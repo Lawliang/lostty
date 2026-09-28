@@ -77,7 +77,9 @@ New code lives in new files. Existing upstream files receive small hooks only.
 3. **AutoSkin** — deterministic skin from a repo name: a stable hash selects a
    hue at fixed dark lightness/low chroma (legible as a terminal background)
    and one built-in texture.
-4. **TextureStore** — produces tile PNGs at 2x: renders a logo as a staggered
+4. **TextureStore** — produces 220×220 device-pixel tile PNGs (Ghostty draws
+   `background-image-fit = none` at one image pixel per device pixel, verified
+   in the spike): renders a logo as a staggered
    tile in the accent color (the logo's shape is the set of pixels that differ
    from its background, so an opaque square favicon background drops out), or draws a built-in pattern
    (dots, grid, diagonal, noise, waves, …). Cached under
@@ -184,7 +186,7 @@ Rules:
 ### 6.2 `skins` CLI
 
 - `skins` — full-screen TUI list: named skins, built-in textures, Reset.
-  ↑/↓ sends `preview`; Enter sends `set`; Esc / Ctrl-C / SIGTERM sends
+  ↑/↓ sends `preview`; Enter sends `set`; Esc / q / Ctrl-C sends
   `cancel` and restores the terminal. If the process dies without sending
   `cancel`, the preview is still dropped when any later `set`/`reset`/`cancel`
   arrives, and SkinManager expires a preview older than 60s with no update.
@@ -241,7 +243,8 @@ requires `allow-passthrough on`. Documented, not otherwise handled.
   `~` expansion), AutoSkin determinism, SkinManager layering / reset /
   reapply-after-reload / close cleanup, protocol validation rejecting paths
   and unknown names.
-- CLI: message encoding per subcommand; cancel on Esc, Ctrl-C and SIGTERM.
+- CLI: message encoding per subcommand; cancel on Esc, q and Ctrl-C (a killed
+  picker is covered by the 60s preview expiry).
 - End-to-end: scripted via the fork's AppleScript support (panes in `arca`,
   an unconfigured repo, and `~`; `cd` transitions; `skins set`); screenshots
   require temporary Screen Recording permission, requested each time.
