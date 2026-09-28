@@ -156,10 +156,12 @@ final class TextureStore {
         return image
     }
 
-    /// Row-major alpha mask (0–255) of the logo's shape. If the image has an
-    /// opaque background (the image's most common pixel value has alpha ≥
-    /// 230), the shape is the pixels whose color differs from that background;
-    /// otherwise it is the alpha channel.
+    /// Row-major alpha mask (0–255) of the logo's shape. If the image has a
+    /// *dominant* opaque background — the image's most common pixel value has
+    /// alpha ≥ 230 and covers at least 40% of all pixels — the shape is the
+    /// pixels whose color differs from that background; otherwise (no color
+    /// clears the 40% bar, or the dominant color is transparent) the shape is
+    /// the alpha channel directly.
     ///
     /// The background is found by a majority vote over every pixel rather
     /// than by sampling the top-left corner: a logo whose background has
@@ -167,6 +169,11 @@ final class TextureStore {
     /// even though the bulk of the image is an opaque fill, which would
     /// otherwise misdetect the background as transparent and let the alpha
     /// channel (opaque for both fill and strokes) paint the whole shape solid.
+    /// The 40% dominance bar keeps a genuinely multi-colored, no-background
+    /// image (e.g. a photo-like logo with no single fill) from having some
+    /// arbitrary minority color picked as "the background". Ties in the vote
+    /// are broken deterministically: the higher pixel count wins, and if two
+    /// colors tie on count, the smaller packed RGBA value wins.
     static func logoMask(_ image: CGImage) -> [UInt8] {
         let width = image.width
         let height = image.height
@@ -179,23 +186,30 @@ final class TextureStore {
             ctx.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
         }
 
+        let totalPixels = width * height
         var counts: [UInt32: Int] = [:]
-        for i in 0..<(width * height) {
+        for i in 0..<totalPixels {
             let key = UInt32(pixels[i * 4]) << 24 | UInt32(pixels[i * 4 + 1]) << 16
                 | UInt32(pixels[i * 4 + 2]) << 8 | UInt32(pixels[i * 4 + 3])
             counts[key, default: 0] += 1
         }
-        let backgroundKey = counts.max { $0.value < $1.value }?.key ?? 0
+        // Deterministic winner: highest count; ties broken by the smaller packed key.
+        let winner = counts.reduce((key: UInt32(0), count: 0)) { best, entry in
+            entry.value > best.count || (entry.value == best.count && entry.key < best.key)
+                ? (entry.key, entry.value)
+                : best
+        }
+        let dominant = totalPixels > 0 && Double(winner.count) / Double(totalPixels) >= 0.4
+            && UInt8(winner.key & 0xff) >= 230
         let background: [UInt8] = [
-            UInt8((backgroundKey >> 24) & 0xff), UInt8((backgroundKey >> 16) & 0xff),
-            UInt8((backgroundKey >> 8) & 0xff),
+            UInt8((winner.key >> 24) & 0xff), UInt8((winner.key >> 16) & 0xff),
+            UInt8((winner.key >> 8) & 0xff),
         ]
-        let opaqueBackground = UInt8(backgroundKey & 0xff) >= 230
 
-        var mask = [UInt8](repeating: 0, count: width * height)
-        for i in 0..<(width * height) {
+        var mask = [UInt8](repeating: 0, count: totalPixels)
+        for i in 0..<totalPixels {
             let alpha = pixels[i * 4 + 3]
-            guard opaqueBackground else {
+            guard dominant else {
                 mask[i] = alpha
                 continue
             }

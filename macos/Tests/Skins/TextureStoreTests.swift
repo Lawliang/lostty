@@ -78,6 +78,31 @@ struct TextureStoreTests {
         #expect(mask[32 * 64 + 32] == 255)
     }
 
+    @Test func maskIgnoresARoundedOpaqueBackground() throws {
+        let ctx = try TextureStore.makeContext(width: 64, height: 64)
+        ctx.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
+        ctx.addPath(CGPath(roundedRect: CGRect(x: 0, y: 0, width: 64, height: 64),
+                            cornerWidth: 14, cornerHeight: 14, transform: nil))
+        ctx.fillPath()
+        ctx.setFillColor(CGColor(red: 0, green: 0, blue: 0, alpha: 1))
+        ctx.fill(CGRect(x: 24, y: 24, width: 16, height: 16))
+        let mask = TextureStore.logoMask(try #require(ctx.makeImage()))
+        #expect(mask[0] == 0)
+        #expect(mask[10 * 64 + 32] == 0)
+        #expect(mask[32 * 64 + 32] == 255)
+    }
+
+    @Test func maskFallsBackToAlphaWithoutADominantBackground() throws {
+        let ctx = try TextureStore.makeContext(width: 64, height: 64)
+        for column in 0..<64 {
+            let level = CGFloat(column * 4) / 255
+            ctx.setFillColor(CGColor(red: level, green: level, blue: level, alpha: 1))
+            ctx.fill(CGRect(x: CGFloat(column), y: 0, width: 1, height: 64))
+        }
+        let mask = TextureStore.logoMask(try #require(ctx.makeImage()))
+        #expect(mask.allSatisfy { $0 == 255 })
+    }
+
     @Test func svgLogoTileRenders() throws {
         let dir = tempDir()
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
