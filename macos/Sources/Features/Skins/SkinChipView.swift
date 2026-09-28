@@ -53,7 +53,17 @@ struct SkinChipView: View {
         .help("Pane skin")
         .popover(isPresented: $showingPopover, arrowEdge: .bottom) {
             if let id {
-                SkinPopoverView(surfaceID: id, manager: manager)
+                // Ghostty Skins: `.id(id)` forces SwiftUI to tear down and
+                // recreate this view when the focused pane changes while the
+                // popover is open (e.g. the pane's process exits, or focus
+                // moves via AppleScript). Without it, SkinPopoverView's
+                // `@State` (draft, committed) would stick around across the
+                // pane change: the old pane's preview would never be
+                // cancelled (its `onDisappear` wouldn't fire), and Apply
+                // would write the old pane's draft as the new pane's
+                // override. Recreating the view makes the old one disappear
+                // (cancelling its preview) and starts the new one fresh.
+                SkinPopoverView(surfaceID: id, manager: manager).id(id)
             }
         }
         .padding(.leading, 6)
