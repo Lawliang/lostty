@@ -154,6 +154,29 @@ pub fn parse(parser: *Parser, _: ?u8) ?*Command {
             return &parser.command;
         },
 
+        .SetUserVar => {
+            // Format: SetUserVar=<name>=<base64 value>
+            const value = value_ orelse {
+                parser.command = .invalid;
+                return null;
+            };
+            const eq = std.mem.indexOfScalar(u8, value, '=') orelse {
+                parser.command = .invalid;
+                return null;
+            };
+            if (eq == 0) {
+                parser.command = .invalid;
+                return null;
+            }
+            parser.command = .{
+                .set_user_var = .{
+                    .name = value[0..eq],
+                    .value = value[eq + 1 .. value.len :0],
+                },
+            };
+            return &parser.command;
+        },
+
         .AddAnnotation,
         .AddHiddenAnnotation,
         .Block,
@@ -184,7 +207,6 @@ pub fn parse(parser: *Parser, _: ?u8) ?*Command {
         .SetKeyLabel,
         .SetMark,
         .SetProfile,
-        .SetUserVar,
         .ShellIntegrationVersion,
         .StealFocus,
         .UnicodeVersion,
@@ -432,4 +454,50 @@ test "OSC: 1337: test CurrentDir with non-empty value" {
     const cmd = p.end('\x1b').?.*;
     try testing.expect(cmd == .report_pwd);
     try testing.expectEqualStrings("abc123", cmd.report_pwd.value);
+}
+
+test "OSC: 1337: SetUserVar with name and value" {
+    const testing = std.testing;
+
+    var p: Parser = .init(testing.allocator);
+    defer p.deinit();
+
+    const input = "1337;SetUserVar=GHOSTTY_SKIN=eyJ2IjoxfQ==";
+    for (input) |ch| p.next(ch);
+
+    const cmd = p.end('\x1b').?.*;
+    try testing.expect(cmd == .set_user_var);
+    try testing.expectEqualStrings("GHOSTTY_SKIN", cmd.set_user_var.name);
+    try testing.expectEqualStrings("eyJ2IjoxfQ==", cmd.set_user_var.value);
+}
+
+test "OSC: 1337: SetUserVar with empty value is allowed" {
+    const testing = std.testing;
+
+    var p: Parser = .init(testing.allocator);
+    defer p.deinit();
+
+    const input = "1337;SetUserVar=FOO=";
+    for (input) |ch| p.next(ch);
+
+    const cmd = p.end('\x1b').?.*;
+    try testing.expect(cmd == .set_user_var);
+    try testing.expectEqualStrings("FOO", cmd.set_user_var.name);
+    try testing.expectEqualStrings("", cmd.set_user_var.value);
+}
+
+test "OSC: 1337: SetUserVar invalid forms" {
+    const testing = std.testing;
+
+    for ([_][]const u8{
+        "1337;SetUserVar",
+        "1337;SetUserVar=",
+        "1337;SetUserVar=NOEQUALS",
+        "1337;SetUserVar==abc",
+    }) |input| {
+        var p: Parser = .init(testing.allocator);
+        defer p.deinit();
+        for (input) |ch| p.next(ch);
+        try testing.expect(p.end('\x1b') == null);
+    }
 }

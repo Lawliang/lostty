@@ -160,6 +160,13 @@ pub const Command = union(Key) {
     /// https://uapi-group.org/specifications/specs/osc_context/
     context_signal: parsers.context_signal.Command,
 
+    /// OSC 1337 SetUserVar (iTerm2). `value` is the raw base64 text; decoding
+    /// happens in the surface so the parser stays allocation-free.
+    set_user_var: struct {
+        name: []const u8,
+        value: [:0]const u8,
+    },
+
     pub const SemanticPrompt = parsers.semantic_prompt.Command;
 
     pub const KittyClipboardProtocol = parsers.kitty_clipboard_protocol.OSC;
@@ -193,6 +200,7 @@ pub const Command = union(Key) {
             "kitty_text_sizing",
             "kitty_clipboard_protocol",
             "context_signal",
+            "set_user_var",
         },
     );
 
@@ -425,6 +433,7 @@ pub const Parser = struct {
             .kitty_text_sizing,
             .kitty_clipboard_protocol,
             .context_signal,
+            .set_user_var,
             => {},
         }
 

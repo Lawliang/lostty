@@ -14,3 +14,6 @@ Ghostty Skins is `skins` = upstream tag + our commits. To move to a new tag:
 ## Upstream files we hook (keep these hunks when resolving conflicts)
 
 - `macos/Ghostty.xcodeproj/project.pbxproj` — app target `PRODUCT_BUNDLE_IDENTIFIER` and `INFOPLIST_KEY_CFBundleDisplayName` (3 build configurations).
+- `src/terminal/osc.zig` — `set_user_var` Command field, `Key` list entry (last), reset-switch entry.
+- `src/terminal/osc/parsers/iterm2.zig` — `.SetUserVar` branch (removed from unimplemented list) + tests.
+- `src/terminal/stream.zig` — `.set_user_var` added to `oscDispatch`'s unimplemented-OSC no-op arm.
