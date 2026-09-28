@@ -55,4 +55,10 @@ struct SkinsTOMLTests {
             try SkinsTOML.parse("[a]\n\nnonsense")
         }
     }
+
+    @Test func acceptsCRLF() throws {
+        let sections = try SkinsTOML.parse("[defaults]\r\nauto = false\r\n[[match]]\r\npath = \"~/x\"\r\n")
+        #expect(sections[1] == TOMLSection(path: ["defaults"], isArrayElement: false, values: ["auto": .bool(false)], line: 1))
+        #expect(sections[2].values["path"] == .string("~/x"))
+    }
 }

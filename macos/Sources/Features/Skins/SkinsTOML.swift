@@ -31,7 +31,7 @@ enum SkinsTOML {
         var seenTables = Set<[String]>()
         for (index, raw) in text.components(separatedBy: "\n").enumerated() {
             let number = index + 1
-            let line = stripComment(raw).trimmingCharacters(in: .whitespaces)
+            let line = stripComment(raw).trimmingCharacters(in: .whitespacesAndNewlines)
             if line.isEmpty { continue }
             if line.hasPrefix("[[") {
                 guard line.hasSuffix("]]"), line.count > 4 else {
