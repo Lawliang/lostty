@@ -1,7 +1,7 @@
 # Ghostty Skins — Design
 
 Date: 2026-09-28
-Status: Approved 2026-09-28
+Status: Approved 2026-09-28 (rev. 2: CLI as `ghostty +skins`, in-repo TOML parser)
 Base: Ghostty v1.3.1 (`332b2ae`), branch `skins`
 
 ## 1. Problem and goal
@@ -51,8 +51,10 @@ not committed) confirmed:
 | Override lifetime | Until `skins reset` / Reset button, or the pane closes |
 | Project definition | Central config + automatic skins for unlisted git repos |
 | Branded textures | Generated from a logo file (SVG/PNG) + accent color |
-| Config format | TOML, parsed with the TOMLKit Swift package |
+| Config format | TOML subset, parsed by a small in-repo Swift parser (no third-party dependency, no Xcode package edits) |
 | CLI → app transport | `OSC 1337 ; SetUserVar=GHOSTTY_SKIN=<base64 JSON>` |
+| CLI implementation | `ghostty +skins` action in Zig (vaxis TUI, modeled on `+list-themes`), exposed as `skins` by a shell-integration function |
+| CLI data source | `catalog.json` written by the app; the CLI never parses TOML |
 
 Out of scope: Linux/GTK, menu-bar overview of all terminals, "save override
 as project default", non-Ghostty terminals, chip with hidden title bar.
@@ -71,12 +73,13 @@ New code lives in new files. Existing upstream files receive small hooks only.
    (1) longest configured `[[match]].path` that equals or is an ancestor of
    the directory, compared by path components after `~` expansion and symlink
    resolution; else (2) the enclosing git root (nearest ancestor containing
-   `.git`, cached) → automatic skin; else (3) none (user's normal look).
+   `.git`) → automatic skin; else (3) none (user's normal look).
 3. **AutoSkin** — deterministic skin from a repo name: a stable hash selects a
    hue at fixed dark lightness/low chroma (legible as a terminal background)
    and one built-in texture.
-4. **TextureStore** — produces tile PNGs at 2x: renders a logo as a staggered,
-   outline-only tile in the accent color, or draws a built-in pattern
+4. **TextureStore** — produces tile PNGs at 2x: renders a logo as a staggered
+   tile in the accent color (the logo's shape is the set of pixels that differ
+   from its background, so an opaque square favicon background drops out), or draws a built-in pattern
    (dots, grid, diagonal, noise, waves, …). Cached under
    `~/Library/Caches/ghostty-skins/`, keyed by a hash of inputs.
 5. **SkinManager** — the only component that mutates surface appearance.
@@ -85,9 +88,10 @@ New code lives in new files. Existing upstream files receive small hooks only.
    Applies the effective skin by building a config (user's default files +
    skin overlay) and calling `ghostty_surface_update_config`. Skips the call
    when the effective skin is unchanged. Re-applies all surfaces after an
-   app-wide config reload and after a SkinConfig reload. Drops state when a
-   surface closes. Publishes changes for the UI and writes a small state file
-   for `skins current`.
+   app-wide config reload and after a SkinConfig reload. Drops state for
+   surfaces that no longer exist. Publishes changes for the UI and writes
+   `~/.config/ghostty-skins/state/catalog.json` (skins, built-in textures,
+   and each pane's current skin keyed by pane UUID) for the CLI.
 6. **SkinChip + SkinPopover (SwiftUI)** — see §6.
 
 ### 4.2 Zig core change
@@ -99,9 +103,13 @@ New code lives in new files. Existing upstream files receive small hooks only.
 
 ### 4.3 `skins` CLI
 
-8. A Swift command-line target bundled in the app and placed on the shell's
-   `PATH` (alongside Ghostty's existing `GHOSTTY_BIN_DIR`). Shares the config
-   model sources with the app so it can list skins and textures.
+8. A new Ghostty CLI action, `ghostty +skins` (`src/cli/skins.zig`), with a
+   vaxis TUI modeled on `+list-themes`. The app binary's directory is already
+   on every pane's `PATH` (`src/termio/Exec.zig`), and a `skins` shell
+   function added by Ghostty's zsh and bash shell integration calls it. The
+   CLI reads `catalog.json` for skin names and the current skin; it never
+   parses TOML. Each pane gets `GHOSTTY_SKINS_SURFACE=<pane UUID>` in its
+   environment so the CLI can find its own entry in the catalog.
 
 ### 4.4 Existing files touched
 
@@ -110,7 +118,12 @@ New code lives in new files. Existing upstream files receive small hooks only.
 - Title-bar view(s) for the default and tabbed styles — host the chip.
 - `src/terminal/osc/parsers/iterm2.zig`, stream handler, apprt action enum,
   `include/ghostty.h` — SetUserVar plumbing.
-- `macos/Ghostty.xcodeproj` — CLI target, TOMLKit package.
+- `macos/Sources/Ghostty/Surface View/SurfaceView_AppKit.swift` — inject
+  `GHOSTTY_SKINS_SURFACE` into each new surface's environment.
+- `macos/Sources/Features/Terminal/BaseTerminalController.swift` — tell the
+  window's chip which surface is focused.
+- `src/cli/ghostty.zig` — register the `+skins` action.
+- `src/shell-integration/{zsh,bash}` — define the `skins` function.
 - `macos/Ghostty-Info.plist` / build settings — name, bundle ID, Sparkle off.
 
 ## 5. Configuration
@@ -178,7 +191,9 @@ Rules:
 - `skins set <name>`, `skins color <#hex>`, `skins texture <name|none>`,
   `skins opacity <0-1>`, `skins reset`, `skins list`, `skins current`.
 - Exit non-zero with a message when not running inside Ghostty Skins
-  (no `GHOSTTY_RESOURCES_DIR`/`TERM_PROGRAM` match) or on invalid input.
+  (`GHOSTTY_SKINS_SURFACE` unset) or on invalid input.
+- Shell function coverage: zsh and bash. fish/nushell users can run
+  `ghostty +skins` directly.
 
 ### 6.3 Wire protocol
 
