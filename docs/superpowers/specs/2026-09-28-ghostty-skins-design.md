@@ -1,7 +1,7 @@
 # Ghostty Skins — Design
 
 Date: 2026-09-28
-Status: Draft, awaiting review
+Status: Approved 2026-09-28
 Base: Ghostty v1.3.1 (`332b2ae`), branch `skins`
 
 ## 1. Problem and goal
@@ -64,7 +64,7 @@ New code lives in new files. Existing upstream files receive small hooks only.
 ### 4.1 Swift components (`macos/Sources/Features/Skins/`)
 
 1. **SkinConfig** — loads and validates
-   `~/.config/ghostty-projects/skins.toml`; watches the file and reloads on
+   `~/.config/ghostty-skins/skins.toml`; watches the file and reloads on
    save. On a parse or validation error it keeps the last good config and
    exposes the error for the UI.
 2. **ProjectResolver** — maps a working directory to a skin source:
@@ -115,7 +115,7 @@ New code lives in new files. Existing upstream files receive small hooks only.
 
 ## 5. Configuration
 
-`~/.config/ghostty-projects/skins.toml` (optional; absent file = automatic
+`~/.config/ghostty-skins/skins.toml` (optional; absent file = automatic
 skins only):
 
 ```toml
