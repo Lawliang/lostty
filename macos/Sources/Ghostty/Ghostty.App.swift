@@ -548,6 +548,9 @@ extension Ghostty {
             case GHOSTTY_ACTION_PWD:
                 pwdChanged(app, target: target, v: action.action.pwd)
 
+            case GHOSTTY_ACTION_SET_USER_VAR:
+                userVarChanged(app, target: target, v: action.action.set_user_var)
+
             case GHOSTTY_ACTION_OPEN_CONFIG:
                 openConfig()
 
@@ -1713,9 +1716,27 @@ extension Ghostty {
                 guard let surfaceView = self.surfaceView(from: surface) else { return }
                 guard let pwd = String(cString: v.pwd!, encoding: .utf8) else { return }
                 surfaceView.pwd = pwd
+                // Ghostty Skins: re-skin the pane for its new directory.
+                MainActor.assumeIsolated { SkinsRuntime.shared.pwdChanged(surfaceView, pwd: pwd) }
 
             default:
                 assertionFailure()
+            }
+        }
+
+        private static func userVarChanged(
+            _ app: ghostty_app_t,
+            target: ghostty_target_s,
+            v: ghostty_action_set_user_var_s) {
+            guard target.tag == GHOSTTY_TARGET_SURFACE,
+                  let surface = target.target.surface,
+                  let surfaceView = self.surfaceView(from: surface),
+                  let namePtr = v.name, let valuePtr = v.value,
+                  let name = String(cString: namePtr, encoding: .utf8),
+                  let value = String(cString: valuePtr, encoding: .utf8) else { return }
+            // Ghostty Skins: requests from the `skins` CLI arrive as a user var.
+            MainActor.assumeIsolated {
+                SkinsRuntime.shared.userVarChanged(surfaceView, name: name, value: value)
             }
         }
 
@@ -2170,6 +2191,12 @@ extension Ghostty {
                     guard let app_ud = ghostty_app_userdata(app) else { return }
                     let ghostty = Unmanaged<App>.fromOpaque(app_ud).takeUnretainedValue()
                     ghostty.config = config
+
+                    // Ghostty Skins: an app-wide reload replaced every surface's
+                    // config; put skins back once this callback has returned.
+                    DispatchQueue.main.async {
+                        MainActor.assumeIsolated { SkinsRuntime.shared.ghosttyConfigReloaded() }
+                    }
 
                     return
 

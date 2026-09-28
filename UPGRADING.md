@@ -23,3 +23,5 @@ Ghostty Skins is `skins` = upstream tag + our commits. To move to a new tag:
 - `src/Surface.zig` — `.user_var` handler, `decodeUserVar`, `userVar`, test.
 - `src/apprt/action.zig` + `include/ghostty.h` — `set_user_var` action (last in enum/union), `ghostty_action_set_user_var_s`.
 - `src/apprt/gtk/class/application.zig` — `.set_user_var` unimplemented.
+- `macos/Sources/Ghostty/Ghostty.App.swift` — `pwdChanged` calls `SkinsRuntime.shared.pwdChanged`; `GHOSTTY_ACTION_SET_USER_VAR` case + `userVarChanged`; app-target `configChange` schedules `ghosttyConfigReloaded()`.
+- `macos/Sources/Ghostty/Surface View/SurfaceView_AppKit.swift` — `GHOSTTY_SKINS_SURFACE` env var on surface creation.
