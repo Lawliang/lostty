@@ -455,4 +455,7 @@ _ghostty_deferred_init() {
     builtin unfunction _ghostty_deferred_init
 }
 
+# Ghostty Skins: `skins` runs the running app's skin picker / CLI.
+skins() { "${GHOSTTY_BIN_DIR:+$GHOSTTY_BIN_DIR/}ghostty" +skins "$@"; }
+
 _entrypoint

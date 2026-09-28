@@ -313,3 +313,6 @@ else
   preexec_functions+=(__ghostty_preexec)
   precmd_functions+=(__ghostty_precmd)
 fi
+
+# Ghostty Skins: `skins` runs the running app's skin picker / CLI.
+skins() { "${GHOSTTY_BIN_DIR:+$GHOSTTY_BIN_DIR/}ghostty" +skins "$@"; }
