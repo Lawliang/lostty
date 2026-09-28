@@ -1638,8 +1638,19 @@ struct TextureStoreTests {
         return try #require(CGImageSourceCreateImageAtIndex(source, 0, nil))
     }
 
+    /// Pixels with any alpha. Counted directly (not via `logoMask`), because a
+    /// tile whose top-left pixel is painted would otherwise look "opaque".
     private func paintedPixels(_ image: CGImage) -> Int {
-        TextureStore.logoMask(image).filter { $0 > 0 }.count
+        let width = image.width, height = image.height
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        pixels.withUnsafeMutableBytes { buffer in
+            let ctx = CGContext(
+                data: buffer.baseAddress, width: width, height: height, bitsPerComponent: 8,
+                bytesPerRow: width * 4, space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+            ctx?.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        }
+        return stride(from: 3, to: pixels.count, by: 4).filter { pixels[$0] > 0 }.count
     }
 
     @Test func noneHasNoTile() throws {
