@@ -37,7 +37,11 @@ class BaseTerminalController: NSWindowController,
 
     /// The currently focused surface.
     var focusedSurface: Ghostty.SurfaceView? {
-        didSet { syncFocusToSurfaceTree() }
+        didSet {
+            syncFocusToSurfaceTree()
+            // Ghostty Skins: keep the title-bar chip on the focused pane.
+            (window as? TerminalWindow)?.skinChipModel.focusedSurfaceID = focusedSurface?.id
+        }
     }
 
     /// The tree of splits within this terminal window.

@@ -216,5 +216,13 @@ struct SkinManagerTests {
         #expect(h.calls.last?.1?.skin == broken)
         #expect(h.calls.last?.1?.tile == nil)
     }
+
+    @Test func thumbnailURLDoesNotPublishErrors() {
+        let h = Harness(); let m = makeManager(h)
+        let broken = Skin(name: "broken", background: RGB(hex: "#123456")!, foreground: nil,
+                           accent: RGB(hex: "#abcdef")!, texture: .logo(path: "/nonexistent/logo.svg"), textureOpacity: 0.16)
+        #expect(m.thumbnailURL(for: broken) == nil)
+        #expect(m.textureError == nil)
+    }
 }
 #endif

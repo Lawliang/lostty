@@ -25,3 +25,5 @@ Ghostty Skins is `skins` = upstream tag + our commits. To move to a new tag:
 - `src/apprt/gtk/class/application.zig` — `.set_user_var` unimplemented.
 - `macos/Sources/Ghostty/Ghostty.App.swift` — `pwdChanged` calls `SkinsRuntime.shared.pwdChanged`; `GHOSTTY_ACTION_SET_USER_VAR` case + `userVarChanged`; app-target `configChange` schedules `ghosttyConfigReloaded()`; surface-target `configReload` schedules `SkinsRuntime.shared.surfaceConfigReloaded(surfaceView)` after `ghostty.reloadConfig(surface:soft:)` (covers the soft reload macOS sends on a light/dark appearance change).
 - `macos/Sources/Ghostty/Surface View/SurfaceView_AppKit.swift` — `GHOSTTY_SKINS_SURFACE` env var on surface creation.
+- `macos/Sources/Features/Terminal/Window Styles/TerminalWindow.swift` — `skinChipModel`, `skinAccessory`, chip mount in `awakeFromNib`.
+- `macos/Sources/Features/Terminal/BaseTerminalController.swift` — `focusedSurface.didSet` updates the chip.

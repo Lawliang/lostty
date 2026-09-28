@@ -24,6 +24,10 @@ class TerminalWindow: NSWindow {
     /// Update notification UI in titlebar
     private let updateAccessory = NSTitlebarAccessoryViewController()
 
+    /// Ghostty Skins: model and accessory for the pane skin chip.
+    let skinChipModel = SkinChipModel()
+    private let skinAccessory = NSTitlebarAccessoryViewController()
+
     /// Visual indicator that mirrors the selected tab color.
     private lazy var tabColorIndicator: NSHostingView<TabColorIndicatorView> = {
         let view = NSHostingView(rootView: TabColorIndicatorView(tabColor: tabColor))
@@ -153,6 +157,13 @@ class TerminalWindow: NSWindow {
                 addTitlebarAccessoryViewController(updateAccessory)
                 updateAccessory.view.translatesAutoresizingMaskIntoConstraints = false
             }
+
+            // Ghostty Skins: pane skin chip at the leading edge of the titlebar.
+            skinAccessory.layoutAttribute = .left
+            skinAccessory.view = NonDraggableHostingView(rootView: SkinChipView(
+                model: skinChipModel,
+                manager: SkinsRuntime.shared.manager))
+            addTitlebarAccessoryViewController(skinAccessory)
         }
 
         // Setup the accessory view for tabs that shows our keyboard shortcuts,

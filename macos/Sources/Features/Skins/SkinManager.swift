@@ -192,6 +192,13 @@ final class SkinManager: ObservableObject {
         }
     }
 
+    /// Side-effect-free variant of `tileURL(for:)` for use from SwiftUI view
+    /// bodies (e.g. the popover's thumbnails), which must not mutate
+    /// `@Published` state during a view update.
+    func thumbnailURL(for skin: Skin) -> URL? {
+        try? textures.tileURL(for: skin)
+    }
+
     // MARK: Internals
 
     private func autoSkin(for source: SkinSource) -> Skin? {
