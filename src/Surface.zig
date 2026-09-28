@@ -1057,6 +1057,13 @@ pub fn handleMessage(self: *Surface, msg: Message) !void {
             );
         },
 
+        .user_var => |w| {
+            defer w.deinit();
+            self.userVar(w.slice()) catch |err| {
+                log.warn("error handling user var err={}", .{err});
+            };
+        },
+
         .close => self.close(),
 
         .child_exited => |v| self.childExited(v),
@@ -6506,6 +6513,82 @@ fn testMouseSelectionIsNull(
             size,
         ),
     );
+}
+
+/// Largest decoded SetUserVar value we forward to the apprt.
+pub const max_user_var_len = 4096;
+
+const DecodedUserVar = struct {
+    /// Backing allocation: name, NUL, value, NUL. Free with the same allocator.
+    buf: []u8,
+    name: [:0]const u8,
+    value: [:0]const u8,
+};
+
+/// Split "name=base64" and decode the value. Returns null for malformed
+/// input or a value larger than max_user_var_len.
+fn decodeUserVar(alloc: Allocator, raw: []const u8) !?DecodedUserVar {
+    const eq = std.mem.indexOfScalar(u8, raw, '=') orelse return null;
+    const name = raw[0..eq];
+    if (name.len == 0) return null;
+    const encoded = raw[eq + 1 ..];
+
+    const decoder = std.base64.standard.Decoder;
+    const size = decoder.calcSizeForSlice(encoded) catch return null;
+    if (size > max_user_var_len) return null;
+
+    const buf = try alloc.alloc(u8, name.len + 1 + size + 1);
+    @memcpy(buf[0..name.len], name);
+    buf[name.len] = 0;
+    decoder.decode(buf[name.len + 1 .. name.len + 1 + size], encoded) catch {
+        alloc.free(buf);
+        return null;
+    };
+    buf[buf.len - 1] = 0;
+    return .{
+        .buf = buf,
+        .name = buf[0..name.len :0],
+        .value = buf[name.len + 1 .. buf.len - 1 :0],
+    };
+}
+
+fn userVar(self: *Surface, raw: []const u8) !void {
+    const decoded = (try decodeUserVar(self.alloc, raw)) orelse {
+        log.debug("ignoring malformed or oversized user var", .{});
+        return;
+    };
+    defer self.alloc.free(decoded.buf);
+    _ = try self.rt_app.performAction(
+        .{ .surface = self },
+        .set_user_var,
+        .{ .name = decoded.name, .value = decoded.value },
+    );
+}
+
+test "decodeUserVar" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    const d = (try decodeUserVar(alloc, "GHOSTTY_SKIN=eyJ2IjoxfQ==")).?;
+    defer alloc.free(d.buf);
+    try testing.expectEqualStrings("GHOSTTY_SKIN", d.name);
+    try testing.expectEqualStrings("{\"v\":1}", d.value);
+
+    try testing.expect((try decodeUserVar(alloc, "noequals")) == null);
+    try testing.expect((try decodeUserVar(alloc, "=eyJ2IjoxfQ==")) == null);
+    try testing.expect((try decodeUserVar(alloc, "X=not base64!")) == null);
+
+    // Over the cap: 4097 decoded bytes.
+    const big = try alloc.alloc(u8, 4097);
+    defer alloc.free(big);
+    @memset(big, 'a');
+    const enc = std.base64.standard.Encoder;
+    const b64 = try alloc.alloc(u8, enc.calcSize(big.len));
+    defer alloc.free(b64);
+    _ = enc.encode(b64, big);
+    const raw = try std.fmt.allocPrint(alloc, "X={s}", .{b64});
+    defer alloc.free(raw);
+    try testing.expect((try decodeUserVar(alloc, raw)) == null);
 }
 
 test "Surface: selection logic" {

@@ -343,6 +343,10 @@ pub const Action = union(Key) {
     /// otherwise the terminal-set title.
     copy_title_to_clipboard,
 
+    /// A program set a user variable with OSC 1337 SetUserVar. The value
+    /// is base64-decoded and at most 4096 bytes.
+    set_user_var: SetUserVar,
+
     /// Sync with: ghostty_action_tag_e
     pub const Key = enum(c_int) {
         quit,
@@ -410,6 +414,7 @@ pub const Action = union(Key) {
         search_selected,
         readonly,
         copy_title_to_clipboard,
+        set_user_var,
 
         test "ghostty.h Action.Key" {
             try lib.checkGhosttyHEnum(Key, "GHOSTTY_ACTION_");
@@ -736,6 +741,33 @@ pub const Pwd = struct {
         writer: *std.Io.Writer,
     ) !void {
         try writer.print("{s}{{ {s} }}", .{ @typeName(@This()), value.pwd });
+    }
+};
+
+pub const SetUserVar = struct {
+    name: [:0]const u8,
+    value: [:0]const u8,
+
+    // Sync with: ghostty_action_set_user_var_s
+    pub const C = extern struct {
+        name: [*:0]const u8,
+        value: [*:0]const u8,
+    };
+
+    pub fn cval(self: SetUserVar) C {
+        return .{
+            .name = self.name.ptr,
+            .value = self.value.ptr,
+        };
+    }
+
+    pub fn format(
+        value: @This(),
+        comptime _: []const u8,
+        _: std.fmt.FormatOptions,
+        writer: *std.Io.Writer,
+    ) !void {
+        try writer.print("{s}{{ {s} }}", .{ @typeName(@This()), value.name });
     }
 };
 

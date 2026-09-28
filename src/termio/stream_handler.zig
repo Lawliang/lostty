@@ -316,6 +316,7 @@ pub const StreamHandler = struct {
             .decaln => try self.decaln(),
             .window_title => try self.windowTitle(value.title),
             .report_pwd => try self.reportPwd(value.url),
+            .set_user_var => self.setUserVar(value.name, value.value),
             .show_desktop_notification => try self.showDesktopNotification(value.title, value.body),
             .progress_report => self.progressReport(value),
             .start_hyperlink => try self.startHyperlink(value.uri, value.id),
@@ -1199,6 +1200,20 @@ pub const StreamHandler = struct {
             try self.windowTitle(path);
             self.seen_title = false;
         }
+    }
+
+    /// Forward OSC 1337 SetUserVar to the surface as "name=base64value".
+    fn setUserVar(self: *StreamHandler, name: []const u8, value: []const u8) void {
+        const joined = std.fmt.allocPrint(self.alloc, "{s}={s}", .{ name, value }) catch |err| {
+            log.warn("error formatting user var err={}", .{err});
+            return;
+        };
+        defer self.alloc.free(joined);
+        const req = apprt.surface.Message.WriteReq.init(self.alloc, joined) catch |err| {
+            log.warn("error notifying surface of user var err={}", .{err});
+            return;
+        };
+        self.surfaceMessageWriter(.{ .user_var = req });
     }
 
     fn colorOperation(

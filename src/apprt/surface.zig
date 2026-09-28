@@ -85,6 +85,9 @@ pub const Message = union(enum) {
     /// The terminal has reported a change in the working directory.
     pwd_change: WriteReq,
 
+    /// The terminal set a user variable (OSC 1337 SetUserVar) as "name=base64".
+    user_var: WriteReq,
+
     /// The terminal encountered a bell character.
     ring_bell,
 

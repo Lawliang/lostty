@@ -126,6 +126,7 @@ pub const Action = union(Key) {
     kitty_color_report: kitty.color.OSC,
     color_operation: ColorOperation,
     semantic_prompt: SemanticPrompt,
+    set_user_var: SetUserVar,
 
     pub const Key = lib.Enum(
         lib_target,
@@ -223,6 +224,7 @@ pub const Action = union(Key) {
             "kitty_color_report",
             "color_operation",
             "semantic_prompt",
+            "set_user_var",
         },
     );
 
@@ -329,6 +331,23 @@ pub const Action = union(Key) {
 
         pub fn cval(self: ReportPwd) ReportPwd.C {
             return .init(self.url);
+        }
+    };
+
+    pub const SetUserVar = struct {
+        name: []const u8,
+        value: []const u8,
+
+        pub const C = extern struct {
+            name: lib.String,
+            value: lib.String,
+        };
+
+        pub fn cval(self: SetUserVar) SetUserVar.C {
+            return .{
+                .name = .init(self.name),
+                .value = .init(self.value),
+            };
         }
     };
 
@@ -1996,6 +2015,13 @@ pub fn Stream(comptime Handler: type) type {
                     try self.handler.vt(.report_pwd, .{ .url = v.value });
                 },
 
+                .set_user_var => |v| {
+                    try self.handler.vt(.set_user_var, .{
+                        .name = v.name,
+                        .value = v.value,
+                    });
+                },
+
                 .mouse_shape => |v| {
                     const shape = MouseShape.fromString(v.value) orelse {
                         @branchHint(.unlikely);
@@ -2055,7 +2081,6 @@ pub fn Stream(comptime Handler: type) type {
                 .kitty_text_sizing,
                 .kitty_clipboard_protocol,
                 .context_signal,
-                .set_user_var,
                 => {
                     log.debug("unimplemented OSC callback: {}", .{cmd});
                 },
