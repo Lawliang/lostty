@@ -39,7 +39,10 @@ final class GhosttySkinApplier {
 
         ghostty_config_load_default_files(cfg)
         if !isRunningInXcode() { ghostty_config_load_cli_args(cfg) }
+        ghostty_config_load_recursive_files(cfg)
         if let applied {
+            // Ghostty Skins: the overlay loads after the user's own
+            // `config-file =` includes so the skin always wins.
             let url = overlayDir.appendingPathComponent("\(id.uuidString).ghostty")
             do {
                 try FileManager.default.createDirectory(at: overlayDir, withIntermediateDirectories: true)
@@ -49,7 +52,6 @@ final class GhosttySkinApplier {
                 Ghostty.logger.warning("skins: failed to write overlay: \(String(describing: error))")
             }
         }
-        ghostty_config_load_recursive_files(cfg)
         ghostty_config_finalize(cfg)
         ghostty_surface_update_config(surface, cfg)
         return true
@@ -105,6 +107,13 @@ final class SkinsRuntime {
 
     func ghosttyConfigReloaded() {
         manager.reapplyAll()
+    }
+
+    /// A per-surface config reload (e.g. macOS's soft reload on a light/dark
+    /// appearance change) replaced this surface's config with the global one;
+    /// put its skin back.
+    func surfaceConfigReloaded(_ view: Ghostty.SurfaceView) {
+        manager.reapply(view.id)
     }
 }
 #endif

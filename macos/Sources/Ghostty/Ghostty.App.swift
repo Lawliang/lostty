@@ -2157,6 +2157,13 @@ extension Ghostty {
                 guard let surface = target.target.surface else { return }
                 ghostty.reloadConfig(surface: surface, soft: v.soft)
 
+                // Ghostty Skins: a per-surface reload replaced this surface's
+                // config with the global one; put its skin back.
+                guard let surfaceView = self.surfaceView(from: surface) else { return }
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated { SkinsRuntime.shared.surfaceConfigReloaded(surfaceView) }
+                }
+
             default:
                 assertionFailure()
             }

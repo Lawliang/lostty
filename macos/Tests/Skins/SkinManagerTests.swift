@@ -162,6 +162,20 @@ struct SkinManagerTests {
         #expect(h.calls.map(\.0) == [skinned])
     }
 
+    @Test func reapplyForcesOnePane() {
+        let h = Harness(); let m = makeManager(h)
+        let skinned = UUID(), plain = UUID()
+        m.pwdChanged(skinned, pwd: "\(root)/arca")
+        m.pwdChanged(plain, pwd: "\(root)/plain")
+        h.calls.removeAll()
+        m.reapply(skinned)
+        #expect(h.calls.count == 1)
+        #expect(h.calls.last?.0 == skinned)
+        #expect(h.calls.last?.1?.skin == arca)
+        m.reapply(plain)
+        #expect(h.calls.count == 1)
+    }
+
     @Test func writesCatalog() throws {
         let h = Harness()
         let url = URL(fileURLWithPath: root).appendingPathComponent("state/catalog.json")

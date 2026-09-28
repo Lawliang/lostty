@@ -145,6 +145,14 @@ final class SkinManager: ObservableObject {
         if expired { writeCatalog() }
     }
 
+    /// Re-applies one pane's skin, e.g. after Ghostty replaced that surface's
+    /// config with the global one (a per-surface config reload, including the
+    /// soft reload macOS sends on a light/dark appearance change).
+    func reapply(_ id: UUID) {
+        guard effectiveSkin(id) != nil else { return }
+        applyIfNeeded(id, force: true)
+    }
+
     /// Re-applies every skinned pane, e.g. after Ghostty reloaded its config
     /// and replaced each surface's config with the global one.
     func reapplyAll() {
