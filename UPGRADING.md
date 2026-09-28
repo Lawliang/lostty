@@ -27,6 +27,6 @@ Ghostty Skins is `skins` = upstream tag + our commits. To move to a new tag:
 - `macos/Sources/Ghostty/Surface View/SurfaceView_AppKit.swift` — `GHOSTTY_SKINS_SURFACE` env var on surface creation.
 - `macos/Sources/Features/Terminal/Window Styles/TerminalWindow.swift` — `skinChipModel`, `skinAccessory`, chip mount in `awakeFromNib`.
 - `macos/Sources/Features/Terminal/BaseTerminalController.swift` — `focusedSurface.didSet` updates the chip.
-- `src/cli/ghostty.zig` — `skins` import, `Action.skins`, `runMain` and `options` entries.
+- `src/cli/ghostty.zig` — `skins` import, `Action.skins`, `runMain` and `options` entries, trailing `test { _ = skins; }` block.
 - `src/shell-integration/zsh/ghostty-integration` — `skins()` above `_entrypoint`.
 - `src/shell-integration/bash/ghostty.bash` — `skins()` at end.

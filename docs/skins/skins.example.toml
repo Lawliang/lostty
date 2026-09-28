@@ -1,0 +1,23 @@
+# Copy to ~/.config/ghostty-skins/skins.toml. Saved changes apply immediately.
+
+[defaults]
+texture_opacity = 0.16   # 0–1; how visible textures are
+auto = true              # automatic skin for any git repo not listed below
+
+[skins.arca]
+background = "#12222b"
+foreground = "#eaf3ff"
+accent     = "#46a2ff"   # logo color
+logo       = "~/projectrepos/arca-labs/website/assets/favicon.svg"
+
+[skins.prod]             # not tied to a folder; use with `skins set prod`
+background = "#3a0f14"
+texture    = "diagonal"  # dots, grid, diagonal, cross, waves, noise, none
+
+[[match]]
+path = "~/projectrepos/arca"
+skin = "arca"
+
+[[match]]
+path = "~/projectrepos/arca-labs"
+skin = "arca"
