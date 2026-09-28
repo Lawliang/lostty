@@ -89,6 +89,12 @@ struct SkinModelTests {
         }
     }
 
+    @Test func rootKeysErrorHasNoBogusLine() {
+        #expect(throws: SkinConfigError(message: "skins.toml: keys must be inside a table such as [defaults] or [skins.<name>]")) {
+            try SkinConfig.parse("k = 1", home: "/h")
+        }
+    }
+
     @Test func rgb() {
         #expect(RGB(hex: "#12222B")?.hex == "#12222b")
         #expect(RGB(hex: "12222b") == nil)

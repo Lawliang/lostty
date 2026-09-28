@@ -128,7 +128,7 @@ struct SkinConfig: Equatable {
         for section in sections {
             switch (section.path, section.isArrayElement) {
             case ([], false):
-                guard section.values.isEmpty else { throw error(section, "keys must be inside a table") }
+                guard section.values.isEmpty else { throw SkinConfigError(message: "skins.toml: keys must be inside a table such as [defaults] or [skins.<name>]") }
             case (["defaults"], false):
                 try checkKeys(section, allowed: ["texture_opacity", "auto"])
                 if let value = section.values["texture_opacity"] {
