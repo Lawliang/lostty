@@ -32,9 +32,9 @@ struct SkinManagerTests {
         self.config = config
     }
 
-    func makeManager(_ harness: Harness, catalog: URL? = nil) -> SkinManager {
+    func makeManager(_ harness: Harness, catalog: URL? = nil, config: SkinConfig? = nil) -> SkinManager {
         SkinManager(
-            config: config,
+            config: config ?? self.config,
             textures: TextureStore(cacheDir: URL(fileURLWithPath: root).appendingPathComponent("cache")),
             catalogURL: catalog,
             home: "/nonexistent-home",
@@ -174,6 +174,33 @@ struct SkinManagerTests {
         #expect((object?["textures"] as? [String]) == BuiltinTexture.allCases.map(\.rawValue))
         let pane = (object?["panes"] as? [String: [String: String]])?[id.uuidString]
         #expect(pane == ["skin": "prod", "source": "override", "background": "#3a0f14"])
+    }
+
+    @Test func catalogUpdatesWhenPreviewExpires() throws {
+        let h = Harness()
+        let url = URL(fileURLWithPath: root).appendingPathComponent("state/catalog.json")
+        let m = makeManager(h, catalog: url); let id = UUID()
+        m.pwdChanged(id, pwd: "\(root)/arca")
+        m.handle(SkinRequest(op: .preview, skin: "prod"), for: id)
+        h.clock += 61
+        m.expirePreviews()
+        let object = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any]
+        let pane = (object?["panes"] as? [String: [String: String]])?[id.uuidString]
+        #expect(pane == ["skin": "arca", "source": "config", "background": "#12222b"])
+    }
+
+    @Test func textureFailureIsPublished() {
+        let h = Harness()
+        let broken = Skin(name: "broken", background: RGB(hex: "#123456")!, foreground: nil,
+                           accent: RGB(hex: "#abcdef")!, texture: .logo(path: "/nonexistent/logo.svg"), textureOpacity: 0.16)
+        var brokenConfig = config
+        brokenConfig.skins["broken"] = broken
+        brokenConfig.matches = [SkinMatch(path: "\(root)/arca", skin: "broken")]
+        let m = makeManager(h, config: brokenConfig); let id = UUID()
+        m.pwdChanged(id, pwd: "\(root)/arca")
+        #expect(m.textureError?.contains("nonexistent") == true)
+        #expect(h.calls.last?.1?.skin == broken)
+        #expect(h.calls.last?.1?.tile == nil)
     }
 }
 #endif

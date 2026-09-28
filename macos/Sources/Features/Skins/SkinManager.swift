@@ -29,6 +29,7 @@ final class SkinManager: ObservableObject {
     @Published private(set) var config: SkinConfig
     @Published private(set) var configError: String?
     @Published private(set) var panes: [UUID: Pane] = [:]
+    @Published private(set) var textureError: String?
 
     private let textures: TextureStore
     private let catalogURL: URL?
@@ -115,6 +116,7 @@ final class SkinManager: ObservableObject {
         pane.previewUpdatedAt = skin == nil ? nil : now()
         panes[id] = pane
         applyIfNeeded(id)
+        writeCatalog()
     }
 
     func setOverride(_ id: UUID, _ skin: Skin?) {
@@ -133,11 +135,14 @@ final class SkinManager: ObservableObject {
 
     func expirePreviews() {
         let cutoff = now().addingTimeInterval(-Self.previewTimeout)
+        var expired = false
         for (id, pane) in panes where pane.preview != nil && (pane.previewUpdatedAt ?? .distantPast) < cutoff {
             panes[id]?.preview = nil
             panes[id]?.previewUpdatedAt = nil
             applyIfNeeded(id)
+            expired = true
         }
+        if expired { writeCatalog() }
     }
 
     /// Re-applies every skinned pane, e.g. after Ghostty reloaded its config
@@ -146,6 +151,7 @@ final class SkinManager: ObservableObject {
         for id in panes.keys.sorted(by: { $0.uuidString < $1.uuidString }) where effectiveSkin(id) != nil {
             applyIfNeeded(id, force: true)
         }
+        writeCatalog()
     }
 
     // MARK: Queries
@@ -168,8 +174,11 @@ final class SkinManager: ObservableObject {
 
     func tileURL(for skin: Skin) -> URL? {
         do {
-            return try textures.tileURL(for: skin)
+            let url = try textures.tileURL(for: skin)
+            if skin.texture != .none { textureError = nil }
+            return url
         } catch {
+            textureError = "\(skin.name): \(String(describing: error))"
             Ghostty.logger.warning("skins: texture for \(skin.name) failed: \(String(describing: error))")
             return nil
         }
