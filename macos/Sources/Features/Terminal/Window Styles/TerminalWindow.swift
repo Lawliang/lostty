@@ -164,6 +164,7 @@ class TerminalWindow: NSWindow {
                 model: skinChipModel,
                 manager: SkinsRuntime.shared.manager))
             addTitlebarAccessoryViewController(skinAccessory)
+            skinAccessory.view.translatesAutoresizingMaskIntoConstraints = false
         }
 
         // Setup the accessory view for tabs that shows our keyboard shortcuts,
