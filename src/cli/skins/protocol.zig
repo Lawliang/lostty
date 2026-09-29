@@ -154,6 +154,52 @@ pub fn parseCatalog(alloc: Allocator, bytes: []const u8) !std.json.Parsed(Catalo
     });
 }
 
+/// Message buffer for `validateAgainstCatalog`. The CLI is single-threaded
+/// and prints the message immediately, so a threadlocal scratch buffer lets
+/// the validator stay a plain, allocator-free function.
+threadlocal var validate_error_buf: [160]u8 = undefined;
+
+/// Checks a `set`/`preview` request's `skin`/`texture` names against a
+/// loaded catalog. Returns an error message (already prefixed `skins: `,
+/// ready to print to stderr) or null if the request is fine. `background`
+/// and `opacity` are validated by `parseArgs` already and are not rechecked
+/// here.
+pub fn validateAgainstCatalog(catalog: Catalog, req: Request) ?[]const u8 {
+    if (req.skin) |name| {
+        var found = false;
+        for (catalog.skins) |skin| {
+            if (std.mem.eql(u8, skin.name, name)) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) return formatValidateError("unknown skin", name);
+    }
+    if (req.texture) |name| {
+        if (!std.mem.eql(u8, name, "none") and !catalogHasTexture(catalog, name)) {
+            return formatValidateError("unknown texture", name);
+        }
+    }
+    return null;
+}
+
+/// True if `name` is one of the catalog's built-in textures, or the name of
+/// a catalog skin whose own texture is a logo.
+fn catalogHasTexture(catalog: Catalog, name: []const u8) bool {
+    for (catalog.textures) |t| {
+        if (std.mem.eql(u8, t, name)) return true;
+    }
+    for (catalog.skins) |skin| {
+        if (std.mem.eql(u8, skin.texture, "logo") and std.mem.eql(u8, skin.name, name)) return true;
+    }
+    return false;
+}
+
+fn formatValidateError(kind: []const u8, name: []const u8) []const u8 {
+    return std.fmt.bufPrint(&validate_error_buf, "skins: {s} '{s}' (try: skins list)", .{ kind, name }) catch
+        "skins: invalid value (try: skins list)";
+}
+
 test "skins: encodeJson" {
     const alloc = std.testing.allocator;
     const a = try encodeJson(alloc, .{ .op = .set, .skin = "arca" });
@@ -238,4 +284,67 @@ test "skins: parseCatalog" {
     try std.testing.expectEqualStrings("arca", parsed.value.skins[0].name);
     try std.testing.expectEqualStrings("grid", parsed.value.textures[1]);
     try std.testing.expectEqualStrings("config", parsed.value.panes.map.get("ABC").?.source);
+}
+
+fn testCatalog() Catalog {
+    return .{
+        .version = 1,
+        .skins = &.{
+            .{ .name = "arca", .background = "#12222b", .texture = "logo" },
+            .{ .name = "prod", .background = "#3a0f14", .texture = "diagonal" },
+        },
+        .textures = &.{ "dots", "grid", "diagonal" },
+        .panes = .{},
+    };
+}
+
+test "skins: validateAgainstCatalog accepts a known skin and texture" {
+    const catalog = testCatalog();
+    try std.testing.expectEqual(@as(?[]const u8, null), validateAgainstCatalog(catalog, .{ .op = .set, .skin = "arca" }));
+    try std.testing.expectEqual(@as(?[]const u8, null), validateAgainstCatalog(catalog, .{ .op = .set, .texture = "grid" }));
+    try std.testing.expectEqual(@as(?[]const u8, null), validateAgainstCatalog(catalog, .{ .op = .set, .texture = "none" }));
+    // A skin whose own texture is "logo" can be named as a texture source.
+    try std.testing.expectEqual(@as(?[]const u8, null), validateAgainstCatalog(catalog, .{ .op = .set, .texture = "arca" }));
+    // Requests that only carry color/opacity/reset are not checked here.
+    try std.testing.expectEqual(@as(?[]const u8, null), validateAgainstCatalog(catalog, .{ .op = .reset }));
+    try std.testing.expectEqual(@as(?[]const u8, null), validateAgainstCatalog(catalog, .{ .op = .set, .background = "#123456" }));
+}
+
+test "skins: validateAgainstCatalog rejects an unknown skin" {
+    const catalog = testCatalog();
+    const msg = validateAgainstCatalog(catalog, .{ .op = .set, .skin = "nosuchskin" });
+    try std.testing.expectEqualStrings("skins: unknown skin 'nosuchskin' (try: skins list)", msg.?);
+}
+
+test "skins: validateAgainstCatalog rejects an unknown texture" {
+    const catalog = testCatalog();
+    const msg = validateAgainstCatalog(catalog, .{ .op = .set, .texture = "nosuchtexture" });
+    try std.testing.expectEqualStrings("skins: unknown texture 'nosuchtexture' (try: skins list)", msg.?);
+    // "prod" is a real skin, but its texture isn't "logo", so it isn't a
+    // valid texture name either.
+    const msg2 = validateAgainstCatalog(catalog, .{ .op = .set, .texture = "prod" });
+    try std.testing.expectEqualStrings("skins: unknown texture 'prod' (try: skins list)", msg2.?);
+}
+
+// Real shape written by `SkinManager.writeCatalog()` (`JSONEncoder` with
+// `.prettyPrinted, .sortedKeys`), including a pane entry, so a change to the
+// Swift encoder's output that this parser can't read is caught here rather
+// than only at runtime against `~/.config/ghostty-skins/state/catalog.json`.
+test "skins: parseCatalog reads the Swift writer's fixture" {
+    const alloc = std.testing.allocator;
+    const bytes = @embedFile("testdata/catalog.json");
+    const parsed = try parseCatalog(alloc, bytes);
+    defer parsed.deinit();
+    try std.testing.expectEqual(@as(u32, 1), parsed.value.version);
+    try std.testing.expectEqual(@as(usize, 2), parsed.value.skins.len);
+    try std.testing.expectEqualStrings("arca", parsed.value.skins[0].name);
+    try std.testing.expectEqualStrings("logo", parsed.value.skins[0].texture);
+    try std.testing.expectEqualStrings("prod", parsed.value.skins[1].name);
+    try std.testing.expectEqual(@as(usize, 6), parsed.value.textures.len);
+    const pane = parsed.value.panes.map.get("3A281C4C-6DE1-4B96-9B35-0F7F5EE2AB3E").?;
+    try std.testing.expectEqualStrings("arca", pane.skin);
+    try std.testing.expectEqualStrings("config", pane.source);
+    try std.testing.expectEqualStrings("#12222b", pane.background);
+    try std.testing.expect(validateAgainstCatalog(parsed.value, .{ .op = .set, .skin = "arca" }) == null);
+    try std.testing.expect(validateAgainstCatalog(parsed.value, .{ .op = .set, .skin = "nosuchskin" }) != null);
 }

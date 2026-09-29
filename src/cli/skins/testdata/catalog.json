@@ -1,0 +1,30 @@
+{
+  "panes" : {
+    "3A281C4C-6DE1-4B96-9B35-0F7F5EE2AB3E" : {
+      "background" : "#12222b",
+      "skin" : "arca",
+      "source" : "config"
+    }
+  },
+  "skins" : [
+    {
+      "background" : "#12222b",
+      "name" : "arca",
+      "texture" : "logo"
+    },
+    {
+      "background" : "#3a0f14",
+      "name" : "prod",
+      "texture" : "diagonal"
+    }
+  ],
+  "textures" : [
+    "dots",
+    "grid",
+    "diagonal",
+    "cross",
+    "waves",
+    "noise"
+  ],
+  "version" : 1
+}

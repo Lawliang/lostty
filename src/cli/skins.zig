@@ -80,6 +80,16 @@ pub fn run(gpa: Allocator) !u8 {
     switch (command) {
         .help => unreachable,
         .send => |req| {
+            // Best-effort: if the catalog can't be loaded (app not running,
+            // or the file is stale/corrupt), still send the sequence rather
+            // than block the user on a missing catalog. When it *can* be
+            // loaded, catch typos before they silently no-op.
+            if (tryLoadCatalog(alloc)) |catalog| {
+                if (protocol.validateAgainstCatalog(catalog, req)) |msg| {
+                    try stderr.print("{s}\n", .{msg});
+                    return 1;
+                }
+            }
             try sendToTty(alloc, req, tmux);
             return 0;
         },
@@ -94,7 +104,8 @@ pub fn run(gpa: Allocator) !u8 {
         .current => {
             const catalog = try loadCatalog(alloc, stderr) orelse return 1;
             if (catalog.panes.map.get(surface_id)) |pane| {
-                try stdout.print("{s} ({s}) {s}\n", .{ pane.skin, pane.source, pane.background });
+                const name = try sanitizeForDisplay(alloc, pane.skin);
+                try stdout.print("{s} ({s}) {s}\n", .{ name, pane.source, pane.background });
             } else {
                 try stdout.writeAll("default\n");
             }
@@ -117,6 +128,28 @@ fn sendToTty(alloc: Allocator, req: protocol.Request, tmux: bool) !void {
     const tty = try std.fs.openFileAbsolute("/dev/tty", .{ .mode = .write_only });
     defer tty.close();
     try tty.writeAll(seq);
+}
+
+/// Defense in depth: catalog.json is written by the app, but a hand-edited
+/// or corrupted file could carry control characters (including escape
+/// sequences) in a name; strip them before printing to a terminal.
+fn sanitizeForDisplay(alloc: Allocator, s: []const u8) ![]const u8 {
+    var out: std.ArrayList(u8) = .empty;
+    for (s) |c| {
+        if (!std.ascii.isControl(c)) try out.append(alloc, c);
+    }
+    return out.toOwnedSlice(alloc);
+}
+
+/// Loads the catalog without surfacing any error: used on the best-effort
+/// `.send` path, where a missing/stale/corrupt catalog should not block
+/// sending the escape sequence (see the `.send` case in `run`).
+fn tryLoadCatalog(alloc: Allocator) ?protocol.Catalog {
+    const home = std.posix.getenv("HOME") orelse return null;
+    const path = std.fs.path.join(alloc, &.{ home, ".config/ghostty-skins/state/catalog.json" }) catch return null;
+    const bytes = std.fs.cwd().readFileAlloc(alloc, path, 1 << 20) catch return null;
+    const parsed = protocol.parseCatalog(alloc, bytes) catch return null;
+    return parsed.value;
 }
 
 fn loadCatalog(alloc: Allocator, stderr: *std.Io.Writer) !?protocol.Catalog {
