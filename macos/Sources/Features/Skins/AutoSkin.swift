@@ -3,6 +3,9 @@ import Foundation
 
 /// Deterministic skins for git repos that skins.toml does not mention.
 enum AutoSkin {
+    /// Fixed so adding textures never reshuffles existing repos' looks.
+    static let autoTextures: [BuiltinTexture] = [.dots, .grid, .diagonal, .cross, .waves, .noise]
+
     /// 64-bit FNV-1a. Stable across launches, unlike `hashValue`.
     static func fnv1a(_ s: String) -> UInt64 {
         var hash: UInt64 = 0xcbf29ce484222325
@@ -16,7 +19,7 @@ enum AutoSkin {
     static func skin(forRepo name: String, textureOpacity: Double) -> Skin {
         let hash = fnv1a(name.lowercased())
         let hue = Double(hash % 360)
-        let textures = BuiltinTexture.allCases
+        let textures = autoTextures
         return Skin(
             name: name,
             background: .hsl(hue, 0.35, 0.13),

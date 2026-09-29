@@ -186,6 +186,35 @@ final class TextureStore {
                 ctx.setFillColor(cgColor(accent, alpha: 0.3 + 0.7 * next()))
                 ctx.fill(CGRect(x: next() * size, y: next() * size, width: 1.5, height: 1.5))
             }
+        case .scanlines:
+            // 40 lines per tile (5.5 px apart) keeps the repeat seamless.
+            for i in 0..<40 {
+                let y = CGFloat(i) * (size / 40) + 0.5
+                ctx.move(to: CGPoint(x: 0, y: y))
+                ctx.addLine(to: CGPoint(x: size, y: y))
+            }
+            ctx.setLineWidth(1)
+            ctx.strokePath()
+        case .sparkle:
+            for i in 0..<8 {
+                for j in 0..<8 {
+                    let c = center(i, j)
+                    ctx.fillEllipse(in: CGRect(x: c.x - 1.2, y: c.y - 1.2, width: 2.4, height: 2.4))
+                }
+            }
+            for i in 0..<4 {
+                for j in 0..<4 {
+                    let c = CGPoint(x: CGFloat(i) * size / 4 + step, y: CGFloat(j) * size / 4 + step)
+                    ctx.fillEllipse(in: CGRect(x: c.x - 2.4, y: c.y - 2.4, width: 4.8, height: 4.8))
+                }
+            }
+        case .rings:
+            for i in 0..<4 {
+                for j in 0..<4 {
+                    let c = CGPoint(x: (CGFloat(i) + 0.5) * size / 4, y: (CGFloat(j) + 0.5) * size / 4)
+                    ctx.strokeEllipse(in: CGRect(x: c.x - 9, y: c.y - 9, width: 18, height: 18))
+                }
+            }
         }
 
         guard let image = ctx.makeImage() else { throw TextureError.render("makeImage failed") }

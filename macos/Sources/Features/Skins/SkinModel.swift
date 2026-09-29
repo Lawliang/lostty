@@ -53,7 +53,7 @@ struct RGB: Hashable {
 }
 
 enum BuiltinTexture: String, CaseIterable {
-    case dots, grid, diagonal, cross, waves, noise
+    case dots, grid, diagonal, cross, waves, noise, scanlines, sparkle, rings
 }
 
 enum SkinTexture: Hashable {
@@ -69,6 +69,12 @@ struct Skin: Hashable {
     var accent: RGB
     var texture: SkinTexture
     var textureOpacity: Double
+    /// Optional terminal theme (built-in presets set these).
+    var accent2: RGB? = nil
+    /// 16 ANSI colors, index 0–15.
+    var palette: [RGB]? = nil
+    var cursor: RGB? = nil
+    var selectionBackground: RGB? = nil
 
     /// Accent used when a skin does not set one.
     static func defaultAccent(for background: RGB) -> RGB {

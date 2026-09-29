@@ -119,5 +119,18 @@ struct SkinModelTests {
         #expect(SkinConfig.expand("/abs", home: "/h") == "/abs")
         #expect(SkinConfig.expand("~other/a", home: "/h") == "~other/a")
     }
+
+    @Test func newTexturesParse() throws {
+        for name in ["scanlines", "sparkle", "rings"] {
+            let config = try SkinConfig.parse("[skins.a]\nbackground = \"#000000\"\ntexture = \"\(name)\"", home: "/h")
+            #expect(config.skins["a"]?.texture == .builtin(BuiltinTexture(rawValue: name)!))
+        }
+    }
+
+    @Test func themeFieldsDefaultToNil() {
+        let s = Skin(name: "x", background: RGB(r: 0, g: 0, b: 0), foreground: nil,
+                     accent: RGB(r: 1, g: 1, b: 1), texture: .none, textureOpacity: 0.1)
+        #expect(s.palette == nil && s.cursor == nil && s.selectionBackground == nil && s.accent2 == nil)
+    }
 }
 #endif

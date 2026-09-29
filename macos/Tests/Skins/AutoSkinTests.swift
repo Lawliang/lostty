@@ -30,5 +30,14 @@ struct AutoSkinTests {
         #expect(AutoSkin.fnv1a("") == 0xcbf29ce484222325)
         #expect(AutoSkin.fnv1a("a") == 0xaf63dc4c8601ec8c)
     }
+
+    @Test func autoTexturesUnchanged() {
+        #expect(AutoSkin.autoTextures == [.dots, .grid, .diagonal, .cross, .waves, .noise])
+        for name in ["Milo", "Tabletake", "fewdy", "songslice", "Grain-app"] {
+            let hash = AutoSkin.fnv1a(name.lowercased())
+            let expected = AutoSkin.autoTextures[Int((hash >> 16) % 6)]
+            #expect(AutoSkin.skin(forRepo: name, textureOpacity: 0.16).texture == .builtin(expected))
+        }
+    }
 }
 #endif
