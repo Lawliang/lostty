@@ -63,6 +63,19 @@ struct ProjectResolverTests {
         #expect(noAuto.resolve(pwd: "\(root)/projectrepos/Milo/src") == .none)
     }
 
+    /// APFS is (usually) case-insensitive: a pwd whose case doesn't match the
+    /// configured match path, or the on-disk casing, must still resolve —
+    /// this can happen e.g. when a shell's $PWD was set before a directory
+    /// was renamed to different casing.
+    @Test func matchingIsCaseInsensitive() throws {
+        let root = try makeTree()
+        let resolver = ProjectResolver(matches: [
+            SkinMatch(path: "\(root)/projectrepos/Arca", skin: "arca"),
+        ], auto: true, home: "/nonexistent-home")
+        #expect(resolver.resolve(pwd: "\(root)/PROJECTREPOS/arca/APP") == .configured("arca"))
+        #expect(resolver.resolve(pwd: "\(root)/projectrepos/arca") == .configured("arca"))
+    }
+
     @Test func homeGitRootIsIgnored() throws {
         let root = try makeTree(rootIsGitRepo: true)
         let resolver = ProjectResolver(matches: [], auto: true, home: root)
