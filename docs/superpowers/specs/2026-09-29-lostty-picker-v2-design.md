@@ -1,7 +1,7 @@
 # Lostty Picker v2 — Design
 
 Date: 2026-09-29
-Status: Draft, awaiting review
+Status: Approved 2026-09-29
 Builds on: `2026-09-28-ghostty-skins-design.md` (rev 2) and the shipped app
 Visual reference: the "Lostty Skin Picker" design artifact (interactive mockup)
 
