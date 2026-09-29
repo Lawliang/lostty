@@ -14,7 +14,12 @@ grep -q "\*\* BUILD SUCCEEDED \*\*" macos/build/last-install.log || {
   exit 1
 }
 APP="macos/build/ReleaseLocal/Ghostty.app"
-codesign --force --deep --sign - "$APP"
+if [ -e "$APP" ] && codesign -dv "$APP" >/dev/null 2>&1; then
+  echo "$APP is already signed by the build; not re-signing."
+else
+  echo "$APP is unsigned or invalid; ad-hoc signing (preserving entitlements/flags)."
+  codesign --force --sign - --preserve-metadata=entitlements,flags "$APP"
+fi
 rm -rf "/Applications/Ghostty Skins.app"
 cp -R "$APP" "/Applications/Ghostty Skins.app"
 echo "Installed /Applications/Ghostty Skins.app"
