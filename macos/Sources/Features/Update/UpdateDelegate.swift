@@ -3,17 +3,15 @@ import Cocoa
 
 extension UpdateDriver: SPUUpdaterDelegate {
     func feedURLString(for updater: SPUUpdater) -> String? {
-        guard let appDelegate = NSApplication.shared.delegate as? AppDelegate else {
-            return nil
-        }
-
-        // Sparkle supports a native concept of "channels" but it requires that
-        // you share a single appcast file. We don't want to do that so we
-        // do this instead.
-        switch appDelegate.ghostty.config.autoUpdateChannel {
-        case .tip: return "https://tip.files.ghostty.org/appcast.xml"
-        case .stable: return "https://release.files.ghostty.org/appcast.xml"
-        }
+        // Ghostty Skins: this fork does not publish its own appcast, and
+        // must never point at upstream Ghostty's feed — doing so would let
+        // "Check for Updates…" offer to replace this fork with official
+        // Ghostty. Returning nil here (with no `SUFeedURL` in
+        // Ghostty-Info.plist to fall back to) leaves Sparkle with no feed
+        // URL at all, so a manual check surfaces a "no update information"
+        // error instead of silently reaching for the real ghostty.org feed.
+        // See UPGRADING.md.
+        return nil
     }
 
     /// Called when an update is scheduled to install silently,

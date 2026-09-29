@@ -1364,6 +1364,12 @@ extension AppDelegate: NSMenuItemValidation {
         case #selector(setAsDefaultTerminal(_:)):
             return NSWorkspace.shared.defaultTerminal != Bundle.main.bundleURL
 
+        case #selector(checkForUpdates(_:)):
+            // Ghostty Skins: this fork has no appcast feed (see
+            // UpdateDelegate.feedURLString) and must never offer to replace
+            // itself with official Ghostty, so disable the menu item outright.
+            return false
+
         case #selector(floatOnTop(_:)),
             #selector(useAsDefault(_:)):
             // Float on top items only active if the key window is a primary

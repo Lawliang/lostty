@@ -6,7 +6,8 @@ Ghostty Skins is `skins` = upstream tag + our commits. To move to a new tag:
     git merge v1.3.2
     # resolve conflicts in the hook list below, then:
     export PATH="$(brew --prefix zig@0.15)/bin:$PATH"   # use the Zig version the new tag requires
-    zig build test -Demit-macos-app=false -Dtest-filter=SetUserVar
+    zig build test -Demit-macos-app=false -Dtest-filter=UserVar
+    zig build test -Demit-macos-app=false -Dtest-filter="skins:"
     zig build -Demit-macos-app=false -Doptimize=ReleaseFast -Dxcframework-target=native
     macos/skins-test.sh
     macos/install-skins.sh
@@ -30,3 +31,5 @@ Ghostty Skins is `skins` = upstream tag + our commits. To move to a new tag:
 - `src/cli/ghostty.zig` — `skins` import, `Action.skins`, `runMain` and `options` entries, trailing `test { _ = skins; }` block.
 - `src/shell-integration/zsh/ghostty-integration` — `skins()` above `_entrypoint`.
 - `src/shell-integration/bash/ghostty.bash` — `skins()` at end.
+- `macos/Sources/Features/Update/UpdateDelegate.swift` — `feedURLString(for:)` unconditionally returns `nil` (this fork has no appcast and must never resolve to upstream Ghostty's feed).
+- `macos/Sources/App/macOS/AppDelegate.swift` — `validateMenuItem(_:)` disables the `checkForUpdates(_:)` (Check for Updates…) menu item, since there is no feed to check.
