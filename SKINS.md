@@ -40,8 +40,11 @@ Overrides last until reset or until the pane closes. zsh and bash get the
 - Quick Terminal panes are not skinned.
 - fish, nushell, and other non-zsh/bash shells do not get the `skins`
   shell function; run `ghostty +skins` directly instead.
-- tmux passes the skin escape sequence through only when
-  `set -g allow-passthrough on` is set.
+- Launching Ghostty Skins from inside another Ghostty pane (e.g. via
+  `open -a "Ghostty Skins"`, or double-clicking from within a terminal)
+  inherits that parent app's `GHOSTTY_RESOURCES_DIR`, which breaks the
+  `skins` shell function in every new pane. Launch it from Finder, the
+  Dock, or Spotlight instead.
 
 ## Updating from upstream Ghostty
 
