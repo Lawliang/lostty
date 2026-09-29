@@ -123,5 +123,65 @@ struct TextureStoreTests {
             try TextureStore(cacheDir: tempDir()).tileURL(for: skin(.logo(path: "/nonexistent/logo.svg")))
         }
     }
+
+    @Test func thumbnailImageDoesNotWriteToDisk() throws {
+        let dir = tempDir()
+        let store = TextureStore(cacheDir: dir)
+        let image = try store.thumbnailImage(for: skin(.builtin(.dots)))
+        #expect(image != nil)
+        #expect(image?.width == TextureStore.tileSize)
+        #expect(!FileManager.default.fileExists(atPath: dir.path))
+    }
+
+    @Test func thumbnailImageForNoneIsNil() throws {
+        #expect(try TextureStore(cacheDir: tempDir()).thumbnailImage(for: skin(.none)) == nil)
+    }
+
+    @Test func pruneDeletesOldestTilesBeyondLimit() throws {
+        let dir = tempDir()
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let fm = FileManager.default
+        var urls: [URL] = []
+        for i in 0..<5 {
+            let url = dir.appendingPathComponent("v1-tile\(i).png")
+            try Data([UInt8(i)]).write(to: url)
+            try fm.setAttributes([.modificationDate: Date(timeIntervalSince1970: Double(i))], ofItemAtPath: url.path)
+            urls.append(url)
+        }
+        // A non-matching file (no "v1-" prefix or wrong extension) must be left alone.
+        let other = dir.appendingPathComponent("notes.txt")
+        try Data().write(to: other)
+
+        TextureStore(cacheDir: dir).prune(keepingNewest: 2)
+
+        let remaining = Set(try fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil).map(\.lastPathComponent))
+        #expect(remaining == ["v1-tile3.png", "v1-tile4.png", "notes.txt"])
+    }
+
+    @Test func pruneKeepsEverythingUnderTheLimit() throws {
+        let dir = tempDir()
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try Data().write(to: dir.appendingPathComponent("v1-only.png"))
+        TextureStore(cacheDir: dir).prune(keepingNewest: 200)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: dir.path).count == 1)
+    }
+
+    @Test func pruneOldFilesDeletesOnlyStaleEntries() throws {
+        let dir = tempDir()
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let fm = FileManager.default
+        let stale = dir.appendingPathComponent("stale.ghostty")
+        let fresh = dir.appendingPathComponent("fresh.ghostty")
+        try Data().write(to: stale)
+        try Data().write(to: fresh)
+        let now = Date()
+        try fm.setAttributes([.modificationDate: now.addingTimeInterval(-8 * 24 * 3600)], ofItemAtPath: stale.path)
+        try fm.setAttributes([.modificationDate: now.addingTimeInterval(-1 * 3600)], ofItemAtPath: fresh.path)
+
+        TextureStore.pruneOldFiles(in: dir, olderThan: 7 * 24 * 3600, now: now)
+
+        let remaining = try fm.contentsOfDirectory(atPath: dir.path)
+        #expect(remaining == ["fresh.ghostty"])
+    }
 }
 #endif

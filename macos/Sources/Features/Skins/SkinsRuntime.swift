@@ -77,13 +77,18 @@ final class SkinsRuntime {
     private var expiryTimer: Timer?
 
     private init() {
-        let applier = GhosttySkinApplier(overlayDir: Self.cacheDir.appendingPathComponent("overlays"))
+        let overlayDir = Self.cacheDir.appendingPathComponent("overlays")
+        let applier = GhosttySkinApplier(overlayDir: overlayDir)
         let store = SkinConfigStore(fileURL: Self.configDir.appendingPathComponent("skins.toml"))
         store.reload()
         self.store = store
+        let textures = TextureStore(cacheDir: Self.cacheDir.appendingPathComponent("textures"))
+        // Ghostty Skins: keep the on-disk caches from growing without bound.
+        textures.prune()
+        TextureStore.pruneOldFiles(in: overlayDir, olderThan: 7 * 24 * 3600)
         self.manager = SkinManager(
             config: store.config,
-            textures: TextureStore(cacheDir: Self.cacheDir.appendingPathComponent("textures")),
+            textures: textures,
             catalogURL: Self.configDir.appendingPathComponent("state/catalog.json"),
             apply: { id, applied in applier.apply(id, applied) })
         manager.updateConfig(store.config, error: store.error)

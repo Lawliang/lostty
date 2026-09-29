@@ -1,5 +1,6 @@
 #if os(macOS)
 import Combine
+import CoreGraphics
 import Foundation
 
 struct AppliedSkin: Hashable {
@@ -80,7 +81,12 @@ final class SkinManager: ObservableObject {
     }
 
     func handleUserVar(_ id: UUID, name: String, value: String) {
-        guard name == SkinsConstants.userVarName, let request = SkinRequest.decode(value) else { return }
+        guard name == SkinsConstants.userVarName else { return }
+        guard let request = SkinRequest.decode(value) else {
+            // Spec §7: invalid CLI messages are ignored, logged at debug level.
+            Ghostty.logger.debug("skins: rejected malformed \(SkinsConstants.userVarName) payload")
+            return
+        }
         handle(request, for: id)
     }
 
@@ -95,11 +101,17 @@ final class SkinManager: ObservableObject {
             pane.previewUpdatedAt = nil
             pane.override = nil
         case .preview:
-            guard let skin = skin(from: request, base: pane.override ?? autoSkin(for: pane.source)) else { return }
+            guard let skin = skin(from: request, base: pane.override ?? autoSkin(for: pane.source)) else {
+                Ghostty.logger.debug("skins: rejected preview request naming an unknown skin/texture")
+                return
+            }
             pane.preview = skin
             pane.previewUpdatedAt = now()
         case .set:
-            guard let skin = skin(from: request, base: pane.override ?? autoSkin(for: pane.source)) else { return }
+            guard let skin = skin(from: request, base: pane.override ?? autoSkin(for: pane.source)) else {
+                Ghostty.logger.debug("skins: rejected set request naming an unknown skin/texture")
+                return
+            }
             pane.override = skin
             pane.preview = nil
             pane.previewUpdatedAt = nil
@@ -194,9 +206,11 @@ final class SkinManager: ObservableObject {
 
     /// Side-effect-free variant of `tileURL(for:)` for use from SwiftUI view
     /// bodies (e.g. the popover's thumbnails), which must not mutate
-    /// `@Published` state during a view update.
-    func thumbnailURL(for skin: Skin) -> URL? {
-        try? textures.tileURL(for: skin)
+    /// `@Published` state during a view update. Renders in memory only (no
+    /// disk write), so re-previewing colors/textures doesn't grow the
+    /// texture cache.
+    func thumbnailImage(for skin: Skin) -> CGImage? {
+        try? textures.thumbnailImage(for: skin)
     }
 
     // MARK: Internals

@@ -135,10 +135,17 @@ struct SkinPopoverView: View {
             get: { Color(rgb: current.background) },
             set: { newValue in
                 guard let c = NSColor(newValue).usingColorSpace(.sRGB) else { return }
+                // Ghostty Skins: some color spaces (e.g. wide-gamut Display
+                // P3 swatches) round-trip through sRGB with components
+                // slightly outside 0...1, which would otherwise overflow
+                // the UInt8 conversion below.
+                func clamped255(_ component: CGFloat) -> UInt8 {
+                    UInt8((min(max(component, 0), 1) * 255).rounded())
+                }
                 let rgb = RGB(
-                    r: UInt8((c.redComponent * 255).rounded()),
-                    g: UInt8((c.greenComponent * 255).rounded()),
-                    b: UInt8((c.blueComponent * 255).rounded()))
+                    r: clamped255(c.redComponent),
+                    g: clamped255(c.greenComponent),
+                    b: clamped255(c.blueComponent))
                 edit { skin in
                     skin.background = rgb
                     if case .builtin = skin.texture { skin.accent = Skin.defaultAccent(for: rgb) }
@@ -182,11 +189,12 @@ struct SkinPopoverView: View {
         ZStack {
             RoundedRectangle(cornerRadius: 5).fill(Color(rgb: current.background))
             if option.texture != .none {
-                // Ghostty Skins: use the side-effect-free lookup here — this
-                // runs during a view update, and `tileURL(for:)` mutates
-                // `@Published textureError` as a side effect.
-                if let url = manager.thumbnailURL(for: sampleSkin(for: option)), let image = NSImage(contentsOf: url) {
-                    Image(nsImage: image).resizable().scaledToFill().opacity(0.8)
+                // Ghostty Skins: use the side-effect-free, in-memory lookup
+                // here — this runs during a view update (so it must not
+                // mutate `@Published textureError`), and re-renders on every
+                // color/texture change, so it must not write to disk either.
+                if let image = manager.thumbnailImage(for: sampleSkin(for: option)) {
+                    Image(decorative: image, scale: 1).resizable().scaledToFill().opacity(0.8)
                 }
             } else {
                 Image(systemName: "nosign").foregroundStyle(.secondary)

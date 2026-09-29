@@ -17,35 +17,92 @@ final class TextureStore {
     static let logoOrigins = [CGPoint(x: 30, y: 30), CGPoint(x: 140, y: 135)]
 
     let cacheDir: URL
+    /// In-memory renders for the popover's live thumbnails, keyed the same
+    /// as the on-disk cache. Side-effect-free w.r.t. the filesystem, so
+    /// dragging the color picker or flipping through textures doesn't write
+    /// a PNG per frame.
+    private let thumbnailCache = NSCache<NSString, CGImage>()
 
     init(cacheDir: URL) {
         self.cacheDir = cacheDir
     }
 
-    func tileURL(for skin: Skin) throws -> URL? {
-        let key: String
-        let render: () throws -> CGImage
+    /// The cache key and renderer for a skin's texture, or nil for `.none`.
+    private func plan(for skin: Skin) throws -> (key: String, render: () throws -> CGImage)? {
         switch skin.texture {
         case .none:
             return nil
         case .builtin(let texture):
-            key = "b-\(texture.rawValue)-\(skin.accent.hex.dropFirst())"
-            render = { try Self.renderBuiltin(texture, accent: skin.accent) }
+            let key = "b-\(texture.rawValue)-\(skin.accent.hex.dropFirst())"
+            return (key, { try Self.renderBuiltin(texture, accent: skin.accent) })
         case .logo(let path):
             guard let attributes = try? FileManager.default.attributesOfItem(atPath: path) else {
                 throw TextureError.unreadableLogo(path)
             }
             let mtime = Int((attributes[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0)
-            key = "l-\(String(AutoSkin.fnv1a(path), radix: 16))-\(mtime)-\(skin.accent.hex.dropFirst())"
-            render = { try Self.renderLogoTile(path: path, accent: skin.accent) }
+            let key = "l-\(String(AutoSkin.fnv1a(path), radix: 16))-\(mtime)-\(skin.accent.hex.dropFirst())"
+            return (key, { try Self.renderLogoTile(path: path, accent: skin.accent) })
         }
+    }
 
+    func tileURL(for skin: Skin) throws -> URL? {
+        guard let (key, render) = try plan(for: skin) else { return nil }
         let url = cacheDir.appendingPathComponent("v1-\(key).png")
         if FileManager.default.fileExists(atPath: url.path) { return url }
         let image = try render()
         try FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
         try Self.writePNG(image, to: url)
         return url
+    }
+
+    /// Renders a skin's texture tile in memory only, for previews (e.g. the
+    /// popover's thumbnails) that must not write to the texture cache on
+    /// every color/texture change. Cached in memory so re-rendering the same
+    /// preview repeatedly (e.g. every view update) is cheap.
+    func thumbnailImage(for skin: Skin) throws -> CGImage? {
+        guard let (key, render) = try plan(for: skin) else { return nil }
+        let cacheKey = key as NSString
+        if let cached = thumbnailCache.object(forKey: cacheKey) { return cached }
+        let image = try render()
+        thumbnailCache.setObject(image, forKey: cacheKey)
+        return image
+    }
+
+    /// Deletes the oldest `v1-*.png` tiles beyond `keepingNewest` (by
+    /// modification date), so the texture cache doesn't grow without bound
+    /// as skins/accents change over time.
+    func prune(keepingNewest: Int = 200) {
+        let fm = FileManager.default
+        guard let files = try? fm.contentsOfDirectory(
+            at: cacheDir, includingPropertiesForKeys: [.contentModificationDateKey],
+            options: [.skipsHiddenFiles]) else { return }
+        let tiles = files.filter { $0.lastPathComponent.hasPrefix("v1-") && $0.pathExtension == "png" }
+        guard tiles.count > keepingNewest else { return }
+        let dated = tiles.map { url -> (url: URL, date: Date) in
+            let date = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+            return (url, date ?? .distantPast)
+        }
+        let newestFirst = dated.sorted { $0.date > $1.date }
+        for stale in newestFirst.dropFirst(keepingNewest) {
+            try? fm.removeItem(at: stale.url)
+        }
+    }
+
+    /// Deletes files in `dir` whose modification date is older than
+    /// `olderThan` seconds ago. Used to prune the overlay directory (one
+    /// small `.ghostty` file per live surface), which otherwise keeps a
+    /// stale entry for any pane whose app instance was force-quit rather
+    /// than closed normally.
+    static func pruneOldFiles(in dir: URL, olderThan seconds: TimeInterval, now: Date = Date()) {
+        let fm = FileManager.default
+        guard let files = try? fm.contentsOfDirectory(
+            at: dir, includingPropertiesForKeys: [.contentModificationDateKey],
+            options: [.skipsHiddenFiles]) else { return }
+        let cutoff = now.addingTimeInterval(-seconds)
+        for url in files {
+            let date = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+            if (date ?? .distantPast) < cutoff { try? fm.removeItem(at: url) }
+        }
     }
 
     static func makeContext(width: Int, height: Int) throws -> CGContext {
