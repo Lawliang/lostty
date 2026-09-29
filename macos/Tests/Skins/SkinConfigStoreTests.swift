@@ -39,5 +39,29 @@ struct SkinConfigStoreTests {
         #expect(store.error == nil)
         #expect(changes == 3)
     }
+
+    /// Editors like VS Code/Cursor/nano rewrite the file in place (truncate +
+    /// write on the same inode) rather than rename-over-save; that fires no
+    /// directory event, so the store needs its own watcher on the file.
+    @Test func detectsInPlaceRewrite() throws {
+        let (store, file) = try makeStore()
+        try "[skins.a]\nbackground = \"#000000\"\n".write(to: file, atomically: true, encoding: .utf8)
+        store.reload()
+        #expect(store.config.skins["a"]?.background == RGB(hex: "#000000"))
+
+        store.startWatching()
+
+        let newContents = "[skins.a]\nbackground = \"#3a0f15\"\n"
+        let handle = try FileHandle(forWritingTo: file)
+        handle.truncateFile(atOffset: 0)
+        handle.write(newContents.data(using: .utf8)!)
+        try handle.close()
+
+        let deadline = Date().addingTimeInterval(2)
+        while store.config.skins["a"]?.background != RGB(hex: "#3a0f15") && Date() < deadline {
+            RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        }
+        #expect(store.config.skins["a"]?.background == RGB(hex: "#3a0f15"))
+    }
 }
 #endif
