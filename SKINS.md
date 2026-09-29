@@ -24,7 +24,7 @@ title-bar chip shows a warning.
 
 ## Override
 
-- Click the chip at the left of the title bar: pick a skin, color, texture or
+- Click the chip at the right of the title bar: pick a skin, color, texture or
   opacity (previews live), then **Apply**. **Reset to project** undoes it.
 - Or in any pane: `skins` (interactive picker), `skins set <name>`,
   `skins color '#3a0f14'`, `skins texture grid`, `skins opacity 0.3`,

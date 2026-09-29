@@ -28,11 +28,14 @@ struct SkinChipView: View {
             showingPopover.toggle()
         } label: {
             HStack(spacing: 5) {
-                Circle()
-                    .fill(skin.map { Color(rgb: $0.background) } ?? Color.secondary.opacity(0.3))
-                    .overlay(Circle().strokeBorder(skin.map { Color(rgb: $0.accent) } ?? Color.secondary, lineWidth: 1.5))
-                    .frame(width: 11, height: 11)
-                Text(skin?.name ?? "default")
+                // Unskinned panes show a plain "skins" label, no swatch.
+                if let skin {
+                    Circle()
+                        .fill(Color(rgb: skin.background))
+                        .overlay(Circle().strokeBorder(Color(rgb: skin.accent), lineWidth: 1.5))
+                        .frame(width: 11, height: 11)
+                }
+                Text(skin?.name ?? "skins")
                     .font(.system(size: 11, weight: .medium))
                     .lineLimit(1)
                 if let id, manager.panes[id]?.override != nil {
@@ -66,7 +69,9 @@ struct SkinChipView: View {
                 SkinPopoverView(surfaceID: id, manager: manager).id(id)
             }
         }
-        .padding(.leading, 6)
+        .padding(.trailing, 8)
+        // Line the pill up with the window title's baseline area.
+        .padding(.top, 7)
     }
 }
 #endif

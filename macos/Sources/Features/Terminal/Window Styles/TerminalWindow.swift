@@ -158,8 +158,8 @@ class TerminalWindow: NSWindow {
                 updateAccessory.view.translatesAutoresizingMaskIntoConstraints = false
             }
 
-            // Ghostty Skins: pane skin chip at the leading edge of the titlebar.
-            skinAccessory.layoutAttribute = .left
+            // Ghostty Skins: pane skin chip at the trailing edge of the titlebar.
+            skinAccessory.layoutAttribute = .right
             skinAccessory.view = NonDraggableHostingView(rootView: SkinChipView(
                 model: skinChipModel,
                 manager: SkinsRuntime.shared.manager))
