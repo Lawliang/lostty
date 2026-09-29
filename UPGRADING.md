@@ -1,6 +1,6 @@
-# Upgrading Ghostty Skins to a new Ghostty release
+# Upgrading Lostty (Ghostty Skins) to a new Ghostty release
 
-Ghostty Skins is `skins` = upstream tag + our commits. To move to a new tag:
+Lostty is `skins` = upstream tag + our commits. To move to a new tag:
 
     git fetch upstream tag v1.3.2 --no-tags
     git merge v1.3.2
@@ -15,6 +15,7 @@ Ghostty Skins is `skins` = upstream tag + our commits. To move to a new tag:
 ## Upstream files we hook (keep these hunks when resolving conflicts)
 
 - `macos/Ghostty.xcodeproj/project.pbxproj` — app target `PRODUCT_BUNDLE_IDENTIFIER` and `INFOPLIST_KEY_CFBundleDisplayName` (3 build configurations).
+- `images/Ghostty.icon/Assets/Screen.png`, `images/Ghostty.icon/icon.json` (GhosttyBlur fill) and `macos/Assets.xcassets/AppIconImage.imageset/*.png` — hologram-pink Lostty icon. On conflict keep ours; regenerate with `python3 docs/skins/recolor-icon.py screen|flat <src> <dst>` if upstream redraws the icon.
 - `src/terminal/osc.zig` — `set_user_var` Command field, `Key` list entry (last), reset-switch entry.
 - `src/terminal/osc/parsers/iterm2.zig` — `.SetUserVar` branch (removed from unimplemented list) + tests.
 - `src/terminal/stream.zig` — `set_user_var` Action + Key entry (last) + `SetUserVar` struct + `oscDispatch` arm.

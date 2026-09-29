@@ -1,5 +1,5 @@
 #!/bin/sh
-# Builds Ghostty Skins (ReleaseLocal) and installs /Applications/Ghostty Skins.app.
+# Builds Lostty (ReleaseLocal) and installs /Applications/Lostty.app.
 set -eu
 cd "$(dirname "$0")/.."
 export PATH="$(brew --prefix zig@0.15)/bin:$PATH"
@@ -20,6 +20,6 @@ else
   echo "$APP is unsigned or invalid; ad-hoc signing (preserving entitlements/flags)."
   codesign --force --sign - --preserve-metadata=entitlements,flags "$APP"
 fi
-rm -rf "/Applications/Ghostty Skins.app"
-cp -R "$APP" "/Applications/Ghostty Skins.app"
-echo "Installed /Applications/Ghostty Skins.app"
+rm -rf "/Applications/Lostty.app" "/Applications/Ghostty Skins.app"
+cp -R "$APP" "/Applications/Lostty.app"
+echo "Installed /Applications/Lostty.app"

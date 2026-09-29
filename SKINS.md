@@ -1,4 +1,4 @@
-# Ghostty Skins
+# Lostty
 
 A fork of [Ghostty](https://github.com/ghostty-org/ghostty) that gives every
 pane a background color and texture based on the project it is in.
@@ -10,7 +10,7 @@ pane a background color and texture based on the project it is in.
 
 ## Install
 
-    macos/install-skins.sh      # builds and installs /Applications/Ghostty Skins.app
+    macos/install-skins.sh      # builds and installs /Applications/Lostty.app
 
 Requires Xcode (with the Metal Toolchain component:
 `xcodebuild -downloadComponent MetalToolchain`), `brew install zig@0.15 nushell`.
@@ -40,8 +40,8 @@ Overrides last until reset or until the pane closes. zsh and bash get the
 - Quick Terminal panes are not skinned.
 - fish, nushell, and other non-zsh/bash shells do not get the `skins`
   shell function; run `ghostty +skins` directly instead.
-- Launching Ghostty Skins from inside another Ghostty pane (e.g. via
-  `open -a "Ghostty Skins"`, or double-clicking from within a terminal)
+- Launching Lostty from inside another Ghostty pane (e.g. via
+  `open -a Lostty`, or double-clicking from within a terminal)
   inherits that parent app's `GHOSTTY_RESOURCES_DIR`, which breaks the
   `skins` shell function in every new pane. Launch it from Finder, the
   Dock, or Spotlight instead.

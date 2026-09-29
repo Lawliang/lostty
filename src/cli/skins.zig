@@ -72,7 +72,7 @@ pub fn run(gpa: Allocator) !u8 {
     }
 
     const surface_id = std.posix.getenv(protocol.surface_env) orelse {
-        try stderr.writeAll("skins: run this inside a Ghostty Skins terminal\n");
+        try stderr.writeAll("skins: run this inside a Lostty terminal\n");
         return 1;
     };
     const tmux = std.posix.getenv("TMUX") != null;
@@ -156,7 +156,7 @@ fn loadCatalog(alloc: Allocator, stderr: *std.Io.Writer) !?protocol.Catalog {
     const home = std.posix.getenv("HOME") orelse return null;
     const path = try std.fs.path.join(alloc, &.{ home, ".config/ghostty-skins/state/catalog.json" });
     const bytes = std.fs.cwd().readFileAlloc(alloc, path, 1 << 20) catch {
-        try stderr.print("skins: cannot read {s} (is Ghostty Skins running?)\n", .{path});
+        try stderr.print("skins: cannot read {s} (is Lostty running?)\n", .{path});
         return null;
     };
     const parsed = protocol.parseCatalog(alloc, bytes) catch {
