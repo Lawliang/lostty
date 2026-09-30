@@ -26,7 +26,7 @@ title-bar chip shows a warning.
 
 Lostty ships with six built-in preset skins that restyle your background, text
 color, texture, 16-color ANSI palette, cursor, and selection. Each preset has
-a rarity label and an optional accent color.
+a rarity label and a defined accent color.
 
 - **neon-arcade** (legendary) — Bright magenta and cyan on a dark purple.
 - **sunset-drive** (epic) — Warm orange and pink on a dark plum with scanlines.
@@ -43,8 +43,8 @@ the same name as a preset overrides it and appears in the picker tagged PROJECT.
 If your `skins.toml` maps a folder with `[[match]]`, that folder's pane always
 shows its mapped skin and cannot be overridden. The picker shows a Locked card
 explaining that the folder is configured. `skins set`, `skins color`, and
-`skins texture` exit with an error in a locked folder; `skins reset` still
-works. When you leave a locked folder, your previous override (if any)
+`skins texture` exit with `skins: this folder is locked to "<skin>" by skins.toml` (exit 1);
+`skins reset` still works. When you leave a locked folder, your previous override (if any)
 returns.
 
 ## Saved Colors
@@ -61,8 +61,8 @@ shared across all Lostty windows (max 24).
   texture (live), then **Equip** to keep it. **Reset** undoes it. The chip
   briefly shows "Equipped" after you apply.
 - Or in any pane: `skins` (interactive picker), `skins set <name>`,
-  `skins color '#3a0f14'`, `skins texture grid`,
-  `skins reset`, `skins list`, `skins current`.
+  `skins color '#3a0f14'`, `skins texture grid`, `skins opacity 0.5`,
+  `skins reset`, `skins list` (shows name, background, texture, rarity), `skins current`.
 
 Overrides last until reset or until the pane closes. zsh and bash get the
 `skins` function from Ghostty's shell integration; other shells can run
