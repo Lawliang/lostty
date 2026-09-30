@@ -81,6 +81,8 @@ struct SkinManagerTests {
         #expect(m.effectiveSkin(id) == prod)
         #expect(m.sourceLabel(id) == "Override")
         m.handleUserVar(id, name: SkinsConstants.userVarName, value: #"{"v":1,"op":"reset"}"#)
+        #expect(m.effectiveSkin(id) == nil)
+        #expect(h.calls.last?.1 == nil)
         m.pwdChanged(id, pwd: "\(root)/Milo")
         #expect(m.effectiveSkin(id) == milo)
         #expect(h.calls.last?.1?.skin == milo)
@@ -247,6 +249,7 @@ struct SkinManagerTests {
         m.setOverride(id, prod)
         #expect(m.effectiveSkin(id) == arca)
         #expect(m.panes[id]?.override == nil)
+        #expect(m.panes[id]?.preview == nil)
         #expect(h.calls.count == calls)
         #expect(m.sourceLabel(id) == "Locked: arca")
     }
@@ -258,8 +261,10 @@ struct SkinManagerTests {
         m.pwdChanged(id, pwd: "\(root)/arca/app")
         #expect(m.effectiveSkin(id) == arca)
         #expect(m.equippedName(id) == "prod")
+        #expect(h.calls.last?.1?.skin == arca)
         m.pwdChanged(id, pwd: "\(root)/plain")
         #expect(m.effectiveSkin(id) == prod)
+        #expect(h.calls.last?.1?.skin == prod)
     }
 
     @Test func resetStillWorksWhileLocked() {
