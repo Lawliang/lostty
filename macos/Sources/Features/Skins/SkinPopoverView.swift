@@ -8,6 +8,7 @@ struct SkinPopoverView: View {
     @ObservedObject var manager: SkinManager
     @ObservedObject var savedColors: SavedColorsStore
     var onEquipped: (String) -> Void
+    var onClose: () -> Void
 
     private enum Tab: Hashable { case presets, custom }
 
@@ -51,9 +52,20 @@ struct SkinPopoverView: View {
     // MARK: Sections
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text("Skins").font(.system(size: 20, weight: .bold))
-            Text(subtitle).font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(1)
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Skins").font(.system(size: 20, weight: .bold))
+                Text(subtitle).font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(1)
+            }
+            Spacer()
+            Button { onClose() } label: {
+                Image(systemName: "xmark").font(.system(size: 11, weight: .bold))
+                    .frame(width: 26, height: 26)
+                    .background(Circle().fill(Color.white.opacity(0.08)))
+            }
+            .buttonStyle(.plain)
+            .help("Close")
+            .accessibilityLabel("Close")
         }
     }
 
@@ -154,7 +166,16 @@ struct SkinPopoverView: View {
                     .textFieldStyle(.roundedBorder)
                     .font(.system(size: 12, design: .monospaced))
                     .frame(width: 84)
-                    .onSubmit { if let rgb = RGB(hex: hex.lowercased()) { setBackground(rgb) } }
+                    .onChange(of: hex) { new in
+                        if let rgb = RGB(hex: new.trimmingCharacters(in: .whitespaces).lowercased()), rgb != current.background {
+                            setBackground(rgb)
+                        }
+                    }
+                    .onSubmit {
+                        if let rgb = RGB(hex: hex.trimmingCharacters(in: .whitespaces).lowercased()), rgb != current.background {
+                            setBackground(rgb)
+                        }
+                    }
                 let saved = savedColors.contains(current.background)
                     || SkinPresets.all.contains { $0.skin.background == current.background }
                 Button(saved ? "Saved" : "Save") { savedColors.add(current.background) }
@@ -199,7 +220,6 @@ struct SkinPopoverView: View {
                     .shadow(color: accent.opacity(0.45), radius: 10)
             }
             .buttonStyle(.plain)
-            .keyboardShortcut(.defaultAction)
             .disabled(draft == nil)
             .opacity(draft == nil ? 0.5 : 1)
         }
@@ -325,6 +345,7 @@ struct SkinPopoverView: View {
         committed = true
         draft = nil
         manager.reset(surfaceID)
+        hex = base.background.hex
     }
 }
 #endif

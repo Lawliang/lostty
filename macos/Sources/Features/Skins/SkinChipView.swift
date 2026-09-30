@@ -80,7 +80,8 @@ struct SkinChipView: View {
                         showingPopover = false
                         flash = name
                         DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) { flash = nil }
-                    }
+                    },
+                    onClose: { showingPopover = false }
                 ).id(id)
             }
         }
