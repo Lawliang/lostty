@@ -16,6 +16,7 @@ Lostty is `skins` = upstream tag + our commits. To move to a new tag:
 
 - `macos/Ghostty.xcodeproj/project.pbxproj` — app target `PRODUCT_BUNDLE_IDENTIFIER` and `INFOPLIST_KEY_CFBundleDisplayName` (3 build configurations).
 - `images/Ghostty.icon/` (Screen.png, Ghostty.png, Inner Bevel 6px.png, and icon.json's frame gradient + GhosttyBlur fill) and `macos/Assets.xcassets/AppIconImage.imageset/*.png` — Lostty's neon-pink icon. On conflict keep ours. If upstream redraws the icon, rerun `python3 docs/skins/recolor-icon.py screen|bevel|ghost <upstream layer> <dst>`, reapply the icon.json colors, build, and re-export the fallback PNGs from the built app's icon.
+- `macos/Sources/Features/Custom App Icon/DockTilePlugin.swift` — release builds on macOS 26 use the bundled `AppIconImage` (hologram-pink Blueprint) and stamp it on the bundle instead of the composed glass icon. `macos/Assets.xcassets/AppIconImage.imageset/*.png` hold that artwork (`python3 docs/skins/recolor-icon.py blueprint <Blueprint 1024px> <dst>`).
 - `src/terminal/osc.zig` — `set_user_var` Command field, `Key` list entry (last), reset-switch entry.
 - `src/terminal/osc/parsers/iterm2.zig` — `.SetUserVar` branch (removed from unimplemented list) + tests.
 - `src/terminal/stream.zig` — `set_user_var` Action + Key entry (last) + `SetUserVar` struct + `oscDispatch` arm.

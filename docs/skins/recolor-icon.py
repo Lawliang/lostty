@@ -8,6 +8,9 @@ Modes (run each against the *upstream* layer, not an already recolored one):
           rounded-rect alpha mask.
   bevel   images/Ghostty.icon/Assets/Inner Bevel 6px.png — tints the dark
           bevel deep magenta, keeping its shading.
+  blueprint  macos/Assets.xcassets/Alternate Icons/BlueprintImage.imageset/
+          macOS-AppIcon-1024px.png — rotates Blueprint's blue (~216°) to
+          hologram pink (~318°), keeping its lines, shading and peeled corner.
   ghost   images/Ghostty.icon/Assets/Ghostty.png — turns the light-blue ghost
           pale neon pink; dark pixels (the prompt glyphs) keep their shade.
 
@@ -65,6 +68,20 @@ def recolor_ghost(src, dst):
     save(np.concatenate([GHOST_TINT * value, img[..., 3:]], axis=2), dst)
 
 
+def recolor_blueprint(src, dst):
+    import colorsys
+
+    img = load(src)
+    to_hsv = np.vectorize(colorsys.rgb_to_hsv)
+    to_rgb = np.vectorize(colorsys.hsv_to_rgb)
+    h, s, v = to_hsv(img[..., 0], img[..., 1], img[..., 2])
+    # Only coloured pixels move; white lines and greys keep their look.
+    h = np.where(s > 0.12, (h + 102 / 360) % 1.0, h)
+    s = np.where(s > 0.12, np.minimum(1.0, s * 1.05), s)
+    r, g, b = to_rgb(h, s, v)
+    save(np.stack([r, g, b, img[..., 3]], axis=-1), dst)
+
+
 if __name__ == "__main__":
     mode, src, dst = sys.argv[1:4]
-    {"screen": recolor_screen, "bevel": recolor_bevel, "ghost": recolor_ghost}[mode](src, dst)
+    {"screen": recolor_screen, "bevel": recolor_bevel, "ghost": recolor_ghost, "blueprint": recolor_blueprint}[mode](src, dst)

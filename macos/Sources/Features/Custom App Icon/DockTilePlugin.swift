@@ -93,20 +93,12 @@ class DockTilePlugin: NSObject, NSDockTilePlugIn {
             // Use the `Blueprint` icon to distinguish Debug from Release builds.
             appIcon = pluginBundle.image(forResource: "BlueprintImage")!
             #else
-            // Get the composed icon from the app bundle.
-            if let appBundlePath,
-                let iconRep = NSWorkspace.shared.icon(forFile: appBundlePath)
-                .bestRepresentation(
-                    for: CGRect(origin: .zero, size: dockTile.size),
-                    context: nil,
-                    hints: nil
-            ) {
-                appIcon = NSImage(size: dockTile.size)
-                appIcon.addRepresentation(iconRep)
-            } else {
-                // If something unexpected happens on macOS 26,
-                // fall back to a bundled icon.
-                appIcon = pluginBundle.image(forResource: "AppIconImage")!
+            // Ghostty Skins (Lostty): always use the bundled hologram-pink
+            // Blueprint icon (AppIconImage) instead of the composed glass icon,
+            // and stamp it on the bundle so Finder/Spotlight match the Dock.
+            appIcon = pluginBundle.image(forResource: "AppIconImage")!
+            if let appBundlePath {
+                NSWorkspace.shared.setIcon(appIcon, forFile: appBundlePath)
             }
             #endif
         } else {

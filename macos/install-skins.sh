@@ -22,4 +22,14 @@ else
 fi
 rm -rf "/Applications/Lostty.app" "/Applications/Ghostty Skins.app"
 cp -R "$APP" "/Applications/Lostty.app"
+# Stamp the hologram-pink Blueprint icon so Finder/Spotlight show it before
+# the first launch (the Dock tile plugin keeps it in sync afterwards).
+ICON="$PWD/macos/Assets.xcassets/AppIconImage.imageset/macOS-AppIcon-1024px.png"
+swift - "$ICON" <<'SWIFT' || echo "warning: could not set the Finder icon" >&2
+import AppKit
+let args = CommandLine.arguments
+if let image = NSImage(contentsOfFile: args[1]) {
+    NSWorkspace.shared.setIcon(image, forFile: "/Applications/Lostty.app")
+}
+SWIFT
 echo "Installed /Applications/Lostty.app"
