@@ -163,7 +163,8 @@ struct SkinConfig: Equatable {
                 name: name, section: section, defaultOpacity: config.textureOpacity,
                 home: home, fileExists: fileExists)
         }
-        for match in config.matches where config.skins[match.skin] == nil {
+        let builtinNames = Set(SkinPresets.all.map(\.skin.name))
+        for match in config.matches where config.skins[match.skin] == nil && !builtinNames.contains(match.skin) {
             throw SkinConfigError(message: "[[match]] \(match.path) references unknown skin '\(match.skin)'")
         }
         return config

@@ -120,6 +120,12 @@ struct SkinModelTests {
         #expect(SkinConfig.expand("~other/a", home: "/h") == "~other/a")
     }
 
+    @Test func matchMayNameABuiltinPreset() throws {
+        let config = try SkinConfig.parse(
+            "[[match]]\npath = \"~/x\"\nskin = \"neon-arcade\"", home: "/Users/test")
+        #expect(config.matches == [SkinMatch(path: "/Users/test/x", skin: "neon-arcade")])
+    }
+
     @Test func newTexturesParse() throws {
         for name in ["scanlines", "sparkle", "rings"] {
             let config = try SkinConfig.parse("[skins.a]\nbackground = \"#000000\"\ntexture = \"\(name)\"", home: "/h")

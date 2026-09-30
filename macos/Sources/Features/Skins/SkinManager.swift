@@ -194,7 +194,8 @@ final class SkinManager: ObservableObject {
     func isLocked(_ id: UUID) -> Bool { lockedSkinName(id) != nil }
 
     func lockedSkinName(_ id: UUID) -> String? {
-        guard case .configured(let name)? = panes[id]?.source, config.skins[name] != nil else { return nil }
+        guard case .configured(let name)? = panes[id]?.source,
+              SkinLibrary.skins(config: config)[name] != nil else { return nil }
         return name
     }
 
@@ -203,7 +204,7 @@ final class SkinManager: ObservableObject {
 
     func effectiveSkin(_ id: UUID) -> Skin? {
         guard let pane = panes[id] else { return nil }
-        if let locked = lockedSkinName(id) { return config.skins[locked] }
+        if let locked = lockedSkinName(id) { return SkinLibrary.skins(config: config)[locked] }
         return pane.preview ?? pane.override ?? autoSkin(for: pane.source)
     }
 
@@ -244,7 +245,7 @@ final class SkinManager: ObservableObject {
 
     private func autoSkin(for source: SkinSource) -> Skin? {
         switch source {
-        case .configured(let name): return config.skins[name]
+        case .configured(let name): return SkinLibrary.skins(config: config)[name]
         case .auto(let repo): return AutoSkin.skin(forRepo: repo, textureOpacity: config.textureOpacity)
         case .none: return nil
         }

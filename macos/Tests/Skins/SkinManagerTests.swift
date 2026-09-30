@@ -295,6 +295,20 @@ struct SkinManagerTests {
         #expect(m.effectiveSkin(id)?.palette == nil)
     }
 
+    @Test func matchToABuiltinPresetLocksAndResolves() throws {
+        var cfg = config
+        cfg.matches.append(SkinMatch(path: "\(root)/plain", skin: "neon-arcade"))
+        let h = Harness()
+        let m = SkinManager(config: cfg, textures: TextureStore(cacheDir: URL(fileURLWithPath: root).appendingPathComponent("cache")),
+                            catalogURL: nil, home: "/nonexistent-home", now: { h.clock },
+                            apply: { id, a in h.calls.append((id, a)); return true })
+        let id = UUID()
+        m.pwdChanged(id, pwd: "\(root)/plain")
+        #expect(m.isLocked(id))
+        #expect(m.lockedSkinName(id) == "neon-arcade")
+        #expect(m.effectiveSkin(id)?.palette?.count == 16)
+    }
+
     @Test func catalogListsLibraryAndLockedPanes() throws {
         let h = Harness()
         let url = URL(fileURLWithPath: root).appendingPathComponent("state/catalog.json")
