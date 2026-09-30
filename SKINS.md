@@ -49,11 +49,12 @@ returns.
 
 ## Saved Colors
 
-Click the chip or run `skins` to open the picker, then go to the Custom tab.
-The "Any color" row lets you pick any background color with a native color
-panel or type a hex code. Click Save to add it to your saved swatches. Saved
-colors live in `~/.config/ghostty-skins/state/saved-colors.json` and are
-shared across all Lostty windows (max 24).
+Click the chip to open the title-bar picker, then go to the Custom tab (the
+terminal `skins` picker has no Custom tab). The "Any color" row lets you pick
+any background color with a native color panel or type a hex code. Click Save
+to add it to your saved swatches. Saved colors live in
+`~/.config/ghostty-skins/state/saved-colors.json` and are shared across all
+Lostty windows (max 24).
 
 ## Override
 

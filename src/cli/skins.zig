@@ -19,7 +19,7 @@ pub const Options = struct {
 
 const usage =
     \\usage: skins                     interactive picker (live preview)
-    \\       skins set <name>          use a skin from skins.toml
+    \\       skins set <name>          use a preset or a skin from skins.toml
     \\       skins color <#rrggbb>     override the background color
     \\       skins texture <name|none> override the texture
     \\       skins opacity <0-1>       override the texture opacity
@@ -109,7 +109,11 @@ pub fn run(gpa: Allocator) !u8 {
             const catalog = try loadCatalog(alloc, stderr) orelse return 1;
             if (catalog.panes.map.get(surface_id)) |pane| {
                 const name = try sanitizeForDisplay(alloc, pane.skin);
-                try stdout.print("{s} ({s}) {s}\n", .{ name, pane.source, pane.background });
+                if (pane.locked) {
+                    try stdout.print("{s} ({s}) (locked) {s}\n", .{ name, pane.source, pane.background });
+                } else {
+                    try stdout.print("{s} ({s}) {s}\n", .{ name, pane.source, pane.background });
+                }
             } else {
                 try stdout.writeAll("default\n");
             }
