@@ -138,12 +138,14 @@ pub const Catalog = struct {
         name: []const u8,
         background: []const u8,
         texture: []const u8,
+        rarity: []const u8 = "project",
     };
 
     pub const PaneEntry = struct {
         skin: []const u8,
         source: []const u8,
         background: []const u8,
+        locked: bool = false,
     };
 };
 
@@ -181,6 +183,16 @@ pub fn validateAgainstCatalog(catalog: Catalog, req: Request) ?[]const u8 {
         }
     }
     return null;
+}
+
+/// Non-null when `req` would change the look of a pane whose folder is
+/// locked by skins.toml (spec §2/§8). reset/cancel are always allowed.
+pub fn lockedMessage(catalog: Catalog, surface_id: []const u8, req: Request) ?[]const u8 {
+    if (req.op != .set and req.op != .preview) return null;
+    const pane = catalog.panes.map.get(surface_id) orelse return null;
+    if (!pane.locked) return null;
+    return std.fmt.bufPrint(&validate_error_buf, "skins: this folder is locked to \"{s}\" by skins.toml", .{pane.skin}) catch
+        "skins: this folder is locked by skins.toml";
 }
 
 /// True if `name` is one of the catalog's built-in textures, or the name of
@@ -347,4 +359,33 @@ test "skins: parseCatalog reads the Swift writer's fixture" {
     try std.testing.expectEqualStrings("#12222b", pane.background);
     try std.testing.expect(validateAgainstCatalog(parsed.value, .{ .op = .set, .skin = "arca" }) == null);
     try std.testing.expect(validateAgainstCatalog(parsed.value, .{ .op = .set, .skin = "nosuchskin" }) != null);
+}
+
+test "skins: lockedMessage" {
+    const alloc = std.testing.allocator;
+    const json =
+        \\{"version":1,"skins":[{"name":"arca","background":"#12222b","texture":"rings","rarity":"project"}],
+        \\ "textures":["dots"],
+        \\ "panes":{"A":{"skin":"arca","source":"config","background":"#12222b","locked":true},
+        \\          "B":{"skin":"Milo","source":"auto","background":"#16262d","locked":false}}}
+    ;
+    const parsed = try parseCatalog(alloc, json);
+    defer parsed.deinit();
+    const msg = lockedMessage(parsed.value, "A", .{ .op = .set, .skin = "arca" }).?;
+    try std.testing.expectEqualStrings("skins: this folder is locked to \"arca\" by skins.toml", msg);
+    try std.testing.expect(lockedMessage(parsed.value, "A", .{ .op = .reset }) == null);
+    try std.testing.expect(lockedMessage(parsed.value, "B", .{ .op = .set, .skin = "arca" }) == null);
+    try std.testing.expect(lockedMessage(parsed.value, "missing", .{ .op = .set, .skin = "arca" }) == null);
+}
+
+test "skins: catalog without rarity/locked still parses" {
+    const alloc = std.testing.allocator;
+    const json =
+        \\{"version":1,"skins":[{"name":"a","background":"#000000","texture":"none"}],"textures":[],
+        \\ "panes":{"A":{"skin":"a","source":"override","background":"#000000"}}}
+    ;
+    const parsed = try parseCatalog(alloc, json);
+    defer parsed.deinit();
+    try std.testing.expectEqualStrings("project", parsed.value.skins[0].rarity);
+    try std.testing.expect(!parsed.value.panes.map.get("A").?.locked);
 }
