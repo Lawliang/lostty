@@ -20,6 +20,7 @@ struct SkinChipView: View {
     @ObservedObject var model: SkinChipModel
     @ObservedObject var manager: SkinManager
     @State private var showingPopover = false
+    @State private var flash: String?
 
     var body: some View {
         let id = model.focusedSurfaceID
@@ -35,9 +36,16 @@ struct SkinChipView: View {
                         .overlay(Circle().strokeBorder(Color(rgb: skin.accent), lineWidth: 1.5))
                         .frame(width: 11, height: 11)
                 }
-                Text(skin?.name ?? "skins")
-                    .font(.system(size: 11, weight: .medium))
-                    .lineLimit(1)
+                if let flash {
+                    Image(systemName: "checkmark").font(.system(size: 9, weight: .bold))
+                    Text("Equipped").font(.system(size: 11, weight: .semibold))
+                        .help(flash)
+                } else {
+                    Text(chipTitle(skin)).font(.system(size: 11, weight: .medium)).lineLimit(1)
+                }
+                if let id, manager.isLocked(id) {
+                    Image(systemName: "lock.fill").font(.system(size: 8)).foregroundStyle(.secondary)
+                }
                 if let id, manager.panes[id]?.override != nil {
                     Circle().fill(Color.accentColor).frame(width: 5, height: 5)
                 }
@@ -66,12 +74,24 @@ struct SkinChipView: View {
                 // would write the old pane's draft as the new pane's
                 // override. Recreating the view makes the old one disappear
                 // (cancelling its preview) and starts the new one fresh.
-                SkinPopoverView(surfaceID: id, manager: manager).id(id)
+                SkinPopoverView(
+                    surfaceID: id, manager: manager, savedColors: SkinsRuntime.shared.savedColors,
+                    onEquipped: { name in
+                        showingPopover = false
+                        flash = name
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) { flash = nil }
+                    }
+                ).id(id)
             }
         }
         .padding(.trailing, 8)
         // Line the pill up with the window title's baseline area.
         .padding(.top, 7)
+    }
+
+    private func chipTitle(_ skin: Skin?) -> String {
+        guard let skin else { return "skins" }
+        return SkinPresets.all.contains { $0.skin.name == skin.name } ? SkinPresets.displayName(skin.name) : skin.name
     }
 }
 #endif
