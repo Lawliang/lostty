@@ -23,6 +23,7 @@ struct SkinPopoverView: View {
     private var base: Skin { manager.effectiveSkin(surfaceID) ?? Skin.fallback }
     private var current: Skin { draft ?? base }
     private var accent: Color { Color(rgb: current.accent) }
+    private var presetBackgrounds: Set<RGB> { Set(SkinPresets.all.map(\.skin.background)) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -72,8 +73,10 @@ struct SkinPopoverView: View {
     private var subtitle: String {
         if let locked = manager.lockedSkinName(surfaceID) { return "Locked · \(locked) from skins.toml" }
         let pwd = manager.panes[surfaceID]?.pwd ?? ""
+        if pwd.isEmpty { return "This pane" }
         let home = NSHomeDirectory()
-        return pwd.hasPrefix(home) ? "This pane · ~" + pwd.dropFirst(home.count) : "This pane · \(pwd)"
+        return (pwd == home || pwd.hasPrefix(home + "/"))
+            ? "This pane · ~" + pwd.dropFirst(home.count) : "This pane · \(pwd)"
     }
 
     private func lockedCard(_ name: String) -> some View {
@@ -96,11 +99,14 @@ struct SkinPopoverView: View {
     }
 
     private var presetGrid: some View {
-        LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
-            ForEach(manager.library, id: \.skin.name) { entry in
-                presetCard(entry)
+        ScrollView {
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
+                ForEach(manager.library, id: \.skin.name) { entry in
+                    presetCard(entry)
+                }
             }
         }
+        .frame(maxHeight: 360)
     }
 
     private func presetCard(_ entry: SkinLibrary.Entry) -> some View {
@@ -145,7 +151,7 @@ struct SkinPopoverView: View {
             .shadow(color: selected ? ring.opacity(0.45) : .clear, radius: 10)
         }
         .buttonStyle(.plain)
-        .help(title(for: skin))
+        .help("skins set \(skin.name)")
     }
 
     private var customPanel: some View {
@@ -153,7 +159,7 @@ struct SkinPopoverView: View {
             sectionLabel("BACKGROUND")
             LazyVGrid(columns: Array(repeating: GridItem(.fixed(34), spacing: 10), count: 8), alignment: .leading, spacing: 10) {
                 ForEach(SkinPresets.all.map(\.skin.background), id: \.self) { color in swatch(color, removable: false) }
-                ForEach(savedColors.colors, id: \.self) { color in swatch(color, removable: true) }
+                ForEach(savedColors.colors.filter { !presetBackgrounds.contains($0) }, id: \.self) { color in swatch(color, removable: true) }
             }
             HStack(spacing: 10) {
                 ColorPicker("", selection: colorBinding, supportsOpacity: false).labelsHidden()
