@@ -73,58 +73,63 @@ struct SkinManagerTests {
 
     @Test func overridePersistsAcrossCdUntilReset() {
         let h = Harness(); let m = makeManager(h); let id = UUID()
-        m.pwdChanged(id, pwd: "\(root)/arca")
+        let milo = AutoSkin.skin(forRepo: "Milo", textureOpacity: 0.16)
+        m.pwdChanged(id, pwd: "\(root)/Milo")
         m.handleUserVar(id, name: SkinsConstants.userVarName, value: #"{"v":1,"op":"set","skin":"prod"}"#)
         #expect(m.effectiveSkin(id) == prod)
         m.pwdChanged(id, pwd: "\(root)/plain")
         #expect(m.effectiveSkin(id) == prod)
         #expect(m.sourceLabel(id) == "Override")
         m.handleUserVar(id, name: SkinsConstants.userVarName, value: #"{"v":1,"op":"reset"}"#)
-        #expect(m.effectiveSkin(id) == nil)
-        #expect(h.calls.last?.1 == nil)
+        m.pwdChanged(id, pwd: "\(root)/Milo")
+        #expect(m.effectiveSkin(id) == milo)
+        #expect(h.calls.last?.1?.skin == milo)
     }
 
     @Test func previewAndCancel() {
         let h = Harness(); let m = makeManager(h); let id = UUID()
-        m.pwdChanged(id, pwd: "\(root)/arca")
+        let milo = AutoSkin.skin(forRepo: "Milo", textureOpacity: 0.16)
+        m.pwdChanged(id, pwd: "\(root)/Milo")
         m.handle(SkinRequest(op: .preview, skin: "prod"), for: id)
         #expect(m.effectiveSkin(id) == prod)
         // A second preview replaces the first rather than stacking on it.
         m.handle(SkinRequest(op: .preview, texture: "grid"), for: id)
-        #expect(m.effectiveSkin(id)?.background == arca.background)
+        #expect(m.effectiveSkin(id)?.background == milo.background)
         #expect(m.effectiveSkin(id)?.texture == .builtin(.grid))
         m.handle(SkinRequest(op: .cancel), for: id)
-        #expect(m.effectiveSkin(id) == arca)
+        #expect(m.effectiveSkin(id) == milo)
     }
 
     @Test func previewExpires() {
         let h = Harness(); let m = makeManager(h); let id = UUID()
-        m.pwdChanged(id, pwd: "\(root)/arca")
+        let milo = AutoSkin.skin(forRepo: "Milo", textureOpacity: 0.16)
+        m.pwdChanged(id, pwd: "\(root)/Milo")
         m.handle(SkinRequest(op: .preview, skin: "prod"), for: id)
         h.clock += 59
         m.expirePreviews()
         #expect(m.effectiveSkin(id) == prod)
         h.clock += 2
         m.expirePreviews()
-        #expect(m.effectiveSkin(id) == arca)
-        #expect(h.calls.last?.1?.skin == arca)
+        #expect(m.effectiveSkin(id) == milo)
+        #expect(h.calls.last?.1?.skin == milo)
     }
 
     @Test func rejectsUnknownNames() {
         let h = Harness(); let m = makeManager(h); let id = UUID()
-        m.pwdChanged(id, pwd: "\(root)/arca")
+        let milo = AutoSkin.skin(forRepo: "Milo", textureOpacity: 0.16)
+        m.pwdChanged(id, pwd: "\(root)/Milo")
         let before = h.calls.count
         m.handle(SkinRequest(op: .set, skin: "missing"), for: id)
         m.handle(SkinRequest(op: .set, texture: "missing"), for: id)
         m.handleUserVar(id, name: "OTHER_VAR", value: #"{"v":1,"op":"set","skin":"prod"}"#)
         m.handleUserVar(id, name: SkinsConstants.userVarName, value: "garbage")
         #expect(h.calls.count == before)
-        #expect(m.effectiveSkin(id) == arca)
+        #expect(m.effectiveSkin(id) == milo)
     }
 
     @Test func colorOverrideRecomputesBuiltinAccent() {
         let h = Harness(); let m = makeManager(h); let id = UUID()
-        m.pwdChanged(id, pwd: "\(root)/arca")
+        m.pwdChanged(id, pwd: "\(root)/Milo")
         let red = RGB(hex: "#400000")!
         m.handle(SkinRequest(op: .set, background: red), for: id)
         #expect(m.effectiveSkin(id)?.background == red)
@@ -180,27 +185,32 @@ struct SkinManagerTests {
         let h = Harness()
         let url = URL(fileURLWithPath: root).appendingPathComponent("state/catalog.json")
         let m = makeManager(h, catalog: url); let id = UUID()
-        m.pwdChanged(id, pwd: "\(root)/arca")
+        m.pwdChanged(id, pwd: "\(root)/Milo")
         m.handle(SkinRequest(op: .set, skin: "prod"), for: id)
         let object = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any]
         let skins = object?["skins"] as? [[String: String]]
-        #expect(skins?.map { $0["name"] } == ["arca", "prod"])
+        #expect(skins?.map { $0["name"] } == ["neon-arcade", "sunset-drive", "mint-protocol", "deep-dive", "lava-rush", "bubble-pop", "arca", "prod"])
         #expect((object?["textures"] as? [String]) == BuiltinTexture.allCases.map(\.rawValue))
-        let pane = (object?["panes"] as? [String: [String: String]])?[id.uuidString]
-        #expect(pane == ["skin": "prod", "source": "override", "background": "#3a0f14"])
+        let pane = (object?["panes"] as? [String: [String: Any]])?[id.uuidString]
+        #expect(pane?["skin"] as? String == "prod")
+        #expect(pane?["source"] as? String == "override")
+        #expect(pane?["background"] as? String == "#3a0f14")
+        #expect(pane?["locked"] as? Bool == false)
     }
 
     @Test func catalogUpdatesWhenPreviewExpires() throws {
         let h = Harness()
         let url = URL(fileURLWithPath: root).appendingPathComponent("state/catalog.json")
         let m = makeManager(h, catalog: url); let id = UUID()
-        m.pwdChanged(id, pwd: "\(root)/arca")
+        m.pwdChanged(id, pwd: "\(root)/Milo")
         m.handle(SkinRequest(op: .preview, skin: "prod"), for: id)
         h.clock += 61
         m.expirePreviews()
         let object = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any]
-        let pane = (object?["panes"] as? [String: [String: String]])?[id.uuidString]
-        #expect(pane == ["skin": "arca", "source": "config", "background": "#12222b"])
+        let pane = (object?["panes"] as? [String: [String: Any]])?[id.uuidString]
+        #expect(pane?["skin"] as? String == "Milo")
+        #expect(pane?["source"] as? String == "auto")
+        #expect(pane?["locked"] as? Bool == false)
     }
 
     @Test func textureFailureIsPublished() {
@@ -223,6 +233,81 @@ struct SkinManagerTests {
                            accent: RGB(hex: "#abcdef")!, texture: .logo(path: "/nonexistent/logo.svg"), textureOpacity: 0.16)
         #expect(m.thumbnailImage(for: broken) == nil)
         #expect(m.textureError == nil)
+    }
+
+    @Test func lockedFolderIgnoresPreviewAndSet() {
+        let h = Harness(); let m = makeManager(h); let id = UUID()
+        m.pwdChanged(id, pwd: "\(root)/arca")
+        #expect(m.isLocked(id))
+        #expect(m.lockedSkinName(id) == "arca")
+        let calls = h.calls.count
+        m.handle(SkinRequest(op: .preview, skin: "prod"), for: id)
+        m.handle(SkinRequest(op: .set, skin: "prod"), for: id)
+        m.setPreview(id, prod)
+        m.setOverride(id, prod)
+        #expect(m.effectiveSkin(id) == arca)
+        #expect(m.panes[id]?.override == nil)
+        #expect(h.calls.count == calls)
+        #expect(m.sourceLabel(id) == "Locked: arca")
+    }
+
+    @Test func overrideSurvivesLockedFolder() {
+        let h = Harness(); let m = makeManager(h); let id = UUID()
+        m.pwdChanged(id, pwd: "\(root)/Milo")
+        m.handle(SkinRequest(op: .set, skin: "prod"), for: id)
+        m.pwdChanged(id, pwd: "\(root)/arca/app")
+        #expect(m.effectiveSkin(id) == arca)
+        #expect(m.equippedName(id) == "prod")
+        m.pwdChanged(id, pwd: "\(root)/plain")
+        #expect(m.effectiveSkin(id) == prod)
+    }
+
+    @Test func resetStillWorksWhileLocked() {
+        let h = Harness(); let m = makeManager(h); let id = UUID()
+        m.pwdChanged(id, pwd: "\(root)/Milo")
+        m.handle(SkinRequest(op: .set, skin: "prod"), for: id)
+        m.pwdChanged(id, pwd: "\(root)/arca")
+        m.handle(SkinRequest(op: .reset), for: id)
+        m.pwdChanged(id, pwd: "\(root)/plain")
+        #expect(m.effectiveSkin(id) == nil)
+    }
+
+    @Test func requestsCanNameBuiltinPresets() {
+        let h = Harness(); let m = makeManager(h); let id = UUID()
+        m.pwdChanged(id, pwd: "\(root)/Milo")
+        m.handle(SkinRequest(op: .set, skin: "neon-arcade"), for: id)
+        #expect(m.effectiveSkin(id)?.palette?.count == 16)
+        #expect(h.calls.last?.1?.skin.name == "neon-arcade")
+    }
+
+    @Test func requestUsesShadowedPreset() {
+        var cfg = config
+        cfg.skins["neon-arcade"] = Skin(name: "neon-arcade", background: RGB(hex: "#000000")!, foreground: nil,
+                                        accent: RGB(hex: "#ffffff")!, texture: .none, textureOpacity: 0.16)
+        let h = Harness()
+        let m = SkinManager(config: cfg, textures: TextureStore(cacheDir: URL(fileURLWithPath: root).appendingPathComponent("cache")),
+                            catalogURL: nil, home: "/nonexistent-home", now: { h.clock },
+                            apply: { id, a in h.calls.append((id, a)); return true })
+        let id = UUID()
+        m.pwdChanged(id, pwd: "\(root)/Milo")
+        m.handle(SkinRequest(op: .set, skin: "neon-arcade"), for: id)
+        #expect(m.effectiveSkin(id)?.background == RGB(hex: "#000000"))
+        #expect(m.effectiveSkin(id)?.palette == nil)
+    }
+
+    @Test func catalogListsLibraryAndLockedPanes() throws {
+        let h = Harness()
+        let url = URL(fileURLWithPath: root).appendingPathComponent("state/catalog.json")
+        let m = makeManager(h, catalog: url); let id = UUID()
+        m.pwdChanged(id, pwd: "\(root)/arca")
+        let object = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any]
+        let skins = object?["skins"] as? [[String: String]]
+        #expect(skins?.first(where: { $0["name"] == "neon-arcade" })?["rarity"] == "legendary")
+        #expect(skins?.first(where: { $0["name"] == "arca" })?["rarity"] == "project")
+        let pane = (object?["panes"] as? [String: [String: Any]])?[id.uuidString]
+        #expect(pane?["locked"] as? Bool == true)
+        #expect(pane?["source"] as? String == "config")
+        #expect(pane?["skin"] as? String == "arca")
     }
 }
 #endif
