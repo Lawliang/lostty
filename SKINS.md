@@ -22,12 +22,46 @@ Copy `docs/skins/skins.example.toml` to `~/.config/ghostty-skins/skins.toml`.
 Errors never break the terminal: the last good config stays active and the
 title-bar chip shows a warning.
 
+## Presets
+
+Lostty ships with six built-in preset skins that restyle your background, text
+color, texture, 16-color ANSI palette, cursor, and selection. Each preset has
+a rarity label and an optional accent color.
+
+- **neon-arcade** (legendary) — Bright magenta and cyan on a dark purple.
+- **sunset-drive** (epic) — Warm orange and pink on a dark plum with scanlines.
+- **mint-protocol** (rare) — Neon green and yellow on a dark teal.
+- **deep-dive** (rare) — Bright cyan and purple on a dark blue.
+- **lava-rush** (epic) — Warm orange and yellow on a dark brown with diagonal texture.
+- **bubble-pop** (common) — Hot pink and yellow on a purple with sparkle texture.
+
+Use `skins set <id>` to equip any preset. A skin defined in `skins.toml` with
+the same name as a preset overrides it and appears in the picker tagged PROJECT.
+
+## Locked Folders
+
+If your `skins.toml` maps a folder with `[[match]]`, that folder's pane always
+shows its mapped skin and cannot be overridden. The picker shows a Locked card
+explaining that the folder is configured. `skins set`, `skins color`, and
+`skins texture` exit with an error in a locked folder; `skins reset` still
+works. When you leave a locked folder, your previous override (if any)
+returns.
+
+## Saved Colors
+
+Click the chip or run `skins` to open the picker, then go to the Custom tab.
+The "Any color" row lets you pick any background color with a native color
+panel or type a hex code. Click Save to add it to your saved swatches. Saved
+colors live in `~/.config/ghostty-skins/state/saved-colors.json` and are
+shared across all Lostty windows (max 24).
+
 ## Override
 
-- Click the chip at the right of the title bar: pick a skin, color, texture or
-  opacity (previews live), then **Apply**. **Reset to project** undoes it.
+- Click the chip at the right of the title bar: preview a skin, color, or
+  texture (live), then **Equip** to keep it. **Reset** undoes it. The chip
+  briefly shows "Equipped" after you apply.
 - Or in any pane: `skins` (interactive picker), `skins set <name>`,
-  `skins color '#3a0f14'`, `skins texture grid`, `skins opacity 0.3`,
+  `skins color '#3a0f14'`, `skins texture grid`,
   `skins reset`, `skins list`, `skins current`.
 
 Overrides last until reset or until the pane closes. zsh and bash get the
