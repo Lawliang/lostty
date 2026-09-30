@@ -25,5 +25,18 @@ struct SkinOverlayTests {
 
         """)
     }
+
+    @Test func presetThemeLines() {
+        let skin = SkinPresets.all[0].skin
+        let text = SkinOverlay.configText(for: AppliedSkin(skin: skin, tile: nil))
+        let lines = text.split(separator: "\n").map(String.init)
+        #expect(lines[0] == "background = #120a2a")
+        #expect(lines[1] == "foreground = #f3ecff")
+        #expect(lines[2] == "palette = 0=#1d1240")
+        #expect(lines[17] == "palette = 15=#f3ecff")
+        #expect(lines[18] == "cursor-color = #ff3df2")
+        #expect(lines[19] == "selection-background = \(skin.selectionBackground!.hex)")
+        #expect(lines.count == 20)
+    }
 }
 #endif

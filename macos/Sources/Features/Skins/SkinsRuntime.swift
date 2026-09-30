@@ -10,6 +10,17 @@ enum SkinOverlay {
         if let foreground = applied.skin.foreground {
             lines.append("foreground = \(foreground.hex)")
         }
+        if let palette = applied.skin.palette {
+            for (index, color) in palette.prefix(16).enumerated() {
+                lines.append("palette = \(index)=\(color.hex)")
+            }
+        }
+        if let cursor = applied.skin.cursor {
+            lines.append("cursor-color = \(cursor.hex)")
+        }
+        if let selection = applied.skin.selectionBackground {
+            lines.append("selection-background = \(selection.hex)")
+        }
         if let tile = applied.tile {
             lines.append("background-image = \"\(tile.path)\"")
             lines.append(String(format: "background-image-opacity = %.3f", applied.skin.textureOpacity))
