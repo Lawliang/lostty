@@ -265,22 +265,19 @@ final class SkinManager: ObservableObject {
         }
         if let background = request.background {
             skin.background = background
-            // Recompute the accent only for skins without a theme; a preset's
-            // palette-tuned accent shouldn't be clobbered by a background tweak.
-            if case .builtin = skin.texture, skin.palette == nil { skin.accent = Skin.defaultAccent(for: background) }
+            skin.recomputeAccentIfNeeded()
         }
         if let texture = request.texture {
             if texture == "none" {
                 skin.texture = .none
             } else if let builtin = BuiltinTexture(rawValue: texture) {
                 skin.texture = .builtin(builtin)
-                skin.accent = Skin.defaultAccent(for: skin.background)
             } else if let named = library[texture], named.texture != .none {
                 skin.texture = named.texture
-                skin.accent = named.accent
             } else {
                 return nil
             }
+            skin.recomputeAccentIfNeeded()
         }
         if let opacity = request.opacity { skin.textureOpacity = opacity }
         return skin

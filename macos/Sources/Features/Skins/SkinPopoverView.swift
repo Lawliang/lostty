@@ -272,7 +272,10 @@ struct SkinPopoverView: View {
         var sample = current
         sample.texture = texture
         let selected = current.texture == texture
-        return Button { edit { $0.texture = texture } } label: {
+        return Button { edit { skin in
+            skin.texture = texture
+            skin.recomputeAccentIfNeeded()
+        } } label: {
             VStack(spacing: 4) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 8).fill(Color(rgb: current.background))
@@ -320,7 +323,7 @@ struct SkinPopoverView: View {
     private func setBackground(_ color: RGB) {
         edit { skin in
             skin.background = color
-            if case .builtin = skin.texture, skin.palette == nil { skin.accent = Skin.defaultAccent(for: color) }
+            skin.recomputeAccentIfNeeded()
         }
     }
 

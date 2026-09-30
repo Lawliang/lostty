@@ -309,6 +309,28 @@ struct SkinManagerTests {
         #expect(m.effectiveSkin(id)?.palette?.count == 16)
     }
 
+    @Test func textureRequestOnAPresetKeepsItsAccent() {
+        let h = Harness(); let m = makeManager(h); let id = UUID()
+        m.pwdChanged(id, pwd: "\(root)/Milo")
+        m.handle(SkinRequest(op: .set, skin: "neon-arcade"), for: id)
+        let accentBefore = m.effectiveSkin(id)?.accent
+        m.handle(SkinRequest(op: .set, texture: "rings"), for: id)
+        #expect(m.effectiveSkin(id)?.accent == accentBefore)
+        #expect(m.effectiveSkin(id)?.palette?.count == 16)
+        m.handle(SkinRequest(op: .set, texture: "none"), for: id)
+        #expect(m.effectiveSkin(id)?.accent == accentBefore)
+    }
+
+    @Test func textureRequestOnAPaletteLessBaseRecomputesAccent() {
+        let h = Harness(); let m = makeManager(h); let id = UUID()
+        m.pwdChanged(id, pwd: "\(root)/Milo")
+        let milo = AutoSkin.skin(forRepo: "Milo", textureOpacity: 0.16)
+        m.handle(SkinRequest(op: .set, texture: "grid"), for: id)
+        #expect(m.effectiveSkin(id)?.accent == Skin.defaultAccent(for: milo.background))
+        m.handle(SkinRequest(op: .set, texture: "none"), for: id)
+        #expect(m.effectiveSkin(id)?.accent == Skin.defaultAccent(for: milo.background))
+    }
+
     @Test func catalogListsLibraryAndLockedPanes() throws {
         let h = Harness()
         let url = URL(fileURLWithPath: root).appendingPathComponent("state/catalog.json")

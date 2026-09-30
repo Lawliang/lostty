@@ -81,6 +81,15 @@ struct Skin: Hashable {
         background.mixed(with: .white, amount: 0.45)
     }
 
+    /// The one accent rule for custom looks: a background or texture edit
+    /// (including picking `.none`) recomputes the accent from the new
+    /// background when the skin has no preset palette. A skin with a palette
+    /// keeps its hand-tuned accent (and cursor/palette) untouched.
+    mutating func recomputeAccentIfNeeded() {
+        guard palette == nil else { return }
+        accent = Skin.defaultAccent(for: background)
+    }
+
     /// Base for color/texture overrides on a pane that has no skin.
     static let fallback = Skin(
         name: "custom",
