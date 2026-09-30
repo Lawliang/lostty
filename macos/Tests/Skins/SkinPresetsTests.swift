@@ -40,6 +40,20 @@ struct SkinPresetsTests {
         #expect(SkinLibrary.skins(config: config)["neon-arcade"]?.palette == nil)
     }
 
+    @Test func textureOpacityFromConfigAppliesToBuiltinsOnly() throws {
+        let config = try SkinConfig.parse("""
+        [defaults]
+        texture_opacity = 0.4
+
+        [skins.arca]
+        background = "#12222b"
+        texture_opacity = 0.1
+        """, home: "/h")
+        let entries = SkinLibrary.entries(config: config)
+        #expect(entries.first(where: { $0.skin.name == "neon-arcade" })?.skin.textureOpacity == 0.4)
+        #expect(entries.first(where: { $0.skin.name == "arca" })?.skin.textureOpacity == 0.1)
+    }
+
     /// Palette readability (spec §3): ANSI 8 must read at ≥3:1 against the
     /// preset's own background (WCAG relative luminance).
     @Test func palette8IsReadableAgainstBackground() {

@@ -65,7 +65,11 @@ enum SkinLibrary {
     static func entries(config: SkinConfig) -> [Entry] {
         var result = SkinPresets.all.map { preset -> Entry in
             if let own = config.skins[preset.skin.name] { return Entry(skin: own, rarity: .project) }
-            return Entry(skin: preset.skin, rarity: preset.rarity)
+            // Config skins keep their own texture_opacity (already resolved by
+            // SkinConfig.parse); built-in presets pick up skins.toml's default.
+            var skin = preset.skin
+            skin.textureOpacity = config.textureOpacity
+            return Entry(skin: skin, rarity: preset.rarity)
         }
         let builtinNames = Set(SkinPresets.all.map(\.skin.name))
         for skin in config.skins.values.sorted(by: { $0.name < $1.name }) where !builtinNames.contains(skin.name) {
