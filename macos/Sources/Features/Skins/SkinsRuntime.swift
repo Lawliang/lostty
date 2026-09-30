@@ -84,10 +84,12 @@ final class SkinsRuntime {
     }
 
     let manager: SkinManager
+    let savedColors: SavedColorsStore
     private let store: SkinConfigStore
     private var expiryTimer: Timer?
 
     private init() {
+        self.savedColors = SavedColorsStore(fileURL: Self.configDir.appendingPathComponent("state/saved-colors.json"))
         let overlayDir = Self.cacheDir.appendingPathComponent("overlays")
         let applier = GhosttySkinApplier(overlayDir: overlayDir)
         let store = SkinConfigStore(fileURL: Self.configDir.appendingPathComponent("skins.toml"))
