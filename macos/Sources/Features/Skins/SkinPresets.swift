@@ -16,22 +16,22 @@ enum SkinPresets {
     static let all: [SkinPreset] = [
         make("neon-arcade", .legendary, bg: "#120a2a", fg: "#f3ecff", accent: "#ff3df2", accent2: "#28e7ff", texture: .grid,
              palette: ["#1d1240", "#ff4f7b", "#3dffb0", "#ffd84d", "#7b8cff", "#ff3df2", "#28e7ff", "#d9ccff",
-                       "#4a3a7a", "#ff7a9c", "#7dffcb", "#ffe68a", "#a5b1ff", "#ff7af6", "#7af0ff", "#f3ecff"]),
+                       "#6f6197", "#ff7a9c", "#7dffcb", "#ffe68a", "#a5b1ff", "#ff7af6", "#7af0ff", "#f3ecff"]),
         make("sunset-drive", .epic, bg: "#1c0b24", fg: "#ffe9f5", accent: "#ff7a3d", accent2: "#ff4fa3", texture: .scanlines,
              palette: ["#2b1436", "#ff4f5e", "#9dff6a", "#ffb347", "#8f7bff", "#ff4fa3", "#5ee7ff", "#f0d4e6",
-                       "#5a3a66", "#ff7a86", "#bfff96", "#ffcf7f", "#b3a6ff", "#ff85c0", "#8ff0ff", "#ffe9f5"]),
+                       "#7d5f84", "#ff7a86", "#bfff96", "#ffcf7f", "#b3a6ff", "#ff85c0", "#8ff0ff", "#ffe9f5"]),
         make("mint-protocol", .rare, bg: "#04140f", fg: "#d8ffe9", accent: "#2cff9a", accent2: "#b6ff3b", texture: .dots,
              palette: ["#0b2219", "#ff5c7a", "#2cff9a", "#b6ff3b", "#3fb8ff", "#d38bff", "#3dffe0", "#bfe8d2",
-                       "#2e5445", "#ff8aa0", "#7dffc0", "#d4ff85", "#7fd1ff", "#e3b3ff", "#8affec", "#d8ffe9"]),
+                       "#4b7161", "#ff8aa0", "#7dffc0", "#d4ff85", "#7fd1ff", "#e3b3ff", "#8affec", "#d8ffe9"]),
         make("deep-dive", .rare, bg: "#041a2e", fg: "#dff4ff", accent: "#25c4ff", accent2: "#9b87ff", texture: .waves,
              palette: ["#0b2a45", "#ff5c8a", "#3dffa8", "#ffd166", "#25c4ff", "#9b87ff", "#3de8ff", "#c4e4f5",
-                       "#2f5575", "#ff8aac", "#85ffc8", "#ffe199", "#7ad8ff", "#bfb3ff", "#8af0ff", "#dff4ff"]),
+                       "#4f728e", "#ff8aac", "#85ffc8", "#ffe199", "#7ad8ff", "#bfb3ff", "#8af0ff", "#dff4ff"]),
         make("lava-rush", .epic, bg: "#1d0806", fg: "#fff0e8", accent: "#ff5a2c", accent2: "#ffc53d", texture: .diagonal,
              palette: ["#2e110c", "#ff5a2c", "#b8ff4d", "#ffc53d", "#6fa8ff", "#ff5fb0", "#4de3ff", "#f2d9cc",
-                       "#5e3228", "#ff8a66", "#d2ff8a", "#ffd97f", "#9cc4ff", "#ff8fca", "#8aecff", "#fff0e8"]),
+                       "#856056", "#ff8a66", "#d2ff8a", "#ffd97f", "#9cc4ff", "#ff8fca", "#8aecff", "#fff0e8"]),
         make("bubble-pop", .common, bg: "#230a24", fg: "#ffeefe", accent: "#ff6ad5", accent2: "#ffd84d", texture: .sparkle,
              palette: ["#36143a", "#ff5c8a", "#6dffb3", "#ffd84d", "#7ea8ff", "#ff6ad5", "#5cf2ff", "#f2d6f0",
-                       "#663b68", "#ff8aab", "#9dffcc", "#ffe68a", "#a8c4ff", "#ff9be4", "#92f6ff", "#ffeefe"]),
+                       "#855f86", "#ff8aab", "#9dffcc", "#ffe68a", "#a8c4ff", "#ff9be4", "#92f6ff", "#ffeefe"]),
     ]
 
     /// Display name for a preset id ("neon-arcade" → "Neon Arcade").

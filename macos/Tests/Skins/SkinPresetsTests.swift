@@ -1,4 +1,5 @@
 #if os(macOS)
+import Foundation
 import Testing
 @testable import Ghostty
 
@@ -37,6 +38,31 @@ struct SkinPresetsTests {
         #expect(entries[0].skin.background == RGB(hex: "#000000"))
         #expect(entries[0].rarity == .project)
         #expect(SkinLibrary.skins(config: config)["neon-arcade"]?.palette == nil)
+    }
+
+    /// Palette readability (spec §3): ANSI 8 must read at ≥3:1 against the
+    /// preset's own background (WCAG relative luminance).
+    @Test func palette8IsReadableAgainstBackground() {
+        for preset in SkinPresets.all {
+            let color = preset.skin.palette?[8]
+            #expect(color != nil, "\(preset.skin.name)")
+            guard let color else { continue }
+            #expect(contrastRatio(preset.skin.background, color) >= 3.0, "\(preset.skin.name)")
+        }
+    }
+
+    private func relativeLuminance(_ c: RGB) -> Double {
+        func channel(_ v: UInt8) -> Double {
+            let s = Double(v) / 255
+            return s <= 0.03928 ? s / 12.92 : pow((s + 0.055) / 1.055, 2.4)
+        }
+        return 0.2126 * channel(c.r) + 0.7152 * channel(c.g) + 0.0722 * channel(c.b)
+    }
+
+    private func contrastRatio(_ a: RGB, _ b: RGB) -> Double {
+        let l1 = relativeLuminance(a), l2 = relativeLuminance(b)
+        let lighter = max(l1, l2), darker = min(l1, l2)
+        return (lighter + 0.05) / (darker + 0.05)
     }
 }
 #endif
