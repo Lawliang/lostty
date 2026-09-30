@@ -39,6 +39,15 @@ enum SkinPresets {
         id.split(separator: "-").map { $0.prefix(1).uppercased() + $0.dropFirst() }.joined(separator: " ")
     }
 
+    /// Title shown for a skin: the friendly display name only when it really
+    /// is a preset (its name matches a preset id *and* it still carries that
+    /// preset's palette, i.e. it wasn't shadowed by a paletteless config skin
+    /// of the same name); otherwise the raw name.
+    static func title(for skin: Skin) -> String {
+        guard skin.palette != nil, all.contains(where: { $0.skin.name == skin.name }) else { return skin.name }
+        return displayName(skin.name)
+    }
+
     private static func make(
         _ id: String, _ rarity: SkinRarity, bg: String, fg: String, accent: String, accent2: String,
         texture: BuiltinTexture, palette: [String]

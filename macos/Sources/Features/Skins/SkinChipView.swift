@@ -92,7 +92,7 @@ struct SkinChipView: View {
 
     private func chipTitle(_ skin: Skin?) -> String {
         guard let skin else { return "skins" }
-        return SkinPresets.all.contains { $0.skin.name == skin.name } ? SkinPresets.displayName(skin.name) : skin.name
+        return SkinPresets.title(for: skin)
     }
 }
 #endif

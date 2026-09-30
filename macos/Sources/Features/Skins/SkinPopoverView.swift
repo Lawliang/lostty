@@ -111,7 +111,7 @@ struct SkinPopoverView: View {
 
     private func presetCard(_ entry: SkinLibrary.Entry) -> some View {
         let skin = entry.skin
-        let selected = current.name == skin.name
+        let selected = current.name == skin.name && current.palette == skin.palette
         let equipped = manager.equippedName(surfaceID) == skin.name
         let ring = Color(rgb: skin.accent)
         return Button { preview(skin) } label: {
@@ -139,7 +139,7 @@ struct SkinPopoverView: View {
                 .frame(height: 64)
                 .clipped()
                 HStack(spacing: 6) {
-                    Text(title(for: skin)).font(.system(size: 13, weight: .semibold)).lineLimit(1)
+                    Text(SkinPresets.title(for: skin)).font(.system(size: 13, weight: .semibold)).lineLimit(1)
                     Spacer(minLength: 4)
                     rarityPill(entry.rarity)
                 }
@@ -302,10 +302,6 @@ struct SkinPopoverView: View {
 
     // MARK: Actions
 
-    private func title(for skin: Skin) -> String {
-        SkinPresets.all.contains { $0.skin.name == skin.name } ? SkinPresets.displayName(skin.name) : skin.name
-    }
-
     private var onAccent: Color {
         let a = current.accent
         let luminance = 0.2126 * Double(a.r) + 0.7152 * Double(a.g) + 0.0722 * Double(a.b)
@@ -347,7 +343,7 @@ struct SkinPopoverView: View {
         guard let draft else { return }
         committed = true
         manager.setOverride(surfaceID, draft)
-        onEquipped(title(for: draft))
+        onEquipped(SkinPresets.title(for: draft))
     }
 
     private func reset() {
