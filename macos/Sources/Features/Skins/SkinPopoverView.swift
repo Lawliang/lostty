@@ -19,6 +19,10 @@ struct SkinPopoverView: View {
 
     private static let panel = Color(red: 0.09, green: 0.09, blue: 0.14)
     private static let card = Color.white.opacity(0.06)
+    /// Solid card and field fills from the "Lostty Skin Picker" design.
+    private static let solidCard = Color(red: 31 / 255, green: 31 / 255, blue: 46 / 255)
+    private static let field = Color(red: 20 / 255, green: 20 / 255, blue: 32 / 255)
+    private static let ink = Color(red: 11 / 255, green: 11 / 255, blue: 18 / 255)
 
     private var base: Skin { manager.effectiveSkin(surfaceID) ?? Skin.fallback }
     private var current: Skin { draft ?? base }
@@ -26,24 +30,19 @@ struct SkinPopoverView: View {
     private var presetBackgrounds: Set<RGB> { Set(SkinPresets.all.map(\.skin.background)) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 18) {
             header
             if let locked = manager.lockedSkinName(surfaceID) {
                 lockedCard(locked)
             } else {
-                Picker("", selection: $tab) {
-                    Text("Presets").tag(Tab.presets)
-                    Text("Custom").tag(Tab.custom)
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
+                tabSwitcher
                 if tab == .presets { presetGrid } else { customPanel }
                 problems
                 footer
             }
         }
-        .padding(18)
-        .frame(width: 380)
+        .padding(20)
+        .frame(width: 420)
         .background(Self.panel)
         .environment(\.colorScheme, .dark)
         .onAppear { hex = current.background.hex }
@@ -154,49 +153,116 @@ struct SkinPopoverView: View {
         .help("skins set \(skin.name)")
     }
 
+    private var tabSwitcher: some View {
+        HStack(spacing: 4) {
+            tabButton("Presets", .presets)
+            tabButton("Custom", .custom)
+        }
+        .padding(4)
+        .background(RoundedRectangle(cornerRadius: 12).fill(Color.white.opacity(0.06)))
+    }
+
+    private func tabButton(_ title: String, _ value: Tab) -> some View {
+        let on = tab == value
+        return Button { tab = value } label: {
+            Text(title).font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(on ? Self.ink : Color.white.opacity(0.7))
+                .frame(maxWidth: .infinity).frame(height: 34)
+                .background(RoundedRectangle(cornerRadius: 9).fill(on ? Color.white : .clear))
+                .contentShape(RoundedRectangle(cornerRadius: 9))
+        }
+        .buttonStyle(.plain)
+    }
+
     private var customPanel: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            sectionLabel("BACKGROUND")
-            LazyVGrid(columns: Array(repeating: GridItem(.fixed(34), spacing: 10), count: 8), alignment: .leading, spacing: 10) {
-                ForEach(SkinPresets.all.map(\.skin.background), id: \.self) { color in swatch(color, removable: false) }
-                ForEach(savedColors.colors.filter { !presetBackgrounds.contains($0) }, id: \.self) { color in swatch(color, removable: true) }
-            }
-            HStack(spacing: 10) {
-                ColorPicker("", selection: colorBinding, supportsOpacity: false).labelsHidden()
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Any color").font(.system(size: 13, weight: .semibold))
-                    Text("Full color picker").font(.system(size: 11)).foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 10) {
+                sectionLabel("BACKGROUND")
+                LazyVGrid(columns: Array(repeating: GridItem(.fixed(36), spacing: 10), count: 8), alignment: .leading, spacing: 10) {
+                    ForEach(SkinPresets.all.map(\.skin.background), id: \.self) { color in swatch(color, removable: false) }
+                    ForEach(savedColors.colors.filter { !presetBackgrounds.contains($0) }, id: \.self) { color in swatch(color, removable: true) }
                 }
-                Spacer()
-                TextField("#rrggbb", text: $hex)
-                    .textFieldStyle(.roundedBorder)
-                    .font(.system(size: 12, design: .monospaced))
-                    .frame(width: 84)
-                    .onChange(of: hex) { new in
-                        if let rgb = RGB(hex: new.trimmingCharacters(in: .whitespaces).lowercased()), rgb != current.background {
-                            setBackground(rgb)
-                        }
-                    }
-                    .onSubmit {
-                        if let rgb = RGB(hex: hex.trimmingCharacters(in: .whitespaces).lowercased()), rgb != current.background {
-                            setBackground(rgb)
-                        }
-                    }
-                let saved = savedColors.contains(current.background)
-                    || SkinPresets.all.contains { $0.skin.background == current.background }
-                Button(saved ? "Saved" : "Save") { savedColors.add(current.background) }
-                    .disabled(saved)
+                anyColorRow
             }
-            .padding(10)
-            .background(RoundedRectangle(cornerRadius: 14).fill(Self.card))
-            sectionLabel("TEXTURE")
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 5), spacing: 8) {
-                textureTile(.none, label: "None")
-                ForEach(BuiltinTexture.allCases, id: \.self) { texture in
-                    textureTile(.builtin(texture), label: texture.rawValue.capitalized)
+            VStack(alignment: .leading, spacing: 10) {
+                sectionLabel("TEXTURE")
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4), spacing: 8) {
+                    textureTile(.none, label: "None")
+                    ForEach(BuiltinTexture.allCases, id: \.self) { texture in
+                        textureTile(.builtin(texture), label: texture.rawValue.capitalized)
+                    }
                 }
             }
         }
+    }
+
+    private var anyColorRow: some View {
+        HStack(spacing: 12) {
+            // The rainbow circle is the design's; the (nearly invisible) system
+            // well laid over it still opens the standard color panel.
+            ZStack {
+                Circle().fill(AngularGradient(colors: [
+                    Color(rgb: RGB(r: 0xff, g: 0x3d, b: 0xf2)), Color(rgb: RGB(r: 0xff, g: 0x7a, b: 0x3d)),
+                    Color(rgb: RGB(r: 0xff, g: 0xd8, b: 0x4d)), Color(rgb: RGB(r: 0x2c, g: 0xff, b: 0x9a)),
+                    Color(rgb: RGB(r: 0x25, g: 0xc4, b: 0xff)), Color(rgb: RGB(r: 0x9b, g: 0x87, b: 0xff)),
+                    Color(rgb: RGB(r: 0xff, g: 0x3d, b: 0xf2)),
+                ], center: .center, angle: .degrees(-90)))
+                ColorPicker("", selection: colorBinding, supportsOpacity: false)
+                    .labelsHidden()
+                    .frame(width: 36, height: 36)
+                    .scaleEffect(1.6)
+                    .opacity(0.011)
+            }
+            .frame(width: 36, height: 36)
+            .clipShape(Circle())
+            .overlay(Circle().strokeBorder(Color.white.opacity(0.14), lineWidth: 1))
+            .help("Pick any background color")
+            .accessibilityLabel("Pick any background color")
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Any color").font(.system(size: 13, weight: .semibold))
+                Text("Open the full color picker").font(.system(size: 11)).foregroundStyle(Color.white.opacity(0.55))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Text("Hex").font(.system(size: 11)).foregroundStyle(Color.white.opacity(0.55))
+            TextField("#rrggbb", text: $hex)
+                .textFieldStyle(.plain)
+                .font(.system(size: 12, design: .monospaced))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 10)
+                .frame(width: 84, height: 32)
+                .background(RoundedRectangle(cornerRadius: 9).fill(Self.field))
+                .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(Color.white.opacity(0.14), lineWidth: 1))
+                .onChange(of: hex) { new in
+                    if let rgb = RGB(hex: new.trimmingCharacters(in: .whitespaces).lowercased()), rgb != current.background {
+                        setBackground(rgb)
+                    }
+                }
+                .onSubmit {
+                    if let rgb = RGB(hex: hex.trimmingCharacters(in: .whitespaces).lowercased()), rgb != current.background {
+                        setBackground(rgb)
+                    }
+                }
+
+            let saved = savedColors.contains(current.background)
+                || SkinPresets.all.contains { $0.skin.background == current.background }
+            Button { savedColors.add(current.background) } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "plus").font(.system(size: 9, weight: .bold))
+                    Text(saved ? "Saved" : "Save").font(.system(size: 12, weight: .bold))
+                }
+                .foregroundStyle(saved ? Color.white.opacity(0.6) : onAccent)
+                .padding(.horizontal, 12).frame(height: 32)
+                .background(RoundedRectangle(cornerRadius: 9).fill(saved ? Color.white.opacity(0.1) : accent))
+            }
+            .buttonStyle(.plain)
+            .disabled(saved)
+            .help("Save this color to the swatches")
+        }
+        .padding(.vertical, 10).padding(.horizontal, 12)
+        .background(RoundedRectangle(cornerRadius: 14).fill(Self.solidCard))
     }
 
     private var problems: some View {
@@ -234,7 +300,7 @@ struct SkinPopoverView: View {
     // MARK: Pieces
 
     private func sectionLabel(_ text: String) -> some View {
-        Text(text).font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary).kerning(0.5)
+        Text(text).font(.system(size: 12, weight: .semibold)).foregroundStyle(Color.white.opacity(0.6)).kerning(0.5)
     }
 
     private func rarityPill(_ rarity: SkinRarity) -> some View {
@@ -255,17 +321,17 @@ struct SkinPopoverView: View {
     private func swatch(_ color: RGB, removable: Bool) -> some View {
         Button { setBackground(color) } label: {
             Circle().fill(Color(rgb: color))
-                .frame(width: 30, height: 30)
-                .overlay(Circle().strokeBorder(current.background == color ? accent : Color.white.opacity(0.14),
-                                               lineWidth: current.background == color ? 3 : 1))
+                .frame(width: 36, height: 36)
+                .overlay(Circle().strokeBorder(current.background == color ? accent : .clear, lineWidth: 3))
+                .overlay(Circle().stroke(Color.white.opacity(0.14), lineWidth: 1))
         }
         .buttonStyle(.plain)
         .help(color.hex)
         .overlay(alignment: .topTrailing) {
             if removable {
                 Button { savedColors.remove(color) } label: {
-                    Image(systemName: "xmark").font(.system(size: 7, weight: .bold)).foregroundStyle(.black)
-                        .frame(width: 14, height: 14).background(Circle().fill(.white))
+                    Image(systemName: "xmark").font(.system(size: 7, weight: .bold)).foregroundStyle(Self.ink)
+                        .frame(width: 16, height: 16).background(Circle().fill(.white))
                 }
                 .buttonStyle(.plain)
                 .offset(x: 4, y: -4)
@@ -282,7 +348,7 @@ struct SkinPopoverView: View {
             skin.texture = texture
             skin.recomputeAccentIfNeeded()
         } } label: {
-            VStack(spacing: 4) {
+            VStack(spacing: 6) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 8).fill(Color(rgb: current.background))
                     if texture != .none, let image = manager.thumbnailImage(for: sample) {
@@ -290,12 +356,12 @@ struct SkinPopoverView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 8))
                     }
                 }
-                .frame(height: 34)
-                Text(label).font(.system(size: 10, weight: .semibold)).lineLimit(1)
+                .frame(height: 38)
+                Text(label).font(.system(size: 11, weight: .semibold)).foregroundStyle(.white).lineLimit(1)
             }
-            .padding(4)
-            .background(RoundedRectangle(cornerRadius: 10).fill(Self.card))
-            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(selected ? accent : .clear, lineWidth: 2))
+            .padding(.top, 6).padding(.horizontal, 4).padding(.bottom, 8)
+            .background(RoundedRectangle(cornerRadius: 12).fill(Self.solidCard))
+            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(selected ? accent : .clear, lineWidth: 2))
         }
         .buttonStyle(.plain)
     }
