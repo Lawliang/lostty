@@ -191,7 +191,7 @@ struct SkinManagerTests {
         m.handle(SkinRequest(op: .set, skin: "prod"), for: id)
         let object = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any]
         let skins = object?["skins"] as? [[String: String]]
-        #expect(skins?.map { $0["name"] } == ["neon-arcade", "sunset-drive", "mint-protocol", "deep-dive", "lava-rush", "bubble-pop", "arca", "prod"])
+        #expect(skins?.map { $0["name"] } == SkinPresets.all.map(\.skin.name) + ["arca", "prod"])
         #expect((object?["textures"] as? [String]) == BuiltinTexture.allCases.map(\.rawValue))
         let pane = (object?["panes"] as? [String: [String: Any]])?[id.uuidString]
         #expect(pane?["skin"] as? String == "prod")

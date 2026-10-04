@@ -24,9 +24,11 @@ title-bar chip shows a warning.
 
 ## Presets
 
-Lostty ships with six built-in preset skins that restyle your background, text
+Lostty ships with twelve built-in preset skins that restyle your background, text
 color, texture, 16-color ANSI palette, cursor, and selection. Each preset has
 a rarity label and a defined accent color.
+
+The arcade pack:
 
 - **neon-arcade** (legendary) — Bright magenta and cyan on a dark purple.
 - **sunset-drive** (epic) — Warm orange and pink on a dark plum with scanlines.
@@ -35,7 +37,17 @@ a rarity label and a defined accent color.
 - **lava-rush** (epic) — Warm orange and yellow on a dark brown with diagonal texture.
 - **bubble-pop** (common) — Hot pink and yellow on a purple with sparkle texture.
 
-Use `skins set <id>` to equip any preset. A skin defined in `skins.toml` with
+The Olympian boon pack, each offered by a patron god:
+
+- **thunderhead** (epic, Zeus) — Thunder gold on storm navy with lightning.
+- **undertow** (rare, Poseidon) — Sea-foam on abyssal teal with tide lines.
+- **bloodrite** (heroic, Ares) — Battle red on dried blood with blade marks.
+- **heartsease** (common, Aphrodite) — Rose pink on dusk rose with petals.
+- **silverbow** (legendary, Artemis) — Hunter green on night forest with a starfield.
+- **stormsurge** (duo, Zeus & Poseidon) — Gold lightning over teal swells.
+
+The title-bar picker shows every skin as a boon you can choose. Use
+`skins set <id>` to equip any preset. A skin defined in `skins.toml` with
 the same name as a preset overrides it and appears in the picker tagged PROJECT.
 
 ## Locked Folders

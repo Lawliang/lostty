@@ -215,10 +215,100 @@ final class TextureStore {
                     ctx.strokeEllipse(in: CGRect(x: c.x - 9, y: c.y - 9, width: 18, height: 18))
                 }
             }
+        case .lightning:
+            addBolts(ctx)
+            ctx.setLineJoin(.miter)
+            ctx.setLineWidth(1.6)
+            ctx.strokePath()
+        case .tide:
+            addSwells(ctx, size: size, rows: 5, amplitude: 7)
+            ctx.strokePath()
+        case .blades:
+            // Paired anti-diagonal cuts every 55 px (4 per tile) stay seamless.
+            for k in 0...8 {
+                for offset: CGFloat in [0, 5] {
+                    let c = CGFloat(k) * size / 4 + offset
+                    ctx.move(to: CGPoint(x: c - size, y: size))
+                    ctx.addLine(to: CGPoint(x: c, y: 0))
+                }
+            }
+            ctx.setLineWidth(1)
+            ctx.strokePath()
+        case .petals:
+            let petals: [(x: CGFloat, y: CGFloat, angle: CGFloat)] = [
+                (30, 34, 0.4), (112, 22, -0.6), (182, 58, 1.2), (66, 96, -1.1), (150, 120, 0.2),
+                (24, 160, 0.9), (98, 180, -0.3), (190, 176, -1.4), (126, 64, 2.0), (54, 210, 1.6),
+            ]
+            for petal in petals {
+                ctx.saveGState()
+                ctx.translateBy(x: petal.x, y: petal.y)
+                ctx.rotate(by: petal.angle)
+                ctx.move(to: CGPoint(x: -7, y: 0))
+                ctx.addQuadCurve(to: CGPoint(x: 7, y: 0), control: CGPoint(x: 0, y: -7))
+                ctx.addQuadCurve(to: CGPoint(x: -7, y: 0), control: CGPoint(x: 0, y: 7))
+                ctx.fillPath()
+                ctx.restoreGState()
+            }
+        case .starfield:
+            var seed: UInt64 = 7
+            func next() -> CGFloat {
+                seed = seed &* 6364136223846793005 &+ 1442695040888963407
+                return CGFloat(seed >> 33) / CGFloat(UInt64(1) << 31)
+            }
+            for i in 0..<18 {
+                let c = CGPoint(x: 8 + next() * (size - 16), y: 8 + next() * (size - 16))
+                let arm: CGFloat = i % 3 == 0 ? 4 : 2
+                ctx.move(to: CGPoint(x: c.x - arm, y: c.y))
+                ctx.addLine(to: CGPoint(x: c.x + arm, y: c.y))
+                ctx.move(to: CGPoint(x: c.x, y: c.y - arm))
+                ctx.addLine(to: CGPoint(x: c.x, y: c.y + arm))
+            }
+            ctx.setLineWidth(1)
+            ctx.strokePath()
+            // One crescent moon per tile.
+            ctx.addEllipse(in: CGRect(x: 150, y: 150, width: 34, height: 34))
+            ctx.fillPath()
+            ctx.setBlendMode(.clear)
+            ctx.addEllipse(in: CGRect(x: 160, y: 156, width: 30, height: 30))
+            ctx.fillPath()
+            ctx.setBlendMode(.normal)
+        case .tempest:
+            addSwells(ctx, size: size, rows: 4, amplitude: 6)
+            ctx.setLineWidth(1)
+            ctx.strokePath()
+            addBolts(ctx)
+            ctx.setLineJoin(.miter)
+            ctx.setLineWidth(1.6)
+            ctx.strokePath()
         }
 
         guard let image = ctx.makeImage() else { throw TextureError.render("makeImage failed") }
         return image
+    }
+
+    /// Two forked bolts kept inside the tile so the repeat stays seamless.
+    private static func addBolts(_ ctx: CGContext) {
+        let bolt: [CGPoint] = [
+            CGPoint(x: 0, y: 0), CGPoint(x: -10, y: 28), CGPoint(x: 6, y: 32),
+            CGPoint(x: -6, y: 64), CGPoint(x: 10, y: 68), CGPoint(x: -2, y: 96),
+        ]
+        for origin in [CGPoint(x: 58, y: 14), CGPoint(x: 166, y: 112)] {
+            ctx.addLines(between: bolt.map { CGPoint(x: origin.x + $0.x, y: origin.y + $0.y) })
+            ctx.move(to: CGPoint(x: origin.x + 6, y: origin.y + 32))
+            ctx.addLine(to: CGPoint(x: origin.x + 24, y: origin.y + 46))
+        }
+    }
+
+    /// Slow swells: two whole periods per row, each row phase-shifted.
+    private static func addSwells(_ ctx: CGContext, size: CGFloat, rows: Int, amplitude: CGFloat) {
+        for j in 0..<rows {
+            let y0 = (CGFloat(j) + 0.5) * size / CGFloat(rows)
+            let phase = CGFloat(j) * .pi / 2
+            ctx.move(to: CGPoint(x: 0, y: y0 + amplitude * sin(phase)))
+            for x in stride(from: CGFloat(2), through: size, by: 2) {
+                ctx.addLine(to: CGPoint(x: x, y: y0 + amplitude * sin(x / size * 4 * .pi + phase)))
+            }
+        }
     }
 
     static func renderLogoTile(path: String, accent: RGB) throws -> CGImage {

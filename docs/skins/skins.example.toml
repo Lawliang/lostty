@@ -12,7 +12,8 @@ logo       = "~/projectrepos/arca-labs/website/assets/favicon.svg"
 
 [skins.prod]             # not tied to a folder; use with `skins set prod`
 background = "#3a0f14"
-texture    = "diagonal"  # dots, grid, diagonal, cross, waves, noise, none
+texture    = "diagonal"  # dots, grid, diagonal, cross, waves, noise, scanlines, sparkle,
+                         # rings, lightning, tide, blades, petals, starfield, tempest, none
 
 [[match]]
 path = "~/projectrepos/arca"

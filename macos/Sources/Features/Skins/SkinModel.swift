@@ -54,6 +54,7 @@ struct RGB: Hashable {
 
 enum BuiltinTexture: String, CaseIterable {
     case dots, grid, diagonal, cross, waves, noise, scanlines, sparkle, rings
+    case lightning, tide, blades, petals, starfield, tempest
 }
 
 enum SkinTexture: Hashable {

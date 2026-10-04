@@ -31,10 +31,12 @@ struct SkinChipView: View {
             HStack(spacing: 5) {
                 // Unskinned panes show a plain "skins" label, no swatch.
                 if let skin {
-                    Circle()
+                    Rectangle()
                         .fill(Color(rgb: skin.background))
-                        .overlay(Circle().strokeBorder(Color(rgb: skin.accent), lineWidth: 1.5))
-                        .frame(width: 11, height: 11)
+                        .overlay(Rectangle().strokeBorder(Color(rgb: skin.accent), lineWidth: 1.5))
+                        .frame(width: 9, height: 9)
+                        .rotationEffect(.degrees(45))
+                        .frame(width: 13, height: 13)
                 }
                 if let flash {
                     Image(systemName: "checkmark").font(.system(size: 9, weight: .bold))

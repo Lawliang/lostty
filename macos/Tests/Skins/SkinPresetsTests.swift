@@ -5,14 +5,36 @@ import Testing
 
 struct SkinPresetsTests {
     @Test func packMatchesSpec() {
-        #expect(SkinPresets.all.map(\.skin.name) == ["neon-arcade", "sunset-drive", "mint-protocol", "deep-dive", "lava-rush", "bubble-pop"])
-        #expect(SkinPresets.all.map(\.rarity) == [.legendary, .epic, .rare, .rare, .epic, .common])
-        let neon = SkinPresets.all[0].skin
+        #expect(SkinPresets.arcade.map(\.skin.name) == ["neon-arcade", "sunset-drive", "mint-protocol", "deep-dive", "lava-rush", "bubble-pop"])
+        #expect(SkinPresets.arcade.map(\.rarity) == [.legendary, .epic, .rare, .rare, .epic, .common])
+        let neon = SkinPresets.arcade[0].skin
         #expect(neon.background == RGB(hex: "#120a2a"))
         #expect(neon.foreground == RGB(hex: "#f3ecff"))
         #expect(neon.accent == RGB(hex: "#ff3df2"))
         #expect(neon.accent2 == RGB(hex: "#28e7ff"))
         #expect(neon.texture == .builtin(.grid))
+    }
+
+    @Test func boonPackHasOnePatronEach() {
+        let boons = SkinPresets.boons
+        #expect(boons.map(\.skin.name) == ["thunderhead", "undertow", "bloodrite", "heartsease", "silverbow", "stormsurge"])
+        #expect(boons.map(\.rarity) == [.epic, .rare, .heroic, .common, .legendary, .duo])
+        #expect(boons.map(\.patron) == ["Zeus", "Poseidon", "Ares", "Aphrodite", "Artemis", "Zeus & Poseidon"])
+        #expect(boons.map(\.skin.texture) == [.lightning, .tide, .blades, .petals, .starfield, .tempest].map { .builtin($0) })
+        #expect(SkinPresets.all.map(\.skin.name) == boons.map(\.skin.name) + SkinPresets.arcade.map(\.skin.name))
+    }
+
+    @Test func everyPresetHasABlurb() {
+        for preset in SkinPresets.all {
+            #expect(!preset.blurb.isEmpty, "\(preset.skin.name)")
+        }
+    }
+
+    @Test func libraryCarriesPresetMetadata() {
+        let entries = SkinLibrary.entries(config: .empty)
+        let thunderhead = entries.first { $0.skin.name == "thunderhead" }
+        #expect(thunderhead?.patron == "Zeus")
+        #expect(thunderhead?.glyph == .bolt)
     }
 
     @Test func everyPresetHasAFullTheme() {
@@ -26,17 +48,19 @@ struct SkinPresetsTests {
     @Test func libraryAppendsConfigSkinsAsProject() throws {
         let config = try SkinConfig.parse("[skins.arca]\nbackground = \"#12222b\"", home: "/h")
         let entries = SkinLibrary.entries(config: config)
-        #expect(entries.map(\.skin.name) == ["neon-arcade", "sunset-drive", "mint-protocol", "deep-dive", "lava-rush", "bubble-pop", "arca"])
+        #expect(entries.map(\.skin.name) == SkinPresets.all.map(\.skin.name) + ["arca"])
         #expect(entries.last?.rarity == .project)
-        #expect(SkinLibrary.skins(config: config).count == 7)
+        #expect(entries.last?.glyph == .sigil)
+        #expect(SkinLibrary.skins(config: config).count == SkinPresets.all.count + 1)
     }
 
     @Test func configShadowsBuiltin() throws {
         let config = try SkinConfig.parse("[skins.neon-arcade]\nbackground = \"#000000\"", home: "/h")
         let entries = SkinLibrary.entries(config: config)
-        #expect(entries.count == 6)
-        #expect(entries[0].skin.background == RGB(hex: "#000000"))
-        #expect(entries[0].rarity == .project)
+        #expect(entries.count == SkinPresets.all.count)
+        let neon = try #require(entries.first { $0.skin.name == "neon-arcade" })
+        #expect(neon.skin.background == RGB(hex: "#000000"))
+        #expect(neon.rarity == .project)
         #expect(SkinLibrary.skins(config: config)["neon-arcade"]?.palette == nil)
     }
 

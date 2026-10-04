@@ -27,7 +27,7 @@ struct SkinOverlayTests {
     }
 
     @Test func presetThemeLines() {
-        let skin = SkinPresets.all[0].skin
+        let skin = SkinPresets.arcade[0].skin
         let text = SkinOverlay.configText(for: AppliedSkin(skin: skin, tile: nil))
         let lines = text.split(separator: "\n").map(String.init)
         #expect(lines[0] == "background = #120a2a")

@@ -193,6 +193,7 @@ const Event = union(enum) {
 const Entry = struct {
     label: []const u8,
     swatch: ?[3]u8,
+    rarity: ?[]const u8 = null,
     preview: protocol.Request,
     commit: protocol.Request,
 };
@@ -203,6 +204,7 @@ fn pick(alloc: Allocator, catalog: protocol.Catalog, tmux: bool) !void {
         try entries.append(alloc, .{
             .label = skin.name,
             .swatch = parseHex(skin.background),
+            .rarity = skin.rarity,
             .preview = .{ .op = .preview, .skin = skin.name },
             .commit = .{ .op = .set, .skin = skin.name },
         });
@@ -226,6 +228,28 @@ fn pick(alloc: Allocator, catalog: protocol.Catalog, tmux: bool) !void {
     var picker = try Picker.init(alloc, entries.items, tmux, &buf);
     defer picker.deinit();
     try picker.run();
+}
+
+// Boon-picker colors, matching the app's title-bar picker.
+const gold: [3]u8 = .{ 0xe3, 0xb8, 0x5a };
+const gold_light: [3]u8 = .{ 0xff, 0xf1, 0xc4 };
+const bronze: [3]u8 = .{ 0x8a, 0x6a, 0x32 };
+const faded: [3]u8 = .{ 0xa9, 0x9a, 0x7c };
+const highlight: [3]u8 = .{ 0x3a, 0x2e, 0x14 };
+
+fn rarityColor(rarity: []const u8) [3]u8 {
+    const colors = .{
+        .{ "legendary", [3]u8{ 0xff, 0xa6, 0x30 } },
+        .{ "heroic", [3]u8{ 0xff, 0x5a, 0x52 } },
+        .{ "epic", [3]u8{ 0xb9, 0x7b, 0xff } },
+        .{ "rare", [3]u8{ 0x4f, 0xa3, 0xff } },
+        .{ "common", [3]u8{ 0xd9, 0xd4, 0xc7 } },
+        .{ "duo", [3]u8{ 0xb8, 0xf3, 0x5a } },
+    };
+    inline for (colors) |entry| {
+        if (std.mem.eql(u8, rarity, entry[0])) return entry[1];
+    }
+    return gold;
 }
 
 fn parseHex(s: []const u8) ?[3]u8 {
@@ -321,22 +345,48 @@ const Picker = struct {
     fn draw(self: *Picker) void {
         const win = self.vx.window();
         win.clear();
-        _ = win.printSegment(.{
-            .text = "skins — ↑/↓ preview · enter apply · esc cancel",
-            .style = .{ .bold = true },
-        }, .{ .row_offset = 0 });
+        const title = [_]vaxis.Segment{
+            .{ .text = "═╦═╦═╦═  ", .style = .{ .fg = .{ .rgb = bronze } } },
+            .{ .text = "CHOOSE A BOON", .style = .{ .fg = .{ .rgb = gold }, .bold = true } },
+            .{ .text = "  ═╦═╦═╦═", .style = .{ .fg = .{ .rgb = bronze } } },
+        };
+        _ = win.print(&title, .{ .row_offset = 0, .col_offset = 1 });
+        const keys = [_]vaxis.Segment{
+            .{ .text = "↑↓", .style = .{ .fg = .{ .rgb = gold } } },
+            .{ .text = " choose   ", .style = .{ .fg = .{ .rgb = faded } } },
+            .{ .text = "enter", .style = .{ .fg = .{ .rgb = gold } } },
+            .{ .text = " equip   ", .style = .{ .fg = .{ .rgb = faded } } },
+            .{ .text = "esc", .style = .{ .fg = .{ .rgb = gold } } },
+            .{ .text = " decline", .style = .{ .fg = .{ .rgb = faded } } },
+        };
+        _ = win.print(&keys, .{ .row_offset = 1, .col_offset = 1 });
+
         for (self.entries, 0..) |entry, i| {
-            const row: u16 = @intCast(i + 2);
+            const row: u16 = @intCast(i + 3);
             if (row >= win.height) break;
             const selected = i == self.current;
-            if (selected) _ = win.printSegment(.{ .text = "❯", .style = .{ .bold = true } }, .{ .row_offset = row });
+            const bg: vaxis.Color = if (selected) .{ .rgb = highlight } else .default;
+            if (selected) win.child(.{ .y_off = row, .height = 1 }).fill(.{ .style = .{ .bg = bg } });
+            if (selected) _ = win.printSegment(.{ .text = "▶", .style = .{ .fg = .{ .rgb = gold }, .bg = bg, .bold = true } }, .{ .row_offset = row, .col_offset = 1 });
             if (entry.swatch) |rgb| {
-                _ = win.printSegment(.{ .text = "██", .style = .{ .fg = .{ .rgb = rgb } } }, .{ .row_offset = row, .col_offset = 2 });
+                _ = win.printSegment(.{ .text = "██", .style = .{ .fg = .{ .rgb = rgb }, .bg = bg } }, .{ .row_offset = row, .col_offset = 3 });
+            } else {
+                _ = win.printSegment(.{ .text = " ◇", .style = .{ .fg = .{ .rgb = bronze }, .bg = bg } }, .{ .row_offset = row, .col_offset = 3 });
             }
             _ = win.printSegment(.{
                 .text = entry.label,
-                .style = .{ .bold = selected, .reverse = selected },
-            }, .{ .row_offset = row, .col_offset = 5 });
+                .style = .{ .fg = .{ .rgb = if (selected) gold_light else faded }, .bg = bg, .bold = selected },
+            }, .{ .row_offset = row, .col_offset = 7 });
+            if (entry.rarity) |rarity| {
+                const col: u16 = 7 + 24;
+                if (col + 12 < win.width) {
+                    const color = rarityColor(rarity);
+                    _ = win.print(&.{
+                        .{ .text = "◆ ", .style = .{ .fg = .{ .rgb = color }, .bg = bg } },
+                        .{ .text = rarity, .style = .{ .fg = .{ .rgb = color }, .bg = bg, .bold = true } },
+                    }, .{ .row_offset = row, .col_offset = col });
+                }
+            }
         }
     }
 };

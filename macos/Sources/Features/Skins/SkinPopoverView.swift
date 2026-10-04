@@ -2,7 +2,8 @@
 import AppKit
 import SwiftUI
 
-/// Lostty's skin picker (spec §7): Presets / Custom, live preview, Equip.
+/// Lostty's skin picker (spec §7), styled as a boon offering: Boons /
+/// Custom, live preview, Equip.
 struct SkinPopoverView: View {
     let surfaceID: UUID
     @ObservedObject var manager: SkinManager
@@ -17,12 +18,11 @@ struct SkinPopoverView: View {
     @State private var committed = false
     @State private var hex = ""
 
-    private static let panel = Color(red: 0.09, green: 0.09, blue: 0.14)
-    private static let card = Color.white.opacity(0.06)
-    /// Solid card and field fills from the "Lostty Skin Picker" design.
-    private static let solidCard = Color(red: 31 / 255, green: 31 / 255, blue: 46 / 255)
-    private static let field = Color(red: 20 / 255, green: 20 / 255, blue: 32 / 255)
-    private static let ink = Color(red: 11 / 255, green: 11 / 255, blue: 18 / 255)
+    private static let card = Color(red: 30 / 255, green: 23 / 255, blue: 17 / 255).opacity(0.9)
+    /// Solid card and field fills, warmed to sit on the boon panel.
+    private static let solidCard = Color(red: 26 / 255, green: 20 / 255, blue: 15 / 255)
+    private static let field = Color(red: 14 / 255, green: 11 / 255, blue: 9 / 255)
+    private static let ink = Boon.ink
 
     private var base: Skin { manager.effectiveSkin(surfaceID) ?? Skin.fallback }
     private var current: Skin { draft ?? base }
@@ -42,8 +42,8 @@ struct SkinPopoverView: View {
             }
         }
         .padding(20)
-        .frame(width: 420)
-        .background(Self.panel)
+        .frame(width: 440)
+        .background(panelBackground)
         .environment(\.colorScheme, .dark)
         .onAppear { hex = current.background.hex }
         .onDisappear { if !committed { manager.setPreview(surfaceID, nil) } }
@@ -51,17 +51,32 @@ struct SkinPopoverView: View {
 
     // MARK: Sections
 
+    /// Dark ground lit from the top by the previewed skin's accent, the way
+    /// a patron's color fills the screen when they offer a boon.
+    private var panelBackground: some View {
+        ZStack {
+            Boon.ground
+            RadialGradient(colors: [accent.opacity(0.22), .clear], center: .top, startRadius: 0, endRadius: 320)
+                .animation(.easeOut(duration: 0.35), value: current.accent)
+        }
+    }
+
     private var header: some View {
         HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Skins").font(.system(size: 20, weight: .bold))
-                Text(subtitle).font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(1)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("CHOOSE A BOON")
+                    .font(Boon.display(20, .black)).kerning(3)
+                    .foregroundStyle(Boon.goldFill)
+                Text(subtitle).font(.system(size: 12, design: .serif)).italic()
+                    .foregroundStyle(Boon.faded).lineLimit(1)
             }
             Spacer()
             Button { onClose() } label: {
-                Image(systemName: "xmark").font(.system(size: 11, weight: .bold))
+                Image(systemName: "xmark").font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(Boon.gold)
                     .frame(width: 26, height: 26)
-                    .background(Circle().fill(Color.white.opacity(0.08)))
+                    .background(Circle().fill(Boon.rowFill))
+                    .overlay(Circle().strokeBorder(Boon.bronze, lineWidth: 1))
             }
             .buttonStyle(.plain)
             .help("Close")
@@ -72,10 +87,10 @@ struct SkinPopoverView: View {
     private var subtitle: String {
         if let locked = manager.lockedSkinName(surfaceID) { return "Locked · \(locked) from skins.toml" }
         let pwd = manager.panes[surfaceID]?.pwd ?? ""
-        if pwd.isEmpty { return "This pane" }
+        if pwd.isEmpty { return "A patron offers a skin for this pane" }
         let home = NSHomeDirectory()
         return (pwd == home || pwd.hasPrefix(home + "/"))
-            ? "This pane · ~" + pwd.dropFirst(home.count) : "This pane · \(pwd)"
+            ? "A patron offers a skin for ~" + pwd.dropFirst(home.count) : "A patron offers a skin for \(pwd)"
     }
 
     private func lockedCard(_ name: String) -> some View {
@@ -94,82 +109,102 @@ struct SkinPopoverView: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 14).fill(Self.card))
+        .background(Rectangle().fill(Self.card))
+        .overlay(Rectangle().strokeBorder(Boon.bronze, lineWidth: 1))
     }
 
     private var presetGrid: some View {
         ScrollView {
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
+            VStack(spacing: 10) {
                 ForEach(manager.library, id: \.skin.name) { entry in
-                    presetCard(entry)
+                    boonRow(entry)
                 }
             }
+            .padding(.vertical, 6)
+            .padding(.horizontal, 4)
         }
-        .frame(maxHeight: 360)
+        .frame(maxHeight: 400)
     }
 
-    private func presetCard(_ entry: SkinLibrary.Entry) -> some View {
+    private func boonRow(_ entry: SkinLibrary.Entry) -> some View {
         let skin = entry.skin
         let selected = current.name == skin.name && current.palette == skin.palette
         let equipped = manager.equippedName(surfaceID) == skin.name
-        let ring = Color(rgb: skin.accent)
+        let glow = Color(rgb: skin.accent)
         return Button { preview(skin) } label: {
-            VStack(spacing: 0) {
-                ZStack(alignment: .bottomLeading) {
-                    Rectangle().fill(Color(rgb: skin.background))
-                    if let image = manager.thumbnailImage(for: skin) {
-                        Image(decorative: image, scale: 2)
-                            .resizable(resizingMode: .tile)
-                            .opacity(min(1, skin.textureOpacity * 3))
+            HStack(spacing: 14) {
+                BoonEmblem(skin: skin, rarity: entry.rarity, glyph: entry.glyph,
+                           texture: manager.thumbnailImage(for: skin))
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(SkinPresets.title(for: skin).uppercased())
+                            .font(Boon.display(14)).kerning(1.2).lineLimit(1)
+                            .foregroundStyle(selected ? Boon.goldLight : Color(red: 217 / 255, green: 199 / 255, blue: 156 / 255))
+                        if let patron = entry.patron {
+                            Text(patron.uppercased()).font(Boon.display(9, .semibold)).kerning(1)
+                                .foregroundStyle(Boon.faded).lineLimit(1)
+                        }
+                        Spacer(minLength: 4)
+                        rarityTag(entry.rarity)
                     }
-                    Text("❯ _")
-                        .font(.system(size: 12, weight: .bold, design: .monospaced))
-                        .foregroundStyle(ring)
-                        .padding(10)
-                    if equipped {
-                        Text("EQUIPPED")
-                            .font(.system(size: 9, weight: .heavy))
-                            .padding(.horizontal, 7).padding(.vertical, 2)
-                            .background(Capsule().fill(Color.black.opacity(0.55)))
-                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                            .padding(8)
+                    Text(entry.blurb)
+                        .font(.system(size: 11.5, design: .serif))
+                        .foregroundStyle(Boon.parchment.opacity(0.85))
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                    HStack(spacing: 5) {
+                        ForEach(Array(gems(skin).enumerated()), id: \.offset) { _, color in
+                            Rectangle().fill(Color(rgb: color)).frame(width: 6, height: 6)
+                                .rotationEffect(.degrees(45))
+                        }
+                        Spacer()
+                        if equipped {
+                            Text("EQUIPPED").font(Boon.display(8.5, .heavy)).kerning(1.2)
+                                .foregroundStyle(Boon.gold)
+                        }
                     }
+                    .padding(.top, 2)
                 }
-                .frame(height: 64)
-                .clipped()
-                HStack(spacing: 6) {
-                    Text(SkinPresets.title(for: skin)).font(.system(size: 13, weight: .semibold)).lineLimit(1)
-                    Spacer(minLength: 4)
-                    rarityPill(entry.rarity)
-                }
-                .padding(.horizontal, 10).padding(.vertical, 9)
             }
-            .background(Self.card)
-            .clipShape(RoundedRectangle(cornerRadius: 14))
-            .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(selected ? ring : .clear, lineWidth: 2))
-            .shadow(color: selected ? ring.opacity(0.45) : .clear, radius: 10)
+            .padding(.leading, 16).padding(.trailing, 22).padding(.vertical, 10)
+            .background(
+                HexBar().fill(selected
+                    ? AnyShapeStyle(LinearGradient(colors: [glow.opacity(0.2), Boon.rowFill], startPoint: .leading, endPoint: .trailing))
+                    : AnyShapeStyle(Boon.rowFill)))
+            .overlay(HexBar().strokeBorder(selected ? Boon.goldRim : Boon.bronzeRim, lineWidth: selected ? 1.5 : 1))
+            .shadow(color: selected ? glow.opacity(0.4) : .clear, radius: 10)
+            .contentShape(HexBar())
         }
         .buttonStyle(.plain)
         .help("skins set \(skin.name)")
+        .animation(.easeOut(duration: 0.2), value: selected)
+    }
+
+    /// The eight normal ANSI colors, or just the ground and accent for a
+    /// skin without a palette.
+    private func gems(_ skin: Skin) -> [RGB] {
+        guard let palette = skin.palette, palette.count >= 8 else { return [skin.background, skin.accent] }
+        return Array(palette[1...7]) + [skin.foreground ?? palette[15]]
     }
 
     private var tabSwitcher: some View {
         HStack(spacing: 4) {
-            tabButton("Presets", .presets)
+            tabButton("Boons", .presets)
             tabButton("Custom", .custom)
         }
-        .padding(4)
-        .background(RoundedRectangle(cornerRadius: 12).fill(Color.white.opacity(0.06)))
+        .padding(3)
+        .background(HexBar(notch: 12).fill(Boon.rowFill))
+        .overlay(HexBar(notch: 12).strokeBorder(Boon.bronze, lineWidth: 1))
     }
 
     private func tabButton(_ title: String, _ value: Tab) -> some View {
         let on = tab == value
         return Button { tab = value } label: {
-            Text(title).font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(on ? Self.ink : Color.white.opacity(0.7))
-                .frame(maxWidth: .infinity).frame(height: 34)
-                .background(RoundedRectangle(cornerRadius: 9).fill(on ? Color.white : .clear))
-                .contentShape(RoundedRectangle(cornerRadius: 9))
+            Text(title.uppercased()).font(Boon.display(12)).kerning(2)
+                .foregroundStyle(on ? AnyShapeStyle(Self.ink) : AnyShapeStyle(Boon.faded))
+                .frame(maxWidth: .infinity).frame(height: 32)
+                .background(HexBar(notch: 11).fill(on ? AnyShapeStyle(Boon.goldFill) : AnyShapeStyle(Color.clear)))
+                .contentShape(HexBar(notch: 11))
         }
         .buttonStyle(.plain)
     }
@@ -262,7 +297,8 @@ struct SkinPopoverView: View {
             .help("Save this color to the swatches")
         }
         .padding(.vertical, 10).padding(.horizontal, 12)
-        .background(RoundedRectangle(cornerRadius: 14).fill(Self.solidCard))
+        .background(Rectangle().fill(Self.solidCard))
+        .overlay(Rectangle().strokeBorder(Boon.bronze, lineWidth: 1))
     }
 
     private var problems: some View {
@@ -279,17 +315,21 @@ struct SkinPopoverView: View {
     private var footer: some View {
         HStack(spacing: 10) {
             Button { reset() } label: {
-                Text("Reset to project").font(.system(size: 14, weight: .semibold))
+                Text("RESET TO PROJECT").font(Boon.display(12)).kerning(1.5)
+                    .foregroundStyle(Color(red: 205 / 255, green: 187 / 255, blue: 148 / 255))
                     .frame(maxWidth: .infinity).frame(height: 40)
-                    .background(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.white.opacity(0.18)))
+                    .background(HexBar(notch: 12).fill(Boon.rowFill))
+                    .overlay(HexBar(notch: 12).strokeBorder(Boon.bronze, lineWidth: 1))
+                    .contentShape(HexBar(notch: 12))
             }
             .buttonStyle(.plain)
             Button { equip() } label: {
-                Text("Equip").font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(onAccent)
+                Text("EQUIP").font(Boon.display(14, .black)).kerning(3)
+                    .foregroundStyle(Self.ink)
                     .frame(maxWidth: .infinity).frame(height: 40)
-                    .background(RoundedRectangle(cornerRadius: 12).fill(accent))
-                    .shadow(color: accent.opacity(0.45), radius: 10)
+                    .background(HexBar(notch: 12).fill(Boon.goldFill))
+                    .shadow(color: Boon.gold.opacity(draft == nil ? 0 : 0.45), radius: 10)
+                    .contentShape(HexBar(notch: 12))
             }
             .buttonStyle(.plain)
             .disabled(draft == nil)
@@ -300,22 +340,15 @@ struct SkinPopoverView: View {
     // MARK: Pieces
 
     private func sectionLabel(_ text: String) -> some View {
-        Text(text).font(.system(size: 12, weight: .semibold)).foregroundStyle(Color.white.opacity(0.6)).kerning(0.5)
+        Text(text).font(Boon.display(11)).foregroundStyle(Boon.gold).kerning(2)
     }
 
-    private func rarityPill(_ rarity: SkinRarity) -> some View {
-        let style: (String, Color, Color) = switch rarity {
-        case .legendary: ("LEGENDARY", Color(red: 1, green: 0.85, blue: 0.3), Color(red: 0.16, green: 0.1, blue: 0))
-        case .epic: ("EPIC", Color(red: 0.7, green: 0.42, blue: 1), .white)
-        case .rare: ("RARE", Color(red: 0.18, green: 0.7, blue: 1), Color(red: 0, green: 0.07, blue: 0.12))
-        case .common: ("COMMON", Color.white.opacity(0.16), .white)
-        case .project: ("PROJECT", .white, Color(red: 0.07, green: 0.13, blue: 0.17))
+    private func rarityTag(_ rarity: SkinRarity) -> some View {
+        HStack(spacing: 5) {
+            Rectangle().fill(rarity.color).frame(width: 5, height: 5).rotationEffect(.degrees(45))
+            Text(rarity.label).font(Boon.display(9, .heavy)).kerning(1.6).foregroundStyle(rarity.color)
         }
-        return Text(style.0)
-            .font(.system(size: 9, weight: .heavy))
-            .foregroundStyle(style.2)
-            .padding(.horizontal, 7).padding(.vertical, 2)
-            .background(Capsule().fill(style.1))
+        .fixedSize()
     }
 
     private func swatch(_ color: RGB, removable: Bool) -> some View {
