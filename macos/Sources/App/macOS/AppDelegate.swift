@@ -338,13 +338,17 @@ class AppDelegate: NSObject,
             }
         }
 
+        // Lostty Claude trace: menu item and the one-time hook offer.
+        ClaudeHooksUI.installMenuItem(after: menuOpenConfig)
+        ClaudeHooksUI.promptAtLaunchIfNeeded()
+
         #if DEBUG
         // Lostty Claude trace: preview the focused pane's trace style.
         if let anchor = menuOpenConfig, let menu = anchor.menu {
             let item = NSMenuItem(
                 title: "Preview Claude Trace", action: #selector(previewClaudeTrace(_:)), keyEquivalent: "")
             item.target = self
-            menu.insertItem(item, at: menu.index(of: anchor) + 1)
+            menu.insertItem(item, at: menu.index(of: anchor) + 2)
         }
         #endif
     }
