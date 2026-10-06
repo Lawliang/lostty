@@ -13,6 +13,11 @@ struct TraceDrawTests {
         #expect(TraceDraw.noise(1, 1) != TraceDraw.noise(1, 2))
     }
 
+    @Test func eachStyleHasItsOwnRenderer() {
+        let types = BuiltinTrace.allCases.map { String(describing: type(of: TraceRenderers.renderer(for: $0))) }
+        #expect(Set(types).count == BuiltinTrace.allCases.count)
+    }
+
     @Test func everyStyleHasARenderer() {
         for style in BuiltinTrace.allCases {
             _ = TraceRenderers.renderer(for: style)

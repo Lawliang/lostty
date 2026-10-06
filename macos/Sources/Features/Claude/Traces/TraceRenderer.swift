@@ -12,9 +12,18 @@ enum TraceRenderers {
     static func renderer(for style: BuiltinTrace) -> any TraceRenderer {
         switch style {
         case .beam: BeamTrace()
+        case .comet: CometTrace()
+        case .sunset: SunsetTrace()
+        case .datastream: DatastreamTrace()
+        case .sonar: SonarTrace()
+        case .ember: EmberTrace()
+        case .bubbles: BubblesTrace()
         case .bolt: BoltTrace()
-        // The other styles arrive in the next task; until then they draw a beam.
-        default: BeamTrace()
+        case .tide: TideTrace()
+        case .blade: BladeTrace()
+        case .petal: PetalTrace()
+        case .arrow: ArrowTrace()
+        case .tempest: TempestTrace()
         }
     }
 }
