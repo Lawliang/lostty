@@ -93,7 +93,16 @@ pub fn applyAt(alloc: Allocator, path: []const u8, op: Op) !Outcome {
     // Follow a symlinked settings.json (dotfile managers) so the rename
     // replaces the real file and the link stays a link.
     const real = std.fs.realpathAlloc(alloc, path) catch |err| switch (err) {
-        error.FileNotFound => try alloc.dupe(u8, path),
+        error.FileNotFound => missing: {
+            // A symlink to a file that does not exist yet (dotfiles not
+            // applied): refuse rather than replace the link with a file.
+            var buf: [std.fs.max_path_bytes]u8 = undefined;
+            if (std.fs.cwd().readLink(path, &buf)) |_| {
+                if (op == .status) return .{ .status = .not_installed };
+                return .{ .failed = "settings file is a symlink to a missing file; left untouched" };
+            } else |_| {}
+            break :missing try alloc.dupe(u8, path);
+        },
         else => return .{ .failed = "cannot resolve the settings file path" },
     };
     const bytes: ?[]u8 = std.fs.cwd().readFileAlloc(alloc, real, 16 << 20) catch |err| switch (err) {
@@ -123,18 +132,36 @@ pub fn applyAt(alloc: Allocator, path: []const u8, op: Op) !Outcome {
     };
     if (!changed) return .{ .changed = false };
 
-    if (std.fs.path.dirname(real)) |dir| try std.fs.cwd().makePath(dir);
-    if (bytes) |b| {
-        const backup = try std.fmt.allocPrint(alloc, "{s}.lostty-backup", .{real});
-        try std.fs.cwd().writeFile(.{ .sub_path = backup, .data = b });
-    }
-    const tmp = try std.fmt.allocPrint(alloc, "{s}.lostty-tmp", .{real});
-    try std.fs.cwd().writeFile(.{ .sub_path = tmp, .data = try hooks.stringify(alloc, root) });
-    std.fs.renameAbsolute(tmp, real) catch |err| {
-        std.fs.cwd().deleteFile(tmp) catch {};
-        return err;
+    // Keep the original's permissions: settings.json may hold tokens.
+    const mode: std.fs.File.Mode = if (bytes != null)
+        (if (std.fs.cwd().statFile(real)) |st| st.mode & 0o777 else |_| 0o600)
+    else
+        0o644;
+    writeOut(alloc, real, bytes, try hooks.stringify(alloc, root), mode) catch |err| {
+        return .{ .failed = try std.fmt.allocPrint(alloc, "cannot write {s} ({s}); left untouched", .{ real, @errorName(err) }) };
     };
     return .{ .changed = true };
+}
+
+/// Backs up `original` (if any), then replaces `real` with `data` through a
+/// temp file and a rename, all with `mode`. On error the original is intact.
+fn writeOut(alloc: Allocator, real: []const u8, original: ?[]const u8, data: []const u8, mode: std.fs.File.Mode) !void {
+    if (std.fs.path.dirname(real)) |dir| try std.fs.cwd().makePath(dir);
+    if (original) |b| try writeWithMode(try std.fmt.allocPrint(alloc, "{s}.lostty-backup", .{real}), b, mode);
+    const tmp = try std.fmt.allocPrint(alloc, "{s}.lostty-tmp", .{real});
+    errdefer std.fs.cwd().deleteFile(tmp) catch {};
+    try writeWithMode(tmp, data, mode);
+    try std.fs.renameAbsolute(tmp, real);
+}
+
+fn writeWithMode(path: []const u8, data: []const u8, mode: std.fs.File.Mode) !void {
+    const file = try std.fs.cwd().createFile(path, .{ .mode = mode });
+    defer file.close();
+    // createFile's mode is filtered by the umask (and ignored for an
+    // existing file), so set it explicitly.
+    try file.chmod(mode);
+    try file.writeAll(data);
+    try file.sync();
 }
 
 fn tmpPath(alloc: Allocator, dir: std.testing.TmpDir, name: []const u8) ![]u8 {
@@ -218,6 +245,53 @@ test "claude hooks: install follows a symlink" {
     _ = try tmp.dir.readLink("settings.json", &buf);
     const target = try readAll(a, try tmpPath(a, tmp, "dotfiles/settings.json"));
     try std.testing.expect(std.mem.indexOf(u8, target, "+claude-state busy") != null);
+}
+
+test "claude hooks file: install keeps the file's permissions" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    // settings.json may hold tokens in its env block; a 0600 file stays 0600.
+    const f = try tmp.dir.createFile("settings.json", .{ .mode = 0o600 });
+    try f.writeAll("{}");
+    f.close();
+    const path = try tmpPath(a, tmp, "settings.json");
+    try std.testing.expectEqual(Outcome{ .changed = true }, try applyAt(a, path, .install));
+    try std.testing.expectEqual(@as(std.fs.File.Mode, 0o600), (try tmp.dir.statFile("settings.json")).mode & 0o777);
+    try std.testing.expectEqual(@as(std.fs.File.Mode, 0o600), (try tmp.dir.statFile("settings.json.lostty-backup")).mode & 0o777);
+}
+
+test "claude hooks file: write errors become a message and leave the file alone" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(.{ .sub_path = "settings.json", .data = "{}" });
+    const path = try tmpPath(a, tmp, "settings.json");
+    // A read-only directory (e.g. a Nix store target) cannot take the backup.
+    try std.posix.fchmod(tmp.dir.fd, 0o555);
+    defer std.posix.fchmod(tmp.dir.fd, 0o755) catch {};
+    const result = try applyAt(a, path, .install);
+    try std.testing.expect(result == .failed);
+    try std.testing.expect(std.mem.indexOf(u8, result.failed, "AccessDenied") != null);
+    try std.testing.expectEqualStrings("{}", try readAll(a, path));
+}
+
+test "claude hooks file: a dangling symlink is refused, not replaced" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.symLink("dotfiles/settings.json", "settings.json", .{});
+    const link = try tmpPath(a, tmp, "settings.json");
+    const result = try applyAt(a, link, .install);
+    try std.testing.expect(result == .failed);
+    var buf: [std.fs.max_path_bytes]u8 = undefined;
+    try std.testing.expectEqualStrings("dotfiles/settings.json", try tmp.dir.readLink("settings.json", &buf));
 }
 
 test "claude hooks file: preview needs no file" {
