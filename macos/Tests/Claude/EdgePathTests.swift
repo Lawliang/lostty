@@ -70,7 +70,8 @@ struct EdgePathTests {
         // Mid-edge it covers more ground per step than near the corner.
         let nearCorner = path.easedFraction(2.0 / 300) - path.easedFraction(0)
         let midEdge = path.easedFraction(52.0 / 300) - path.easedFraction(50.0 / 300)
-        #expect(midEdge > nearCorner * 2)
+        // Pronounced: mid-edge is many times faster than leaving the corner.
+        #expect(midEdge > nearCorner * 15)
         // Never fully stops at a corner.
         #expect(nearCorner > 0)
     }

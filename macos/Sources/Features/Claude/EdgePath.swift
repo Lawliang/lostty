@@ -58,7 +58,7 @@ struct EdgePath {
 
     /// Maps a linear lap position to an eased one: each side keeps its share
     /// of the lap, but on it the head accelerates out of the corner and
-    /// decelerates into the next. The linear part keeps it from stopping.
+    /// decelerates into the next, smoothly and noticeably.
     func easedFraction(_ fraction: Double) -> Double {
         let total = perimeter
         guard total > 0 else { return fraction }
@@ -70,7 +70,10 @@ struct EdgePath {
         for length in [w, h, w, h] {
             if d < start + length {
                 let u = (d - start) / length
-                let eased = 0.3 * u + 0.7 * (1 - cos(.pi * u)) / 2
+                // Smootherstep: zero speed and zero jerk at the corners, peak
+                // mid-edge. A little linear keeps the head from stopping.
+                let smooth = u * u * u * (u * (6 * u - 15) + 10)
+                let eased = 0.06 * u + 0.94 * smooth
                 return (start + eased * length) / total
             }
             start += length
