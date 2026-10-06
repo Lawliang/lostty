@@ -93,6 +93,36 @@ Overrides last until reset or until the pane closes. zsh and bash get the
   `skins` shell function in every new pane. Launch it from Finder, the
   Dock, or Spotlight instead.
 
+## Claude Trace
+
+While Claude Code is working in a pane, a light ray races around that
+pane's edge. The moment Claude finishes (or you interrupt it), the ray
+disappears. If Claude finishes (or asks for permission) while you are in
+another pane or app, that pane dims and shows **Ready for response** until
+you look at it. Each preset has its own trace; panes without a skin get a
+pink-and-cyan beam.
+
+On first launch Lostty offers to add four hooks to
+`~/.claude/settings.json` (it saves `settings.json.lostty-backup` first).
+The hooks do nothing outside Lostty. Manage them from
+**Lostty → Claude Integration…**, or run `ghostty +claude-hooks install`,
+`remove`, `status` or `preview`.
+
+Custom skins pick a trace in `skins.toml`:
+
+    [skins.my-skin]
+    background = "#101820"
+    trace = "bolt"            # beam comet sunset datastream sonar ember bubbles
+                              # bolt tide blade petal arrow tempest, or none
+    trace_color = "#ff00aa"   # default: the skin's accent
+    trace_color2 = "#00ffcc"  # default: accent2, or a lighter accent
+    trace_speed = 1.5         # 0.25–4
+    trace_length = 0.2        # 0.05–0.5
+
+A skin with the same name as a preset keeps the preset's trace unless it
+sets `trace`. `[defaults] trace = false` turns traces off. With Reduce
+Motion on, the border glows gently instead of racing.
+
 ## Updating from upstream Ghostty
 
 See `UPGRADING.md`.

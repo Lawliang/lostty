@@ -337,7 +337,29 @@ class AppDelegate: NSObject,
                 NSApp.arrangeInFront(nil)
             }
         }
+
+        // Lostty Claude trace: menu item and the one-time hook offer.
+        ClaudeHooksUI.installMenuItem(after: menuOpenConfig)
+        ClaudeHooksUI.promptAtLaunchIfNeeded()
+
+        #if DEBUG
+        // Lostty Claude trace: preview the focused pane's trace style.
+        if let anchor = menuOpenConfig, let menu = anchor.menu {
+            let item = NSMenuItem(
+                title: "Preview Claude Trace", action: #selector(previewClaudeTrace(_:)), keyEquivalent: "")
+            item.target = self
+            menu.insertItem(item, at: menu.index(of: anchor) + 2)
+        }
+        #endif
     }
+
+    #if DEBUG
+    @objc private func previewClaudeTrace(_ sender: Any?) {
+        guard let controller = NSApp.keyWindow?.windowController as? BaseTerminalController,
+              let surface = controller.focusedSurface else { return }
+        MainActor.assumeIsolated { ClaudeRuntime.shared.debugCycle(surface.id) }
+    }
+    #endif
 
     func applicationDidHide(_ notification: Notification) {
         // Keep track of our hidden state to restore properly

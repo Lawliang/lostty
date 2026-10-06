@@ -20,6 +20,8 @@ const show_face = @import("show_face.zig");
 const boo = @import("boo.zig");
 const new_window = @import("new_window.zig");
 const skins = @import("skins.zig");
+const claude_state = @import("claude_state.zig");
+const claude_hooks = @import("claude_hooks.zig");
 
 /// Special commands that can be invoked via CLI flags. These are all
 /// invoked by using `+<action>` as a CLI flag. The only exception is
@@ -72,6 +74,12 @@ pub const Action = enum {
 
     // Ghostty Skins: preview and set this pane's skin.
     skins,
+
+    // Lostty: report Claude Code's state to this pane (run by hooks).
+    @"claude-state",
+
+    // Lostty: install or remove the Claude Code hooks that drive the trace.
+    @"claude-hooks",
 
     pub fn detectSpecialCase(arg: []const u8) ?SpecialCase(Action) {
         // If we see a "-e" and we haven't seen a command yet, then
@@ -152,6 +160,8 @@ pub const Action = enum {
             .boo => try boo.run(alloc),
             .@"new-window" => try new_window.run(alloc),
             .skins => try skins.run(alloc),
+            .@"claude-state" => try claude_state.run(alloc),
+            .@"claude-hooks" => try claude_hooks.run(alloc),
         };
     }
 
@@ -192,6 +202,8 @@ pub const Action = enum {
                 .boo => boo.Options,
                 .@"new-window" => new_window.Options,
                 .skins => skins.Options,
+                .@"claude-state" => claude_state.Options,
+                .@"claude-hooks" => claude_hooks.Options,
             };
         }
     }
@@ -309,4 +321,6 @@ test "parse action plus ignores -e" {
 
 test {
     _ = skins;
+    _ = claude_state;
+    _ = claude_hooks;
 }

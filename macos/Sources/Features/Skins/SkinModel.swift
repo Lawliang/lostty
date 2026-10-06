@@ -76,6 +76,8 @@ struct Skin: Hashable {
     var palette: [RGB]? = nil
     var cursor: RGB? = nil
     var selectionBackground: RGB? = nil
+    /// Claude trace settings; nil = defaults (see ResolvedTrace).
+    var trace: SkinTrace? = nil
 
     /// Accent used when a skin does not set one.
     static func defaultAccent(for background: RGB) -> RGB {
@@ -121,6 +123,7 @@ struct SkinConfigError: Error, Equatable, CustomStringConvertible {
 struct SkinConfig: Equatable {
     var textureOpacity: Double = 0.16
     var auto: Bool = true
+    var trace: Bool = true
     var skins: [String: Skin] = [:]
     var matches: [SkinMatch] = []
 
@@ -146,13 +149,17 @@ struct SkinConfig: Equatable {
             case ([], false):
                 guard section.values.isEmpty else { throw SkinConfigError(message: "skins.toml: keys must be inside a table such as [defaults] or [skins.<name>]") }
             case (["defaults"], false):
-                try checkKeys(section, allowed: ["texture_opacity", "auto"])
+                try checkKeys(section, allowed: ["texture_opacity", "auto", "trace"])
                 if let value = section.values["texture_opacity"] {
                     config.textureOpacity = try opacity(value, section)
                 }
                 if let value = section.values["auto"] {
                     guard case .bool(let flag) = value else { throw error(section, "auto must be true or false") }
                     config.auto = flag
+                }
+                if let value = section.values["trace"] {
+                    guard case .bool(let flag) = value else { throw error(section, "trace must be true or false") }
+                    config.trace = flag
                 }
             case (let path, false) where path.count == 2 && path[0] == "skins":
                 skinSections.append((path[1], section))
@@ -190,7 +197,10 @@ struct SkinConfig: Equatable {
         name: String, section: TOMLSection, defaultOpacity: Double,
         home: String, fileExists: (String) -> Bool
     ) throws -> Skin {
-        try checkKeys(section, allowed: ["background", "foreground", "accent", "logo", "texture", "texture_opacity"])
+        try checkKeys(section, allowed: [
+            "background", "foreground", "accent", "logo", "texture", "texture_opacity",
+            "trace", "trace_color", "trace_color2", "trace_speed", "trace_length",
+        ])
         guard SkinNames.isValid(name) else {
             throw error(section, "skin name '\(name)' may only use letters, digits, - and _")
         }
@@ -227,7 +237,8 @@ struct SkinConfig: Equatable {
         return Skin(
             name: name, background: background, foreground: foreground,
             accent: accent ?? Skin.defaultAccent(for: background),
-            texture: texture, textureOpacity: textureOpacity)
+            texture: texture, textureOpacity: textureOpacity,
+            trace: try skinTrace(section))
     }
 
     private static func error(_ section: TOMLSection, _ message: String) -> SkinConfigError {
@@ -246,6 +257,41 @@ struct SkinConfig: Equatable {
             throw error(section, "\(key) must be a #rrggbb color")
         }
         return rgb
+    }
+
+    private static func skinTrace(_ section: TOMLSection) throws -> SkinTrace? {
+        let keys = ["trace", "trace_color", "trace_color2", "trace_speed", "trace_length"]
+        guard keys.contains(where: { section.values[$0] != nil }) else { return nil }
+        var trace = SkinTrace()
+        if let value = section.values["trace"] {
+            guard case .string(let name) = value else { throw error(section, "trace must be a string") }
+            if name == "none" {
+                trace.disabled = true
+            } else if let style = BuiltinTrace(rawValue: name) {
+                trace.style = style
+            } else {
+                let names = BuiltinTrace.allCases.map(\.rawValue).joined(separator: ", ")
+                throw error(section, "unknown trace '\(name)' (use \(names) or none)")
+            }
+        }
+        trace.color = try color(section, "trace_color")
+        trace.color2 = try color(section, "trace_color2")
+        if let value = section.values["trace_speed"] {
+            trace.speed = try number(value, section, "trace_speed", SkinTrace.speedRange)
+        }
+        if let value = section.values["trace_length"] {
+            trace.length = try number(value, section, "trace_length", SkinTrace.lengthRange)
+        }
+        return trace
+    }
+
+    private static func number(
+        _ value: TOMLValue, _ section: TOMLSection, _ key: String, _ range: ClosedRange<Double>
+    ) throws -> Double {
+        guard case .number(let number) = value, range.contains(number) else {
+            throw error(section, "\(key) must be a number from \(range.lowerBound) to \(range.upperBound)")
+        }
+        return number
     }
 
     private static func opacity(_ value: TOMLValue, _ section: TOMLSection) throws -> Double {

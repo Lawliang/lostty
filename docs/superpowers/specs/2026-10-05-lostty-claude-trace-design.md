@@ -9,15 +9,15 @@ and the shipped skins feature
 
 While Claude Code (the `claude` CLI) is working in a Lostty pane, a light
 ray races around the inside edge of that pane, styled by the pane's skin.
-When Claude finishes its turn, the trace closes its loop and flashes once,
-then fades. This is the first feature on a general Claude → Lostty channel
+When Claude finishes its turn the trace disappears at once, with no
+ending animation (revised 2026-10-05 at the user's request). This is the first feature on a general Claude → Lostty channel
 that later features (context/token meter, "needs you" state) will reuse.
 
 Success criteria:
 
 - Sending a prompt to `claude` in a Lostty pane starts that pane's trace;
-  Claude finishing the turn plays the finish flash and stops the trace.
-- If `claude` exits or crashes while busy, the trace fades without a flash
+  Claude finishing the turn removes the trace immediately.
+- If `claude` exits, crashes or is interrupted while busy, the trace disappears
   and never stays stuck.
 - Each of the 12 preset skins has its own trace style; unskinned panes and
   custom skins without a trace setting get the default `beam` style.
@@ -53,14 +53,18 @@ styles (shaders/images), Quick Terminal panes, a shell-wrapper hook path.
   ClaudeSessionState per pane: idle → busy → idle / exited
                │
                ▼
-  TraceOverlay on that pane: races while busy, finish flash on busy → idle
+  TraceOverlay on that pane: races while busy, removed on idle / exit
 ```
 
 Units, one job each:
 
 1. **`+claude-state` CLI action (Zig).** Maps an event name to the
    `LOSTTY_CLAUDE` escape sequence (tmux DCS-wrapped when `$TMUX` is set)
-   and writes it to `/dev/tty`. Mirrors `src/cli/skins.zig` and
+   and writes it to `/dev/tty`. Claude Code runs hooks without a
+   controlling terminal (verified 2026-10-05), so when `/dev/tty` fails it
+   walks up the process tree (`ps -o ppid=,tty=`) to the nearest ancestor
+   with a terminal, which is `claude` in the pane (or its tmux pane), and
+   writes there. Mirrors `src/cli/skins.zig` and
    `src/cli/skins/protocol.zig`.
 2. **Per-pane environment.** `SurfaceView_AppKit.swift` already sets
    `GHOSTTY_SKINS_SURFACE`; next to it Lostty also sets `LOSTTY_SURFACE`
@@ -167,7 +171,7 @@ trace_length = 0.2            # optional, 0.05–0.5
 **Placement.** A SwiftUI overlay on each pane inside `SurfaceWrapper`
 (`macos/Sources/Ghostty/Surface View/SurfaceView.swift`), above the
 terminal, `allowsHitTesting(false)`, inset 1.5pt from the pane's edge so it
-does not sit on split dividers. When the pane is idle (and not mid-flash)
+does not sit on split dividers. When the pane is idle
 the overlay is not in the view tree.
 
 **Engine.** `TimelineView(.animation)` + `Canvas`, active only while
@@ -192,13 +196,11 @@ busy/finishing/fading.
 | Transition | Visual |
 |---|---|
 | idle → busy | Fade in (0.2s) at the top-left corner; race |
-| busy → idle | Finish flash: the head keeps moving while the tail stretches until it wraps the whole edge (0.4s), whole-border pulse (0.25s), fade out (0.8s) |
-| busy during flash/fade | Cancel, resume racing; the head never jumps because it moves at the same speed during the flash |
-| busy → exited | 0.3s fade, no flash |
+| busy → idle | Trace removed immediately (no ending animation) |
+| busy → exited / interrupted | Trace removed immediately |
 
 **Reduce Motion** (`accessibilityReduceMotion`): no racing; the whole
-border glows with a slow pulse (2s period) while busy. The finish flash
-stays.
+border glows with a slow pulse (2s period) while busy. 
 
 **Occlusion.** While the window's `occlusionState` lacks `.visible` or it
 is minimized, the timeline is paused.
@@ -263,7 +265,7 @@ the file. Lostty identifies its entries as hook commands containing both
 | Hook outside Lostty / Lostty uninstalled | Guard fails; hook exits 0; Claude shows nothing |
 | `/dev/tty` unavailable (e.g. `claude -p` headless) | `+claude-state` exits 0 silently |
 | Malformed or unknown `LOSTTY_CLAUDE` payload | Ignored with a debug log |
-| `Stop` missing (interrupt, crash) | `command_finished` → exited; `Notification` → idle; next prompt → busy. If testing shows Esc-interrupts leave the trace running, add a quiet-output timeout (decided in the first implementation task) |
+| `Stop` missing (interrupt, crash) | Verified 2026-10-05: Esc sends no `Stop` and no `Notification`. Claude titles the pane `✳ …` when idle and with a spinner while working, so a racing pane whose title stays `✳` for 2.5s stops at once. `command_finished` → exited; next prompt → busy |
 | Pane closes while busy | State and overlay discarded with the pane |
 | Bad trace keys in skins.toml | Existing config-error path |
 | settings.json unreadable / invalid JSON | Install refuses, shows error, file untouched |
@@ -276,7 +278,7 @@ the file. Lostty identifies its entries as hook commands containing both
   invalid JSON. Asserts key order preserved, idempotent install, remove
   touches only Lostty entries, status values.
 - **Swift (`macos/Tests/Claude/`):** `ClaudeSessionState` transitions
-  (busy→idle finish, busy→exited fade, re-busy during flash,
+  (busy→idle and busy→exited remove the trace at once,
   `command_finished` override); payload decoding; `skins.toml` trace keys
   (defaults, ranges, `none`, `[defaults] trace = false`, shadowed presets
   inheriting style); `EdgePath` sampling (corners, wrap-around, tangents,
@@ -293,7 +295,7 @@ the file. Lostty identifies its entries as hook commands containing both
 1. Spike: confirm hooks can write `/dev/tty` and whether `Stop` fires on
    Esc interrupt (decides the quiet-output timeout).
 2. `+claude-state` + per-pane env vars + `ClaudeRuntime` state machine.
-3. `EdgePath`, overlay engine, `beam` and `bolt`, finish flash, debug
+3. `EdgePath`, overlay engine, `beam` and `bolt`, debug
    preview item.
 4. Trace config in `Skin`/`skins.toml`; preset assignments.
 5. Remaining 11 styles.

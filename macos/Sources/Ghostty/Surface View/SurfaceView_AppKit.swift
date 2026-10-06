@@ -393,6 +393,12 @@ extension Ghostty {
             var surface_cfg = baseConfig ?? SurfaceConfiguration()
             // Ghostty Skins: lets the `skins` CLI find this pane in catalog.json.
             surface_cfg.environmentVariables[SkinsConstants.surfaceEnvKey] = id.uuidString
+            // Lostty Claude trace: Claude Code hooks check these to know
+            // they run inside Lostty and where the Lostty binary is.
+            surface_cfg.environmentVariables[ClaudeConstants.surfaceEnvKey] = id.uuidString
+            if let bin = Bundle.main.executableURL?.path {
+                surface_cfg.environmentVariables[ClaudeConstants.binEnvKey] = bin
+            }
             let surface = surface_cfg.withCValue(view: self) { surface_cfg_c in
                 ghostty_surface_new(app, &surface_cfg_c)
             }
@@ -414,6 +420,10 @@ extension Ghostty {
         }
 
         deinit {
+            // Lostty Claude trace: forget this pane's trace phase.
+            let closedID = id
+            Task { @MainActor in ClaudeRuntime.shared.surfaceClosed(closedID) }
+
             // Remove all of our notificationcenter subscriptions
             let center = NotificationCenter.default
             center.removeObserver(self)
@@ -444,6 +454,10 @@ extension Ghostty {
             guard let surface = self.surface else { return }
             guard self.focused != focused else { return }
             self.focused = focused
+
+            // Lostty Claude trace: focusing a waiting pane dismisses "Ready for response".
+            let paneID = id
+            MainActor.assumeIsolated { ClaudeRuntime.shared.focusChanged(paneID, focused: focused) }
 
             // If we lost our focus then remove the mouse event suppression so
             // our mouse release event leaving the surface can properly be

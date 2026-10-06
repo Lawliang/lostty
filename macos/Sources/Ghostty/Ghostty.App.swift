@@ -1425,6 +1425,10 @@ extension Ghostty {
                 guard let surface = target.target.surface else { return }
                 guard let surfaceView = self.surfaceView(from: surface) else { return }
 
+                // Lostty Claude trace: a finished command means claude (if it
+                // ran here) is gone. Before the notify settings, which return early.
+                MainActor.assumeIsolated { ClaudeRuntime.shared.commandFinished(surfaceView.id) }
+
                 // Determine if we even care about command finish notifications
                 guard let config = (NSApplication.shared.delegate as? AppDelegate)?.ghostty.config else { return }
                 switch config.notifyOnCommandFinish {
@@ -1602,6 +1606,8 @@ extension Ghostty {
                 guard let surfaceView = self.surfaceView(from: surface) else { return }
                 guard let title = String(cString: v.title!, encoding: .utf8) else { return }
                 surfaceView.setTitle(title)
+                // Lostty Claude trace: Claude's idle title ends an interrupted trace.
+                MainActor.assumeIsolated { ClaudeRuntime.shared.titleChanged(surfaceView.id, title: title) }
 
             default:
                 assertionFailure()
@@ -1735,8 +1741,10 @@ extension Ghostty {
                   let name = String(cString: namePtr, encoding: .utf8),
                   let value = String(cString: valuePtr, encoding: .utf8) else { return }
             // Ghostty Skins: requests from the `skins` CLI arrive as a user var.
+            // Lostty Claude trace: hook reports arrive the same way.
             MainActor.assumeIsolated {
                 SkinsRuntime.shared.userVarChanged(surfaceView, name: name, value: value)
+                ClaudeRuntime.shared.userVarChanged(surfaceView.id, name: name, value: value)
             }
         }
 
