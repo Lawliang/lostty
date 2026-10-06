@@ -49,34 +49,18 @@ struct ClaudeRuntimeTests {
         #expect(runtime.phases.isEmpty)
     }
 
-    @Test func idleFinishesThenSettlesOff() {
+    @Test func idleStopsTheTraceAtOnce() {
         let runtime = makeRuntime()
         runtime.apply(.busy, to: pane)
         runtime.apply(.idle, to: pane)
-        guard case .finishing = runtime.phase(pane) else { Issue.record("expected finishing"); return }
-        // The finish settle is scheduled (busy also schedules an idle-title check).
-        #expect(harness.pending.contains { $0.delay >= TraceTiming.finishTotal })
-        runPending()
         #expect(runtime.phase(pane) == .off)
-        #expect(runtime.phases[pane] == nil)
+        #expect(runtime.phases.isEmpty)
     }
 
-    @Test func newPromptDuringFlashKeepsRacing() {
-        let runtime = makeRuntime()
-        runtime.apply(.busy, to: pane)
-        let start = harness.clock
-        runtime.apply(.idle, to: pane)
-        runtime.apply(.busy, to: pane)
-        runPending()
-        #expect(runtime.phase(pane) == .racing(since: start))
-    }
-
-    @Test func commandFinishedFadesARacingTrace() {
+    @Test func commandFinishedStopsARacingTrace() {
         let runtime = makeRuntime()
         runtime.apply(.busy, to: pane)
         runtime.commandFinished(pane)
-        guard case .fading = runtime.phase(pane) else { Issue.record("expected fading"); return }
-        runPending()
         #expect(runtime.phase(pane) == .off)
     }
 
@@ -96,13 +80,13 @@ struct ClaudeRuntimeTests {
 
     // Esc interrupts never send Stop; Claude's title shows ✳ when idle and a
     // spinner while working, so a racing pane idle-titled for the grace
-    // period fades out (no finish flash: it was interrupted, not done).
-    @Test func idleTitleAfterGraceFadesARacingTrace() {
+    // period stops.
+    @Test func idleTitleAfterGraceStopsARacingTrace() {
         let runtime = makeRuntime()
         runtime.apply(.busy, to: pane)
         runtime.titleChanged(pane, title: "✳ My session")
         runPending()
-        guard case .fading = runtime.phase(pane) else { Issue.record("expected fading, got \(runtime.phase(pane))"); return }
+        #expect(runtime.phase(pane) == .off)
     }
 
     @Test func spinnerTitleCancelsTheIdleCheck() {
@@ -123,12 +107,13 @@ struct ClaudeRuntimeTests {
         guard case .racing = runtime.phase(pane) else { Issue.record("expected racing, got \(runtime.phase(pane))"); return }
     }
 
-    @Test func idleTitleDoesNotPreemptAStopThatArrives() {
+    @Test func stopDuringAPendingIdleCheckStaysOff() {
         let runtime = makeRuntime()
         runtime.apply(.busy, to: pane)
         runtime.titleChanged(pane, title: "✳ My session")
         runtime.apply(.idle, to: pane)
-        guard case .finishing = runtime.phase(pane) else { Issue.record("expected finishing"); return }
+        runPending()
+        #expect(runtime.phase(pane) == .off)
     }
 
     @Test func otherTitlesNeverEndATrace() {
@@ -139,13 +124,14 @@ struct ClaudeRuntimeTests {
         guard case .racing = runtime.phase(pane) else { Issue.record("expected racing"); return }
     }
 
-    @Test func settleAfterCloseDoesNothing() {
+    @Test func pendingCheckAfterCloseDoesNothing() {
         let runtime = makeRuntime()
         runtime.apply(.busy, to: pane)
-        runtime.apply(.idle, to: pane)
+        runtime.titleChanged(pane, title: "✳ My session")
         runtime.surfaceClosed(pane)
         runPending()
         #expect(runtime.phases[pane] == nil)
     }
+
 }
 #endif

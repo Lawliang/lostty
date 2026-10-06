@@ -96,8 +96,8 @@ Overrides last until reset or until the pane closes. zsh and bash get the
 ## Claude Trace
 
 While Claude Code is working in a pane, a light ray races around that
-pane's edge. When Claude finishes, the ray wraps the whole edge, flashes
-once, and fades. Each preset has its own trace; panes without a skin get a
+pane's edge. The moment Claude finishes (or you interrupt it), the ray
+disappears. Each preset has its own trace; panes without a skin get a
 pink-and-cyan beam.
 
 On first launch Lostty offers to add four hooks to

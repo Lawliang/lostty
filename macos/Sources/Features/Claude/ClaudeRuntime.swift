@@ -58,7 +58,7 @@ final class ClaudeRuntime: ObservableObject {
 
     /// Claude Code titles the pane "✳ …" when idle and with a spinner while
     /// working. An Esc interrupt sends no Stop hook, so a racing pane whose
-    /// title stays idle for `idleTitleGrace` fades out (no finish flash).
+    /// title stays idle for `idleTitleGrace` stops.
     func titleChanged(_ id: UUID, title: String) {
         guard title.hasPrefix("✳") else {
             idleTitleSince[id] = nil
@@ -71,12 +71,7 @@ final class ClaudeRuntime: ObservableObject {
     func apply(_ state: ClaudeState, to id: UUID) {
         let next = phase(id).applying(state, now: now())
         store(next, for: id)
-        switch next {
-        case .finishing: settle(id, after: TraceTiming.finishTotal)
-        case .fading: settle(id, after: TraceTiming.exitFade)
-        case .racing: if state == .busy { checkIdleTitle(id) }
-        case .off: break
-        }
+        if case .racing = next, state == .busy { checkIdleTitle(id) }
     }
 
     /// Debug builds: a fake 4s busy → idle cycle to review a style by eye.
@@ -90,14 +85,6 @@ final class ClaudeRuntime: ObservableObject {
             guard let self, case .racing = self.phase(id), let since = self.idleTitleSince[id],
                   self.now().timeIntervalSince(since) >= Self.idleTitleGrace else { return }
             self.apply(.exit, to: id)
-        }
-    }
-
-    private func settle(_ id: UUID, after delay: TimeInterval) {
-        // A little slack so the frame at the end of the animation is drawn.
-        schedule(delay + 0.05) { [weak self] in
-            guard let self, let current = self.phases[id] else { return }
-            self.store(current.settled(now: self.now()), for: id)
         }
     }
 

@@ -42,21 +42,9 @@ struct TraceOverlay: View {
                     TraceRenderers.renderer(for: trace.style)
                         .draw(in: &ctx, along: path, frame: frame, time: time, colors: colors)
                 }
-                if frame.pulse > 0 {
-                    Self.drawPulse(in: &ctx, along: path, frame: frame, colors: colors)
-                }
             }
         }
         .background(OcclusionProbe(visible: $windowVisible))
-    }
-
-    /// Finish flash: the whole border glows once.
-    static func drawPulse(in ctx: inout GraphicsContext, along path: EdgePath, frame: TraceFrame, colors: TraceColors) {
-        let opacity = frame.pulse * frame.intensity
-        var halo = ctx
-        halo.addFilter(.blur(radius: 6))
-        halo.stroke(path.outline, with: .color(colors.head.opacity(opacity)), lineWidth: 6)
-        ctx.stroke(path.outline, with: .color(colors.blend(0.6).opacity(opacity)), lineWidth: 2)
     }
 
     /// Reduce Motion: no racing; the border breathes with a 2s period.
