@@ -32,7 +32,8 @@ struct TraceOverlay: View {
             Canvas { ctx, size in
                 let path = EdgePath(size: size, inset: Self.inset)
                 let lap = TraceFrame.lapSeconds(perimeter: path.perimeter, speed: trace.speed)
-                guard let frame = TraceFrame.make(phase, now: timeline.date, lapSeconds: lap, length: trace.length) else { return }
+                guard var frame = TraceFrame.make(phase, now: timeline.date, lapSeconds: lap, length: trace.length) else { return }
+                frame.head = path.easedFraction(frame.head)
                 let colors = TraceColors(trace)
                 let time = timeline.date.timeIntervalSinceReferenceDate
                 ctx.blendMode = .plusLighter

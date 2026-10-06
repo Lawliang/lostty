@@ -51,6 +51,36 @@ struct EdgePathTests {
         #expect(box.maxY >= 14.9)
     }
 
+    // Easing: each edge takes time in proportion to its length, the head
+    // eases out of one corner and into the next.
+    @Test func easingKeepsCornersAndEdgeMidpoints() {
+        for f in [0.0, 100.0 / 300, 150.0 / 300, 250.0 / 300] {
+            #expect(abs(path.easedFraction(f) - f) < 1e-9)
+        }
+        #expect(abs(path.easedFraction(50.0 / 300) - 50.0 / 300) < 1e-9)
+        #expect(abs(path.easedFraction(125.0 / 300) - 125.0 / 300) < 1e-9)
+    }
+
+    @Test func easingIsSlowNearCornersAndFastMidEdge() {
+        let lin = 5.0 / 300
+        // Just after the top-left corner the head lags behind linear motion...
+        #expect(path.easedFraction(lin) < lin)
+        // ...and just before the top-right corner it is ahead (decelerating).
+        #expect(path.easedFraction(95.0 / 300) > 95.0 / 300)
+        // Mid-edge it covers more ground per step than near the corner.
+        let nearCorner = path.easedFraction(2.0 / 300) - path.easedFraction(0)
+        let midEdge = path.easedFraction(52.0 / 300) - path.easedFraction(50.0 / 300)
+        #expect(midEdge > nearCorner * 2)
+        // Never fully stops at a corner.
+        #expect(nearCorner > 0)
+    }
+
+    @Test func easingWrapsAndStaysFinite() {
+        #expect(abs(path.easedFraction(1.25) - path.easedFraction(0.25)) < 1e-9)
+        let empty = EdgePath(size: .zero, inset: 1.5)
+        #expect(empty.easedFraction(0.3).isFinite)
+    }
+
     @Test func zeroSizeIsFinite() {
         let empty = EdgePath(size: .zero, inset: 1.5)
         #expect(empty.perimeter == 0)

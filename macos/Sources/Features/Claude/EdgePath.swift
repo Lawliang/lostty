@@ -56,6 +56,28 @@ struct EdgePath {
                       tangent: CGVector(dx: 0, dy: -1), normal: CGVector(dx: 1, dy: 0))
     }
 
+    /// Maps a linear lap position to an eased one: each side keeps its share
+    /// of the lap, but on it the head accelerates out of the corner and
+    /// decelerates into the next. The linear part keeps it from stopping.
+    func easedFraction(_ fraction: Double) -> Double {
+        let total = perimeter
+        guard total > 0 else { return fraction }
+        var wrapped = fraction.truncatingRemainder(dividingBy: 1)
+        if wrapped < 0 { wrapped += 1 }
+        let d = wrapped * total
+        let w = Double(rect.width), h = Double(rect.height)
+        var start = 0.0
+        for length in [w, h, w, h] {
+            if d < start + length {
+                let u = (d - start) / length
+                let eased = 0.3 * u + 0.7 * (1 - cos(.pi * u)) / 2
+                return (start + eased * length) / total
+            }
+            start += length
+        }
+        return wrapped
+    }
+
     /// The point `inward` points into the pane from the edge at `fraction`.
     func offsetPoint(at fraction: Double, inward: CGFloat) -> CGPoint {
         let s = sample(at: fraction)
