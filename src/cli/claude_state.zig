@@ -41,5 +41,4 @@ pub fn run(gpa: Allocator) !u8 {
 
 test {
     _ = @import("claude/protocol.zig");
-    _ = @import("claude/hooks.zig");
 }
