@@ -60,7 +60,11 @@ Units, one job each:
 
 1. **`+claude-state` CLI action (Zig).** Maps an event name to the
    `LOSTTY_CLAUDE` escape sequence (tmux DCS-wrapped when `$TMUX` is set)
-   and writes it to `/dev/tty`. Mirrors `src/cli/skins.zig` and
+   and writes it to `/dev/tty`. Claude Code runs hooks without a
+   controlling terminal (verified 2026-10-05), so when `/dev/tty` fails it
+   walks up the process tree (`ps -o ppid=,tty=`) to the nearest ancestor
+   with a terminal, which is `claude` in the pane (or its tmux pane), and
+   writes there. Mirrors `src/cli/skins.zig` and
    `src/cli/skins/protocol.zig`.
 2. **Per-pane environment.** `SurfaceView_AppKit.swift` already sets
    `GHOSTTY_SKINS_SURFACE`; next to it Lostty also sets `LOSTTY_SURFACE`
@@ -263,7 +267,7 @@ the file. Lostty identifies its entries as hook commands containing both
 | Hook outside Lostty / Lostty uninstalled | Guard fails; hook exits 0; Claude shows nothing |
 | `/dev/tty` unavailable (e.g. `claude -p` headless) | `+claude-state` exits 0 silently |
 | Malformed or unknown `LOSTTY_CLAUDE` payload | Ignored with a debug log |
-| `Stop` missing (interrupt, crash) | `command_finished` → exited; `Notification` → idle; next prompt → busy. If testing shows Esc-interrupts leave the trace running, add a quiet-output timeout (decided in the first implementation task) |
+| `Stop` missing (interrupt, crash) | Verified 2026-10-05: Esc sends no `Stop` and no `Notification`. Claude titles the pane `✳ …` when idle and with a spinner while working, so a racing pane whose title stays `✳` for 2.5s fades out without a flash. `command_finished` → exited; next prompt → busy |
 | Pane closes while busy | State and overlay discarded with the pane |
 | Bad trace keys in skins.toml | Existing config-error path |
 | settings.json unreadable / invalid JSON | Install refuses, shows error, file untouched |
