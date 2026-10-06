@@ -2,90 +2,63 @@
 import SwiftUI
 
 /// "Ready for response": shown over a pane whose Claude finished (or asks
-/// for permission) while you were elsewhere. The racing trace comes to rest
-/// as a breathing rim of light in the skin's colors, over a frosted,
-/// vignetted pane. Clicks pass through, so clicking the pane focuses it,
-/// which dismisses the overlay.
+/// for permission) while you were elsewhere. iOS-style: the pane dims and
+/// blurs like the backdrop of an alert, with a frosted card in the middle.
+/// Clicks pass through, so clicking the pane focuses it, which dismisses
+/// the overlay.
 struct ClaudeReadyOverlay: View {
     let surfaceID: UUID
     @ObservedObject private var runtime = ClaudeRuntime.shared
-    @ObservedObject private var skins = SkinsRuntime.shared.manager
 
     var body: some View {
         if runtime.awaiting.contains(surfaceID) {
-            ReadyCard(colors: Self.colors(for: skins.effectiveSkin(surfaceID)))
+            ReadyCard()
                 .allowsHitTesting(false)
         }
-    }
-
-    /// The pane's trace colors, even when traces are turned off.
-    static func colors(for skin: Skin?) -> TraceColors {
-        if let trace = ResolvedTrace.resolve(skin: skin, enabled: true) { return TraceColors(trace) }
-        let accent = skin?.accent ?? ResolvedTrace.unskinnedColor
-        return TraceColors(primary: accent, secondary: skin?.accent2 ?? accent.mixed(with: .white, amount: 0.4))
     }
 }
 
 private struct ReadyCard: View {
-    let colors: TraceColors
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var breathe = false
-
     private static let words = ["Ready", "for", "response"]
 
     var body: some View {
         GeometryReader { geo in
             let size = Self.fontSize(for: geo.size)
             ZStack {
-                // Frosted pane (the terminal still shows faintly), darker
-                // toward the edges.
-                Rectangle().fill(.ultraThinMaterial).opacity(0.7)
-                RadialGradient(
-                    colors: [Color.black.opacity(0.58), Color.black.opacity(0.88)],
-                    center: .center, startRadius: 0,
-                    endRadius: max(geo.size.width, geo.size.height) * 0.7)
+                // Dimmed, softly blurred pane, like the backdrop behind an iOS alert.
+                Rectangle().fill(.ultraThinMaterial).opacity(0.6)
+                Color.black.opacity(0.4)
 
-                // The trace at rest: a rim of light that slowly breathes.
-                rim
-                    .opacity(reduceMotion ? 0.9 : (breathe ? 1 : 0.55))
-
-                VStack(spacing: -size * 0.16) {
+                VStack(spacing: size * 0.02) {
                     ForEach(Self.words, id: \.self) { word in
                         Text(word).lineLimit(1)
                     }
                 }
-                .font(.system(size: size, weight: .black, design: .rounded))
-                .tracking(-size * 0.025)
+                .font(.system(size: size, weight: .semibold))
+                .tracking(-size * 0.01)
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.white)
-                .shadow(color: colors.head.opacity(0.9), radius: size * 0.12)
-                .shadow(color: colors.tail.opacity(0.5), radius: size * 0.45)
                 .fixedSize()
+                .padding(.horizontal, size * 0.75)
+                .padding(.vertical, size * 0.55)
+                .background {
+                    let card = RoundedRectangle(cornerRadius: size * 0.55, style: .continuous)
+                    card.fill(.regularMaterial)
+                        .overlay(card.fill(Color.black.opacity(0.25)))
+                        .overlay(card.strokeBorder(Color.white.opacity(0.14), lineWidth: 0.5))
+                        .shadow(color: .black.opacity(0.35), radius: size * 0.6, y: size * 0.2)
+                }
+                .environment(\.colorScheme, .dark)
             }
         }
-        .onAppear {
-            guard !reduceMotion else { return }
-            withAnimation(.easeInOut(duration: 2.4).repeatForever(autoreverses: true)) { breathe = true }
-        }
     }
 
-    private var rim: some View {
-        let gradient = AngularGradient(
-            colors: [colors.head, colors.tail, colors.head, colors.tail, colors.head], center: .center)
-        return ZStack {
-            Rectangle().inset(by: TraceOverlay.inset).stroke(gradient, lineWidth: 16).blur(radius: 18)
-            Rectangle().inset(by: TraceOverlay.inset).stroke(gradient, lineWidth: 4).blur(radius: 2)
-            Rectangle().inset(by: TraceOverlay.inset).stroke(Color.white.opacity(0.85), lineWidth: 1.2)
-        }
-        .blendMode(.plusLighter)
-    }
-
-    /// As big as fits: "response" (the widest word) spans at most ~78% of
-    /// the width, and the three lines at most ~70% of the height.
+    /// As big as fits inside the card: "response" spans at most ~55% of the
+    /// pane's width, and the card at most ~60% of its height.
     static func fontSize(for size: CGSize) -> CGFloat {
-        let byWidth = size.width * 0.78 / (8 * 0.6)
-        let byHeight = size.height * 0.7 / 3
-        return max(14, min(120, byWidth, byHeight))
+        let byWidth = size.width * 0.55 / 4.6
+        let byHeight = size.height * 0.6 / 4.3
+        return max(13, min(72, byWidth, byHeight))
     }
 }
 #endif
