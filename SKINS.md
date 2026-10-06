@@ -102,11 +102,16 @@ another pane or app, that pane dims and shows **Ready for response** until
 you look at it. Each preset has its own trace; panes without a skin get a
 pink-and-cyan beam.
 
-On first launch Lostty offers to add four hooks to
-`~/.claude/settings.json` (it saves `settings.json.lostty-backup` first).
-The hooks do nothing outside Lostty. Manage them from
-**Lostty → Claude Integration…**, or run `ghostty +claude-hooks install`,
-`remove`, `status` or `preview`.
+Codex works the same way: the trace runs while Codex works and stops when
+it finishes or you interrupt it. Codex panes don't show **Ready for
+response** while Codex waits for an approval, only when it finishes.
+
+On first launch Lostty offers to add its hooks to
+`~/.claude/settings.json` and, if you use Codex, `~/.codex/hooks.json` (it
+saves a `.lostty-backup` of each file first). Codex asks you to approve
+Lostty's hooks the first time it sees them. The hooks do nothing outside
+Lostty. Manage them from **Lostty → Claude Integration…**, or run
+`ghostty +claude-hooks install`, `remove`, `status` or `preview`.
 
 Custom skins pick a trace in `skins.toml`:
 

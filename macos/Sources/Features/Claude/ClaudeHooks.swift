@@ -49,7 +49,8 @@ struct ClaudeHooksCLI {
 
 enum ClaudeHooksPrompt {
     /// Bump when the hook command format changes, to offer an update once.
-    static let hookVersion = 1
+    /// 2: adds Codex's hooks (~/.codex/hooks.json) next to Claude's.
+    static let hookVersion = 2
     static let defaultsKey = "LosttyClaudeHooksPromptedVersion"
 
     /// Ask once per hook version, only people who use Claude (~/.claude
@@ -64,8 +65,9 @@ enum ClaudeHooksPrompt {
     /// when a session starts, so running sessions need a restart.
     static func successMessage(for op: String) -> String? {
         switch op {
-        case "install": "Claude hooks installed. Restart any running Claude sessions to see the trace."
-        case "remove": "Claude hooks removed. Restart any running Claude sessions to finish turning the trace off."
+        case "install": "Hooks installed. Restart any running Claude or Codex sessions to see the trace. "
+            + "Codex asks you to approve Lostty's hooks the first time."
+        case "remove": "Hooks removed. Restart any running Claude or Codex sessions to finish turning the trace off."
         default: nil
         }
     }

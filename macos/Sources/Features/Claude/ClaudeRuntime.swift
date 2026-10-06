@@ -30,6 +30,8 @@ final class ClaudeRuntime: ObservableObject {
     private var unfocused: Set<UUID> = []
     /// Panes whose current wait was already seen; reset when Claude works again.
     private var seen: Set<UUID> = []
+    /// Panes whose title has shown a working spinner since the trace started.
+    private var sawSpinner: Set<UUID> = []
 
     init(
         now: @escaping () -> Date = Date.init,
@@ -66,6 +68,7 @@ final class ClaudeRuntime: ObservableObject {
         unfocused.remove(id)
         seen.remove(id)
         awaiting.remove(id)
+        sawSpinner.remove(id)
     }
 
     /// A pane is focused when its window is key and it is the selected pane.
@@ -80,15 +83,23 @@ final class ClaudeRuntime: ObservableObject {
         }
     }
 
-    /// Claude Code titles the pane "✳ …" when idle and with a spinner while
-    /// working. An Esc interrupt sends no Stop hook, so a racing pane whose
-    /// title stays idle for `idleTitleGrace` stops.
+    /// Agents title the pane with a spinner while working: Claude "◐ …"
+    /// (then "✳ …" when idle), Codex "⠋ …" (then just the folder name).
+    /// An Esc interrupt sends no Stop hook, so a racing pane whose title
+    /// reads idle for `idleTitleGrace` stops. A title without a spinner only
+    /// counts as idle after a spinner was seen, so panes whose titles never
+    /// show one (e.g. inside tmux) keep their trace until a hook ends it.
     func titleChanged(_ id: UUID, title: String) {
-        guard title.hasPrefix("✳") else {
+        if Self.isSpinner(title) {
             idleTitleSince[id] = nil
-            // A spinner means Claude is working again (e.g. after a permission
-            // prompt, which sends no UserPromptSubmit): the next wait is new.
-            if Self.isSpinner(title) { seen.remove(id) }
+            sawSpinner.insert(id)
+            // Working again (e.g. after a permission prompt, which sends no
+            // UserPromptSubmit): the next wait is new.
+            seen.remove(id)
+            return
+        }
+        guard title.hasPrefix("✳") || sawSpinner.contains(id) else {
+            idleTitleSince[id] = nil
             return
         }
         if idleTitleSince[id] == nil { idleTitleSince[id] = now() }
@@ -100,6 +111,7 @@ final class ClaudeRuntime: ObservableObject {
         store(next, for: id)
         if case .racing = next, state == .busy { checkIdleTitle(id) }
 
+        if next == .off { sawSpinner.remove(id) }
         switch state {
         case .busy:
             seen.remove(id)
@@ -116,10 +128,10 @@ final class ClaudeRuntime: ObservableObject {
         }
     }
 
-    /// Claude Code's working-title spinner glyphs.
+    /// Working-title spinners: Claude's ◐◑◒◓, Codex's braille dots.
     static func isSpinner(_ title: String) -> Bool {
         guard let first = title.unicodeScalars.first else { return false }
-        return "◐◑◒◓".unicodeScalars.contains(first)
+        return "◐◑◒◓".unicodeScalars.contains(first) || (0x2801...0x28FF).contains(first.value)
     }
 
     /// Debug builds: a fake 4s busy → idle cycle to review a style by eye.

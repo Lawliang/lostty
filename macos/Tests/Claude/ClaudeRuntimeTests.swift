@@ -116,6 +116,35 @@ struct ClaudeRuntimeTests {
         #expect(runtime.phase(pane) == .off)
     }
 
+    // Codex: a braille spinner while working, the plain folder name when
+    // idle, and no Stop hook after Esc. Once a spinner was seen, a title
+    // without one for the grace period ends the trace.
+    @Test func codexSpinnerThenPlainTitleStopsTheTrace() {
+        let runtime = makeRuntime()
+        runtime.apply(.busy, to: pane)
+        runtime.titleChanged(pane, title: "⠋ codexproj")
+        runtime.titleChanged(pane, title: "codexproj")
+        runPending()
+        #expect(runtime.phase(pane) == .off)
+    }
+
+    @Test func spinnerComingBackCancelsTheCodexCheck() {
+        let runtime = makeRuntime()
+        runtime.apply(.busy, to: pane)
+        runtime.titleChanged(pane, title: "⠋ codexproj")
+        runtime.titleChanged(pane, title: "codexproj")
+        runtime.titleChanged(pane, title: "⠙ codexproj")
+        runPending()
+        guard case .racing = runtime.phase(pane) else { Issue.record("expected racing"); return }
+    }
+
+    @Test func recognizesBothSpinners() {
+        #expect(ClaudeRuntime.isSpinner("◐ My session"))
+        #expect(ClaudeRuntime.isSpinner("⠦ codexproj"))
+        #expect(!ClaudeRuntime.isSpinner("✳ My session"))
+        #expect(!ClaudeRuntime.isSpinner("codexproj"))
+    }
+
     @Test func otherTitlesNeverEndATrace() {
         let runtime = makeRuntime()
         runtime.apply(.busy, to: pane)
