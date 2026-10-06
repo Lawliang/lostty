@@ -70,9 +70,9 @@ Lostty windows (max 24).
 
 ## Override
 
-- Click the chip at the right of the title bar: preview a skin, color, or
-  texture (live), then **Equip** to keep it. **Reset** undoes it. The chip
-  briefly shows "Equipped" after you apply.
+- Click the chip at the right of the title bar and pick a skin, color, or
+  texture: it applies to the pane right away and stays when you close the
+  picker. **Reset** undoes it.
 - Or in any pane: `skins` (interactive picker), `skins set <name>`,
   `skins color '#3a0f14'`, `skins texture grid`, `skins opacity 0.5`,
   `skins reset`, `skins list` (shows name, background, texture, rarity), `skins current`.

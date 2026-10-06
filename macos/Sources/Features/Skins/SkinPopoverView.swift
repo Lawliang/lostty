@@ -3,19 +3,17 @@ import AppKit
 import SwiftUI
 
 /// Lostty's skin picker (spec §7), styled as a boon offering: Boons /
-/// Custom, live preview, Equip.
+/// Custom. Every pick applies to the pane right away and stays.
 struct SkinPopoverView: View {
     let surfaceID: UUID
     @ObservedObject var manager: SkinManager
     @ObservedObject var savedColors: SavedColorsStore
-    var onEquipped: (String) -> Void
     var onClose: () -> Void
 
     private enum Tab: Hashable { case presets, custom }
 
     @State private var tab: Tab = .presets
     @State private var draft: Skin?
-    @State private var committed = false
     @State private var hex = ""
 
     private static let card = Color(red: 30 / 255, green: 23 / 255, blue: 17 / 255).opacity(0.9)
@@ -42,7 +40,6 @@ struct SkinPopoverView: View {
         .background(panelBackground)
         .environment(\.colorScheme, .dark)
         .onAppear { hex = current.background.hex }
-        .onDisappear { if !committed { manager.setPreview(surfaceID, nil) } }
     }
 
     // MARK: Sections
@@ -106,7 +103,7 @@ struct SkinPopoverView: View {
         let selected = current.name == skin.name && current.palette == skin.palette
         let equipped = manager.equippedName(surfaceID) == skin.name
         let glow = Color(rgb: skin.accent)
-        return Button { preview(skin) } label: {
+        return Button { pick(skin) } label: {
             HStack(spacing: 14) {
                 BoonEmblem(skin: skin, rarity: entry.rarity, glyph: entry.glyph,
                            texture: manager.thumbnailImage(for: skin))
@@ -298,17 +295,6 @@ struct SkinPopoverView: View {
                     .contentShape(HexBar(notch: 12))
             }
             .buttonStyle(.plain)
-            Button { equip() } label: {
-                Text("EQUIP").font(Boon.display(14, .black)).kerning(3)
-                    .foregroundStyle(Self.ink)
-                    .frame(maxWidth: .infinity).frame(height: 40)
-                    .background(HexBar(notch: 12).fill(Boon.goldFill))
-                    .shadow(color: Boon.gold.opacity(draft == nil ? 0 : 0.45), radius: 10)
-                    .contentShape(HexBar(notch: 12))
-            }
-            .buttonStyle(.plain)
-            .disabled(draft == nil)
-            .opacity(draft == nil ? 0.5 : 1)
         }
     }
 
@@ -382,18 +368,18 @@ struct SkinPopoverView: View {
         return luminance > 140 ? Color(red: 0.04, green: 0.04, blue: 0.07) : .white
     }
 
-    private func preview(_ skin: Skin) {
-        committed = false
+    /// Applies `skin` to the pane immediately; it stays when the picker closes.
+    private func pick(_ skin: Skin) {
         draft = skin
         hex = skin.background.hex
-        manager.setPreview(surfaceID, skin)
+        manager.setOverride(surfaceID, skin)
     }
 
     private func edit(_ change: (inout Skin) -> Void) {
         var skin = current
         skin.name = "custom"
         change(&skin)
-        preview(skin)
+        pick(skin)
     }
 
     private func setBackground(_ color: RGB) {
@@ -413,15 +399,7 @@ struct SkinPopoverView: View {
             })
     }
 
-    private func equip() {
-        guard let draft else { return }
-        committed = true
-        manager.setOverride(surfaceID, draft)
-        onEquipped(SkinPresets.title(for: draft))
-    }
-
     private func reset() {
-        committed = true
         draft = nil
         manager.reset(surfaceID)
         hex = base.background.hex

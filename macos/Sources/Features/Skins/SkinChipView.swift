@@ -20,7 +20,6 @@ struct SkinChipView: View {
     @ObservedObject var model: SkinChipModel
     @ObservedObject var manager: SkinManager
     @State private var showingPopover = false
-    @State private var flash: String?
 
     var body: some View {
         let id = model.focusedSurfaceID
@@ -38,13 +37,7 @@ struct SkinChipView: View {
                         .rotationEffect(.degrees(45))
                         .frame(width: 13, height: 13)
                 }
-                if let flash {
-                    Image(systemName: "checkmark").font(.system(size: 9, weight: .bold))
-                    Text("Equipped").font(.system(size: 11, weight: .semibold))
-                        .help(flash)
-                } else {
-                    Text(chipTitle(skin)).font(.system(size: 11, weight: .medium)).lineLimit(1)
-                }
+                Text(chipTitle(skin)).font(.system(size: 11, weight: .medium)).lineLimit(1)
                 if let id, manager.panes[id]?.override != nil {
                     Circle().fill(Color.accentColor).frame(width: 5, height: 5)
                 }
@@ -63,23 +56,11 @@ struct SkinChipView: View {
         .help("Pane skin")
         .popover(isPresented: $showingPopover, arrowEdge: .bottom) {
             if let id {
-                // Ghostty Skins: `.id(id)` forces SwiftUI to tear down and
-                // recreate this view when the focused pane changes while the
-                // popover is open (e.g. the pane's process exits, or focus
-                // moves via AppleScript). Without it, SkinPopoverView's
-                // `@State` (draft, committed) would stick around across the
-                // pane change: the old pane's preview would never be
-                // cancelled (its `onDisappear` wouldn't fire), and Apply
-                // would write the old pane's draft as the new pane's
-                // override. Recreating the view makes the old one disappear
-                // (cancelling its preview) and starts the new one fresh.
+                // Ghostty Skins: `.id(id)` recreates the picker when the
+                // focused pane changes while it is open, so its `@State`
+                // (the current pick) never carries over to another pane.
                 SkinPopoverView(
                     surfaceID: id, manager: manager, savedColors: SkinsRuntime.shared.savedColors,
-                    onEquipped: { name in
-                        showingPopover = false
-                        flash = name
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) { flash = nil }
-                    },
                     onClose: { showingPopover = false }
                 ).id(id)
             }
