@@ -97,7 +97,9 @@ Overrides last until reset or until the pane closes. zsh and bash get the
 
 While Claude Code is working in a pane, a light ray races around that
 pane's edge. The moment Claude finishes (or you interrupt it), the ray
-disappears. Each preset has its own trace; panes without a skin get a
+disappears. If Claude finishes (or asks for permission) while you are in
+another pane or app, that pane dims and shows **Ready for response** until
+you look at it. Each preset has its own trace; panes without a skin get a
 pink-and-cyan beam.
 
 On first launch Lostty offers to add four hooks to

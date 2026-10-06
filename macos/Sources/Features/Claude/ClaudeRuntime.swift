@@ -14,6 +14,11 @@ final class ClaudeRuntime: ObservableObject {
     /// Only panes whose phase is not `.off`.
     @Published private(set) var phases: [UUID: TracePhase] = [:]
 
+    /// Panes showing "Ready for response": Claude finished its turn (or asks
+    /// for permission) while the pane was not focused, and nobody has
+    /// looked at it since.
+    @Published private(set) var awaiting: Set<UUID> = []
+
     /// How long a racing pane's title must read idle before the trace ends.
     static let idleTitleGrace: TimeInterval = 2.5
 
@@ -21,6 +26,10 @@ final class ClaudeRuntime: ObservableObject {
     private let schedule: Scheduler
     /// When each pane's title last switched to Claude's idle marker.
     private var idleTitleSince: [UUID: Date] = [:]
+    /// Panes not focused right now. Panes start focused (SurfaceView does).
+    private var unfocused: Set<UUID> = []
+    /// Panes whose current wait was already seen; reset when Claude works again.
+    private var seen: Set<UUID> = []
 
     init(
         now: @escaping () -> Date = Date.init,
@@ -54,6 +63,21 @@ final class ClaudeRuntime: ObservableObject {
     func surfaceClosed(_ id: UUID) {
         phases[id] = nil
         idleTitleSince[id] = nil
+        unfocused.remove(id)
+        seen.remove(id)
+        awaiting.remove(id)
+    }
+
+    /// A pane is focused when its window is key and it is the selected pane.
+    /// Focusing a waiting pane counts as seeing it.
+    func focusChanged(_ id: UUID, focused: Bool) {
+        if focused {
+            unfocused.remove(id)
+            seen.insert(id)
+            awaiting.remove(id)
+        } else {
+            unfocused.insert(id)
+        }
     }
 
     /// Claude Code titles the pane "✳ …" when idle and with a spinner while
@@ -62,6 +86,9 @@ final class ClaudeRuntime: ObservableObject {
     func titleChanged(_ id: UUID, title: String) {
         guard title.hasPrefix("✳") else {
             idleTitleSince[id] = nil
+            // A spinner means Claude is working again (e.g. after a permission
+            // prompt, which sends no UserPromptSubmit): the next wait is new.
+            if Self.isSpinner(title) { seen.remove(id) }
             return
         }
         if idleTitleSince[id] == nil { idleTitleSince[id] = now() }
@@ -72,6 +99,27 @@ final class ClaudeRuntime: ObservableObject {
         let next = phase(id).applying(state, now: now())
         store(next, for: id)
         if case .racing = next, state == .busy { checkIdleTitle(id) }
+
+        switch state {
+        case .busy:
+            seen.remove(id)
+            awaiting.remove(id)
+        case .exit:
+            awaiting.remove(id)
+        case .idle:
+            // Waiting for the user. Focused now means they see it already.
+            if !unfocused.contains(id) {
+                seen.insert(id)
+            } else if !seen.contains(id) {
+                awaiting.insert(id)
+            }
+        }
+    }
+
+    /// Claude Code's working-title spinner glyphs.
+    static func isSpinner(_ title: String) -> Bool {
+        guard let first = title.unicodeScalars.first else { return false }
+        return "◐◑◒◓".unicodeScalars.contains(first)
     }
 
     /// Debug builds: a fake 4s busy → idle cycle to review a style by eye.

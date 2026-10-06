@@ -455,6 +455,10 @@ extension Ghostty {
             guard self.focused != focused else { return }
             self.focused = focused
 
+            // Lostty Claude trace: focusing a waiting pane dismisses "Ready for response".
+            let paneID = id
+            MainActor.assumeIsolated { ClaudeRuntime.shared.focusChanged(paneID, focused: focused) }
+
             // If we lost our focus then remove the mouse event suppression so
             // our mouse release event leaving the surface can properly be
             // sent to stop things like mouse selection.

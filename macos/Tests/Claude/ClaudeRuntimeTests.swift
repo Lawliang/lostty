@@ -124,6 +124,70 @@ struct ClaudeRuntimeTests {
         guard case .racing = runtime.phase(pane) else { Issue.record("expected racing"); return }
     }
 
+    // "Ready for response": Claude finished (or asks permission) while the
+    // pane is not focused; focusing it clears the overlay for that turn.
+    @Test func finishWhileUnfocusedAwaitsResponse() {
+        let runtime = makeRuntime()
+        runtime.focusChanged(pane, focused: false)
+        runtime.apply(.busy, to: pane)
+        runtime.apply(.idle, to: pane)
+        #expect(runtime.awaiting.contains(pane))
+    }
+
+    @Test func finishWhileFocusedDoesNotAwait() {
+        let runtime = makeRuntime()
+        runtime.apply(.busy, to: pane)
+        runtime.apply(.idle, to: pane)
+        #expect(runtime.awaiting.isEmpty)
+        // Leaving afterwards does not bring it back: it was seen.
+        runtime.focusChanged(pane, focused: false)
+        #expect(runtime.awaiting.isEmpty)
+    }
+
+    @Test func focusingClearsAndALaterNotificationDoesNotReshow() {
+        let runtime = makeRuntime()
+        runtime.focusChanged(pane, focused: false)
+        runtime.apply(.busy, to: pane)
+        runtime.apply(.idle, to: pane)
+        runtime.focusChanged(pane, focused: true)
+        #expect(runtime.awaiting.isEmpty)
+        runtime.focusChanged(pane, focused: false)
+        runtime.apply(.idle, to: pane) // e.g. Claude's 60s idle notification
+        #expect(runtime.awaiting.isEmpty)
+    }
+
+    @Test func newWorkMakesTheNextFinishShowAgain() {
+        let runtime = makeRuntime()
+        runtime.focusChanged(pane, focused: false)
+        runtime.apply(.idle, to: pane)
+        runtime.focusChanged(pane, focused: true)
+        runtime.focusChanged(pane, focused: false)
+        // Claude resumes (a new prompt, or work after a permission prompt).
+        runtime.titleChanged(pane, title: "◐ My session")
+        runtime.apply(.idle, to: pane)
+        #expect(runtime.awaiting.contains(pane))
+        runtime.focusChanged(pane, focused: true)
+        runtime.focusChanged(pane, focused: false)
+        runtime.apply(.busy, to: pane)
+        runtime.apply(.idle, to: pane)
+        #expect(runtime.awaiting.contains(pane))
+    }
+
+    @Test func busyExitAndCloseClearAwaiting() {
+        let runtime = makeRuntime()
+        runtime.focusChanged(pane, focused: false)
+        runtime.apply(.idle, to: pane)
+        runtime.apply(.busy, to: pane)
+        #expect(runtime.awaiting.isEmpty)
+        runtime.apply(.idle, to: pane)
+        runtime.commandFinished(pane)
+        #expect(runtime.awaiting.isEmpty)
+        runtime.apply(.busy, to: pane)
+        runtime.apply(.idle, to: pane)
+        runtime.surfaceClosed(pane)
+        #expect(runtime.awaiting.isEmpty)
+    }
+
     @Test func pendingCheckAfterCloseDoesNothing() {
         let runtime = makeRuntime()
         runtime.apply(.busy, to: pane)
