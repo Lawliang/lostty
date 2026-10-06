@@ -43,8 +43,10 @@ struct TracePhaseTests {
     }
 
     @Test func lapSecondsScalesWithPerimeterAndSpeed() {
-        #expect(TraceFrame.lapSeconds(perimeter: 1000, speed: 1) == 3)
-        #expect(TraceFrame.lapSeconds(perimeter: 2000, speed: 2) == 3)
+        // ~2500pt/s: a typical 3200pt pane edge laps in about 1.3s.
+        #expect(TraceFrame.lapSeconds(perimeter: 2500, speed: 1) == 1)
+        #expect(TraceFrame.lapSeconds(perimeter: 5000, speed: 2) == 1)
+        #expect(abs(TraceFrame.lapSeconds(perimeter: 3200, speed: 1) - 1.28) < 1e-9)
     }
 
     @Test func lapSecondsNeverZero() {

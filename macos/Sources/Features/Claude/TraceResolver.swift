@@ -52,6 +52,12 @@ struct TraceColors {
     /// 0 = secondary (tail end), 1 = primary (head).
     func blend(_ t: Double) -> Color { Self.color(secondary.mixed(with: primary, amount: min(1, max(0, t)))) }
 
+    /// The core's color: the blend, heating to near white at the head.
+    func hot(_ t: Double) -> Color {
+        let c = min(1, max(0, t))
+        return Self.color(secondary.mixed(with: primary, amount: c).mixed(with: .white, amount: 0.85 * pow(c, 4)))
+    }
+
     func swapped() -> TraceColors { TraceColors(primary: secondary, secondary: primary) }
 
     static func color(_ rgb: RGB) -> Color {

@@ -13,6 +13,19 @@ struct TraceDrawTests {
         #expect(TraceDraw.noise(1, 1) != TraceDraw.noise(1, 2))
     }
 
+    @Test func falloffIsBrightAtTheHeadAndDarkAtTheTailEnd() {
+        #expect(TraceDraw.falloff(0) == 0)
+        #expect(TraceDraw.falloff(1) == 1)
+        var last = -1.0
+        for i in 0...20 {
+            let v = TraceDraw.falloff(Double(i) / 20)
+            #expect(v >= last)
+            last = v
+        }
+        // Most of the light sits near the head, like a motion streak.
+        #expect(TraceDraw.falloff(0.5) < 0.3)
+    }
+
     @Test func eachStyleHasItsOwnRenderer() {
         let types = BuiltinTrace.allCases.map { String(describing: type(of: TraceRenderers.renderer(for: $0))) }
         #expect(Set(types).count == BuiltinTrace.allCases.count)
