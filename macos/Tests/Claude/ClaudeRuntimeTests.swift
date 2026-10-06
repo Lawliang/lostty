@@ -54,8 +54,8 @@ struct ClaudeRuntimeTests {
         runtime.apply(.busy, to: pane)
         runtime.apply(.idle, to: pane)
         guard case .finishing = runtime.phase(pane) else { Issue.record("expected finishing"); return }
-        #expect(harness.pending.count == 1)
-        #expect(harness.pending[0].delay >= TraceTiming.finishTotal)
+        // The finish settle is scheduled (busy also schedules an idle-title check).
+        #expect(harness.pending.contains { $0.delay >= TraceTiming.finishTotal })
         runPending()
         #expect(runtime.phase(pane) == .off)
         #expect(runtime.phases[pane] == nil)
@@ -92,6 +92,51 @@ struct ClaudeRuntimeTests {
         let other = UUID()
         runtime.apply(.busy, to: pane)
         #expect(runtime.phase(other) == .off)
+    }
+
+    // Esc interrupts never send Stop; Claude's title shows ✳ when idle and a
+    // spinner while working, so a racing pane idle-titled for the grace
+    // period fades out (no finish flash: it was interrupted, not done).
+    @Test func idleTitleAfterGraceFadesARacingTrace() {
+        let runtime = makeRuntime()
+        runtime.apply(.busy, to: pane)
+        runtime.titleChanged(pane, title: "✳ My session")
+        runPending()
+        guard case .fading = runtime.phase(pane) else { Issue.record("expected fading, got \(runtime.phase(pane))"); return }
+    }
+
+    @Test func spinnerTitleCancelsTheIdleCheck() {
+        let runtime = makeRuntime()
+        runtime.apply(.busy, to: pane)
+        runtime.titleChanged(pane, title: "✳ My session")
+        runtime.titleChanged(pane, title: "◐ My session")
+        runPending()
+        guard case .racing = runtime.phase(pane) else { Issue.record("expected racing, got \(runtime.phase(pane))"); return }
+    }
+
+    @Test func idleTitleAlreadyShowingWhenBusyArrives() {
+        let runtime = makeRuntime()
+        runtime.titleChanged(pane, title: "✳ My session")
+        runtime.apply(.busy, to: pane)
+        runtime.titleChanged(pane, title: "◑ My session")
+        runPending()
+        guard case .racing = runtime.phase(pane) else { Issue.record("expected racing, got \(runtime.phase(pane))"); return }
+    }
+
+    @Test func idleTitleDoesNotPreemptAStopThatArrives() {
+        let runtime = makeRuntime()
+        runtime.apply(.busy, to: pane)
+        runtime.titleChanged(pane, title: "✳ My session")
+        runtime.apply(.idle, to: pane)
+        guard case .finishing = runtime.phase(pane) else { Issue.record("expected finishing"); return }
+    }
+
+    @Test func otherTitlesNeverEndATrace() {
+        let runtime = makeRuntime()
+        runtime.apply(.busy, to: pane)
+        runtime.titleChanged(pane, title: "vim notes.txt")
+        runPending()
+        guard case .racing = runtime.phase(pane) else { Issue.record("expected racing"); return }
     }
 
     @Test func settleAfterCloseDoesNothing() {

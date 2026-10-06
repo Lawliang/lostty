@@ -1606,6 +1606,8 @@ extension Ghostty {
                 guard let surfaceView = self.surfaceView(from: surface) else { return }
                 guard let title = String(cString: v.title!, encoding: .utf8) else { return }
                 surfaceView.setTitle(title)
+                // Lostty Claude trace: Claude's idle title ends an interrupted trace.
+                MainActor.assumeIsolated { ClaudeRuntime.shared.titleChanged(surfaceView.id, title: title) }
 
             default:
                 assertionFailure()

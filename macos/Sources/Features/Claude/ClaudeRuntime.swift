@@ -14,8 +14,13 @@ final class ClaudeRuntime: ObservableObject {
     /// Only panes whose phase is not `.off`.
     @Published private(set) var phases: [UUID: TracePhase] = [:]
 
+    /// How long a racing pane's title must read idle before the trace ends.
+    static let idleTitleGrace: TimeInterval = 2.5
+
     private let now: () -> Date
     private let schedule: Scheduler
+    /// When each pane's title last switched to Claude's idle marker.
+    private var idleTitleSince: [UUID: Date] = [:]
 
     init(
         now: @escaping () -> Date = Date.init,
@@ -48,6 +53,19 @@ final class ClaudeRuntime: ObservableObject {
 
     func surfaceClosed(_ id: UUID) {
         phases[id] = nil
+        idleTitleSince[id] = nil
+    }
+
+    /// Claude Code titles the pane "✳ …" when idle and with a spinner while
+    /// working. An Esc interrupt sends no Stop hook, so a racing pane whose
+    /// title stays idle for `idleTitleGrace` fades out (no finish flash).
+    func titleChanged(_ id: UUID, title: String) {
+        guard title.hasPrefix("✳") else {
+            idleTitleSince[id] = nil
+            return
+        }
+        if idleTitleSince[id] == nil { idleTitleSince[id] = now() }
+        checkIdleTitle(id)
     }
 
     func apply(_ state: ClaudeState, to id: UUID) {
@@ -56,7 +74,8 @@ final class ClaudeRuntime: ObservableObject {
         switch next {
         case .finishing: settle(id, after: TraceTiming.finishTotal)
         case .fading: settle(id, after: TraceTiming.exitFade)
-        case .off, .racing: break
+        case .racing: if state == .busy { checkIdleTitle(id) }
+        case .off: break
         }
     }
 
@@ -64,6 +83,14 @@ final class ClaudeRuntime: ObservableObject {
     func debugCycle(_ id: UUID) {
         apply(.busy, to: id)
         schedule(4) { [weak self] in self?.apply(.idle, to: id) }
+    }
+
+    private func checkIdleTitle(_ id: UUID) {
+        schedule(Self.idleTitleGrace) { [weak self] in
+            guard let self, case .racing = self.phase(id), let since = self.idleTitleSince[id],
+                  self.now().timeIntervalSince(since) >= Self.idleTitleGrace else { return }
+            self.apply(.exit, to: id)
+        }
     }
 
     private func settle(_ id: UUID, after delay: TimeInterval) {
