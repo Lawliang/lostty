@@ -3,7 +3,7 @@ import SwiftUI
 
 /// "Ready for response": shown over a pane whose Claude finished (or asks
 /// for permission) while you were elsewhere. iOS-style: the pane dims and
-/// blurs like the backdrop of an alert, with a frosted card in the middle.
+/// blurs like the backdrop of an alert, with plain white text on it.
 /// Clicks pass through, so clicking the pane focuses it, which dismisses
 /// the overlay.
 struct ClaudeReadyOverlay: View {
@@ -12,13 +12,13 @@ struct ClaudeReadyOverlay: View {
 
     var body: some View {
         if runtime.awaiting.contains(surfaceID) {
-            ReadyCard()
+            ReadyScreen()
                 .allowsHitTesting(false)
         }
     }
 }
 
-private struct ReadyCard: View {
+private struct ReadyScreen: View {
     private static let words = ["Ready", "for", "response"]
 
     var body: some View {
@@ -39,22 +39,12 @@ private struct ReadyCard: View {
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.white)
                 .fixedSize()
-                .padding(.horizontal, size * 0.75)
-                .padding(.vertical, size * 0.55)
-                .background {
-                    let card = RoundedRectangle(cornerRadius: size * 0.55, style: .continuous)
-                    card.fill(.regularMaterial)
-                        .overlay(card.fill(Color.black.opacity(0.25)))
-                        .overlay(card.strokeBorder(Color.white.opacity(0.14), lineWidth: 0.5))
-                        .shadow(color: .black.opacity(0.35), radius: size * 0.6, y: size * 0.2)
-                }
-                .environment(\.colorScheme, .dark)
             }
         }
     }
 
-    /// As big as fits inside the card: "response" spans at most ~55% of the
-    /// pane's width, and the card at most ~60% of its height.
+    /// As big as fits: "response" spans at most ~55% of the pane's width,
+    /// and the text block at most ~60% of its height.
     static func fontSize(for size: CGSize) -> CGFloat {
         let byWidth = size.width * 0.55 / 4.6
         let byHeight = size.height * 0.6 / 4.3
