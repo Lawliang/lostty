@@ -393,6 +393,12 @@ extension Ghostty {
             var surface_cfg = baseConfig ?? SurfaceConfiguration()
             // Ghostty Skins: lets the `skins` CLI find this pane in catalog.json.
             surface_cfg.environmentVariables[SkinsConstants.surfaceEnvKey] = id.uuidString
+            // Lostty Claude trace: Claude Code hooks check these to know
+            // they run inside Lostty and where the Lostty binary is.
+            surface_cfg.environmentVariables[ClaudeConstants.surfaceEnvKey] = id.uuidString
+            if let bin = Bundle.main.executableURL?.path {
+                surface_cfg.environmentVariables[ClaudeConstants.binEnvKey] = bin
+            }
             let surface = surface_cfg.withCValue(view: self) { surface_cfg_c in
                 ghostty_surface_new(app, &surface_cfg_c)
             }
