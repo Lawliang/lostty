@@ -116,8 +116,9 @@ fields (e.g. tokens) under the same name.
 | `tempest` | stormsurge | Two heads: a gold bolt riding a teal wave |
 
 Colors default to the skin's `accent` (primary) and `accent2` (secondary).
-When a skin has no `accent2`, the secondary is the accent mixed 40% toward
-white.
+When a skin has no `accent2`, the secondary is the primary mixed 40% toward
+white. Panes with no skin at all use Lostty's hologram pink `#ff7ad9` and
+cyan `#7af0ff`.
 
 ### 3.2 Model
 
@@ -191,8 +192,8 @@ busy/finishing/fading.
 | Transition | Visual |
 |---|---|
 | idle → busy | Fade in (0.2s) at the top-left corner; race |
-| busy → idle | Finish flash: head speeds up and completes the current lap (≤0.4s), whole-border pulse (0.25s), fade out (0.8s) |
-| busy during flash/fade | Cancel, resume racing from the current head position |
+| busy → idle | Finish flash: the head keeps moving while the tail stretches until it wraps the whole edge (0.4s), whole-border pulse (0.25s), fade out (0.8s) |
+| busy during flash/fade | Cancel, resume racing; the head never jumps because it moves at the same speed during the flash |
 | busy → exited | 0.3s fade, no flash |
 
 **Reduce Motion** (`accessibilityReduceMotion`): no racing; the whole
@@ -204,11 +205,13 @@ is minimized, the timeline is paused.
 
 ## 5. Hook installer
 
-### 5.1 CLI: `ghostty +claude-hooks install | remove | status`
+### 5.1 CLI: `ghostty +claude-hooks install | remove | status | preview`
 
 Implemented in Zig (`src/cli/claude_hooks.zig`) because `std.json`'s
 object map preserves key order, so a user's file keeps its layout apart
-from the added entries. Operates on `~/.claude/settings.json`.
+from the added entries; numbers are kept as written. Operates on
+`~/.claude/settings.json`, following a symlink to the real file so dotfile
+managers keep working.
 
 Entry added under `hooks.<Event>` for each of `UserPromptSubmit`, `Stop`,
 `Notification`, `SessionEnd`:
@@ -224,20 +227,23 @@ the file. Lostty identifies its entries as hook commands containing both
 
 - **install:** missing file → created with only the hooks. Unparseable
   file → exit non-zero with the parse error, file untouched. Existing
-  Lostty entries are replaced in place with the current form; other
-  entries are untouched. Before any write, the current file is copied to
+  Lostty entries are removed and the current form is appended to each
+  event's list; other entries are untouched. Before any write, the current file is copied to
   `settings.json.lostty-backup`. Writes go to a temp file in the same
   directory and are renamed over the original. Re-running is a no-op when
   already current (no write, no backup).
 - **remove:** deletes only Lostty entries; drops matcher groups and event
   arrays left empty; drops `hooks` if it becomes empty. Same backup and
   atomic write.
+- **preview:** prints the JSON that install adds, for the app's "Show
+  changes" view.
 - **status:** prints one of `installed` (all four current), `partial`
   (some missing or outdated form), `not-installed`, `unreadable`.
 
 ### 5.2 App prompt and menu (Swift)
 
-- At launch, if `~/.claude` exists, status is not `installed`, and the
+- At launch, if `~/.claude` exists, status is `not-installed` or
+  `partial` (an `unreadable` file is only reported from the menu), and the
   user has not answered the prompt for this hook version (UserDefaults
   `LosttyClaudeHooksPromptedVersion`), show a sheet: "Show a trace while
   Claude is working? Lostty will add 4 hooks to ~/.claude/settings.json."
@@ -278,8 +284,9 @@ the file. Lostty identifies its entries as hook commands containing both
 - **Manual:** real Claude in single and split panes and in tmux; Esc
   interrupt; Reduce Motion; install prompt against a copy of a real
   settings file.
-- **Visual:** a debug menu item runs a fake busy→idle cycle on the focused
-  pane with a chosen style, to review each style by eye.
+- **Visual:** a debug-build menu item runs a fake busy→idle cycle on the
+  focused pane using its skin's trace; equip presets with `skins set` to
+  review each style by eye.
 
 ## 8. Build order
 
