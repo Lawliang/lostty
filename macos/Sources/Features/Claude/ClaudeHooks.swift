@@ -59,5 +59,15 @@ enum ClaudeHooksPrompt {
         guard claudeDirExists, promptedVersion < hookVersion else { return false }
         return status == .notInstalled || status == .partial
     }
+
+    /// Shown after a successful install or remove. Claude Code reads hooks
+    /// when a session starts, so running sessions need a restart.
+    static func successMessage(for op: String) -> String? {
+        switch op {
+        case "install": "Claude hooks installed. Restart any running Claude sessions to see the trace."
+        case "remove": "Claude hooks removed. Restart any running Claude sessions to finish turning the trace off."
+        default: nil
+        }
+    }
 }
 #endif

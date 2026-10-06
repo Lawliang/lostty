@@ -104,7 +104,15 @@ enum ClaudeHooksUI {
 
     private static func run(_ op: String) {
         let result = ClaudeHooksCLI().run(op)
-        guard result.exitCode != 0 else { return }
+        guard result.exitCode != 0 else {
+            if let message = ClaudeHooksPrompt.successMessage(for: op) {
+                let done = NSAlert()
+                done.messageText = message
+                done.addButton(withTitle: "OK")
+                done.runModal()
+            }
+            return
+        }
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = "Lostty could not \(op) the Claude hooks"
