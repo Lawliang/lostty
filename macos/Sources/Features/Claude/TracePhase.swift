@@ -41,13 +41,13 @@ struct TraceFrame: Equatable {
             intensity: min(1, elapsed / TraceTiming.fadeIn))
     }
 
-    /// Head speed in points per second at `speed = 1`.
-    static let pointsPerSecond: Double = 2500
+    /// Seconds the head spends on each side at `speed = 1`. Every side gets
+    /// the same time, whatever its length, so the ease into and out of each
+    /// corner is always long enough to see.
+    static let secondsPerSide: Double = 1
 
-    /// The same head pace in every pane (a typical 3200pt edge laps in
-    /// ~1.3s). Never below 0.25s, so tiny panes stay finite.
-    static func lapSeconds(perimeter: Double, speed: Double) -> Double {
-        max(0.25, perimeter / pointsPerSecond / speed)
+    static func lapSeconds(speed: Double) -> Double {
+        4 * secondsPerSide / speed
     }
 }
 #endif

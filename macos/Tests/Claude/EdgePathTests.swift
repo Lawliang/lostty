@@ -51,51 +51,37 @@ struct EdgePathTests {
         #expect(box.maxY >= 14.9)
     }
 
-    // Easing: each edge takes time in proportion to its length, the head
-    // eases out of one corner and into the next.
-    @Test func easingKeepsCornersAndEdgeMidpoints() {
-        for f in [0.0, 100.0 / 300, 150.0 / 300, 250.0 / 300] {
-            #expect(abs(path.easedFraction(f) - f) < 1e-9)
-        }
-        #expect(abs(path.easedFraction(50.0 / 300) - 50.0 / 300) < 1e-9)
-        #expect(abs(path.easedFraction(125.0 / 300) - 125.0 / 300) < 1e-9)
+    // Easing: each side takes a quarter of the lap whatever its length.
+    // Lap positions 0, ¼, ½, ¾ are the corners; within a side the speed is
+    // a sine: zero at each corner, fastest mid-side.
+    @Test func eachSideTakesAQuarterOfTheLap() {
+        #expect(abs(path.easedFraction(0) - 0) < 1e-9)
+        #expect(abs(path.easedFraction(0.25) - 100.0 / 300) < 1e-9)
+        #expect(abs(path.easedFraction(0.5) - 150.0 / 300) < 1e-9)
+        #expect(abs(path.easedFraction(0.75) - 250.0 / 300) < 1e-9)
+        // Halfway through a side's time is halfway along it.
+        #expect(abs(path.easedFraction(0.125) - 50.0 / 300) < 1e-9)
+        #expect(abs(path.easedFraction(0.375) - 125.0 / 300) < 1e-9)
     }
 
-    @Test func easingIsSlowNearCornersAndFastMidEdge() {
-        let lin = 5.0 / 300
-        // Just after the top-left corner the head lags behind linear motion...
-        #expect(path.easedFraction(lin) < lin)
-        // ...and just before the top-right corner it is ahead (decelerating).
-        #expect(path.easedFraction(95.0 / 300) > 95.0 / 300)
-        // Mid-edge it covers more ground per step than near the corner.
-        let nearCorner = path.easedFraction(2.0 / 300) - path.easedFraction(0)
-        let midEdge = path.easedFraction(52.0 / 300) - path.easedFraction(50.0 / 300)
-        #expect(midEdge > nearCorner * 15)
-        // It still moves off the corner.
-        #expect(nearCorner > 0)
-    }
-
-    // Progressive: the head comes to rest at each corner, then speed builds
-    // steadily to mid-edge (and releases the same way into the next corner).
-    @Test func easingRampsProgressively() {
+    @Test func speedIsASineAlongEachSide() {
+        // Speed along the top side (lap 0..¼), in points per lap-fraction.
         func speed(at u: Double) -> Double {
-            let du = 0.001
-            return (path.easedFraction((u + du) * 100 / 300) - path.easedFraction(u * 100 / 300)) / du
+            let du = 0.0005
+            let a = path.easedFraction(u / 4), b = path.easedFraction((u + du) / 4)
+            return (b - a) * path.perimeter / (du / 4)
         }
-        let corner = speed(at: 0), peak = speed(at: 0.4995)
-        #expect(corner / peak < 0.01) // stops at the corner
-        var last = corner
-        for i in 1...10 {
-            let v = speed(at: Double(i) * 0.049)
-            #expect(v > last)
-            // No sudden jumps: each tenth of the ramp adds less than 20% of top speed.
-            #expect(v - last < peak * 0.2)
-            last = v
+        let peak = speed(at: 0.5)
+        #expect(speed(at: 0) / peak < 0.01)           // at rest leaving the corner
+        #expect(speed(at: 0.9995) / peak < 0.01)      // at rest arriving at the next
+        for u in stride(from: 0.1, through: 0.9, by: 0.1) {
+            #expect(abs(speed(at: u) / peak - sin(.pi * u)) < 0.02)
         }
     }
 
     @Test func easingWrapsAndStaysFinite() {
         #expect(abs(path.easedFraction(1.25) - path.easedFraction(0.25)) < 1e-9)
+        #expect(abs(path.easedFraction(-0.75) - path.easedFraction(0.25)) < 1e-9)
         let empty = EdgePath(size: .zero, inset: 1.5)
         #expect(empty.easedFraction(0.3).isFinite)
     }

@@ -31,7 +31,7 @@ struct TraceOverlay: View {
         TimelineView(.animation(paused: !windowVisible)) { timeline in
             Canvas { ctx, size in
                 let path = EdgePath(size: size, inset: Self.inset)
-                let lap = TraceFrame.lapSeconds(perimeter: path.perimeter, speed: trace.speed)
+                let lap = TraceFrame.lapSeconds(speed: trace.speed)
                 guard var frame = TraceFrame.make(phase, now: timeline.date, lapSeconds: lap, length: trace.length) else { return }
                 frame.head = path.easedFraction(frame.head)
                 let colors = TraceColors(trace)

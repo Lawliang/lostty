@@ -56,28 +56,22 @@ struct EdgePath {
                       tangent: CGVector(dx: 0, dy: -1), normal: CGVector(dx: 1, dy: 0))
     }
 
-    /// Maps a linear lap position to an eased one: each side keeps its share
-    /// of the lap, but on it the head accelerates out of the corner and
-    /// decelerates to a stop into the next, progressively.
-    func easedFraction(_ fraction: Double) -> Double {
+    /// Maps a lap position (0..<1 of the lap's time) to a place on the edge.
+    /// Each side takes a quarter of the lap. Along a side the speed is a
+    /// sine: the head leaves the corner at rest, is fastest mid-side, and
+    /// comes to rest again at the next corner.
+    func easedFraction(_ lap: Double) -> Double {
         let total = perimeter
-        guard total > 0 else { return fraction }
-        var wrapped = fraction.truncatingRemainder(dividingBy: 1)
+        guard total > 0 else { return lap }
+        var wrapped = lap.truncatingRemainder(dividingBy: 1)
         if wrapped < 0 { wrapped += 1 }
-        let d = wrapped * total
+        let side = min(3, Int(wrapped * 4))
+        let u = wrapped * 4 - Double(side)
         let w = Double(rect.width), h = Double(rect.height)
-        var start = 0.0
-        for length in [w, h, w, h] {
-            if d < start + length {
-                let u = (d - start) / length
-                // Sine ease-in-out: the head comes to rest at each corner,
-                // builds speed steadily to mid-edge, and releases the same way.
-                let eased = (1 - cos(.pi * u)) / 2
-                return (start + eased * length) / total
-            }
-            start += length
-        }
-        return wrapped
+        let lengths = [w, h, w, h]
+        let start = lengths[..<side].reduce(0, +)
+        let eased = (1 - cos(.pi * u)) / 2
+        return (start + eased * lengths[side]) / total
     }
 
     /// The point `inward` points into the pane from the edge at `fraction`.
