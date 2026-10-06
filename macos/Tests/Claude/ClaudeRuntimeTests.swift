@@ -20,8 +20,9 @@ struct ClaudeRuntimeTests {
             schedule: { delay, work in harness.pending.append((delay, work)) })
     }
 
+    /// What the core delivers: the decoded JSON text.
     func payload(_ state: String) -> String {
-        Data(#"{"v":1,"state":"\#(state)"}"#.utf8).base64EncodedString()
+        #"{"v":1,"state":"\#(state)"}"#
     }
 
     /// Advances the clock past every scheduled settle and runs them.

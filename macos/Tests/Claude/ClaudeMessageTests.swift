@@ -3,31 +3,31 @@ import Foundation
 import Testing
 @testable import Ghostty
 
+/// The core base64-decodes SetUserVar values (Surface.decodeUserVar), so
+/// the app receives the JSON text itself.
 struct ClaudeMessageTests {
-    private func b64(_ json: String) -> String { Data(json.utf8).base64EncodedString() }
-
     @Test func decodesEachState() {
-        #expect(ClaudeMessage.decode(b64(#"{"v":1,"state":"busy"}"#)) == .busy)
-        #expect(ClaudeMessage.decode(b64(#"{"v":1,"state":"idle"}"#)) == .idle)
-        #expect(ClaudeMessage.decode(b64(#"{"v":1,"state":"exit"}"#)) == .exit)
+        #expect(ClaudeMessage.decode(#"{"v":1,"state":"busy"}"#) == .busy)
+        #expect(ClaudeMessage.decode(#"{"v":1,"state":"idle"}"#) == .idle)
+        #expect(ClaudeMessage.decode(#"{"v":1,"state":"exit"}"#) == .exit)
     }
 
     @Test func ignoresExtraFields() {
-        #expect(ClaudeMessage.decode(b64(#"{"v":1,"state":"busy","tokens":42}"#)) == .busy)
+        #expect(ClaudeMessage.decode(#"{"v":1,"state":"busy","tokens":42}"#) == .busy)
     }
 
     @Test func rejectsUnknownVersionStateAndGarbage() {
-        #expect(ClaudeMessage.decode(b64(#"{"v":2,"state":"busy"}"#)) == nil)
-        #expect(ClaudeMessage.decode(b64(#"{"v":1,"state":"thinking"}"#)) == nil)
-        #expect(ClaudeMessage.decode(b64(#"{"state":"busy"}"#)) == nil)
-        #expect(ClaudeMessage.decode(b64("[1]")) == nil)
-        #expect(ClaudeMessage.decode("%%%not base64") == nil)
+        #expect(ClaudeMessage.decode(#"{"v":2,"state":"busy"}"#) == nil)
+        #expect(ClaudeMessage.decode(#"{"v":1,"state":"thinking"}"#) == nil)
+        #expect(ClaudeMessage.decode(#"{"state":"busy"}"#) == nil)
+        #expect(ClaudeMessage.decode("[1]") == nil)
+        #expect(ClaudeMessage.decode("eyJ2IjoxLCJzdGF0ZSI6ImJ1c3kifQ==") == nil)
         #expect(ClaudeMessage.decode("") == nil)
     }
 
     @Test func matchesTheZigEncoder() {
-        // Exact bytes produced by `+claude-state busy` (see protocol.zig).
-        #expect(ClaudeMessage.decode("eyJ2IjoxLCJzdGF0ZSI6ImJ1c3kifQ==") == .busy)
+        // Exact JSON `+claude-state busy` encodes (see protocol.zig).
+        #expect(ClaudeMessage.decode(#"{"v":1,"state":"busy"}"#) == .busy)
     }
 }
 #endif

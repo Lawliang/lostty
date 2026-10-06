@@ -16,10 +16,11 @@ enum ClaudeState: String {
 }
 
 enum ClaudeMessage {
-    /// Decodes a LOSTTY_CLAUDE value: base64 of `{"v":1,"state":"…"}`.
-    /// Other versions, unknown states and malformed input decode to nil.
+    /// Decodes a LOSTTY_CLAUDE value, `{"v":1,"state":"…"}`. The core has
+    /// already base64-decoded it (Surface.decodeUserVar). Other versions,
+    /// unknown states and malformed input decode to nil.
     static func decode(_ value: String) -> ClaudeState? {
-        guard let data = Data(base64Encoded: value),
+        guard let data = value.data(using: .utf8),
               let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
               (object["v"] as? Int) == 1,
               let raw = object["state"] as? String else { return nil }
