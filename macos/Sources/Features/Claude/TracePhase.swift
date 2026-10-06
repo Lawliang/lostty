@@ -44,7 +44,7 @@ struct TraceFrame: Equatable {
     /// Seconds the head spends on each side at `speed = 1`. Every side gets
     /// the same time, whatever its length, so the ease into and out of each
     /// corner is always long enough to see.
-    static let secondsPerSide: Double = 1
+    static let secondsPerSide: Double = 0.6
 
     static func lapSeconds(speed: Double) -> Double {
         4 * secondsPerSide / speed

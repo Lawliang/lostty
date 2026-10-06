@@ -2,8 +2,8 @@
 import SwiftUI
 
 /// "Ready for response": shown over a pane whose Claude finished (or asks
-/// for permission) while you were elsewhere. iOS-style: the pane dims and
-/// blurs like the backdrop of an alert, with plain white text on it.
+/// for permission) while you were elsewhere. The pane dims and blurs like
+/// the backdrop of an iOS alert, with plain white monospaced text on it.
 /// Clicks pass through, so clicking the pane focuses it, which dismisses
 /// the overlay.
 struct ClaudeReadyOverlay: View {
@@ -34,8 +34,7 @@ private struct ReadyScreen: View {
                         Text(word).lineLimit(1)
                     }
                 }
-                .font(.system(size: size, weight: .semibold))
-                .tracking(-size * 0.01)
+                .font(.system(size: size, weight: .semibold, design: .monospaced))
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.white)
                 .fixedSize()
@@ -43,10 +42,11 @@ private struct ReadyScreen: View {
         }
     }
 
-    /// As big as fits: "response" spans at most ~55% of the pane's width,
-    /// and the text block at most ~60% of its height.
+    /// As big as fits: "response" (8 monospaced cells, ~0.6em each) spans
+    /// at most ~60% of the pane's width, and the text block at most ~60% of
+    /// its height.
     static func fontSize(for size: CGSize) -> CGFloat {
-        let byWidth = size.width * 0.55 / 4.6
+        let byWidth = size.width * 0.6 / (8 * 0.6)
         let byHeight = size.height * 0.6 / 4.3
         return max(13, min(72, byWidth, byHeight))
     }

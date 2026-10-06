@@ -42,10 +42,9 @@ struct TracePhaseTests {
         #expect(TraceFrame.make(.off, now: t0, lapSeconds: 2, length: 0.2) == nil)
     }
 
-    @Test func lapIsOneSecondPerSide() {
-        #expect(TraceFrame.lapSeconds(speed: 1) == 4)
-        #expect(TraceFrame.lapSeconds(speed: 2) == 2)
-        #expect(TraceFrame.lapSeconds(speed: 4) == 1)
+    @Test func lapIsPointSixSecondsPerSide() {
+        #expect(abs(TraceFrame.lapSeconds(speed: 1) - 2.4) < 1e-9)
+        #expect(abs(TraceFrame.lapSeconds(speed: 2) - 1.2) < 1e-9)
     }
 
 }
