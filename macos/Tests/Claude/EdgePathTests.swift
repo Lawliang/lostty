@@ -70,10 +70,28 @@ struct EdgePathTests {
         // Mid-edge it covers more ground per step than near the corner.
         let nearCorner = path.easedFraction(2.0 / 300) - path.easedFraction(0)
         let midEdge = path.easedFraction(52.0 / 300) - path.easedFraction(50.0 / 300)
-        // Pronounced: mid-edge is many times faster than leaving the corner.
         #expect(midEdge > nearCorner * 15)
-        // Never fully stops at a corner.
+        // It still moves off the corner.
         #expect(nearCorner > 0)
+    }
+
+    // Progressive: the head comes to rest at each corner, then speed builds
+    // steadily to mid-edge (and releases the same way into the next corner).
+    @Test func easingRampsProgressively() {
+        func speed(at u: Double) -> Double {
+            let du = 0.001
+            return (path.easedFraction((u + du) * 100 / 300) - path.easedFraction(u * 100 / 300)) / du
+        }
+        let corner = speed(at: 0), peak = speed(at: 0.4995)
+        #expect(corner / peak < 0.01) // stops at the corner
+        var last = corner
+        for i in 1...10 {
+            let v = speed(at: Double(i) * 0.049)
+            #expect(v > last)
+            // No sudden jumps: each tenth of the ramp adds less than 20% of top speed.
+            #expect(v - last < peak * 0.2)
+            last = v
+        }
     }
 
     @Test func easingWrapsAndStaysFinite() {
