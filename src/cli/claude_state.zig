@@ -33,11 +33,35 @@ pub fn run(gpa: Allocator) !u8 {
 
     const tmux = std.posix.getenv("TMUX") != null;
     const seq = protocol.encodeSequence(alloc, state, tmux) catch return 0;
-    const tty = std.fs.openFileAbsolute("/dev/tty", .{ .mode = .write_only }) catch return 0;
+    const tty = openTerminal(alloc) orelse return 0;
     defer tty.close();
     tty.writeAll(seq) catch {};
     return 0;
 }
+
+/// `/dev/tty` when we have a controlling terminal; otherwise (Claude Code
+/// runs hooks without one) the terminal of the nearest ancestor that has
+/// one, which is `claude` in the pane, or the tmux pane it runs in.
+fn openTerminal(alloc: Allocator) ?std.fs.File {
+    if (std.fs.openFileAbsolute("/dev/tty", .{ .mode = .write_only })) |f| return f else |_| {}
+    const name = protocol.findTty(Ps{ .alloc = alloc }, std.c.getppid(), 8) orelse return null;
+    const path = std.fmt.allocPrint(alloc, "/dev/{s}", .{name}) catch return null;
+    return std.fs.openFileAbsolute(path, .{ .mode = .write_only }) catch null;
+}
+
+const Ps = struct {
+    alloc: Allocator,
+
+    pub fn lookup(self: Ps, pid: i32) ?protocol.ProcInfo {
+        var buf: [16]u8 = undefined;
+        const pid_str = std.fmt.bufPrint(&buf, "{d}", .{pid}) catch return null;
+        const result = std.process.Child.run(.{
+            .allocator = self.alloc,
+            .argv = &.{ "/bin/ps", "-o", "ppid=,tty=", "-p", pid_str },
+        }) catch return null;
+        return protocol.parsePs(result.stdout);
+    }
+};
 
 test {
     _ = @import("claude/protocol.zig");

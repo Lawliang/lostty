@@ -23,6 +23,47 @@ pub fn stateFromArgs(argv: []const []const u8) ?State {
     return null;
 }
 
+pub const ProcInfo = struct {
+    ppid: i32,
+    /// Terminal name as `ps` prints it ("ttys001", "pts/3"), or null.
+    tty: ?[]const u8,
+};
+
+/// Parses `ps -o ppid=,tty= -p <pid>` output.
+pub fn parsePs(out: []const u8) ?ProcInfo {
+    var it = std.mem.tokenizeAny(u8, out, " \t\r\n");
+    const ppid = std.fmt.parseInt(i32, it.next() orelse return null, 10) catch return null;
+    const tty = it.next() orelse return .{ .ppid = ppid, .tty = null };
+    return .{ .ppid = ppid, .tty = if (isTtyName(tty)) tty else null };
+}
+
+/// "ttys001" or "pts/3": letters/digits with at most one "/" and no dots.
+fn isTtyName(s: []const u8) bool {
+    if (s.len == 0 or std.mem.indexOfScalar(u8, s, '?') != null) return false;
+    var slashes: usize = 0;
+    for (s) |c| {
+        if (c == '/') {
+            slashes += 1;
+        } else if (!std.ascii.isAlphanumeric(c)) return false;
+    }
+    return slashes <= 1;
+}
+
+/// Claude Code runs hooks without a controlling terminal, so `/dev/tty`
+/// fails there. Walk up from `start` (at most `max_hops` processes) to the
+/// first one attached to a terminal: that is `claude` in the pane.
+/// `ctx.lookup(pid) ?ProcInfo` supplies process info.
+pub fn findTty(ctx: anytype, start: i32, max_hops: usize) ?[]const u8 {
+    var pid = start;
+    var hops: usize = 0;
+    while (hops < max_hops and pid > 1) : (hops += 1) {
+        const info = ctx.lookup(pid) orelse return null;
+        if (info.tty) |tty| return tty;
+        pid = info.ppid;
+    }
+    return null;
+}
+
 /// OSC 1337 SetUserVar carrying `{"v":1,"state":"<state>"}`. With `tmux`,
 /// wrapped in tmux's DCS passthrough (requires `allow-passthrough on`).
 pub fn encodeSequence(alloc: Allocator, state: State, tmux: bool) ![]u8 {
@@ -36,6 +77,39 @@ pub fn encodeSequence(alloc: Allocator, state: State, tmux: bool) ![]u8 {
         return std.fmt.allocPrint(alloc, "\x1bPtmux;\x1b\x1b]1337;SetUserVar={s}={s}\x07\x1b\\", .{ user_var_name, b64 });
     }
     return std.fmt.allocPrint(alloc, "\x1b]1337;SetUserVar={s}={s}\x07", .{ user_var_name, b64 });
+}
+
+test "claude protocol: parsePs" {
+    const t = std.testing;
+    const a = parsePs("  38137 ttys001\n").?;
+    try t.expectEqual(@as(i32, 38137), a.ppid);
+    try t.expectEqualStrings("ttys001", a.tty.?);
+    const b = parsePs("1 ??\n").?;
+    try t.expect(b.tty == null);
+    const c = parsePs("812 pts/3\n").?;
+    try t.expectEqualStrings("pts/3", c.tty.?);
+    try t.expect(parsePs("812 ?\n").?.tty == null);
+    try t.expect(parsePs("") == null);
+    try t.expect(parsePs("abc ttys001") == null);
+    // Nothing path-like beyond one "pts/N" level.
+    try t.expect(parsePs("5 ../../etc/passwd").?.tty == null);
+}
+
+test "claude protocol: findTty walks up to the first process with a terminal" {
+    const Table = struct {
+        pub fn lookup(_: @This(), pid: i32) ?ProcInfo {
+            return switch (pid) {
+                300 => .{ .ppid = 200, .tty = null }, // +claude-state's sh
+                200 => .{ .ppid = 100, .tty = null }, // hook runner
+                100 => .{ .ppid = 1, .tty = "ttys001" }, // claude
+                else => null,
+            };
+        }
+    };
+    const t = std.testing;
+    try t.expectEqualStrings("ttys001", findTty(Table{}, 300, 8).?);
+    try t.expect(findTty(Table{}, 300, 2) == null);
+    try t.expect(findTty(Table{}, 999, 8) == null);
 }
 
 test "claude protocol: parseState" {
