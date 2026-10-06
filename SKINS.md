@@ -50,14 +50,14 @@ The title-bar picker shows every skin as a boon you can choose. Use
 `skins set <id>` to equip any preset. A skin defined in `skins.toml` with
 the same name as a preset overrides it and appears in the picker tagged PROJECT.
 
-## Locked Folders
+## Folder Defaults
 
-If your `skins.toml` maps a folder with `[[match]]`, that folder's pane always
-shows its mapped skin and cannot be overridden. The picker shows a Locked card
-explaining that the folder is configured. `skins set`, `skins color`, and
-`skins texture` exit with `skins: this folder is locked to "<skin>" by skins.toml` (exit 1);
-`skins reset` still works. When you leave a locked folder, your previous override (if any)
-returns.
+If your `skins.toml` maps a folder with `[[match]]`, a pane in that folder
+shows its mapped skin by default. You can still change it from the picker or
+with `skins set`, `skins color`, or `skins texture`. Overrides belong to the
+pane, so a pick made in a mapped folder stays when you `cd` elsewhere, and a
+pick made elsewhere carries into a mapped folder. `skins reset` drops the
+override and brings the mapped skin back.
 
 ## Saved Colors
 

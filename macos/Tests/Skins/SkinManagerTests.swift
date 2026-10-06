@@ -197,7 +197,6 @@ struct SkinManagerTests {
         #expect(pane?["skin"] as? String == "prod")
         #expect(pane?["source"] as? String == "override")
         #expect(pane?["background"] as? String == "#3a0f14")
-        #expect(pane?["locked"] as? Bool == false)
     }
 
     @Test func catalogUpdatesWhenPreviewExpires() throws {
@@ -212,7 +211,6 @@ struct SkinManagerTests {
         let pane = (object?["panes"] as? [String: [String: Any]])?[id.uuidString]
         #expect(pane?["skin"] as? String == "Milo")
         #expect(pane?["source"] as? String == "auto")
-        #expect(pane?["locked"] as? Bool == false)
     }
 
     @Test func textureFailureIsPublished() {
@@ -237,42 +235,38 @@ struct SkinManagerTests {
         #expect(m.textureError == nil)
     }
 
-    @Test func lockedFolderIgnoresPreviewAndSet() {
+    @Test func mappedFolderAcceptsPreviewAndSet() {
         let h = Harness(); let m = makeManager(h); let id = UUID()
         m.pwdChanged(id, pwd: "\(root)/arca")
-        #expect(m.isLocked(id))
-        #expect(m.lockedSkinName(id) == "arca")
-        let calls = h.calls.count
-        m.handle(SkinRequest(op: .preview, skin: "prod"), for: id)
-        m.handle(SkinRequest(op: .set, skin: "prod"), for: id)
-        m.setPreview(id, prod)
-        m.setOverride(id, prod)
         #expect(m.effectiveSkin(id) == arca)
-        #expect(m.panes[id]?.override == nil)
-        #expect(m.panes[id]?.preview == nil)
-        #expect(h.calls.count == calls)
-        #expect(m.sourceLabel(id) == "Locked: arca")
+        #expect(m.sourceLabel(id) == "Config: arca")
+        m.handle(SkinRequest(op: .preview, skin: "prod"), for: id)
+        #expect(m.effectiveSkin(id) == prod)
+        #expect(m.sourceLabel(id) == "Preview")
+        m.handle(SkinRequest(op: .set, skin: "prod"), for: id)
+        #expect(m.effectiveSkin(id) == prod)
+        #expect(m.panes[id]?.override == prod)
+        #expect(h.calls.last?.1?.skin == prod)
+        #expect(m.sourceLabel(id) == "Override")
     }
 
-    @Test func overrideSurvivesLockedFolder() {
+    @Test func overrideCarriesIntoMappedFolder() {
         let h = Harness(); let m = makeManager(h); let id = UUID()
         m.pwdChanged(id, pwd: "\(root)/Milo")
         m.handle(SkinRequest(op: .set, skin: "prod"), for: id)
         m.pwdChanged(id, pwd: "\(root)/arca/app")
-        #expect(m.effectiveSkin(id) == arca)
-        #expect(m.equippedName(id) == "prod")
-        #expect(h.calls.last?.1?.skin == arca)
-        m.pwdChanged(id, pwd: "\(root)/plain")
         #expect(m.effectiveSkin(id) == prod)
-        #expect(h.calls.last?.1?.skin == prod)
+        #expect(m.equippedName(id) == "prod")
     }
 
-    @Test func resetStillWorksWhileLocked() {
+    @Test func resetInMappedFolderFallsBackToMappedSkin() {
         let h = Harness(); let m = makeManager(h); let id = UUID()
-        m.pwdChanged(id, pwd: "\(root)/Milo")
-        m.handle(SkinRequest(op: .set, skin: "prod"), for: id)
         m.pwdChanged(id, pwd: "\(root)/arca")
+        m.setOverride(id, prod)
+        #expect(h.calls.last?.1?.skin == prod)
         m.handle(SkinRequest(op: .reset), for: id)
+        #expect(m.effectiveSkin(id) == arca)
+        #expect(h.calls.last?.1?.skin == arca)
         m.pwdChanged(id, pwd: "\(root)/plain")
         #expect(m.effectiveSkin(id) == nil)
     }
@@ -300,7 +294,7 @@ struct SkinManagerTests {
         #expect(m.effectiveSkin(id)?.palette == nil)
     }
 
-    @Test func matchToABuiltinPresetLocksAndResolves() throws {
+    @Test func matchToABuiltinPresetResolves() throws {
         var cfg = config
         cfg.matches.append(SkinMatch(path: "\(root)/plain", skin: "neon-arcade"))
         let h = Harness()
@@ -309,8 +303,7 @@ struct SkinManagerTests {
                             apply: { id, a in h.calls.append((id, a)); return true })
         let id = UUID()
         m.pwdChanged(id, pwd: "\(root)/plain")
-        #expect(m.isLocked(id))
-        #expect(m.lockedSkinName(id) == "neon-arcade")
+        #expect(m.sourceLabel(id) == "Config: neon-arcade")
         #expect(m.effectiveSkin(id)?.palette?.count == 16)
     }
 
@@ -336,7 +329,7 @@ struct SkinManagerTests {
         #expect(m.effectiveSkin(id)?.accent == Skin.defaultAccent(for: milo.background))
     }
 
-    @Test func catalogListsLibraryAndLockedPanes() throws {
+    @Test func catalogListsLibraryAndMappedPanes() throws {
         let h = Harness()
         let url = URL(fileURLWithPath: root).appendingPathComponent("state/catalog.json")
         let m = makeManager(h, catalog: url); let id = UUID()
@@ -346,7 +339,7 @@ struct SkinManagerTests {
         #expect(skins?.first(where: { $0["name"] == "neon-arcade" })?["rarity"] == "legendary")
         #expect(skins?.first(where: { $0["name"] == "arca" })?["rarity"] == "project")
         let pane = (object?["panes"] as? [String: [String: Any]])?[id.uuidString]
-        #expect(pane?["locked"] as? Bool == true)
+        #expect(pane?["locked"] == nil)
         #expect(pane?["source"] as? String == "config")
         #expect(pane?["skin"] as? String == "arca")
     }

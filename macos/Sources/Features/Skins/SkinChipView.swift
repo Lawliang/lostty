@@ -45,10 +45,7 @@ struct SkinChipView: View {
                 } else {
                     Text(chipTitle(skin)).font(.system(size: 11, weight: .medium)).lineLimit(1)
                 }
-                if let id, manager.isLocked(id) {
-                    Image(systemName: "lock.fill").font(.system(size: 8)).foregroundStyle(.secondary)
-                }
-                if let id, manager.panes[id]?.override != nil, !manager.isLocked(id) {
+                if let id, manager.panes[id]?.override != nil {
                     Circle().fill(Color.accentColor).frame(width: 5, height: 5)
                 }
                 if manager.configError != nil {

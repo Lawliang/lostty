@@ -32,14 +32,10 @@ struct SkinPopoverView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             header
-            if let locked = manager.lockedSkinName(surfaceID) {
-                lockedCard(locked)
-            } else {
-                tabSwitcher
-                if tab == .presets { presetGrid } else { customPanel }
-                problems
-                footer
-            }
+            tabSwitcher
+            if tab == .presets { presetGrid } else { customPanel }
+            problems
+            footer
         }
         .padding(20)
         .frame(width: 440)
@@ -85,32 +81,11 @@ struct SkinPopoverView: View {
     }
 
     private var subtitle: String {
-        if let locked = manager.lockedSkinName(surfaceID) { return "Locked · \(locked) from skins.toml" }
         let pwd = manager.panes[surfaceID]?.pwd ?? ""
         if pwd.isEmpty { return "A patron offers a skin for this pane" }
         let home = NSHomeDirectory()
         return (pwd == home || pwd.hasPrefix(home + "/"))
             ? "A patron offers a skin for ~" + pwd.dropFirst(home.count) : "A patron offers a skin for \(pwd)"
-    }
-
-    private func lockedCard(_ name: String) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                Image(systemName: "lock.fill").foregroundStyle(accent)
-                Text("Locked to \(name)").font(.system(size: 14, weight: .semibold))
-            }
-            Text("This folder is mapped in skins.toml, so it always shows its own skin. Edit the [[match]] entry to change it; your picks still apply in other folders.")
-                .font(.system(size: 12)).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            Button("Reveal skins.toml in Finder") {
-                let file = SkinsRuntime.configDir.appendingPathComponent("skins.toml")
-                NSWorkspace.shared.activateFileViewerSelecting([file])
-            }
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Rectangle().fill(Self.card))
-        .overlay(Rectangle().strokeBorder(Boon.bronze, lineWidth: 1))
     }
 
     private var presetGrid: some View {

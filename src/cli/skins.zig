@@ -85,10 +85,6 @@ pub fn run(gpa: Allocator) !u8 {
             // than block the user on a missing catalog. When it *can* be
             // loaded, catch typos before they silently no-op.
             if (tryLoadCatalog(alloc)) |catalog| {
-                if (protocol.lockedMessage(catalog, surface_id, req)) |msg| {
-                    try stderr.print("{s}\n", .{msg});
-                    return 1;
-                }
                 if (protocol.validateAgainstCatalog(catalog, req)) |msg| {
                     try stderr.print("{s}\n", .{msg});
                     return 1;
@@ -109,11 +105,7 @@ pub fn run(gpa: Allocator) !u8 {
             const catalog = try loadCatalog(alloc, stderr) orelse return 1;
             if (catalog.panes.map.get(surface_id)) |pane| {
                 const name = try sanitizeForDisplay(alloc, pane.skin);
-                if (pane.locked) {
-                    try stdout.print("{s} ({s}) (locked) {s}\n", .{ name, pane.source, pane.background });
-                } else {
-                    try stdout.print("{s} ({s}) {s}\n", .{ name, pane.source, pane.background });
-                }
+                try stdout.print("{s} ({s}) {s}\n", .{ name, pane.source, pane.background });
             } else {
                 try stdout.writeAll("default\n");
             }
@@ -121,15 +113,6 @@ pub fn run(gpa: Allocator) !u8 {
         },
         .picker => {
             const catalog = try loadCatalog(alloc, stderr) orelse return 1;
-            if (catalog.panes.map.get(surface_id)) |pane| {
-                if (pane.locked) {
-                    try stdout.print(
-                        "skins: this folder is locked to \"{s}\" by skins.toml — edit ~/.config/ghostty-skins/skins.toml to change it\n",
-                        .{pane.skin},
-                    );
-                    return 0;
-                }
-            }
             if (!std.posix.isatty(std.fs.File.stdout().handle)) {
                 for (catalog.skins) |skin| try stdout.print("{s}\n", .{skin.name});
                 return 0;

@@ -9,8 +9,8 @@ struct AppliedSkin: Hashable {
 }
 
 /// Owns every pane's skin state; the only component that changes how panes look.
-/// Layers, first match wins (spec §2): mapped skin (locked) → preview (transient)
-/// → override (sticky) → automatic git-repo skin → default look.
+/// Layers, first match wins: preview (transient) → override (sticky) →
+/// skins.toml-mapped folder skin → automatic git-repo skin → default look.
 @MainActor
 final class SkinManager: ObservableObject {
     struct Pane: Equatable {
@@ -102,10 +102,6 @@ final class SkinManager: ObservableObject {
             pane.previewUpdatedAt = nil
             pane.override = nil
         case .preview:
-            if isLocked(id) {
-                Ghostty.logger.debug("skins: ignored \(request.op.rawValue) in a locked folder")
-                return
-            }
             guard let skin = skin(from: request, base: pane.override ?? autoSkin(for: pane.source)) else {
                 Ghostty.logger.debug("skins: rejected preview request naming an unknown skin/texture")
                 return
@@ -113,10 +109,6 @@ final class SkinManager: ObservableObject {
             pane.preview = skin
             pane.previewUpdatedAt = now()
         case .set:
-            if isLocked(id) {
-                Ghostty.logger.debug("skins: ignored \(request.op.rawValue) in a locked folder")
-                return
-            }
             guard let skin = skin(from: request, base: pane.override ?? autoSkin(for: pane.source)) else {
                 Ghostty.logger.debug("skins: rejected set request naming an unknown skin/texture")
                 return
@@ -132,7 +124,6 @@ final class SkinManager: ObservableObject {
 
     /// UI entry points (the popover builds `Skin` values directly).
     func setPreview(_ id: UUID, _ skin: Skin?) {
-        if skin != nil, isLocked(id) { return }
         var pane = panes[id] ?? Pane()
         pane.preview = skin
         pane.previewUpdatedAt = skin == nil ? nil : now()
@@ -142,7 +133,6 @@ final class SkinManager: ObservableObject {
     }
 
     func setOverride(_ id: UUID, _ skin: Skin?) {
-        if skin != nil, isLocked(id) { return }
         var pane = panes[id] ?? Pane()
         pane.override = skin
         pane.preview = nil
@@ -190,27 +180,16 @@ final class SkinManager: ObservableObject {
     /// Built-in presets merged with skins.toml skins (config shadows built-ins).
     var library: [SkinLibrary.Entry] { SkinLibrary.entries(config: config) }
 
-    /// A folder mapped in skins.toml always shows its mapped skin (spec §2).
-    func isLocked(_ id: UUID) -> Bool { lockedSkinName(id) != nil }
-
-    func lockedSkinName(_ id: UUID) -> String? {
-        guard case .configured(let name)? = panes[id]?.source,
-              SkinLibrary.skins(config: config)[name] != nil else { return nil }
-        return name
-    }
-
-    /// The pane's sticky pick, kept even while a locked folder hides it.
+    /// The pane's sticky pick.
     func equippedName(_ id: UUID) -> String? { panes[id]?.override?.name }
 
     func effectiveSkin(_ id: UUID) -> Skin? {
         guard let pane = panes[id] else { return nil }
-        if let locked = lockedSkinName(id) { return SkinLibrary.skins(config: config)[locked] }
         return pane.preview ?? pane.override ?? autoSkin(for: pane.source)
     }
 
     func sourceLabel(_ id: UUID) -> String {
         guard let pane = panes[id] else { return "Default" }
-        if let locked = lockedSkinName(id) { return "Locked: \(locked)" }
         if pane.preview != nil { return "Preview" }
         if pane.override != nil { return "Override" }
         switch pane.source {
@@ -303,7 +282,6 @@ final class SkinManager: ObservableObject {
 
     private func sourceKind(_ id: UUID) -> String {
         guard let pane = panes[id] else { return "none" }
-        if isLocked(id) { return "config" }
         if pane.preview != nil { return "preview" }
         if pane.override != nil { return "override" }
         switch pane.source {
@@ -324,7 +302,6 @@ final class SkinManager: ObservableObject {
             let skin: String
             let source: String
             let background: String
-            let locked: Bool
         }
         let version: Int
         let skins: [SkinEntry]
@@ -344,7 +321,7 @@ final class SkinManager: ObservableObject {
         for id in panes.keys {
             guard let skin = effectiveSkin(id) else { continue }
             paneEntries[id.uuidString] = .init(
-                skin: skin.name, source: sourceKind(id), background: skin.background.hex, locked: isLocked(id))
+                skin: skin.name, source: sourceKind(id), background: skin.background.hex)
         }
         let catalog = Catalog(
             version: 1, skins: skins,
