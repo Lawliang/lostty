@@ -28,6 +28,10 @@ class TerminalWindow: NSWindow {
     let skinChipModel = SkinChipModel()
     private let skinAccessory = NSTitlebarAccessoryViewController()
 
+    /// Lostty: the extensions sidebar's state and its title bar toggle.
+    let extensionSidebarModel = ExtensionSidebarModel()
+    private let sidebarAccessory = NSTitlebarAccessoryViewController()
+
     /// Visual indicator that mirrors the selected tab color.
     private lazy var tabColorIndicator: NSHostingView<TabColorIndicatorView> = {
         let view = NSHostingView(rootView: TabColorIndicatorView(tabColor: tabColor))
@@ -157,6 +161,15 @@ class TerminalWindow: NSWindow {
                 addTitlebarAccessoryViewController(updateAccessory)
                 updateAccessory.view.translatesAutoresizingMaskIntoConstraints = false
             }
+
+            // Lostty: show/hide the extensions sidebar. Added before the skin chip
+            // so it sits at the far right (AppKit puts later right-side
+            // accessories further in).
+            sidebarAccessory.layoutAttribute = .right
+            sidebarAccessory.view = NonDraggableHostingView(rootView: SidebarToggleAccessoryView(
+                model: extensionSidebarModel))
+            addTitlebarAccessoryViewController(sidebarAccessory)
+            sidebarAccessory.view.translatesAutoresizingMaskIntoConstraints = false
 
             // Ghostty Skins: pane skin chip at the trailing edge of the titlebar.
             skinAccessory.layoutAttribute = .right

@@ -596,6 +596,9 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
         // Call this last in case it uses any of the properties above.
         window.syncAppearance(surfaceConfig)
         terminalViewContainer?.ghosttyConfigDidChange(ghostty.config, preferredBackgroundColor: window.preferredBackgroundColor)
+
+        // Lostty: the extensions sidebar matches the title bar's color.
+        window.extensionSidebarModel.chromeColor = window.preferredBackgroundColor
     }
 
     /// Adjusts the given frame for the configured window position.
@@ -1036,7 +1039,9 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
 
         // Initialize our content view to the SwiftUI root
         let container = TerminalViewContainer {
-            TerminalView(ghostty: ghostty, viewModel: self, delegate: self)
+            TerminalView(
+                ghostty: ghostty, viewModel: self, delegate: self,
+                extensionSidebar: (window as? TerminalWindow)?.extensionSidebarModel)
         }
 
         // Set the initial content size on the container so that
