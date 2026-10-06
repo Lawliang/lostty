@@ -22,3 +22,12 @@ skin = "arca"
 [[match]]
 path = "~/projectrepos/arca-labs"
 skin = "arca"
+
+# Claude trace (shown while Claude Code works in a pane). Optional per skin:
+# trace = "bolt"           # or beam, comet, sunset, datastream, sonar, ember,
+#                          # bubbles, tide, blade, petal, arrow, tempest, none
+# trace_color = "#ffd84a"
+# trace_color2 = "#7fc8ff"
+# trace_speed = 1.0        # 0.25–4
+# trace_length = 0.18      # 0.05–0.5
+# Turn traces off everywhere with `trace = false` under [defaults].
