@@ -420,6 +420,10 @@ extension Ghostty {
         }
 
         deinit {
+            // Lostty Claude trace: forget this pane's trace phase.
+            let closedID = id
+            Task { @MainActor in ClaudeRuntime.shared.surfaceClosed(closedID) }
+
             // Remove all of our notificationcenter subscriptions
             let center = NotificationCenter.default
             center.removeObserver(self)
