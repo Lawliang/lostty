@@ -6,7 +6,7 @@ pane a background color and texture based on the project it is in.
 - `cd` into a project and the pane re-skins; leave and it reverts.
 - Split panes are skinned independently.
 - Git repos you have not configured get a stable automatic skin.
-- Override any pane from the title-bar chip or the `skins` command.
+- Override any pane from the Skins icon in the sidebar or the `skins` command.
 
 ## Install
 
@@ -20,7 +20,7 @@ It reads your normal Ghostty config.
 
 Copy `docs/skins/skins.example.toml` to `~/.config/ghostty-skins/skins.toml`.
 Errors never break the terminal: the last good config stays active and the
-title-bar chip shows a warning.
+Skins icon in the sidebar shows a yellow dot.
 
 ## Presets
 
@@ -46,7 +46,7 @@ The Olympian boon pack, each offered by a patron god:
 - **silverbow** (legendary, Artemis) — Hunter green on night forest with a starfield.
 - **stormsurge** (duo, Zeus & Poseidon) — Gold lightning over teal swells.
 
-The title-bar picker shows every skin as a boon you can choose. Use
+The Skins picker shows every skin as a boon you can choose. Use
 `skins set <id>` to equip any preset. A skin defined in `skins.toml` with
 the same name as a preset overrides it and appears in the picker tagged PROJECT.
 
@@ -61,7 +61,7 @@ override and brings the mapped skin back.
 
 ## Saved Colors
 
-Click the chip to open the title-bar picker, then go to the Custom tab (the
+Click the Skins icon in the sidebar, then go to the Custom tab (the
 terminal `skins` picker has no Custom tab). The "Any color" row lets you pick
 any background color with a native color panel or type a hex code. Click Save
 to add it to your saved swatches. Saved colors live in
@@ -70,9 +70,10 @@ Lostty windows (max 24).
 
 ## Override
 
-- Click the chip at the right of the title bar and pick a skin, color, or
-  texture: it applies to the pane right away and stays when you close the
-  picker. **Reset** undoes it.
+- Click the Skins icon in the sidebar on the right: the picker fills the
+  terminal area. Pick a skin, color, or texture and it applies to the pane
+  you were last in right away, and stays. Click the icon again (or the
+  close button) to go back to the terminal. **Reset** undoes it.
 - Or in any pane: `skins` (interactive picker), `skins set <name>`,
   `skins color '#3a0f14'`, `skins texture grid`, `skins opacity 0.5`,
   `skins reset`, `skins list` (shows name, background, texture, rarity), `skins current`.
@@ -83,7 +84,6 @@ Overrides last until reset or until the pane closes. zsh and bash get the
 
 ## Known limitations
 
-- The title-bar chip is not shown when `macos-titlebar-style = hidden`.
 - Quick Terminal panes are not skinned.
 - fish, nushell, and other non-zsh/bash shells do not get the `skins`
   shell function; run `ghostty +skins` directly instead.

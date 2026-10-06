@@ -24,13 +24,9 @@ class TerminalWindow: NSWindow {
     /// Update notification UI in titlebar
     private let updateAccessory = NSTitlebarAccessoryViewController()
 
-    /// Ghostty Skins: model and accessory for the pane skin chip.
-    let skinChipModel = SkinChipModel()
-    private let skinAccessory = NSTitlebarAccessoryViewController()
-
-    /// Lostty: the extensions sidebar's state and its title bar toggle.
+    /// Lostty: the extensions sidebar's state (its Skins icon replaces the
+    /// old title bar skin chip).
     let extensionSidebarModel = ExtensionSidebarModel()
-    private let sidebarAccessory = NSTitlebarAccessoryViewController()
 
     /// Visual indicator that mirrors the selected tab color.
     private lazy var tabColorIndicator: NSHostingView<TabColorIndicatorView> = {
@@ -161,23 +157,6 @@ class TerminalWindow: NSWindow {
                 addTitlebarAccessoryViewController(updateAccessory)
                 updateAccessory.view.translatesAutoresizingMaskIntoConstraints = false
             }
-
-            // Lostty: show/hide the extensions sidebar. Added before the skin chip
-            // so it sits at the far right (AppKit puts later right-side
-            // accessories further in).
-            sidebarAccessory.layoutAttribute = .right
-            sidebarAccessory.view = NonDraggableHostingView(rootView: SidebarToggleAccessoryView(
-                model: extensionSidebarModel))
-            addTitlebarAccessoryViewController(sidebarAccessory)
-            sidebarAccessory.view.translatesAutoresizingMaskIntoConstraints = false
-
-            // Ghostty Skins: pane skin chip at the trailing edge of the titlebar.
-            skinAccessory.layoutAttribute = .right
-            skinAccessory.view = NonDraggableHostingView(rootView: SkinChipView(
-                model: skinChipModel,
-                manager: SkinsRuntime.shared.manager))
-            addTitlebarAccessoryViewController(skinAccessory)
-            skinAccessory.view.translatesAutoresizingMaskIntoConstraints = false
         }
 
         // Setup the accessory view for tabs that shows our keyboard shortcuts,

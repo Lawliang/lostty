@@ -3,8 +3,9 @@ import AppKit
 import SwiftUI
 
 /// Lostty's skin picker (spec §7), styled as a boon offering: Boons /
-/// Custom. Every pick applies to the pane right away and stays.
-struct SkinPopoverView: View {
+/// Custom. Opened from the sidebar's Skins icon, it fills the terminal
+/// area. Every pick applies to the pane right away and stays.
+struct SkinPickerView: View {
     let surfaceID: UUID
     @ObservedObject var manager: SkinManager
     @ObservedObject var savedColors: SavedColorsStore
@@ -35,8 +36,9 @@ struct SkinPopoverView: View {
             problems
             footer
         }
-        .padding(20)
-        .frame(width: 440)
+        .padding(28)
+        .frame(maxWidth: 760, maxHeight: .infinity, alignment: .top)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(panelBackground)
         .environment(\.colorScheme, .dark)
         .onAppear { hex = current.background.hex }
@@ -49,7 +51,7 @@ struct SkinPopoverView: View {
     private var panelBackground: some View {
         ZStack {
             Boon.ground
-            RadialGradient(colors: [accent.opacity(0.22), .clear], center: .top, startRadius: 0, endRadius: 320)
+            RadialGradient(colors: [accent.opacity(0.22), .clear], center: .top, startRadius: 0, endRadius: 520)
                 .animation(.easeOut(duration: 0.35), value: current.accent)
         }
     }
@@ -87,7 +89,8 @@ struct SkinPopoverView: View {
 
     private var presetGrid: some View {
         ScrollView {
-            VStack(spacing: 10) {
+            // Two columns when the window is wide enough, one otherwise.
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 330), spacing: 12)], spacing: 10) {
                 ForEach(manager.library, id: \.skin.name) { entry in
                     boonRow(entry)
                 }
@@ -95,7 +98,7 @@ struct SkinPopoverView: View {
             .padding(.vertical, 6)
             .padding(.horizontal, 4)
         }
-        .frame(maxHeight: 400)
+        .frame(maxHeight: .infinity)
     }
 
     private func boonRow(_ entry: SkinLibrary.Entry) -> some View {

@@ -40,7 +40,7 @@ class BaseTerminalController: NSWindowController,
         didSet {
             syncFocusToSurfaceTree()
             // Ghostty Skins: keep the title-bar chip on the focused pane.
-            (window as? TerminalWindow)?.skinChipModel.focusedSurfaceID = focusedSurface?.id
+            (window as? TerminalWindow)?.extensionSidebarModel.focusedSurfaceID = focusedSurface?.id
         }
     }
 

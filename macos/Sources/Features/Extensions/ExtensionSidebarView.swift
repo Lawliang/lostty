@@ -1,12 +1,13 @@
 #if os(macOS)
 import SwiftUI
 
-/// The window's extensions sidebar: a narrow strip on the right edge, the
-/// color of the title bar, with an iOS-style icon per extension.
+/// The window's extensions sidebar: an always-on narrow strip on the right
+/// edge, the color of the title bar, with an iOS-style icon per extension.
 struct ExtensionSidebarView: View {
     static let width: CGFloat = 64
 
     @ObservedObject var model: ExtensionSidebarModel
+    @ObservedObject private var skins = SkinsRuntime.shared.manager
     @State private var showingAddNote = false
 
     var body: some View {
@@ -21,7 +22,17 @@ struct ExtensionSidebarView: View {
                         .offset(x: -1.5)
 
                     Button { model.select(ext) } label: {
-                        ExtensionIcon(ext: ext)
+                        ExtensionIcon(ext: ext, skin: model.focusedSurfaceID.flatMap { skins.effectiveSkin($0) })
+                            .overlay(alignment: .topTrailing) {
+                                // skins.toml has an error (the last good config stays active).
+                                if ext == .skins, skins.configError != nil {
+                                    Circle().fill(Color.yellow)
+                                        .frame(width: 10, height: 10)
+                                        .overlay(Circle().strokeBorder(Color.black.opacity(0.35), lineWidth: 0.5))
+                                        .offset(x: 3, y: -3)
+                                        .help("skins.toml has an error; open Skins to see it")
+                                }
+                            }
                     }
                     .buttonStyle(IconButtonStyle())
                     .help(ext.title)
@@ -83,9 +94,15 @@ private struct IOSIconChrome: ViewModifier {
 
 private struct ExtensionIcon: View {
     let ext: LosttyExtension
+    /// The focused pane's skin, shown on the Skins icon.
+    let skin: Skin?
 
     var body: some View {
         switch ext {
+        case .skins:
+            SkinsIcon(skin: skin)
+                .frame(width: 44, height: 44)
+                .modifier(IOSIconChrome())
         case .codebaseVisualizer:
             ZStack {
                 RadialGradient(
@@ -137,6 +154,26 @@ private struct NodeGlyph: View {
     }
 }
 
+/// The pane's current skin: its background with the accent diamond.
+private struct SkinsIcon: View {
+    let skin: Skin?
+
+    var body: some View {
+        let background = skin.map { Color(rgb: $0.background) } ?? Color(red: 0.16, green: 0.16, blue: 0.19)
+        let accent = skin.map { Color(rgb: $0.accent) } ?? Color(white: 0.85)
+        ZStack {
+            background
+            LinearGradient(colors: [Color.white.opacity(0.10), .clear], startPoint: .top, endPoint: .bottom)
+            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                .fill(accent.opacity(0.25))
+                .overlay(RoundedRectangle(cornerRadius: 3, style: .continuous).strokeBorder(accent, lineWidth: 2))
+                .frame(width: 16, height: 16)
+                .rotationEffect(.degrees(45))
+                .shadow(color: accent.opacity(0.6), radius: 4)
+        }
+    }
+}
+
 private struct AddExtensionIcon: View {
     var body: some View {
         ZStack {
@@ -154,9 +191,26 @@ private struct AddExtensionIcon: View {
 /// What an open extension shows in the terminal area.
 struct ExtensionContentView: View {
     let ext: LosttyExtension
+    @ObservedObject var model: ExtensionSidebarModel
 
     var body: some View {
         switch ext {
+        case .skins:
+            if let id = model.focusedSurfaceID {
+                // `.id(id)` starts the picker fresh if the target pane changes.
+                SkinPickerView(
+                    surfaceID: id, manager: SkinsRuntime.shared.manager,
+                    savedColors: SkinsRuntime.shared.savedColors,
+                    onClose: { model.select(.skins) })
+                    .id(id)
+            } else {
+                ZStack {
+                    Color(red: 0.05, green: 0.04, blue: 0.04)
+                    Text("Click a pane, then open Skins.")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.white.opacity(0.6))
+                }
+            }
         case .codebaseVisualizer:
             // MindControl (the `mindcontrol` branch) replaces this with its panel.
             ZStack {
@@ -181,26 +235,4 @@ struct ExtensionContentView: View {
     }
 }
 
-/// Title bar button that shows or hides the sidebar.
-struct SidebarToggleAccessoryView: View {
-    @ObservedObject var model: ExtensionSidebarModel
-
-    var body: some View {
-        Button { withAnimation(.spring(response: 0.3, dampingFraction: 0.9)) { model.toggleShown() } } label: {
-            Image(systemName: "sidebar.right")
-                .font(.system(size: 13, weight: .regular))
-                .frame(width: 26, height: 22)
-                .background(
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(Color.primary.opacity(model.isShown ? 0.1 : 0)))
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(.secondary)
-        .help(model.isShown ? "Hide sidebar" : "Show sidebar")
-        .accessibilityLabel(model.isShown ? "Hide sidebar" : "Show sidebar")
-        .padding(.trailing, 6)
-        .frame(maxHeight: .infinity)
-    }
-}
 #endif
