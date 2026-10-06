@@ -121,6 +121,11 @@ extension Ghostty {
                 }
 
 #if canImport(AppKit)
+                // Lostty Claude trace: a light ray around the pane while Claude works.
+                ClaudeTraceLayer(surfaceID: surfaceView.id)
+#endif
+
+#if canImport(AppKit)
                 // Readonly indicator badge
                 if surfaceView.readonly {
                     ReadonlyBadge {
