@@ -1,31 +1,10 @@
 #if os(macOS)
 import AppKit
 
-/// The first-launch offer and the Claude Integration menu item (spec §5.2).
+/// The Claude Integration menu item (spec §5.2). Missing hooks are offered
+/// at launch by notification bubbles (HookNotifications).
 @MainActor
 enum ClaudeHooksUI {
-    static func promptAtLaunchIfNeeded() {
-        let home = URL(fileURLWithPath: NSHomeDirectory())
-        let defaults = UserDefaults.ghostty
-        let prompted = defaults.integer(forKey: ClaudeHooksPrompt.defaultsKey)
-        // Offer it to anyone who uses Claude or Codex.
-        let claudeDirExists = FileManager.default.fileExists(atPath: home.appendingPathComponent(".claude").path)
-            || FileManager.default.fileExists(atPath: home.appendingPathComponent(".codex").path)
-        guard claudeDirExists, prompted < ClaudeHooksPrompt.hookVersion else { return }
-
-        DispatchQueue.global(qos: .utility).async {
-            let status = ClaudeHooksCLI().status()
-            DispatchQueue.main.async {
-                MainActor.assumeIsolated {
-                    guard ClaudeHooksPrompt.shouldPrompt(
-                        claudeDirExists: claudeDirExists, status: status, promptedVersion: prompted) else { return }
-                    UserDefaults.ghostty.set(ClaudeHooksPrompt.hookVersion, forKey: ClaudeHooksPrompt.defaultsKey)
-                    offerInstall(update: status == .partial)
-                }
-            }
-        }
-    }
-
     static func installMenuItem(after anchor: NSMenuItem?) {
         guard let anchor, let menu = anchor.menu else { return }
         let item = NSMenuItem(title: "Claude Integration…", action: #selector(MenuTarget.open(_:)), keyEquivalent: "")

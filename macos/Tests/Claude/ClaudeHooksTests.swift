@@ -4,21 +4,6 @@ import Testing
 @testable import Ghostty
 
 struct ClaudeHooksTests {
-    @Test func promptsOnlyForClaudeUsersWithMissingOrOldHooks() {
-        #expect(ClaudeHooksPrompt.shouldPrompt(claudeDirExists: true, status: .notInstalled, promptedVersion: 0))
-        #expect(ClaudeHooksPrompt.shouldPrompt(claudeDirExists: true, status: .partial, promptedVersion: 0))
-        #expect(!ClaudeHooksPrompt.shouldPrompt(claudeDirExists: false, status: .notInstalled, promptedVersion: 0))
-        #expect(!ClaudeHooksPrompt.shouldPrompt(claudeDirExists: true, status: .installed, promptedVersion: 0))
-        #expect(!ClaudeHooksPrompt.shouldPrompt(claudeDirExists: true, status: .unreadable, promptedVersion: 0))
-        #expect(!ClaudeHooksPrompt.shouldPrompt(claudeDirExists: true, status: nil, promptedVersion: 0))
-    }
-
-    @Test func answeredPromptIsNotRepeatedForTheSameVersion() {
-        let v = ClaudeHooksPrompt.hookVersion
-        #expect(!ClaudeHooksPrompt.shouldPrompt(claudeDirExists: true, status: .notInstalled, promptedVersion: v))
-        #expect(ClaudeHooksPrompt.shouldPrompt(claudeDirExists: true, status: .partial, promptedVersion: v - 1))
-    }
-
     @Test func parsesStatusOutput() {
         #expect(ClaudeHooksStatus(cliOutput: "installed\n") == .installed)
         #expect(ClaudeHooksStatus(cliOutput: "not-installed\n") == .notInstalled)

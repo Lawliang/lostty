@@ -106,9 +106,11 @@ Codex works the same way: the trace runs while Codex works and stops when
 it finishes or you interrupt it. Codex panes don't show **Ready for
 response** while Codex waits for an approval, only when it finishes.
 
-On first launch Lostty offers to add its hooks to
-`~/.claude/settings.json` and, if you use Codex, `~/.codex/hooks.json` (it
-saves a `.lostty-backup` of each file first). Codex asks you to approve
+Each time Lostty opens, a notification in the top-right corner of the
+window tells you about each installed agent (Claude, Codex) whose hooks
+aren't set up. **Connect** adds Lostty's hooks to `~/.claude/settings.json`
+or `~/.codex/hooks.json` (it saves a `.lostty-backup` of the file first).
+Notifications fade after a few seconds; hovering keeps them. Codex asks you to approve
 Lostty's hooks the first time it sees them. The hooks do nothing outside
 Lostty. Manage them from **Lostty → Claude Integration…**, or run
 `ghostty +claude-hooks install`, `remove`, `status` or `preview`.

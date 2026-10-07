@@ -17,6 +17,7 @@ struct ExtensionSidebarLayout<Content: View>: View {
                             .transition(.opacity)
                     }
                 }
+                .overlay(alignment: .topTrailing) { NotificationStackView() }
             ExtensionSidebarView(model: model)
         }
         .animation(.easeOut(duration: 0.18), value: model.active)

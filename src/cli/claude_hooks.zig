@@ -31,6 +31,8 @@ const usage =
     \\       +claude-hooks status    installed | partial | not-installed | unreadable
     \\       +claude-hooks preview   print the JSON that install adds
     \\
+    \\Add --agent=claude or --agent=codex to act on just one of them.
+    \\
 ;
 
 /// The `claude-hooks` command installs, removes or reports Lostty's hooks
@@ -55,17 +57,13 @@ pub fn run(gpa: Allocator) !u8 {
     defer stderr.flush() catch {};
 
     const argv = try std.process.argsAlloc(alloc);
-    var op: ?Op = null;
-    for (argv, 0..) |arg, i| {
-        if (std.mem.eql(u8, arg, "+claude-hooks") and i + 1 < argv.len) {
-            op = std.meta.stringToEnum(Op, argv[i + 1]);
-            break;
-        }
-    }
-    const chosen = op orelse {
+    var arg_list: std.ArrayList([]const u8) = .empty;
+    for (argv) |arg| try arg_list.append(alloc, arg);
+    const args = parseArgs(arg_list.items) orelse {
         try stderr.writeAll(usage);
         return 2;
     };
+    const chosen = args.op;
 
     const home = std.posix.getenv("HOME") orelse {
         try stderr.writeAll("claude-hooks: HOME is not set\n");
@@ -73,11 +71,15 @@ pub fn run(gpa: Allocator) !u8 {
     };
     // Claude always; Codex only when it is installed (~/.codex exists).
     var targets: std.ArrayList(Target) = .empty;
-    try targets.append(alloc, .{ .agent = .claude, .path = try std.fs.path.join(alloc, &.{ home, ".claude", "settings.json" }) });
+    // With --agent, only that agent; otherwise Claude, plus Codex when
+    // it is installed.
+    if (args.agent == null or args.agent == .claude) {
+        try targets.append(alloc, .{ .agent = .claude, .path = try std.fs.path.join(alloc, &.{ home, ".claude", "settings.json" }) });
+    }
     const codex_dir = try std.fs.path.join(alloc, &.{ home, ".codex" });
-    if (std.fs.cwd().access(codex_dir, .{})) |_| {
+    if (args.agent == .codex or (args.agent == null and if (std.fs.cwd().access(codex_dir, .{})) |_| true else |_| false)) {
         try targets.append(alloc, .{ .agent = .codex, .path = try std.fs.path.join(alloc, &.{ codex_dir, "hooks.json" }) });
-    } else |_| {}
+    }
 
     // One combined answer, so callers (the app's prompt) see a single state.
     if (chosen == .status) {
@@ -93,7 +95,7 @@ pub fn run(gpa: Allocator) !u8 {
         return 0;
     }
     if (chosen == .preview) {
-        try stdout.writeAll((try applyAt(alloc, targets.items[0].path, .preview, .claude)).preview);
+        try stdout.writeAll((try applyAt(alloc, targets.items[0].path, .preview, targets.items[0].agent)).preview);
         return 0;
     }
 
@@ -115,6 +117,25 @@ pub fn run(gpa: Allocator) !u8 {
 }
 
 const Target = struct { agent: hooks.Agent, path: []const u8 };
+
+pub const Args = struct { op: Op, agent: ?hooks.Agent };
+
+/// `+claude-hooks <op> [--agent=claude|codex]`; null on anything else.
+pub fn parseArgs(argv: []const []const u8) ?Args {
+    for (argv, 0..) |arg, i| {
+        if (!std.mem.eql(u8, arg, "+claude-hooks")) continue;
+        if (i + 1 >= argv.len) return null;
+        const op = std.meta.stringToEnum(Op, argv[i + 1]) orelse return null;
+        var agent: ?hooks.Agent = null;
+        for (argv[i + 2 ..]) |extra| {
+            const prefix = "--agent=";
+            if (!std.mem.startsWith(u8, extra, prefix)) return null;
+            agent = std.meta.stringToEnum(hooks.Agent, extra[prefix.len..]) orelse return null;
+        }
+        return .{ .op = op, .agent = agent };
+    }
+    return null;
+}
 
 /// Two agents' states as one: any unreadable wins, then all-installed or
 /// all-missing, else partial.
@@ -338,6 +359,16 @@ test "claude hooks file: preview needs no file" {
     const a = arena.allocator();
     const result = try applyAt(a, "/nonexistent/settings.json", .preview, .claude);
     try std.testing.expect(std.mem.indexOf(u8, result.preview, "SessionEnd") != null);
+}
+
+test "claude hooks file: parseArgs reads the op and an optional agent" {
+    const t = std.testing;
+    try t.expectEqual(Args{ .op = .install, .agent = null }, parseArgs(&.{ "/x/ghostty", "+claude-hooks", "install" }).?);
+    try t.expectEqual(Args{ .op = .status, .agent = .codex }, parseArgs(&.{ "/x/ghostty", "+claude-hooks", "status", "--agent=codex" }).?);
+    try t.expectEqual(Args{ .op = .install, .agent = .claude }, parseArgs(&.{ "/x/ghostty", "+claude-hooks", "install", "--agent=claude" }).?);
+    try t.expect(parseArgs(&.{ "/x/ghostty", "+claude-hooks", "install", "--agent=gemini" }) == null);
+    try t.expect(parseArgs(&.{ "/x/ghostty", "+claude-hooks", "bogus" }) == null);
+    try t.expect(parseArgs(&.{ "/x/ghostty", "+claude-hooks" }) == null);
 }
 
 test "claude hooks file: combine two agents' states" {

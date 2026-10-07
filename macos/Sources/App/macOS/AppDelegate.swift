@@ -338,9 +338,10 @@ class AppDelegate: NSObject,
             }
         }
 
-        // Lostty Claude trace: menu item and the one-time hook offer.
+        // Lostty Claude trace: menu item, and a bubble for each installed
+        // agent (Claude, Codex) whose hooks aren't set up.
         ClaudeHooksUI.installMenuItem(after: menuOpenConfig)
-        ClaudeHooksUI.promptAtLaunchIfNeeded()
+        HookNotifications.checkAtLaunch()
 
         #if DEBUG
         // Lostty Claude trace: preview the focused pane's trace style.
