@@ -1698,7 +1698,8 @@ extension Ghostty {
             content.title = title
             content.subtitle = self.title
             content.body = body
-            content.sound = UNNotificationSound.default
+            // Lostty: the usage bar's mute keeps notifications silent.
+            content.sound = LosttyMute.isMuted() ? nil : UNNotificationSound.default
             content.categoryIdentifier = Ghostty.userNotificationCategory
             content.userInfo = [
                 "surface": self.id.uuidString,

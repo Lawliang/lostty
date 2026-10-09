@@ -4,11 +4,11 @@ import CoreText
 import SwiftUI
 
 /// The strip along the bottom of the window, as tall as the title bar and
-/// the same color as it and the sidebar, in the terminal's font:
-/// `✳ Opus 5.5   Context ▓▓░░░░░░░░ 50K          Session ▓░░░░░░░░░ 2%`.
-/// The left meter is the focused pane's context; the right one is the
-/// tracked plan limit. Clicking it lists every limit; picking one tracks it
-/// here. Without a Claude session in the focused pane the strip is empty.
+/// the same color as it and the sidebar, in the terminal's font. Centered:
+/// `✳ Opus 5.5   Context ▓▓░░░░░░░░ 50K   Session ▓░░░░░░░░░ 2%`, the
+/// focused pane's context and the tracked plan limit; clicking it lists
+/// every limit, and picking one tracks it here. It is empty without a
+/// Claude session in the focused pane. At the far right, the mute button.
 struct ClaudeUsageBar: View {
     /// A standard title bar's height.
     static let height: CGFloat = NSWindow.frameRect(forContentRect: .zero, styleMask: [.titled]).height
@@ -16,6 +16,7 @@ struct ClaudeUsageBar: View {
     @ObservedObject var model: ExtensionSidebarModel
     @ObservedObject private var usage = ClaudeUsageRuntime.shared
     @ObservedObject private var skins = SkinsRuntime.shared.manager
+    @ObservedObject private var mute = LosttyMute.shared
     @State private var showingDetails = false
     @State private var hovering = false
 
@@ -28,55 +29,71 @@ struct ClaudeUsageBar: View {
     private var hasSession: Bool { pane.map { usage.sessions.contains($0) } ?? false }
 
     var body: some View {
+        ZStack {
+            if hasSession {
+                usageButton
+                    // Clear of the mute button.
+                    .padding(.horizontal, 40)
+            }
+            HStack(spacing: 0) {
+                Spacer(minLength: 0)
+                muteButton
+            }
+            .padding(.trailing, 8)
+        }
+        .font(ClaudeUsageFont.font(size: 12))
+        .lineLimit(1)
+        // Never wider than the window: a narrow one truncates the text.
+        .frame(minWidth: 0, maxWidth: .infinity)
+        .frame(height: Self.height)
+        .clipped()
+        .background(Color(nsColor: chrome))
+    }
+
+    private var usageButton: some View {
         Button { showingDetails.toggle() } label: {
             // Ticks so a limit that resets while nothing reports drops to 0%.
-            TimelineView(.everyMinute) { _ in
-                HStack(spacing: 0) {
-                    if hasSession {
-                        line
-                    } else {
-                        Spacer()
-                    }
-                }
-            }
-            .font(ClaudeUsageFont.font(size: 12))
-            .lineLimit(1)
-            .padding(.horizontal, 12)
-            // Never wider than the window: a narrow one truncates the text.
-            .frame(minWidth: 0, maxWidth: .infinity)
-            .clipped()
-            .frame(height: Self.height)
-            .background(ink.opacity(hovering || showingDetails ? 0.05 : 0))
-            .contentShape(Rectangle())
+            TimelineView(.everyMinute) { _ in line }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(ink.opacity(hovering || showingDetails ? 0.07 : 0)))
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .disabled(!hasSession)
-        .onHover { hovering = $0 && hasSession }
+        .onHover { hovering = $0 }
         .popover(isPresented: $showingDetails, arrowEdge: .top) {
             TimelineView(.everyMinute) { _ in
                 ClaudeUsageDetails(usage: usage, accent: accent) { showingDetails = false }
             }
         }
-        .background(Color(nsColor: chrome))
     }
 
-    @ViewBuilder
+    private var muteButton: some View {
+        Button { mute.isMuted.toggle() } label: {
+            Image(systemName: mute.isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(ink.opacity(mute.isMuted ? 0.85 : 0.5))
+                .frame(width: 28, height: Self.height)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(mute.isMuted ? "Unmute terminal sounds" : "Mute terminal sounds")
+    }
+
     private var line: some View {
         let context = pane.flatMap { usage.contexts[$0] }
         let model = pane.flatMap { usage.models[$0] }
         let metric = usage.tracked
         let limit = usage.percent(metric) ?? 0
 
-        (Text("✳ ").foregroundColor(Color(red: 0.85, green: 0.47, blue: 0.34))
+        return (Text("✳ ").foregroundColor(Color(red: 0.85, green: 0.47, blue: 0.34))
             + Text(model.map { "\($0)   " } ?? "  ").foregroundColor(ink.opacity(0.6))
             + Text("Context ").foregroundColor(ink.opacity(0.6))
             + ClaudeUsageBlocks.text(context?.percent ?? 0, accent: accent, empty: ink.opacity(0.28))
-            + Text(" " + ClaudeUsageFormat.thousands(context?.used ?? 0)).foregroundColor(ink.opacity(0.9)))
-            .layoutPriority(1)
-
-        Spacer(minLength: 24)
-
-        (Text(metric.shortTitle + " ").foregroundColor(ink.opacity(0.6))
+            + Text(" " + ClaudeUsageFormat.thousands(context?.used ?? 0)).foregroundColor(ink.opacity(0.9))
+            + Text("   " + metric.shortTitle + " ").foregroundColor(ink.opacity(0.6))
             + ClaudeUsageBlocks.text(limit, accent: accent, empty: ink.opacity(0.28))
             + Text(" " + ClaudeUsageFormat.percent(limit)).foregroundColor(ink.opacity(0.9)))
     }

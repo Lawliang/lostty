@@ -678,11 +678,14 @@ class AppDelegate: NSObject,
     }
 
     @objc private func ghosttyBellDidRing(_ notification: Notification) {
-        if ghostty.config.bellFeatures.contains(.system) {
+        // Lostty: the usage bar's mute silences the bell.
+        let muted = LosttyMute.isMuted()
+
+        if ghostty.config.bellFeatures.contains(.system), !muted {
             NSSound.beep()
         }
 
-        if ghostty.config.bellFeatures.contains(.audio) {
+        if ghostty.config.bellFeatures.contains(.audio), !muted {
             if let configPath = ghostty.config.bellAudioPath,
                let sound = NSSound(contentsOfFile: configPath.path, byReference: false) {
                 sound.volume = ghostty.config.bellAudioVolume
@@ -927,7 +930,9 @@ class AppDelegate: NSObject,
         withCompletionHandler: (UNNotificationPresentationOptions) -> Void
     ) {
         let shouldPresent = ghostty.shouldPresentNotification(notification: willPresent)
-        let options: UNNotificationPresentationOptions = shouldPresent ? [.banner, .sound] : []
+        // Lostty: the usage bar's mute keeps notifications silent.
+        var options: UNNotificationPresentationOptions = shouldPresent ? [.banner, .sound] : []
+        if LosttyMute.isMuted() { options.remove(.sound) }
         withCompletionHandler(options)
     }
 
