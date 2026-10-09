@@ -5,7 +5,7 @@ import SwiftUI
 
 /// The strip along the bottom of the window, as tall as the title bar and
 /// the same color as it and the sidebar, in the terminal's font:
-/// `✳ Opus 5.5   Context ▓▓░░░░░░░░ 50K   ·········   Session ▓░░░░░░░░░ 2%`.
+/// `✳ Opus 5.5   Context ▓▓░░░░░░░░ 50K          Session ▓░░░░░░░░░ 2%`.
 /// The left meter is the focused pane's context; the right one is the
 /// tracked plan limit. Clicking it lists every limit; picking one tracks it
 /// here. Without a Claude session in the focused pane the strip is empty.
@@ -42,7 +42,9 @@ struct ClaudeUsageBar: View {
             .font(ClaudeUsageFont.font(size: 12))
             .lineLimit(1)
             .padding(.horizontal, 12)
-            .frame(maxWidth: .infinity)
+            // Never wider than the window: a narrow one truncates the text.
+            .frame(minWidth: 0, maxWidth: .infinity)
+            .clipped()
             .frame(height: Self.height)
             .background(ink.opacity(hovering || showingDetails ? 0.05 : 0))
             .contentShape(Rectangle())
@@ -70,28 +72,13 @@ struct ClaudeUsageBar: View {
             + Text("Context ").foregroundColor(ink.opacity(0.6))
             + ClaudeUsageBlocks.text(context?.percent ?? 0, accent: accent, empty: ink.opacity(0.28))
             + Text(" " + ClaudeUsageFormat.thousands(context?.used ?? 0)).foregroundColor(ink.opacity(0.9)))
-            .fixedSize()
+            .layoutPriority(1)
 
-        ClaudeUsageLeader(color: ink.opacity(0.25))
-            .padding(.horizontal, 12)
+        Spacer(minLength: 24)
 
         (Text(metric.shortTitle + " ").foregroundColor(ink.opacity(0.6))
             + ClaudeUsageBlocks.text(limit, accent: accent, empty: ink.opacity(0.28))
             + Text(" " + ClaudeUsageFormat.percent(limit)).foregroundColor(ink.opacity(0.9)))
-            .fixedSize()
-    }
-}
-
-/// A run of dots filling the space between the two halves of the bar.
-private struct ClaudeUsageLeader: View {
-    let color: Color
-
-    var body: some View {
-        Text(String(repeating: "·", count: 400))
-            .foregroundColor(color)
-            .fixedSize()
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .clipped()
     }
 }
 

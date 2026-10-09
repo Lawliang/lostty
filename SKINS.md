@@ -138,7 +138,7 @@ pane's Claude model, a block meter for the context with the tokens in the
 window (to the nearest thousand, e.g. `50K`), and a block meter with a
 percentage for one plan limit:
 
-    ✳ Opus 5.5   Context ▓░░░░░░░░░ 50K   ·········   Session ▓░░░░░░░░░ 2%
+    ✳ Opus 5.5   Context ▓░░░░░░░░░ 50K          Session ▓░░░░░░░░░ 2%
 
 You don't need `/context` or `/usage`, and the numbers read `0K` and `0%`
 until Claude reports them. The limit meter tracks your current session (the
