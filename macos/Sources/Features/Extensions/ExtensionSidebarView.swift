@@ -30,12 +30,10 @@ struct ExtensionSidebarView: View {
                                         .frame(width: 10, height: 10)
                                         .overlay(Circle().strokeBorder(Color.black.opacity(0.35), lineWidth: 0.5))
                                         .offset(x: 3, y: -3)
-                                        .help("skins.toml has an error; open Skins to see it")
                                 }
                             }
                     }
                     .buttonStyle(IconButtonStyle())
-                    .help(ext.title)
                     .accessibilityLabel(ext.title)
                     .frame(width: Self.width)
                 }
@@ -46,7 +44,6 @@ struct ExtensionSidebarView: View {
                 AddExtensionIcon()
             }
             .buttonStyle(IconButtonStyle())
-            .help("Add extension")
             .accessibilityLabel("Add extension")
             .popover(isPresented: $showingAddNote, arrowEdge: .leading) {
                 Text("More extensions are on the way.")

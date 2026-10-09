@@ -57,15 +57,15 @@ struct ClaudeUsageReport: Equatable {
     }
 }
 
-/// The usage the bar at the bottom of the window can track.
+/// The plan limit the bar at the bottom of the window tracks (the context
+/// has a meter of its own).
 enum ClaudeUsageMetric: String, CaseIterable, Identifiable {
-    case context, session, weekly, weeklyFable
+    case session, weekly, weeklyFable
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .context: "Context"
         case .session: "Current session"
         case .weekly: "Weekly · all models"
         case .weeklyFable: "Weekly · Fable"
@@ -75,7 +75,6 @@ enum ClaudeUsageMetric: String, CaseIterable, Identifiable {
     /// Short form for the bar.
     var shortTitle: String {
         switch self {
-        case .context: "Context"
         case .session: "Session"
         case .weekly: "Weekly"
         case .weeklyFable: "Fable"
@@ -147,11 +146,9 @@ final class ClaudeUsageRuntime: ObservableObject {
         forget(id)
     }
 
-    /// Percent used for `metric`, or nil when there is nothing to show
-    /// (no Claude in `pane` for the context; no report yet for a limit).
-    func percent(_ metric: ClaudeUsageMetric, pane: UUID?) -> Double? {
+    /// Percent of `metric` used, or nil before any report of it.
+    func percent(_ metric: ClaudeUsageMetric) -> Double? {
         switch metric {
-        case .context: pane.flatMap { contexts[$0] }?.percent
         case .session: fiveHour?.percent(at: now())
         case .weekly: sevenDay?.percent(at: now())
         case .weeklyFable: nil
@@ -174,15 +171,10 @@ final class ClaudeUsageRuntime: ObservableObject {
 }
 
 enum ClaudeUsageFormat {
-    /// 950 → "950", 84_200 → "84.2k", 1_000_000 → "1M".
-    static func tokens(_ n: Int) -> String {
-        func trim(_ v: Double) -> String {
-            let s = String(format: "%.1f", v)
-            return s.hasSuffix(".0") ? String(s.dropLast(2)) : s
-        }
-        if n >= 1_000_000 { return trim(Double(n) / 1_000_000) + "M" }
-        if n >= 1_000 { return trim(Double(n) / 1_000) + "k" }
-        return "\(n)"
+    /// Tokens to the nearest thousand: 49_600 → "50K", 1_234_000 → "1,234K".
+    static func thousands(_ n: Int) -> String {
+        let k = Int((Double(n) / 1_000).rounded())
+        return k.formatted(.number.grouping(.automatic).locale(Locale(identifier: "en_US"))) + "K"
     }
 
     static func percent(_ p: Double) -> String {

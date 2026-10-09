@@ -49,28 +49,31 @@ struct ClaudeUsageBar: View {
         .buttonStyle(.plain)
         .disabled(!hasSession)
         .onHover { hovering = $0 && hasSession }
-        .help("Claude usage: click to choose what this bar tracks")
         .popover(isPresented: $showingDetails, arrowEdge: .top) {
             TimelineView(.everyMinute) { _ in
-                ClaudeUsageDetails(usage: usage, pane: pane, accent: accent) { showingDetails = false }
+                ClaudeUsageDetails(usage: usage, accent: accent) { showingDetails = false }
             }
         }
         .background(Color(nsColor: chrome))
     }
 
-    /// The model, then the context once Claude has replied.
+    /// The model, then a context meter with the tokens in the window
+    /// (filled in once Claude has replied).
     private var contextLabel: some View {
-        HStack(spacing: 6) {
+        let context = pane.flatMap { usage.contexts[$0] }
+        return HStack(spacing: 7) {
             Text("✳").foregroundStyle(Color(red: 0.85, green: 0.47, blue: 0.34))
             if let name = pane.flatMap({ usage.models[$0] }) {
                 Text(name).foregroundStyle(ink.opacity(0.55))
+                    .padding(.trailing, 4)
             }
-            if let context = pane.flatMap({ usage.contexts[$0] }) {
-                Text("\(ClaudeUsageFormat.tokens(context.used)) / \(ClaudeUsageFormat.tokens(context.size))")
-                    .foregroundStyle(ink.opacity(0.85))
-                    .monospacedDigit()
-                Text("context").foregroundStyle(ink.opacity(0.45))
-            }
+            Text("Context").foregroundStyle(ink.opacity(0.55))
+            ClaudeUsageMeter(percent: context?.percent, accent: accent, track: ink.opacity(0.14))
+                .frame(width: 84, height: 5)
+            Text(context.map { ClaudeUsageFormat.thousands($0.used) } ?? "")
+                .foregroundStyle(ink.opacity(0.9))
+                .monospacedDigit()
+                .frame(minWidth: 30, alignment: .leading)
         }
         .font(.system(size: 11, weight: .medium))
         .lineLimit(1)
@@ -78,13 +81,13 @@ struct ClaudeUsageBar: View {
 
     private var trackedLabel: some View {
         let metric = usage.tracked
-        let percent = usage.percent(metric, pane: pane)
+        let percent = usage.percent(metric)
         return HStack(spacing: 7) {
             Text(metric.shortTitle)
                 .foregroundStyle(ink.opacity(0.55))
             ClaudeUsageMeter(percent: percent, accent: accent, track: ink.opacity(0.14))
                 .frame(width: 84, height: 5)
-            Text(percent.map(ClaudeUsageFormat.percent) ?? "—")
+            Text(percent.map(ClaudeUsageFormat.percent) ?? "")
                 .foregroundStyle(ink.opacity(0.9))
                 .monospacedDigit()
                 .frame(minWidth: 30, alignment: .trailing)
@@ -122,10 +125,9 @@ struct ClaudeUsageMeter: View {
     }
 }
 
-/// Every usage, each tappable to make it the one the bar tracks.
+/// Every plan limit, each tappable to make it the one the bar tracks.
 private struct ClaudeUsageDetails: View {
     @ObservedObject var usage: ClaudeUsageRuntime
-    let pane: UUID?
     let accent: Color
     let dismiss: () -> Void
 
@@ -138,11 +140,6 @@ private struct ClaudeUsageDetails: View {
             ForEach(ClaudeUsageMetric.allCases) { metric in
                 row(metric)
             }
-            Text("Click one to show it in the bar.")
-                .font(.system(size: 10))
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 10)
-                .padding(.top, 4)
         }
         .padding(.vertical, 10)
         .padding(.horizontal, 6)
@@ -150,7 +147,7 @@ private struct ClaudeUsageDetails: View {
     }
 
     private func row(_ metric: ClaudeUsageMetric) -> some View {
-        let percent = usage.percent(metric, pane: pane)
+        let percent = usage.percent(metric)
         let available = metric != .weeklyFable
         return Button {
             usage.tracked = metric
@@ -161,7 +158,7 @@ private struct ClaudeUsageDetails: View {
                     HStack {
                         Text(metric.title).font(.system(size: 12, weight: .medium))
                         Spacer()
-                        Text(percent.map(ClaudeUsageFormat.percent) ?? "—")
+                        Text(percent.map(ClaudeUsageFormat.percent) ?? "")
                             .font(.system(size: 12, weight: .semibold))
                             .monospacedDigit()
                     }
@@ -188,25 +185,16 @@ private struct ClaudeUsageDetails: View {
         .opacity(available ? 1 : 0.5)
     }
 
+    /// When the limit resets.
     private func subtitle(_ metric: ClaudeUsageMetric) -> String {
-        let now = usage.now()
+        let limit: ClaudeUsageReport.Limit?
         switch metric {
-        case .context:
-            guard let context = pane.flatMap({ usage.contexts[$0] }) else { return "Shows after Claude's first reply" }
-            return "\(ClaudeUsageFormat.tokens(context.used)) of \(ClaudeUsageFormat.tokens(context.size)) tokens"
-        case .session:
-            return limitSubtitle(usage.fiveHour, now: now, window: "5-hour limit")
-        case .weekly:
-            return limitSubtitle(usage.sevenDay, now: now, window: "7-day limit")
-        case .weeklyFable:
-            return "Claude Code doesn't share this one yet"
+        case .session: limit = usage.fiveHour
+        case .weekly: limit = usage.sevenDay
+        case .weeklyFable: return "Not available"
         }
-    }
-
-    private func limitSubtitle(_ limit: ClaudeUsageReport.Limit?, now: Date, window: String) -> String {
-        guard let limit else { return "Shows after Claude's next reply (Pro and Max plans)" }
-        guard let reset = limit.resetsAt else { return window }
-        return "\(window) · \(ClaudeUsageFormat.reset(reset, now: now))"
+        guard let reset = limit?.resetsAt else { return " " }
+        return ClaudeUsageFormat.reset(reset, now: usage.now())
     }
 }
 
