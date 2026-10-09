@@ -145,8 +145,8 @@ until Claude reports them. The limit meter tracks your current session (the
 5-hour limit) by default. Click the bar to see every limit (current session,
 weekly) and when it resets, and click one to track it in the bar instead.
 Meters turn amber at 70% and red at 90%. When the focused pane has no
-Claude session, the bar is empty; it appears when Claude starts, centered
-in the bar.
+Claude session, the bar is empty; it appears when Claude starts, with the
+model at the left and the two meters centered in the bar.
 
 The speaker button at the far right of the bar mutes the terminal's
 sounds: the bell (including a `notify-on-command-finish` bell) and the

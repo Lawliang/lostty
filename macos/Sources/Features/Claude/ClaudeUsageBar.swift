@@ -4,10 +4,10 @@ import CoreText
 import SwiftUI
 
 /// The strip along the bottom of the window, as tall as the title bar and
-/// the same color as it and the sidebar, in the terminal's font. Centered:
-/// `✳ Opus 5.5   Context ▓▓░░░░░░░░ 50K   Session ▓░░░░░░░░░ 2%`, the
-/// focused pane's context and the tracked plan limit; clicking it lists
-/// every limit, and picking one tracks it here. It is empty without a
+/// the same color as it and the sidebar, in the terminal's font. At the
+/// left, `✳ Opus 5.5`; centered, `Context ▓▓░░░░░░░░ 50K   Session ▓░░░░░░░░░ 2%`,
+/// the focused pane's context and the tracked plan limit (clicking it lists
+/// every limit, and picking one tracks it here). Both are hidden without a
 /// Claude session in the focused pane. At the far right, the mute button.
 struct ClaudeUsageBar: View {
     /// A standard title bar's height.
@@ -32,13 +32,16 @@ struct ClaudeUsageBar: View {
         ZStack {
             if hasSession {
                 usageButton
-                    // Clear of the mute button.
-                    .padding(.horizontal, 40)
+                    // Equal on both sides so it stays centered, clear of
+                    // the model on the left and mute on the right.
+                    .padding(.horizontal, 110)
             }
             HStack(spacing: 0) {
+                if hasSession { modelLabel }
                 Spacer(minLength: 0)
                 muteButton
             }
+            .padding(.leading, 12)
             .padding(.trailing, 8)
         }
         .font(ClaudeUsageFont.font(size: 12))
@@ -82,15 +85,17 @@ struct ClaudeUsageBar: View {
         .accessibilityLabel(mute.isMuted ? "Unmute terminal sounds" : "Mute terminal sounds")
     }
 
+    private var modelLabel: some View {
+        Text("✳ ").foregroundColor(Color(red: 0.85, green: 0.47, blue: 0.34))
+            + Text(pane.flatMap { usage.models[$0] } ?? "").foregroundColor(ink.opacity(0.6))
+    }
+
     private var line: some View {
         let context = pane.flatMap { usage.contexts[$0] }
-        let model = pane.flatMap { usage.models[$0] }
         let metric = usage.tracked
         let limit = usage.percent(metric) ?? 0
 
-        return (Text("✳ ").foregroundColor(Color(red: 0.85, green: 0.47, blue: 0.34))
-            + Text(model.map { "\($0)   " } ?? "  ").foregroundColor(ink.opacity(0.6))
-            + Text("Context ").foregroundColor(ink.opacity(0.6))
+        return (Text("Context ").foregroundColor(ink.opacity(0.6))
             + ClaudeUsageBlocks.text(context?.percent ?? 0, accent: accent, empty: ink.opacity(0.28))
             + Text(" " + ClaudeUsageFormat.thousands(context?.used ?? 0)).foregroundColor(ink.opacity(0.9))
             + Text("   " + metric.shortTitle + " ").foregroundColor(ink.opacity(0.6))
