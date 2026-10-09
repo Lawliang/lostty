@@ -22,6 +22,7 @@ const new_window = @import("new_window.zig");
 const skins = @import("skins.zig");
 const claude_state = @import("claude_state.zig");
 const claude_hooks = @import("claude_hooks.zig");
+const claude_usage = @import("claude_usage.zig");
 
 /// Special commands that can be invoked via CLI flags. These are all
 /// invoked by using `+<action>` as a CLI flag. The only exception is
@@ -80,6 +81,10 @@ pub const Action = enum {
 
     // Lostty: install or remove the Claude Code hooks that drive the trace.
     @"claude-hooks",
+
+    // Lostty: Claude Code's status line command; reports context and plan
+    // usage to this pane.
+    @"claude-usage",
 
     pub fn detectSpecialCase(arg: []const u8) ?SpecialCase(Action) {
         // If we see a "-e" and we haven't seen a command yet, then
@@ -162,6 +167,7 @@ pub const Action = enum {
             .skins => try skins.run(alloc),
             .@"claude-state" => try claude_state.run(alloc),
             .@"claude-hooks" => try claude_hooks.run(alloc),
+            .@"claude-usage" => try claude_usage.run(alloc),
         };
     }
 
@@ -204,6 +210,7 @@ pub const Action = enum {
                 .skins => skins.Options,
                 .@"claude-state" => claude_state.Options,
                 .@"claude-hooks" => claude_hooks.Options,
+                .@"claude-usage" => claude_usage.Options,
             };
         }
     }
@@ -323,4 +330,5 @@ test {
     _ = skins;
     _ = claude_state;
     _ = claude_hooks;
+    _ = claude_usage;
 }

@@ -36,8 +36,8 @@ enum ClaudeHooksUI {
         let alert = NSAlert()
         alert.messageText = "Lostty adds these hooks"
         alert.informativeText = "Added to the \"hooks\" section of ~/.claude/settings.json (and ~/.codex/hooks.json "
-            + "for Codex, with just the first two events). "
-            + "Your other settings and hooks are kept."
+            + "for Codex, with just the first two events). The status line feeds the usage bar; it is only "
+            + "added when you don't have your own. Your other settings and hooks are kept."
         let scroll = NSTextView.scrollableTextView()
         scroll.frame = NSRect(x: 0, y: 0, width: 520, height: 260)
         if let text = scroll.documentView as? NSTextView {

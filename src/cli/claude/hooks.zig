@@ -72,6 +72,28 @@ pub fn isLosttyCommand(cmd: []const u8) bool {
         std.mem.indexOf(u8, cmd, "LOSTTY_SURFACE") != null;
 }
 
+/// Claude Code's status line runs this to feed the window's usage bar.
+pub const status_line_command =
+    "[ -n \"$LOSTTY_SURFACE\" ] && [ -x \"$LOSTTY_BIN\" ] && \"$LOSTTY_BIN\" +claude-usage; exit 0";
+
+const StatusLine = enum { missing, foreign, outdated, current };
+
+/// Whose `statusLine` this is. Someone else's is left alone.
+fn statusLineState(root: Value) StatusLine {
+    const sl = root.object.get("statusLine") orelse return .missing;
+    const cmd = hookCommand(sl) orelse return .foreign;
+    if (std.mem.indexOf(u8, cmd, "+claude-usage") == null or
+        std.mem.indexOf(u8, cmd, "LOSTTY_SURFACE") == null) return .foreign;
+    return if (std.mem.eql(u8, cmd, status_line_command)) .current else .outdated;
+}
+
+fn statusLineValue(alloc: Allocator) Allocator.Error!Value {
+    var sl = std.json.ObjectMap.init(alloc);
+    try sl.put("type", .{ .string = "command" });
+    try sl.put("command", .{ .string = status_line_command });
+    return .{ .object = sl };
+}
+
 fn hookCommand(hook: Value) ?[]const u8 {
     if (hook != .object) return null;
     const c = hook.object.get("command") orelse return null;
@@ -106,26 +128,41 @@ fn expectedFor(alloc: Allocator, agent: Agent, event_name: []const u8) Allocator
 
 pub fn status(alloc: Allocator, agent: Agent, root: Value) Allocator.Error!Status {
     if (root != .object) return .unreadable;
-    const hooks = root.object.get("hooks") orelse return .not_installed;
-    if (hooks != .object) return .unreadable;
     var current: usize = 0;
     var ours: usize = 0;
-    var it = hooks.object.iterator();
-    while (it.next()) |entry| {
-        checkEvent(entry.value_ptr.*) catch return .unreadable;
-        const expected = try expectedFor(alloc, agent, entry.key_ptr.*);
-        for (entry.value_ptr.array.items) |group_value| {
-            for (group_value.object.get("hooks").?.array.items) |hook| {
-                const cmd = hookCommand(hook) orelse continue;
-                if (!isLosttyCommand(cmd)) continue;
-                ours += 1;
-                const exp = expected orelse continue;
-                if (std.mem.eql(u8, cmd, exp) and isTimeout(hook.object.get("timeout") orelse .null)) current += 1;
+    var n = eventsFor(agent).len;
+    if (root.object.get("hooks")) |hooks| {
+        if (hooks != .object) return .unreadable;
+        var it = hooks.object.iterator();
+        while (it.next()) |entry| {
+            checkEvent(entry.value_ptr.*) catch return .unreadable;
+            const expected = try expectedFor(alloc, agent, entry.key_ptr.*);
+            for (entry.value_ptr.array.items) |group_value| {
+                for (group_value.object.get("hooks").?.array.items) |hook| {
+                    const cmd = hookCommand(hook) orelse continue;
+                    if (!isLosttyCommand(cmd)) continue;
+                    ours += 1;
+                    const exp = expected orelse continue;
+                    if (std.mem.eql(u8, cmd, exp) and isTimeout(hook.object.get("timeout") orelse .null)) current += 1;
+                }
             }
         }
     }
+    // Claude's status line feeds the usage bar, unless the user has their own.
+    if (agent == .claude) switch (statusLineState(root)) {
+        .foreign => {},
+        .missing => n += 1,
+        .outdated => {
+            n += 1;
+            ours += 1;
+        },
+        .current => {
+            n += 1;
+            ours += 1;
+            current += 1;
+        },
+    };
     if (ours == 0) return .not_installed;
-    const n = eventsFor(agent).len;
     if (current == n and ours == n) return .installed;
     return .partial;
 }
@@ -198,16 +235,29 @@ pub fn install(alloc: Allocator, agent: Agent, root: *Value) EditError!bool {
         if (!ev.found_existing) ev.value_ptr.* = .{ .array = std.json.Array.init(alloc) };
         try ev.value_ptr.array.append(try group(alloc, e.state));
     }
+    if (agent == .claude and statusLineState(root.*) != .foreign) {
+        try root.object.put("statusLine", try statusLineValue(alloc));
+    }
     return true;
 }
 
-/// Removes Lostty's hooks, and `hooks` itself if that empties it.
+/// Removes Lostty's hooks, and `hooks` itself if that empties it, and
+/// Lostty's status line.
 pub fn remove(root: *Value) EditError!bool {
     if (root.* != .object) return error.Malformed;
-    const hooks = root.object.getPtr("hooks") orelse return false;
-    if (hooks.* != .object) return error.Malformed;
-    const changed = try strip(&hooks.object);
-    if (changed and hooks.object.count() == 0) _ = root.object.orderedRemove("hooks");
+    var changed = false;
+    if (root.object.getPtr("hooks")) |hooks| {
+        if (hooks.* != .object) return error.Malformed;
+        changed = try strip(&hooks.object);
+        if (changed and hooks.object.count() == 0) _ = root.object.orderedRemove("hooks");
+    }
+    switch (statusLineState(root.*)) {
+        .outdated, .current => {
+            _ = root.object.orderedRemove("statusLine");
+            changed = true;
+        },
+        .missing, .foreign => {},
+    }
     return changed;
 }
 
@@ -221,6 +271,7 @@ pub fn preview(alloc: Allocator, agent: Agent) Allocator.Error!Value {
     }
     var root = std.json.ObjectMap.init(alloc);
     try root.put("hooks", .{ .object = hooks });
+    if (agent == .claude) try root.put("statusLine", try statusLineValue(alloc));
     return .{ .object = root };
 }
 
@@ -381,6 +432,45 @@ test "claude hooks: preview lists the four events" {
     for (eventsFor(.claude)) |e| try std.testing.expect(std.mem.indexOf(u8, out, e.name) != null);
 }
 
+test "claude hooks: the status line is added, updated and removed" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var root = try parseFixture(a, "{}");
+    _ = try install(a, .claude, &root);
+    // Hooks from before the usage bar: partial until the status line is added.
+    _ = root.object.orderedRemove("statusLine");
+    try std.testing.expectEqual(Status.partial, try status(a, .claude, root));
+    try std.testing.expect(try install(a, .claude, &root));
+    try std.testing.expectEqual(Status.installed, try status(a, .claude, root));
+    try std.testing.expect(std.mem.indexOf(u8, try stringify(a, root), "+claude-usage") != null);
+    // An older Lostty status line is replaced.
+    try root.object.put("statusLine", try parseFixture(a,
+        \\{"type":"command","command":"[ -n \"$LOSTTY_SURFACE\" ] && old +claude-usage"}
+    ));
+    try std.testing.expectEqual(Status.partial, try status(a, .claude, root));
+    try std.testing.expect(try install(a, .claude, &root));
+    try std.testing.expectEqual(Status.installed, try status(a, .claude, root));
+    try std.testing.expect(try remove(&root));
+    try std.testing.expectEqualStrings("{}\n", try stringify(a, root));
+}
+
+test "claude hooks: a user's own status line is kept" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var root = try parseFixture(a,
+        \\{"statusLine":{"type":"command","command":"~/bin/my-status"}}
+    );
+    try std.testing.expectEqual(Status.not_installed, try status(a, .claude, root));
+    try std.testing.expect(try install(a, .claude, &root));
+    try std.testing.expectEqual(Status.installed, try status(a, .claude, root));
+    try std.testing.expect(try remove(&root));
+    const out = try stringify(a, root);
+    try std.testing.expect(std.mem.indexOf(u8, out, "my-status") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "+claude-usage") == null);
+}
+
 test "codex hooks: install adds only the busy and idle events" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
@@ -408,4 +498,5 @@ test "codex hooks: preview lists the two events" {
     const out = try stringify(a, try preview(a, .codex));
     try std.testing.expect(std.mem.indexOf(u8, out, "UserPromptSubmit") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "Notification") == null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "statusLine") == null);
 }

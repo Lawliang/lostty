@@ -69,14 +69,20 @@ pub fn findTty(ctx: anytype, start: i32, max_hops: usize) ?[]const u8 {
 pub fn encodeSequence(alloc: Allocator, state: State, tmux: bool) ![]u8 {
     const json = try std.fmt.allocPrint(alloc, "{{\"v\":1,\"state\":\"{s}\"}}", .{@tagName(state)});
     defer alloc.free(json);
+    return encodeUserVar(alloc, user_var_name, json, tmux);
+}
+
+/// OSC 1337 SetUserVar setting `name` to `json` (base64-encoded on the
+/// wire). With `tmux`, wrapped in tmux's DCS passthrough.
+pub fn encodeUserVar(alloc: Allocator, name: []const u8, json: []const u8, tmux: bool) ![]u8 {
     const encoder = std.base64.standard.Encoder;
     const b64 = try alloc.alloc(u8, encoder.calcSize(json.len));
     defer alloc.free(b64);
     _ = encoder.encode(b64, json);
     if (tmux) {
-        return std.fmt.allocPrint(alloc, "\x1bPtmux;\x1b\x1b]1337;SetUserVar={s}={s}\x07\x1b\\", .{ user_var_name, b64 });
+        return std.fmt.allocPrint(alloc, "\x1bPtmux;\x1b\x1b]1337;SetUserVar={s}={s}\x07\x1b\\", .{ name, b64 });
     }
-    return std.fmt.allocPrint(alloc, "\x1b]1337;SetUserVar={s}={s}\x07", .{ user_var_name, b64 });
+    return std.fmt.allocPrint(alloc, "\x1b]1337;SetUserVar={s}={s}\x07", .{ name, b64 });
 }
 
 test "claude protocol: parsePs" {

@@ -42,7 +42,7 @@ pub fn run(gpa: Allocator) !u8 {
 /// `/dev/tty` when we have a controlling terminal; otherwise (Claude Code
 /// runs hooks without one) the terminal of the nearest ancestor that has
 /// one, which is `claude` in the pane, or the tmux pane it runs in.
-fn openTerminal(alloc: Allocator) ?std.fs.File {
+pub fn openTerminal(alloc: Allocator) ?std.fs.File {
     if (std.fs.openFileAbsolute("/dev/tty", .{ .mode = .write_only })) |f| return f else |_| {}
     const name = protocol.findTty(Ps{ .alloc = alloc }, std.c.getppid(), 8) orelse return null;
     const path = std.fmt.allocPrint(alloc, "/dev/{s}", .{name}) catch return null;

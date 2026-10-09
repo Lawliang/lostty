@@ -21,7 +21,9 @@ enum HookNotifications {
         LosttyNotification(
             kind: .hooksMissing(agent),
             title: "\(agent.title) isn't connected",
-            detail: "Lostty can't show the trace or Ready for response for \(agent.title).",
+            detail: agent == .claude
+                ? "Lostty can't show the trace, Ready for response or usage for Claude."
+                : "Lostty can't show the trace or Ready for response for \(agent.title).",
             actionTitle: "Connect",
             action: connect)
     }
@@ -34,7 +36,9 @@ enum HookNotifications {
                 title: "Couldn't connect \(agent.title)",
                 detail: reason.isEmpty ? "The Lostty command-line tool did not run." : reason)
         }
-        var detail = "Restart any running \(agent.title) sessions to see the trace."
+        var detail = agent == .claude
+            ? "Restart any running Claude sessions to see the trace and usage."
+            : "Restart any running \(agent.title) sessions to see the trace."
         if agent == .codex { detail += " Codex asks you to approve Lostty's hooks once." }
         return LosttyNotification(kind: .hooks(agent), style: .success, title: "\(agent.title) connected", detail: detail)
     }

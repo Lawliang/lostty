@@ -130,6 +130,24 @@ A skin with the same name as a preset keeps the preset's trace unless it
 sets `trace`. `[defaults] trace = false` turns traces off. With Reduce
 Motion on, the border glows gently instead of racing.
 
+## Claude Usage Bar
+
+A bar along the bottom of each window, as tall as the title bar and the
+same color as it and the sidebar, shows the focused pane's Claude context
+(e.g. `84.2k / 200k context`) and a usage meter with a percentage, so you
+don't need `/context` or `/usage`. The meter tracks your current session
+(the 5-hour limit) by default. Click the bar to see every usage (context,
+current session, weekly) and click one to track it in the bar instead.
+The meter turns amber at 70% and red at 90%.
+
+The numbers come from Claude Code's status line: Connect (or
+`ghostty +claude-hooks install`) sets `statusLine` in
+`~/.claude/settings.json` to Lostty's `+claude-usage`, which prints
+nothing. If you already have your own status line, Lostty leaves it alone
+and the bar stays empty. Plan limits show for Pro and Max plans after
+Claude's first reply. Claude Code doesn't share the weekly Fable limit, so
+that row shows as unavailable.
+
 ## Updating from upstream Ghostty
 
 See `UPGRADING.md`.
