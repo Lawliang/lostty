@@ -5,7 +5,8 @@ import SwiftUI
 /// The strip along the bottom of the window, as tall as the title bar and
 /// the same color as it and the sidebar: the focused pane's Claude context
 /// on the left, the tracked usage (a bar and a percentage) on the right.
-/// Clicking it lists every usage; picking one tracks it here.
+/// Clicking it lists every usage; picking one tracks it here. Without a
+/// Claude session in the focused pane the strip is empty.
 struct ClaudeUsageBar: View {
     /// A standard title bar's height.
     static let height: CGFloat = NSWindow.frameRect(forContentRect: .zero, styleMask: [.titled]).height
@@ -23,14 +24,20 @@ struct ClaudeUsageBar: View {
         pane.flatMap { skins.effectiveSkin($0) }.map { Color(rgb: $0.accent) } ?? ink.opacity(0.8)
     }
 
+    private var context: ClaudeUsageReport.Context? { pane.flatMap { usage.contexts[$0] } }
+
     var body: some View {
         Button { showingDetails.toggle() } label: {
             // Ticks so a limit that resets while nothing reports drops to 0%.
             TimelineView(.everyMinute) { _ in
                 HStack(spacing: 10) {
-                    contextLabel
-                    Spacer(minLength: 12)
-                    trackedLabel
+                    if let context {
+                        contextLabel(context)
+                        Spacer(minLength: 12)
+                        trackedLabel
+                    } else {
+                        Spacer()
+                    }
                 }
             }
             .padding(.horizontal, 12)
@@ -40,7 +47,8 @@ struct ClaudeUsageBar: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .onHover { hovering = $0 }
+        .disabled(context == nil)
+        .onHover { hovering = $0 && context != nil }
         .help("Claude usage: click to choose what this bar tracks")
         .popover(isPresented: $showingDetails, arrowEdge: .top) {
             TimelineView(.everyMinute) { _ in
@@ -50,27 +58,19 @@ struct ClaudeUsageBar: View {
         .background(Color(nsColor: chrome))
     }
 
-    @ViewBuilder
-    private var contextLabel: some View {
-        if let pane, let context = usage.contexts[pane] {
-            HStack(spacing: 6) {
-                Text("✳").foregroundStyle(Color(red: 0.85, green: 0.47, blue: 0.34))
-                if let name = usage.models[pane] {
-                    Text(name).foregroundStyle(ink.opacity(0.55))
-                }
-                Text("\(ClaudeUsageFormat.tokens(context.used)) / \(ClaudeUsageFormat.tokens(context.size))")
-                    .foregroundStyle(ink.opacity(0.85))
-                    .monospacedDigit()
-                Text("context").foregroundStyle(ink.opacity(0.45))
+    private func contextLabel(_ context: ClaudeUsageReport.Context) -> some View {
+        HStack(spacing: 6) {
+            Text("✳").foregroundStyle(Color(red: 0.85, green: 0.47, blue: 0.34))
+            if let name = pane.flatMap({ usage.models[$0] }) {
+                Text(name).foregroundStyle(ink.opacity(0.55))
             }
-            .font(.system(size: 11, weight: .medium))
-            .lineLimit(1)
-        } else {
-            Text("No Claude session in this pane")
-                .font(.system(size: 11))
-                .foregroundStyle(ink.opacity(0.4))
-                .lineLimit(1)
+            Text("\(ClaudeUsageFormat.tokens(context.used)) / \(ClaudeUsageFormat.tokens(context.size))")
+                .foregroundStyle(ink.opacity(0.85))
+                .monospacedDigit()
+            Text("context").foregroundStyle(ink.opacity(0.45))
         }
+        .font(.system(size: 11, weight: .medium))
+        .lineLimit(1)
     }
 
     private var trackedLabel: some View {
