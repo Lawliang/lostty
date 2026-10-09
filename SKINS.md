@@ -139,7 +139,8 @@ don't need `/context` or `/usage`. The meter tracks your current session
 (the 5-hour limit) by default. Click the bar to see every usage (context,
 current session, weekly) and click one to track it in the bar instead.
 The meter turns amber at 70% and red at 90%. When the focused pane has
-no Claude session, the bar is empty.
+no Claude session, the bar is empty; it appears when Claude starts, and
+the context count fills in after Claude's first reply.
 
 The numbers come from Claude Code's status line: Connect (or
 `ghostty +claude-hooks install`) sets `statusLine` in

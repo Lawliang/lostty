@@ -89,6 +89,8 @@ enum ClaudeUsageMetric: String, CaseIterable, Identifiable {
 final class ClaudeUsageRuntime: ObservableObject {
     static let shared = ClaudeUsageRuntime()
 
+    /// Panes running a Claude session: they have reported at least once.
+    @Published private(set) var sessions: Set<UUID> = []
     @Published private(set) var contexts: [UUID: ClaudeUsageReport.Context] = [:]
     @Published private(set) var models: [UUID: String] = [:]
     @Published private(set) var fiveHour: ClaudeUsageReport.Limit?
@@ -122,6 +124,8 @@ final class ClaudeUsageRuntime: ObservableObject {
             Ghostty.logger.debug("claude: rejected malformed \(ClaudeUsageReport.userVarName) payload")
             return
         }
+        // Claude reports at session start, before it has any context numbers.
+        if !sessions.contains(id) { sessions.insert(id) }
         if let context = report.context, contexts[id] != context { contexts[id] = context }
         if let model = report.model, models[id] != model { models[id] = model }
         if let limit = report.fiveHour, fiveHour != limit {
@@ -155,6 +159,7 @@ final class ClaudeUsageRuntime: ObservableObject {
     }
 
     private func forget(_ id: UUID) {
+        if sessions.contains(id) { sessions.remove(id) }
         if contexts[id] != nil { contexts[id] = nil }
         if models[id] != nil { models[id] = nil }
     }

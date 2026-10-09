@@ -24,15 +24,15 @@ struct ClaudeUsageBar: View {
         pane.flatMap { skins.effectiveSkin($0) }.map { Color(rgb: $0.accent) } ?? ink.opacity(0.8)
     }
 
-    private var context: ClaudeUsageReport.Context? { pane.flatMap { usage.contexts[$0] } }
+    private var hasSession: Bool { pane.map { usage.sessions.contains($0) } ?? false }
 
     var body: some View {
         Button { showingDetails.toggle() } label: {
             // Ticks so a limit that resets while nothing reports drops to 0%.
             TimelineView(.everyMinute) { _ in
                 HStack(spacing: 10) {
-                    if let context {
-                        contextLabel(context)
+                    if hasSession {
+                        contextLabel
                         Spacer(minLength: 12)
                         trackedLabel
                     } else {
@@ -47,8 +47,8 @@ struct ClaudeUsageBar: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .disabled(context == nil)
-        .onHover { hovering = $0 && context != nil }
+        .disabled(!hasSession)
+        .onHover { hovering = $0 && hasSession }
         .help("Claude usage: click to choose what this bar tracks")
         .popover(isPresented: $showingDetails, arrowEdge: .top) {
             TimelineView(.everyMinute) { _ in
@@ -58,16 +58,19 @@ struct ClaudeUsageBar: View {
         .background(Color(nsColor: chrome))
     }
 
-    private func contextLabel(_ context: ClaudeUsageReport.Context) -> some View {
+    /// The model, then the context once Claude has replied.
+    private var contextLabel: some View {
         HStack(spacing: 6) {
             Text("✳").foregroundStyle(Color(red: 0.85, green: 0.47, blue: 0.34))
             if let name = pane.flatMap({ usage.models[$0] }) {
                 Text(name).foregroundStyle(ink.opacity(0.55))
             }
-            Text("\(ClaudeUsageFormat.tokens(context.used)) / \(ClaudeUsageFormat.tokens(context.size))")
-                .foregroundStyle(ink.opacity(0.85))
-                .monospacedDigit()
-            Text("context").foregroundStyle(ink.opacity(0.45))
+            if let context = pane.flatMap({ usage.contexts[$0] }) {
+                Text("\(ClaudeUsageFormat.tokens(context.used)) / \(ClaudeUsageFormat.tokens(context.size))")
+                    .foregroundStyle(ink.opacity(0.85))
+                    .monospacedDigit()
+                Text("context").foregroundStyle(ink.opacity(0.45))
+            }
         }
         .font(.system(size: 11, weight: .medium))
         .lineLimit(1)
@@ -189,7 +192,7 @@ private struct ClaudeUsageDetails: View {
         let now = usage.now()
         switch metric {
         case .context:
-            guard let context = pane.flatMap({ usage.contexts[$0] }) else { return "No Claude session in this pane" }
+            guard let context = pane.flatMap({ usage.contexts[$0] }) else { return "Shows after Claude's first reply" }
             return "\(ClaudeUsageFormat.tokens(context.used)) of \(ClaudeUsageFormat.tokens(context.size)) tokens"
         case .session:
             return limitSubtitle(usage.fiveHour, now: now, window: "5-hour limit")

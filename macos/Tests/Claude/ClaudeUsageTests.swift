@@ -47,6 +47,15 @@ struct ClaudeUsageTests {
         #expect(runtime.percent(.weeklyFable, pane: pane) == nil)
     }
 
+    @Test func aReportWithoutNumbersStillMarksASession() {
+        let runtime = ClaudeUsageRuntime(defaults: makeDefaults())
+        runtime.userVarChanged(pane, name: "LOSTTY_USAGE", value: #"{"v":1,"model":"Opus"}"#)
+        #expect(runtime.sessions == [pane])
+        #expect(runtime.contexts[pane] == nil)
+        runtime.commandFinished(pane)
+        #expect(runtime.sessions.isEmpty)
+    }
+
     @Test func otherUserVarsAreIgnored() {
         let runtime = ClaudeUsageRuntime(defaults: makeDefaults())
         runtime.userVarChanged(pane, name: "LOSTTY_CLAUDE", value: #"{"v":1,"ctx":{"used":1,"size":2}}"#)
