@@ -118,10 +118,17 @@ struct ClaudeUsageTests {
         #expect(text.replacingOccurrences(of: "\u{202F}", with: " ") == "Resets Fri, 9 AM")
     }
 
-    @Test func meterTurnsAmberThenRed() {
-        #expect(ClaudeUsageMeter.fill(for: 50, accent: .blue) == .blue)
-        #expect(ClaudeUsageMeter.fill(for: 70, accent: .blue) != .blue)
-        #expect(ClaudeUsageMeter.fill(for: 95, accent: .blue) != ClaudeUsageMeter.fill(for: 75, accent: .blue))
+    @Test func blocksShowAnyUseAndCapAtFull() {
+        #expect(ClaudeUsageBlocks.filled(0) == 0)
+        #expect(ClaudeUsageBlocks.filled(2) == 1)
+        #expect(ClaudeUsageBlocks.filled(50) == 5)
+        #expect(ClaudeUsageBlocks.filled(250) == 10)
+    }
+
+    @Test func blocksTurnAmberThenRed() {
+        #expect(ClaudeUsageBlocks.fill(for: 50, accent: .blue) == .blue)
+        #expect(ClaudeUsageBlocks.fill(for: 70, accent: .blue) != .blue)
+        #expect(ClaudeUsageBlocks.fill(for: 95, accent: .blue) != ClaudeUsageBlocks.fill(for: 75, accent: .blue))
     }
 }
 #endif

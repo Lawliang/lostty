@@ -1,12 +1,14 @@
 #if os(macOS)
 import AppKit
+import CoreText
 import SwiftUI
 
 /// The strip along the bottom of the window, as tall as the title bar and
-/// the same color as it and the sidebar: the focused pane's Claude context
-/// on the left, the tracked usage (a bar and a percentage) on the right.
-/// Clicking it lists every usage; picking one tracks it here. Without a
-/// Claude session in the focused pane the strip is empty.
+/// the same color as it and the sidebar, in the terminal's font:
+/// `✳ Opus 5.5   Context ▓▓░░░░░░░░ 50K   ·········   Session ▓░░░░░░░░░ 2%`.
+/// The left meter is the focused pane's context; the right one is the
+/// tracked plan limit. Clicking it lists every limit; picking one tracks it
+/// here. Without a Claude session in the focused pane the strip is empty.
 struct ClaudeUsageBar: View {
     /// A standard title bar's height.
     static let height: CGFloat = NSWindow.frameRect(forContentRect: .zero, styleMask: [.titled]).height
@@ -23,23 +25,22 @@ struct ClaudeUsageBar: View {
     private var accent: Color {
         pane.flatMap { skins.effectiveSkin($0) }.map { Color(rgb: $0.accent) } ?? ink.opacity(0.8)
     }
-
     private var hasSession: Bool { pane.map { usage.sessions.contains($0) } ?? false }
 
     var body: some View {
         Button { showingDetails.toggle() } label: {
             // Ticks so a limit that resets while nothing reports drops to 0%.
             TimelineView(.everyMinute) { _ in
-                HStack(spacing: 10) {
+                HStack(spacing: 0) {
                     if hasSession {
-                        contextLabel
-                        Spacer(minLength: 12)
-                        trackedLabel
+                        line
                     } else {
                         Spacer()
                     }
                 }
             }
+            .font(ClaudeUsageFont.font(size: 12))
+            .lineLimit(1)
             .padding(.horizontal, 12)
             .frame(maxWidth: .infinity)
             .frame(height: Self.height)
@@ -57,51 +58,54 @@ struct ClaudeUsageBar: View {
         .background(Color(nsColor: chrome))
     }
 
-    /// The model, then a context meter with the tokens in the window
-    /// (filled in once Claude has replied).
-    private var contextLabel: some View {
+    @ViewBuilder
+    private var line: some View {
         let context = pane.flatMap { usage.contexts[$0] }
-        return HStack(spacing: 7) {
-            Text("✳").foregroundStyle(Color(red: 0.85, green: 0.47, blue: 0.34))
-            if let name = pane.flatMap({ usage.models[$0] }) {
-                Text(name).foregroundStyle(ink.opacity(0.55))
-                    .padding(.trailing, 4)
-            }
-            Text("Context").foregroundStyle(ink.opacity(0.55))
-            ClaudeUsageMeter(percent: context?.percent, accent: accent, track: ink.opacity(0.14))
-                .frame(width: 84, height: 5)
-            Text(context.map { ClaudeUsageFormat.thousands($0.used) } ?? "")
-                .foregroundStyle(ink.opacity(0.9))
-                .monospacedDigit()
-                .frame(minWidth: 30, alignment: .leading)
-        }
-        .font(.system(size: 11, weight: .medium))
-        .lineLimit(1)
-    }
-
-    private var trackedLabel: some View {
+        let model = pane.flatMap { usage.models[$0] }
         let metric = usage.tracked
-        let percent = usage.percent(metric)
-        return HStack(spacing: 7) {
-            Text(metric.shortTitle)
-                .foregroundStyle(ink.opacity(0.55))
-            ClaudeUsageMeter(percent: percent, accent: accent, track: ink.opacity(0.14))
-                .frame(width: 84, height: 5)
-            Text(percent.map(ClaudeUsageFormat.percent) ?? "")
-                .foregroundStyle(ink.opacity(0.9))
-                .monospacedDigit()
-                .frame(minWidth: 30, alignment: .trailing)
-        }
-        .font(.system(size: 11, weight: .medium))
-        .lineLimit(1)
+        let limit = usage.percent(metric) ?? 0
+
+        (Text("✳ ").foregroundColor(Color(red: 0.85, green: 0.47, blue: 0.34))
+            + Text(model.map { "\($0)   " } ?? "  ").foregroundColor(ink.opacity(0.6))
+            + Text("Context ").foregroundColor(ink.opacity(0.6))
+            + ClaudeUsageBlocks.text(context?.percent ?? 0, accent: accent, empty: ink.opacity(0.28))
+            + Text(" " + ClaudeUsageFormat.thousands(context?.used ?? 0)).foregroundColor(ink.opacity(0.9)))
+            .fixedSize()
+
+        ClaudeUsageLeader(color: ink.opacity(0.25))
+            .padding(.horizontal, 12)
+
+        (Text(metric.shortTitle + " ").foregroundColor(ink.opacity(0.6))
+            + ClaudeUsageBlocks.text(limit, accent: accent, empty: ink.opacity(0.28))
+            + Text(" " + ClaudeUsageFormat.percent(limit)).foregroundColor(ink.opacity(0.9)))
+            .fixedSize()
     }
 }
 
-/// A thin capsule meter. The fill turns amber past 70% and red past 90%.
-struct ClaudeUsageMeter: View {
-    let percent: Double?
-    let accent: Color
-    let track: Color
+/// A run of dots filling the space between the two halves of the bar.
+private struct ClaudeUsageLeader: View {
+    let color: Color
+
+    var body: some View {
+        Text(String(repeating: "·", count: 400))
+            .foregroundColor(color)
+            .fixedSize()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .clipped()
+    }
+}
+
+/// A text meter of block characters: `▓` used, `░` free. The used part
+/// turns amber past 70% and red past 90%.
+enum ClaudeUsageBlocks {
+    static let cells = 10
+
+    /// Used cells for `percent`: any use shows at least one.
+    static func filled(_ percent: Double, cells: Int = cells) -> Int {
+        let p = min(max(percent, 0), 100)
+        guard p > 0 else { return 0 }
+        return min(cells, max(1, Int((p / 100 * Double(cells)).rounded())))
+    }
 
     static func fill(for percent: Double, accent: Color) -> Color {
         if percent >= 90 { return Color(red: 0.95, green: 0.33, blue: 0.30) }
@@ -109,19 +113,30 @@ struct ClaudeUsageMeter: View {
         return accent
     }
 
-    var body: some View {
-        GeometryReader { geo in
-            ZStack(alignment: .leading) {
-                Capsule().fill(track)
-                if let percent {
-                    Capsule()
-                        .fill(Self.fill(for: percent, accent: accent))
-                        .frame(width: max(geo.size.height, geo.size.width * min(percent, 100) / 100))
-                        .opacity(percent > 0 ? 1 : 0)
-                }
-            }
+    static func text(_ percent: Double, accent: Color, empty: Color) -> Text {
+        let used = filled(percent)
+        return Text(String(repeating: "▓", count: used)).foregroundColor(fill(for: percent, accent: accent))
+            + Text(String(repeating: "░", count: cells - used)).foregroundColor(empty)
+    }
+}
+
+/// The terminal's default font (JetBrains Mono, bundled from Ghostty's
+/// embedded copy), registered for the app on first use; SF Mono if that
+/// fails.
+enum ClaudeUsageFont {
+    private static let name: String? = {
+        guard let url = Bundle.main.url(forResource: "JetBrainsMonoNoNF-Regular", withExtension: "ttf"),
+              let descriptors = CTFontManagerCreateFontDescriptorsFromURL(url as CFURL) as? [CTFontDescriptor],
+              let first = descriptors.first,
+              let name = CTFontDescriptorCopyAttribute(first, kCTFontNameAttribute) as? String else { return nil }
+        if NSFont(name: name, size: 12) == nil {
+            CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
         }
-        .animation(.easeOut(duration: 0.25), value: percent)
+        return NSFont(name: name, size: 12) == nil ? nil : name
+    }()
+
+    static func font(size: CGFloat) -> Font {
+        name.map { .custom($0, size: size) } ?? .system(size: size, design: .monospaced)
     }
 }
 
@@ -133,51 +148,41 @@ private struct ClaudeUsageDetails: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text("Claude usage")
-                .font(.system(size: 12, weight: .semibold))
-                .padding(.horizontal, 10)
-                .padding(.bottom, 4)
             ForEach(ClaudeUsageMetric.allCases) { metric in
                 row(metric)
             }
         }
-        .padding(.vertical, 10)
-        .padding(.horizontal, 6)
-        .frame(width: 300)
+        .font(ClaudeUsageFont.font(size: 12))
+        .padding(6)
+        .frame(width: 320)
     }
 
     private func row(_ metric: ClaudeUsageMetric) -> some View {
-        let percent = usage.percent(metric)
         let available = metric != .weeklyFable
+        let percent = usage.percent(metric) ?? 0
         return Button {
             usage.tracked = metric
             dismiss()
         } label: {
-            HStack(spacing: 10) {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text(metric.title).font(.system(size: 12, weight: .medium))
-                        Spacer()
-                        Text(percent.map(ClaudeUsageFormat.percent) ?? "")
-                            .font(.system(size: 12, weight: .semibold))
-                            .monospacedDigit()
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 0) {
+                    Text(metric.title)
+                    Spacer(minLength: 10)
+                    if available {
+                        (ClaudeUsageBlocks.text(percent, accent: accent, empty: Color.primary.opacity(0.25))
+                            + Text(" " + ClaudeUsageFormat.percent(percent)))
+                            .fixedSize()
                     }
-                    ClaudeUsageMeter(percent: percent, accent: accent, track: Color.primary.opacity(0.1))
-                        .frame(height: 5)
-                    Text(subtitle(metric))
-                        .font(.system(size: 10))
-                        .foregroundStyle(.secondary)
                 }
-                Image(systemName: "checkmark")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(accent)
-                    .opacity(usage.tracked == metric ? 1 : 0)
+                Text(subtitle(metric))
+                    .font(ClaudeUsageFont.font(size: 10))
+                    .foregroundStyle(.secondary)
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 7)
             .background(
                 RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(Color.primary.opacity(usage.tracked == metric ? 0.07 : 0)))
+                    .fill(Color.primary.opacity(usage.tracked == metric ? 0.08 : 0)))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

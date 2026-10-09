@@ -133,15 +133,19 @@ Motion on, the border glows gently instead of racing.
 ## Claude Usage Bar
 
 A bar along the bottom of each window, as tall as the title bar and the
-same color as it and the sidebar, shows the focused pane's Claude model, a
-context meter with the tokens in the window (to the nearest thousand, e.g.
-`50K`), and a meter with a percentage for one plan limit, so you don't need
-`/context` or `/usage`. The limit meter tracks your current session (the
+same color as it and the sidebar, shows in the terminal's font the focused
+pane's Claude model, a block meter for the context with the tokens in the
+window (to the nearest thousand, e.g. `50K`), and a block meter with a
+percentage for one plan limit:
+
+    ✳ Opus 5.5   Context ▓░░░░░░░░░ 50K   ·········   Session ▓░░░░░░░░░ 2%
+
+You don't need `/context` or `/usage`, and the numbers read `0K` and `0%`
+until Claude reports them. The limit meter tracks your current session (the
 5-hour limit) by default. Click the bar to see every limit (current session,
 weekly) and when it resets, and click one to track it in the bar instead.
 Meters turn amber at 70% and red at 90%. When the focused pane has no
-Claude session, the bar is empty; it appears when Claude starts, and the
-numbers fill in after Claude's first reply.
+Claude session, the bar is empty; it appears when Claude starts.
 
 The numbers come from Claude Code's status line: Connect (or
 `ghostty +claude-hooks install`) sets `statusLine` in
