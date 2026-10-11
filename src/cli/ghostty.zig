@@ -331,4 +331,5 @@ test {
     _ = claude_state;
     _ = claude_hooks;
     _ = claude_usage;
+    _ = @import("tmux/naming.zig");
 }
