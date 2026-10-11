@@ -354,6 +354,9 @@ class AppDelegate: NSObject,
                 title: "Preview Claude Trace", action: #selector(previewClaudeTrace(_:)), keyEquivalent: "")
             item.target = self
             menu.insertItem(item, at: menu.index(of: anchor) + 2)
+
+            // Lostty Mobile: open a session over SSH to localhost.
+            RemoteDebugUI.installMenuItems(after: item)
         }
         #endif
     }
