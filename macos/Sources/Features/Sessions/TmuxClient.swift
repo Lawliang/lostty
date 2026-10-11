@@ -10,6 +10,10 @@ struct TmuxClient {
 
     var tmuxPath: String? = TmuxClient.locate()
 
+    /// How long a call may take before Lostty gives up on it: a hung tmux
+    /// must not freeze closing a pane or quitting.
+    var timeout: TimeInterval = 2
+
     static func locate(
         path: String? = ProcessInfo.processInfo.environment["PATH"],
         isExecutable: (String) -> Bool = { FileManager.default.isExecutableFile(atPath: $0) }
@@ -19,7 +23,12 @@ struct TmuxClient {
     }
 
     /// stdout of `tmux -L lostty <args>` when it exits 0; nil when tmux is
-    /// missing, no server is running, or the command fails.
+    /// missing, no server is running, the command fails, or it takes longer
+    /// than `timeout` (then it is killed).
+    ///
+    /// Waits on semaphores, not `waitUntilExit`, which spins the run loop:
+    /// on the main thread that let other events run in the middle of
+    /// closing a pane or quitting.
     @discardableResult
     func run(_ args: [String]) -> String? {
         guard let tmuxPath else { return nil }
@@ -29,15 +38,36 @@ struct TmuxClient {
         let out = Pipe()
         process.standardOutput = out
         process.standardError = FileHandle.nullDevice
+        let exited = DispatchSemaphore(value: 0)
+        process.terminationHandler = { _ in exited.signal() }
         do {
             try process.run()
         } catch {
             return nil
         }
-        let data = out.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        guard process.terminationStatus == 0 else { return nil }
-        return String(decoding: data, as: UTF8.self)
+
+        // Read while it runs, so a full pipe can't stall it.
+        let output = Output()
+        let read = DispatchSemaphore(value: 0)
+        DispatchQueue.global(qos: .userInitiated).async {
+            output.data = out.fileHandleForReading.readDataToEndOfFile()
+            read.signal()
+        }
+
+        let deadline = DispatchTime.now() + timeout
+        guard exited.wait(timeout: deadline) == .success else {
+            process.terminate()
+            return nil
+        }
+        guard read.wait(timeout: deadline) == .success,
+              process.terminationStatus == 0 else { return nil }
+        return String(decoding: output.data, as: UTF8.self)
+    }
+
+    /// Hands stdout from the reading queue back to `run`; the semaphore
+    /// orders the write before the read.
+    private final class Output: @unchecked Sendable {
+        var data = Data()
     }
 
     func sessions() -> [TmuxSession] {

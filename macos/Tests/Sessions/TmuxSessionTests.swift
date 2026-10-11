@@ -105,5 +105,31 @@ struct TmuxClientTests {
         #expect(client.sessions().isEmpty)
         #expect(client.isBusy(surface: paneA, ownedBy: 100) == nil)
     }
+
+    /// A stand-in tmux: a shell script with `body`.
+    private func fakeTmux(_ body: String) throws -> String {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("fake-tmux-\(UUID().uuidString)")
+        try "#!/bin/sh\n\(body)\n".write(to: url, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
+        return url.path
+    }
+
+    @Test func runReturnsStdoutOnSuccess() throws {
+        let client = TmuxClient(tmuxPath: try fakeTmux("echo \"$@\""))
+        #expect(client.run(["list-sessions"]) == "-L lostty list-sessions\n")
+    }
+
+    @Test func runReportsFailure() throws {
+        let client = TmuxClient(tmuxPath: try fakeTmux("echo out; exit 1"))
+        #expect(client.run(["list-sessions"]) == nil)
+    }
+
+    @Test func aHungTmuxGivesUpAtTheTimeout() throws {
+        let client = TmuxClient(tmuxPath: try fakeTmux("sleep 30"), timeout: 0.3)
+        let start = Date()
+        #expect(client.run(["list-sessions"]) == nil)
+        #expect(Date().timeIntervalSince(start) < 3)
+    }
 }
 #endif
