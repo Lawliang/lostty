@@ -27,6 +27,13 @@ struct AttachOutcomeTests {
         #expect(AttachOutcome().end(afterError: Boom()) == .lost)
     }
 
+    @Test func anHugeServerExitStatusDoesNotTrap() {
+        let outcome = AttachOutcome()
+        outcome.record(remoteEnded: true, exitCode: Int(Int32.max) + 5)
+        #expect(outcome.end(afterError: nil) == .exited(Int32(truncatingIfNeeded: Int(Int32.max) + 5)))
+        #expect(AttachEnd.from(finished: true, exitCode: Int(Int32.max) + 5) == .exited(Int32(truncatingIfNeeded: Int(Int32.max) + 5)))
+    }
+
     @Test func firstOutcomeWins() {
         let outcome = AttachOutcome()
         outcome.recordClosedLocally()

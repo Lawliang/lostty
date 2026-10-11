@@ -104,6 +104,31 @@ private final class GatedAttacher: RemoteAttacher, @unchecked Sendable {
     }
 }
 
+/// Runs `beforeOpen` (a resize from the core) after the attach started at
+/// the old size and before the terminal opens.
+private final class ResizingAttacher: RemoteAttacher, @unchecked Sendable {
+    private let lock = NSLock()
+    private var _sizes: [String] = []
+    private var _terminal: FakeTerminal?
+    var sizes: [String] { lock.withLock { _sizes } }
+    var terminal: FakeTerminal? { lock.withLock { _terminal } }
+    nonisolated(unsafe) var io: RemoteSurfaceIO?
+    let beforeOpen: @Sendable (RemoteSurfaceIO) -> Void
+
+    init(beforeOpen: @escaping @Sendable (RemoteSurfaceIO) -> Void) { self.beforeOpen = beforeOpen }
+
+    func attach(cols: Int, rows: Int,
+                onOpen: @escaping @Sendable (RemoteTerminal) -> Void,
+                onOutput: @escaping @Sendable (Data) -> Void) async throws -> AttachEnd {
+        lock.withLock { _sizes.append("\(cols)x\(rows)") }
+        if let io { beforeOpen(io) }
+        let terminal = FakeTerminal()
+        lock.withLock { _terminal = terminal }
+        onOpen(terminal)
+        return .exited(0)
+    }
+}
+
 private final class DelayLog: @unchecked Sendable {
     private let lock = NSLock()
     private var _values: [TimeInterval] = []
@@ -157,7 +182,30 @@ struct RemoteSurfaceIOTests {
         await io.finished()
         #expect(attacher.sizes.count == 1)
         #expect(String(decoding: log.fed, as: UTF8.self).contains("host key"))
-        #expect(log.events == ["exited 1"])
+        // The pane stays open showing why; it is not closed by an exit.
+        #expect(log.events.isEmpty)
+    }
+
+    @Test func aSecondAttachIsIgnored() async {
+        let log = SurfaceLog()
+        let attacher = ScriptedAttacher([.success(.exited(0)), .success(.exited(0))])
+        let io = RemoteSurfaceIO(attacher: attacher, surfaceCalls: log.calls, delays: { _ in }, onMain: { $0() })
+        io.attach(to: fakeSurface)
+        await io.finished()
+        io.attach(to: fakeSurface)
+        await io.finished()
+        #expect(attacher.sizes.count == 1)
+    }
+
+    @Test func aResizeDuringConnectReachesTheTerminalWhenItOpens() async {
+        let log = SurfaceLog()
+        let attacher = ResizingAttacher { io in io.resize(cols: 120, rows: 40, widthPx: 0, heightPx: 0) }
+        let io = RemoteSurfaceIO(attacher: attacher, surfaceCalls: log.calls, delays: { _ in }, onMain: { $0() })
+        attacher.io = io
+        io.attach(to: fakeSurface)
+        await io.finished()
+        #expect(attacher.sizes == ["80x24"])
+        #expect(attacher.terminal?.sizes == ["120x40"])
     }
 
     @Test func typingGoesToTheOpenTerminalAndResizesFollow() async throws {

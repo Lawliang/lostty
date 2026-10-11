@@ -38,11 +38,13 @@ public enum TmuxRemote {
 
     /// The command the PTY's shell replaces itself with. `-u` and LANG keep
     /// tmux in UTF-8 when the SSH session has no locale; TERMINFO lets tmux
-    /// find xterm-ghostty.
+    /// find xterm-ghostty. `-f /dev/null`: attach-session starts a server when
+    /// none runs, and the viewer must never start one (it would read
+    /// ~/.tmux.conf); a server started this way has no sessions and exits.
     public static func attachCommand(sessionID: String, terminfoDir: String) throws -> String {
         guard isSessionID(sessionID) else { throw TmuxRemoteError.badSessionID(sessionID) }
         return "exec env LANG=\"${LANG:-en_US.UTF-8}\" TERMINFO=\(shellQuote(terminfoDir)) "
-            + "\(pathPrefix) tmux -u -L lostty attach-session -t \(shellQuote(sessionID))"
+            + "\(pathPrefix) tmux -u -L lostty -f /dev/null attach-session -t \(shellQuote(sessionID))"
     }
 
     public static func parse(_ output: String) -> [RemoteSession] {

@@ -11,7 +11,7 @@ public enum AttachEnd: Equatable, Sendable {
     /// `finished`: the channel closed normally, with `exitCode` if the
     /// remote reported one.
     public static func from(finished: Bool, exitCode: Int?) -> AttachEnd {
-        finished ? .exited(Int32(exitCode ?? 0)) : .lost
+        finished ? .exited(Int32(truncatingIfNeeded: exitCode ?? 0)) : .lost
     }
 }
 

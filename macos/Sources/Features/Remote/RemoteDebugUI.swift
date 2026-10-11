@@ -60,7 +60,13 @@ enum RemoteDebugUI {
             let key = try RemoteKey.secureEnclave(storedAt: keyURL)
             let knownHosts = KnownHosts(fileURL: knownHostsURL)
             let connection = try await RemoteConnection.connect(to: host, key: key, knownHosts: knownHosts)
-            let sessions = try await connection.sessions()
+            let sessions: [RemoteSession]
+            do {
+                sessions = try await connection.sessions()
+            } catch {
+                await connection.close()
+                throw error
+            }
             await connection.close()
             guard let session = pick(sessions) else { return }
 

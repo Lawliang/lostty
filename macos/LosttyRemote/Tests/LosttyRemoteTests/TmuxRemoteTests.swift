@@ -9,7 +9,7 @@ struct TmuxRemoteTests {
     @Test func attachQuotesTheSessionIDAndNeverDetachesOthers() throws {
         let cmd = try TmuxRemote.attachCommand(sessionID: "$3", terminfoDir: "/Applications/Lostty.app/Contents/Resources/terminfo")
         #expect(cmd == "exec env LANG=\"${LANG:-en_US.UTF-8}\" TERMINFO='/Applications/Lostty.app/Contents/Resources/terminfo' "
-            + "PATH=/opt/homebrew/bin:/usr/local/bin:$PATH tmux -u -L lostty attach-session -t '$3'")
+            + "PATH=/opt/homebrew/bin:/usr/local/bin:$PATH tmux -u -L lostty -f /dev/null attach-session -t '$3'")
         #expect(!cmd.contains(" -d"))
     }
 

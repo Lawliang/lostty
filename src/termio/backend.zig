@@ -25,19 +25,19 @@ pub const Config = union(Kind) {
 /// behavior and providing read/write capabilities.
 pub const Backend = union(Kind) {
     exec: termio.Exec,
-    remote: termio.Remote, // Lostty Mobile
+    remote: termio.Remote, // Lostty Mobile: remote.
 
     pub fn deinit(self: *Backend) void {
         switch (self.*) {
             .exec => |*exec| exec.deinit(),
-            .remote => |*remote| remote.deinit(), // Lostty Mobile
+            .remote => |*remote| remote.deinit(), // Lostty Mobile: remote.
         }
     }
 
     pub fn initTerminal(self: *Backend, t: *terminal.Terminal) void {
         switch (self.*) {
             .exec => |*exec| exec.initTerminal(t),
-            .remote => |*remote| remote.initTerminal(t), // Lostty Mobile
+            .remote => |*remote| remote.initTerminal(t), // Lostty Mobile: remote.
         }
     }
 
@@ -49,14 +49,14 @@ pub const Backend = union(Kind) {
     ) !void {
         switch (self.*) {
             .exec => |*exec| try exec.threadEnter(alloc, io, td),
-            .remote => |*remote| try remote.threadEnter(alloc, io, td), // Lostty Mobile
+            .remote => |*remote| try remote.threadEnter(alloc, io, td), // Lostty Mobile: remote.
         }
     }
 
     pub fn threadExit(self: *Backend, td: *termio.Termio.ThreadData) void {
         switch (self.*) {
             .exec => |*exec| exec.threadExit(td),
-            .remote => |*remote| remote.threadExit(td), // Lostty Mobile
+            .remote => |*remote| remote.threadExit(td), // Lostty Mobile: remote.
         }
     }
 
@@ -67,7 +67,7 @@ pub const Backend = union(Kind) {
     ) !void {
         switch (self.*) {
             .exec => |*exec| try exec.focusGained(td, focused),
-            .remote => |*remote| try remote.focusGained(td, focused), // Lostty Mobile
+            .remote => |*remote| try remote.focusGained(td, focused), // Lostty Mobile: remote.
         }
     }
 
@@ -78,7 +78,7 @@ pub const Backend = union(Kind) {
     ) !void {
         switch (self.*) {
             .exec => |*exec| try exec.resize(grid_size, screen_size),
-            .remote => |*remote| try remote.resize(grid_size, screen_size), // Lostty Mobile
+            .remote => |*remote| try remote.resize(grid_size, screen_size), // Lostty Mobile: remote.
         }
     }
 
@@ -91,7 +91,7 @@ pub const Backend = union(Kind) {
     ) !void {
         switch (self.*) {
             .exec => |*exec| try exec.queueWrite(alloc, td, data, linefeed),
-            .remote => |*remote| try remote.queueWrite(alloc, td, data, linefeed), // Lostty Mobile
+            .remote => |*remote| try remote.queueWrite(alloc, td, data, linefeed), // Lostty Mobile: remote.
         }
     }
 
@@ -109,7 +109,7 @@ pub const Backend = union(Kind) {
                 exit_code,
                 runtime_ms,
             ),
-            .remote => |*remote| try remote.childExitedAbnormally( // Lostty Mobile
+            .remote => |*remote| try remote.childExitedAbnormally( // Lostty Mobile: remote.
                 gpa,
                 t,
                 exit_code,
@@ -122,12 +122,12 @@ pub const Backend = union(Kind) {
 /// Termio thread data. See termio.ThreadData for docs.
 pub const ThreadData = union(Kind) {
     exec: termio.Exec.ThreadData,
-    remote: termio.Remote.ThreadData, // Lostty Mobile
+    remote: termio.Remote.ThreadData, // Lostty Mobile: remote.
 
     pub fn deinit(self: *ThreadData, alloc: Allocator) void {
         switch (self.*) {
             .exec => |*exec| exec.deinit(alloc),
-            .remote => |*remote| remote.deinit(alloc), // Lostty Mobile
+            .remote => |*remote| remote.deinit(alloc), // Lostty Mobile: remote.
         }
     }
 

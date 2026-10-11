@@ -2,6 +2,7 @@ import Citadel
 import Crypto
 import CryptoKit
 import Foundation
+import LocalAuthentication
 import NIOCore
 import NIOSSH
 
@@ -9,6 +10,7 @@ public enum RemoteError: Error, Equatable {
     case secureEnclaveUnavailable
     case hostKeyChanged(host: String, pinned: String, offered: String)
     case keyRejected
+    case authenticationCancelled
 
     public var message: String {
         switch self {
@@ -20,7 +22,36 @@ public enum RemoteError: Error, Equatable {
                 + "Application Support/Lostty."
         case .keyRejected:
             "The Mac refused Lostty's key. Add the line from \"Copy Remote Key\" to ~/.ssh/authorized_keys."
+        case .authenticationCancelled:
+            "Touch ID was cancelled, so Lostty did not connect. Open the session again to retry."
         }
+    }
+}
+
+extension RemoteError {
+    /// Citadel hands the connect the original error NIOSSH hit while signing
+    /// the auth offer with the Secure Enclave key (it reaches the handshake
+    /// through fireErrorCaught unwrapped). A cancelled or failed user-presence
+    /// check is a hard stop: retrying would prompt Touch ID again and again.
+    /// Anything else passes through unchanged. Citadel's login timeout is a
+    /// fixed 10 s, so a prompt left unanswered also ends here as a plain
+    /// timeout (retried by the caller).
+    static func mapConnectError(_ error: Error) -> Error {
+        if isUserPresenceFailure(error) { return RemoteError.authenticationCancelled }
+        return error
+    }
+
+    private static func isUserPresenceFailure(_ error: Error) -> Bool {
+        if error is LAError { return true }
+        let ns = error as NSError
+        if ns.domain == LAError.errorDomain { return true }
+        // Security reports a cancelled user-presence check as errSecUserCanceled
+        // (-128), errSecAuthFailed (-25293) or errSecInteractionNotAllowed (-25308).
+        if ns.domain == NSOSStatusErrorDomain, [-128, -25293, -25308].contains(ns.code) { return true }
+        if let underlying = ns.userInfo[NSUnderlyingErrorKey] as? Error {
+            return isUserPresenceFailure(underlying)
+        }
+        return false
     }
 }
 

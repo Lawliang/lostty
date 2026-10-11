@@ -56,6 +56,8 @@ final class RemoteSurfaceIO: Ghostty.RemoteIO, @unchecked Sendable {
     private var size = (cols: 80, rows: 24)
     private var detached = false
     private var didOpen = false
+    /// The size the current attach started with.
+    private var attachedSize = (cols: 80, rows: 24)
     private var task: Task<Void, Never>?
 
     init(
@@ -90,11 +92,13 @@ final class RemoteSurfaceIO: Ghostty.RemoteIO, @unchecked Sendable {
         // The surface is set before the loop can feed it.
         surfaceLock.withLock { self.surface = surface }
         let start: Bool = stateLock.withLock {
-            guard !detached else { return false }
+            guard !detached, task == nil else { return false }
             task = Task { [self] in await run() }
             return true
         }
-        if !start { surfaceLock.withLock { self.surface = nil } }
+        // A refused attach (detached, or a second one) leaves the surface as
+        // it was; only a detached one clears it.
+        if !start, stateLock.withLock({ detached }) { surfaceLock.withLock { self.surface = nil } }
     }
 
     func detach() {
@@ -121,6 +125,7 @@ final class RemoteSurfaceIO: Ghostty.RemoteIO, @unchecked Sendable {
         while !Task.isCancelled {
             let (cols, rows) = stateLock.withLock {
                 didOpen = false
+                attachedSize = size
                 return size
             }
             let end: AttachEnd
@@ -131,10 +136,11 @@ final class RemoteSurfaceIO: Ghostty.RemoteIO, @unchecked Sendable {
                     onOpen: { [self] terminal in opened(terminal) },
                     onOutput: { [self] data in received(data) })
             } catch let error as RemoteError {
-                // Host key changed, key refused, no Secure Enclave: say why
-                // and stop; retrying cannot help.
+                // Host key changed, key refused, no Secure Enclave, Touch ID
+                // cancelled: say why and stop; retrying cannot help. No exit
+                // is reported: that would close the pane and the message with
+                // it. Closing the pane never asks (remote panes don't confirm).
                 received(Data("\r\n\u{1b}[31m\(error.message)\u{1b}[0m\r\n".utf8))
-                reportExit(1)
                 return
             } catch {
                 // Could not connect (or the pane closed mid-attach): try
@@ -167,13 +173,16 @@ final class RemoteSurfaceIO: Ghostty.RemoteIO, @unchecked Sendable {
     }
 
     private func opened(_ terminal: RemoteTerminal) {
-        let keep: Bool = stateLock.withLock {
-            guard !detached else { return false }
+        // A resize while connecting only updated `size`; tell tmux now.
+        let (keep, stale): (Bool, (cols: Int, rows: Int)?) = stateLock.withLock {
+            guard !detached else { return (false, nil) }
             self.terminal = terminal
             didOpen = true
-            return true
+            let differs = size != attachedSize
+            return (true, differs ? size : nil)
         }
         if !keep { terminal.close() }
+        if let stale { terminal.resize(cols: stale.cols, rows: stale.rows) }
     }
 
     private func closed() {

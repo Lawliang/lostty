@@ -43,13 +43,17 @@ public final class RemoteConnection: @unchecked Sendable {
     }
 
     public static func connect(to host: RemoteHost, key: RemoteKey, knownHosts: KnownHosts) async throws -> RemoteConnection {
-        let client = try await SSHClient.connect(
-            host: host.host,
-            port: host.port,
-            authenticationMethod: .custom(KeyAuth(user: host.user, key: key)),
-            hostKeyValidator: .custom(PinnedHostKeys(host: host.host, port: host.port, knownHosts: knownHosts)),
-            reconnect: .never)
-        return RemoteConnection(client: client, host: host)
+        do {
+            let client = try await SSHClient.connect(
+                host: host.host,
+                port: host.port,
+                authenticationMethod: .custom(KeyAuth(user: host.user, key: key)),
+                hostKeyValidator: .custom(PinnedHostKeys(host: host.host, port: host.port, knownHosts: knownHosts)),
+                reconnect: .never)
+            return RemoteConnection(client: client, host: host)
+        } catch {
+            throw RemoteError.mapConnectError(error)
+        }
     }
 
     /// The Mac's Lostty tmux sessions; none when no tmux server is running.
@@ -108,7 +112,9 @@ public final class RemoteConnection: @unchecked Sendable {
                                     onOutput(Data(buffer: buffer))
                                 }
                             }
-                            outcome.record(remoteEnded: true, exitCode: 0)
+                            // Cancelled (the input side failed first): the
+                            // stream just ends, which is not the remote ending.
+                            if !Task.isCancelled { outcome.record(remoteEnded: true, exitCode: 0) }
                         } catch let failed as SSHClient.CommandFailed {
                             outcome.record(remoteEnded: true, exitCode: failed.exitCode)
                         }
@@ -172,7 +178,7 @@ final class AttachOutcome: @unchecked Sendable {
 
     /// The first outcome wins.
     func record(remoteEnded: Bool, exitCode: Int?) {
-        set(remoteEnded ? .exited(Int32(exitCode ?? 0)) : nil)
+        set(remoteEnded ? .exited(Int32(truncatingIfNeeded: exitCode ?? 0)) : nil)
     }
 
     func recordClosedLocally() {

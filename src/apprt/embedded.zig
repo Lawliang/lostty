@@ -19,6 +19,7 @@ const CoreApp = @import("../App.zig");
 const CoreInspector = @import("../inspector/main.zig").Inspector;
 const CoreSurface = @import("../Surface.zig");
 const configpkg = @import("../config.zig");
+// Lostty Mobile: the remote termio backend config.
 const termio = @import("../termio.zig");
 const tmux_session = @import("../cli/tmux/session.zig");
 const Config = configpkg.Config;
@@ -481,7 +482,7 @@ pub const Surface = struct {
             .app = app,
             .platform = try .init(opts.platform_tag, opts.platform),
             .userdata = opts.userdata,
-            .remote_io = remoteConfig(opts), // Lostty Mobile
+            .remote_io = remoteConfig(opts), // Lostty Mobile: remote.
             .core_surface = undefined,
             .content_scale = .{
                 .x = @floatCast(opts.scale_factor),
