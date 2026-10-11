@@ -64,6 +64,18 @@ pane_says() { "$TMUX_BIN" -L lostty-smoke capture-pane -p -t outer | grep -qF "$
 wait_for "the pane's session" our_session
 wait_for "the session named my_project, owned by this script, shell zsh" named_and_tagged
 
+# Lostty's tmux.conf: a mouse drag copies and leaves copy mode (else typing
+# is swallowed), and tmux's pane/menu mouse bindings are gone (no splits).
+for t in copy-mode copy-mode-vi; do
+    "$TMUX_BIN" -L lostty list-keys -T $t MouseDragEnd1Pane | grep -q 'copy-selection-and-cancel' ||
+        fail "$t MouseDragEnd1Pane does not leave copy mode"
+done
+for k in MouseDown3Pane MouseDown3Empty C-MouseDrag1Pane C-MouseDrag1Empty M-MouseDrag1Pane MouseDown2Pane; do
+    "$TMUX_BIN" -L lostty list-keys -T root 2>/dev/null | grep -q "^bind-key  *-T root  *$k " &&
+        fail "root mouse binding $k is still bound"
+done
+"$TMUX_BIN" -L lostty list-keys -T root | grep -q ' WheelUpPane ' || fail "WheelUpPane is not bound"
+
 # One command: 133;C before it, 133;D;<status> after, plus cwd and project.
 "$TMUX_BIN" -L lostty-smoke send-keys -t outer 'tput colors > colors.txt' Enter
 wait_for "OSC 133;D after a command" saw "]133;D;0"

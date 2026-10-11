@@ -54,19 +54,35 @@ pub fn run(gpa: Allocator) !u8 {
         const out = runTmuxEnv(alloc, create, &clean_env) orelse return fallback(alloc, env, .tmux_failed);
         break :create std.mem.trim(u8, out, " \r\n");
     };
-    if (!session.isSessionId(id)) return fallback(alloc, env, failed);
+    if (!session.isSessionId(id)) {
+        if (attach_id == null) killCreated(alloc, tmux, id, &clean_env);
+        return fallback(alloc, env, failed);
+    }
 
     // A new session records its shell, for "is this pane busy?" when its
     // window closes; an adopted one keeps what it has.
     const shell_name: ?[]const u8 = if (attach_id == null) std.fs.path.basename(env.shellPath()) else null;
-    const tag = session.tagArgv(alloc, tmux, id, surface, env.app_pid, shell_name) catch return fallback(alloc, env, failed);
-    if (runTmuxEnv(alloc, tag, &clean_env) == null) return fallback(alloc, env, failed);
+    const tag = session.tagArgv(alloc, tmux, id, surface, env.app_pid, shell_name) catch {
+        if (attach_id == null) killCreated(alloc, tmux, id, &clean_env);
+        return fallback(alloc, env, failed);
+    };
+    if (runTmuxEnv(alloc, tag, &clean_env) == null) {
+        if (attach_id == null) killCreated(alloc, tmux, id, &clean_env);
+        return fallback(alloc, env, failed);
+    }
     if (attach_id != null) reportPwd(alloc, tmux, id, &clean_env);
 
     const attach = session.attachArgv(alloc, tmux, id) catch return fallback(alloc, env, failed);
     const err = std.process.execve(alloc, attach, &clean_env);
     std.log.warn("lostty: could not attach to tmux: {}", .{err});
     return fallback(alloc, env, .tmux_failed);
+}
+
+/// Best effort: a session this launcher created but could not tag would
+/// otherwise run untagged forever.
+fn killCreated(alloc: Allocator, tmux: []const u8, id: []const u8, env_map: *const std.process.EnvMap) void {
+    if (!session.isSessionId(id)) return;
+    _ = runTmuxEnv(alloc, &.{ tmux, "-L", session.socket, "kill-session", "-t", id }, env_map);
 }
 
 pub fn isExecutable(path: []const u8) bool {

@@ -49,7 +49,7 @@ pub fn run(gpa: Allocator) !u8 {
         while (lines.next()) |line| taken.append(alloc, line) catch return 0;
 
         const want = naming.uniqueName(alloc, base, taken.items) catch return 0;
-        if (launch.runTmux(alloc, &.{ tmux, "-L", session.socket, "rename-session", "-t", id, want }) != null) return 0;
+        if (launch.runTmux(alloc, &.{ tmux, "-L", session.socket, "rename-session", "-t", id, "--", want }) != null) return 0;
     }
     return 0;
 }

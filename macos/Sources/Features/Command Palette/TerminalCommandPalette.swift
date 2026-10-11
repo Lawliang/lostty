@@ -139,21 +139,6 @@ struct TerminalCommandPaletteView: View {
     }
 
     /// Commands for jumping to other terminal surfaces.
-    /// Lostty Mobile: sessions no window shows (started on the phone, or
-    /// kept after a crash), opened in a new window.
-    private var sessionOptions: [CommandOption] {
-        guard let ghostty = (NSApp.delegate as? AppDelegate)?.ghostty else { return [] }
-        return sessions.available.map { session in
-            CommandOption(
-                title: "Open Session: \(session.name)",
-                subtitle: "tmux session on this Mac",
-                leadingIcon: "terminal"
-            ) {
-                SessionsUI.open(session, ghostty: ghostty)
-            }
-        }
-    }
-
     private var jumpOptions: [CommandOption] {
         TerminalController.all.flatMap { controller -> [CommandOption] in
             guard let window = controller.window else { return [] }
@@ -194,6 +179,20 @@ struct TerminalCommandPaletteView: View {
         }
     }
 
+    /// Lostty Mobile: sessions no window shows (started on the phone, or
+    /// kept after a crash), opened in a new window.
+    private var sessionOptions: [CommandOption] {
+        guard let ghostty = (NSApp.delegate as? AppDelegate)?.ghostty else { return [] }
+        return sessions.available.map { session in
+            CommandOption(
+                title: "Open Session: \(session.name)",
+                subtitle: "tmux session on this Mac",
+                leadingIcon: "terminal"
+            ) {
+                SessionsUI.open(session, ghostty: ghostty)
+            }
+        }
+    }
 }
 
 /// This is done to ensure that the given view is in the responder chain.
