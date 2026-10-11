@@ -343,6 +343,10 @@ class AppDelegate: NSObject,
         ClaudeHooksUI.installMenuItem(after: menuOpenConfig)
         HookNotifications.checkAtLaunch()
 
+        // Lostty Mobile: after a crash, offer to reopen the tmux sessions
+        // the previous Lostty left running.
+        SessionsUI.offerOrphansAtLaunch(ghostty)
+
         #if DEBUG
         // Lostty Claude trace: preview the focused pane's trace style.
         if let anchor = menuOpenConfig, let menu = anchor.menu {

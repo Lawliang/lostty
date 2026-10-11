@@ -15,6 +15,9 @@ struct TerminalCommandPaletteView: View {
     /// The update view model for showing update commands.
     var updateViewModel: UpdateViewModel?
 
+    /// Lostty Mobile: tmux sessions no window shows.
+    @ObservedObject var sessions = SessionsModel.shared
+
     /// The callback when an action is submitted.
     var onAction: ((String) -> Void)
 
@@ -42,6 +45,7 @@ struct TerminalCommandPaletteView: View {
             }
         }
         .onChange(of: isPresented) { newValue in
+            if newValue { sessions.refresh() }
             // When the command palette disappears we need to send focus back to the
             // surface view we were overlaid on top of. There's probably a better way
             // to handle the first responder state here but I don't know it.
@@ -64,7 +68,7 @@ struct TerminalCommandPaletteView: View {
         // Sort the rest. We replace ":" with a character that sorts before space
         // so that "Foo:" sorts before "Foo Bar:". Use sortKey as a tie-breaker
         // for stable ordering when titles are equal.
-        options.append(contentsOf: (jumpOptions + terminalOptions).sorted { a, b in
+        options.append(contentsOf: (jumpOptions + terminalOptions + sessionOptions).sorted { a, b in
             let aNormalized = a.title.replacingOccurrences(of: ":", with: "\t")
             let bNormalized = b.title.replacingOccurrences(of: ":", with: "\t")
             let comparison = aNormalized.localizedCaseInsensitiveCompare(bNormalized)
@@ -135,6 +139,21 @@ struct TerminalCommandPaletteView: View {
     }
 
     /// Commands for jumping to other terminal surfaces.
+    /// Lostty Mobile: sessions no window shows (started on the phone, or
+    /// kept after a crash), opened in a new window.
+    private var sessionOptions: [CommandOption] {
+        guard let ghostty = (NSApp.delegate as? AppDelegate)?.ghostty else { return [] }
+        return sessions.available.map { session in
+            CommandOption(
+                title: "Open Session: \(session.name)",
+                subtitle: "tmux session on this Mac",
+                leadingIcon: "terminal"
+            ) {
+                SessionsUI.open(session, ghostty: ghostty)
+            }
+        }
+    }
+
     private var jumpOptions: [CommandOption] {
         TerminalController.all.flatMap { controller -> [CommandOption] in
             guard let window = controller.window else { return [] }
