@@ -590,9 +590,11 @@ class BaseTerminalController: NSWindowController,
     @objc private func ghosttyDidCloseSurface(_ notification: Notification) {
         guard let target = notification.object as? Ghostty.SurfaceView else { return }
         guard let node = surfaceTree.root?.node(view: target) else { return }
-        closeSurface(
-            node,
-            withConfirmation: (notification.userInfo?["process_alive"] as? Bool) ?? false)
+        // Lostty Mobile: the core's process_alive is always true for a pane in
+        // a tmux session (alternate screen), so re-ask the tmux-aware check.
+        // For plain panes needsConfirmQuit is the core's answer, so no change.
+        let processAlive = (notification.userInfo?["process_alive"] as? Bool) ?? false
+        closeSurface(node, withConfirmation: processAlive && target.needsConfirmQuit)
     }
 
     @objc private func ghosttyDidNewSplit(_ notification: Notification) {
