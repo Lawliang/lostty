@@ -332,4 +332,5 @@ test {
     _ = claude_hooks;
     _ = claude_usage;
     _ = @import("tmux/naming.zig");
+    _ = @import("tmux/session.zig");
 }
