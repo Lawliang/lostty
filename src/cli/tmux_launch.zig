@@ -95,13 +95,46 @@ pub fn runTmux(alloc: Allocator, argv: []const []const u8) ?[]u8 {
     return runTmuxEnv(alloc, argv, null);
 }
 
+/// How long one tmux command may take: a hung tmux must not leave the new
+/// pane blank, so the launcher kills it and falls back to a plain shell.
+const timeout_ns = 2 * std.time.ns_per_s;
+
 /// `runTmux` with an explicit environment for the child (null inherits).
 fn runTmuxEnv(alloc: Allocator, argv: []const []const u8, env_map: ?*const std.process.EnvMap) ?[]u8 {
-    const result = std.process.Child.run(.{ .allocator = alloc, .argv = argv, .env_map = env_map }) catch return null;
-    return switch (result.term) {
-        .Exited => |code| if (code == 0) result.stdout else null,
+    return runTimed(alloc, argv, env_map, timeout_ns);
+}
+
+/// Runs `argv`; its stdout when it exits 0 within `timeout`, else null
+/// (killed at the deadline).
+fn runTimed(
+    alloc: Allocator,
+    argv: []const []const u8,
+    env_map: ?*const std.process.EnvMap,
+    timeout: u64,
+) ?[]u8 {
+    var child = std.process.Child.init(argv, alloc);
+    child.env_map = env_map;
+    child.stdin_behavior = .Ignore;
+    child.stdout_behavior = .Pipe;
+    child.stderr_behavior = .Ignore;
+    child.spawn() catch return null;
+
+    var finished: std.Thread.ResetEvent = .{};
+    const watchdog = std.Thread.spawn(.{}, killAfter, .{ &finished, child.id, timeout }) catch null;
+    const out = child.stdout.?.readToEndAlloc(alloc, 1 << 20) catch null;
+    const term = child.wait();
+    finished.set();
+    if (watchdog) |t| t.join();
+
+    const t = term catch return null;
+    return switch (t) {
+        .Exited => |code| if (code == 0) out else null,
         else => null,
     };
+}
+
+fn killAfter(finished: *std.Thread.ResetEvent, pid: std.posix.pid_t, timeout: u64) void {
+    finished.timedWait(timeout) catch std.posix.kill(pid, std.posix.SIG.KILL) catch {};
 }
 
 /// The pane's size, so the shell starts at the right width rather than
@@ -147,4 +180,20 @@ fn fallback(alloc: Allocator, env: session.Env, notice: session.Notice) u8 {
 
 test {
     _ = @import("tmux/session.zig");
+}
+
+test "lostty tmux launch: runTimed returns stdout, fails on a non-zero exit" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+    try std.testing.expectEqualStrings("hi\n", runTimed(alloc, &.{ "/bin/echo", "hi" }, null, timeout_ns).?);
+    try std.testing.expect(runTimed(alloc, &.{"/usr/bin/false"}, null, timeout_ns) == null);
+}
+
+test "lostty tmux launch: runTimed kills a hung command at the deadline" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    var timer = try std.time.Timer.start();
+    try std.testing.expect(runTimed(arena.allocator(), &.{ "/bin/sleep", "30" }, null, 200 * std.time.ns_per_ms) == null);
+    try std.testing.expect(timer.read() < 5 * std.time.ns_per_s);
 }
