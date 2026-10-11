@@ -19,6 +19,7 @@ const CoreApp = @import("../App.zig");
 const CoreInspector = @import("../inspector/main.zig").Inspector;
 const CoreSurface = @import("../Surface.zig");
 const configpkg = @import("../config.zig");
+const tmux_session = @import("../cli/tmux/session.zig");
 const Config = configpkg.Config;
 
 const log = std.log.scoped(.embedded_window);
@@ -530,7 +531,9 @@ pub const Surface = struct {
             const cmd = std.mem.sliceTo(c_command, 0);
             if (cmd.len > 0) {
                 config.command = .{ .shell = cmd };
-                config.@"wait-after-command" = true;
+                // Lostty Mobile: the tmux launcher is the pane's shell, so the
+                // pane closes when the shell exits, like a plain pane.
+                config.@"wait-after-command" = !tmux_session.isLauncherCommand(cmd);
             }
         }
 

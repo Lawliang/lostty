@@ -170,6 +170,12 @@ pub fn attachIdFromArgs(argv: []const []const u8) ?[]const u8 {
     return null;
 }
 
+/// True when the pane's command is Lostty's tmux launcher (see
+/// SessionLaunch.swift), i.e. the pane's shell rather than a script.
+pub fn isLauncherCommand(cmd: []const u8) bool {
+    return std.mem.indexOf(u8, cmd, "' +tmux-launch") != null;
+}
+
 /// tmux session ids look like "$12".
 pub fn isSessionId(s: []const u8) bool {
     if (s.len < 2 or s[0] != '$') return false;
@@ -379,4 +385,13 @@ test "lostty tmux session: notices and OSC 7" {
         "\x1b]7;kitty-shell-cwd://mac/Users/me/My Projects/x\x07",
         try pwdSequence(arena.allocator(), "mac", "/Users/me/My Projects/x"),
     );
+}
+
+test "lostty tmux session: isLauncherCommand" {
+    const t = std.testing;
+    try t.expect(isLauncherCommand("'/Applications/Lostty.app/Contents/MacOS/ghostty' +tmux-launch"));
+    try t.expect(isLauncherCommand("'/x/ghostty' +tmux-launch '--attach=$3'"));
+    try t.expect(!isLauncherCommand("vim foo"));
+    try t.expect(!isLauncherCommand(""));
+    try t.expect(!isLauncherCommand("echo +tmux-launch"));
 }
