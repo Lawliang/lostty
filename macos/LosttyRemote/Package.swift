@@ -19,7 +19,10 @@ let package = Package(
         ),
         .testTarget(
             name: "LosttyRemoteTests",
-            dependencies: ["LosttyRemote"]
+            dependencies: [
+                "LosttyRemote",
+                .product(name: "Citadel", package: "Citadel"),
+            ]
         ),
     ]
 )
