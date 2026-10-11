@@ -1013,12 +1013,7 @@ pub const Surface = struct {
 /// Lostty Mobile: the remote backend's config from surface options, or null
 /// for a local process (the default, an unknown mode, or a missing callback).
 fn remoteConfig(opts: Surface.Options) ?termio.Remote.Config {
-    if (opts.io_mode != 1) return null;
-    return .{
-        .userdata = opts.io_userdata,
-        .write = opts.io_write orelse return null,
-        .resize = opts.io_resize orelse return null,
-    };
+    return termio.Remote.fromOptions(opts.io_mode, opts.io_userdata, opts.io_write, opts.io_resize);
 }
 
 /// Inspector is the state required for the terminal inspector. A terminal
@@ -2298,25 +2293,3 @@ pub const CAPI = struct {
         }
     };
 };
-
-fn testWrite(_: ?*anyopaque, _: [*]const u8, _: usize) callconv(.c) void {}
-fn testResize(_: ?*anyopaque, _: u16, _: u16, _: u32, _: u32) callconv(.c) void {}
-
-test "lostty remote: surface options ask for the remote backend only when complete" {
-    const t = std.testing;
-    // Default: a local process.
-    try t.expect(remoteConfig(.{}) == null);
-    // Remote mode with both callbacks.
-    var ud: u8 = 0;
-    const cfg = remoteConfig(.{
-        .io_mode = 1,
-        .io_userdata = &ud,
-        .io_write = testWrite,
-        .io_resize = testResize,
-    }).?;
-    try t.expect(cfg.userdata == @as(?*anyopaque, &ud));
-    // Remote mode missing a callback falls back to local.
-    try t.expect(remoteConfig(.{ .io_mode = 1, .io_write = testWrite }) == null);
-    // An unknown mode is local.
-    try t.expect(remoteConfig(.{ .io_mode = 7, .io_write = testWrite, .io_resize = testResize }) == null);
-}

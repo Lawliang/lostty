@@ -41,6 +41,18 @@ pub const Config = struct {
     resize: ResizeFn,
 };
 
+/// The config for a surface whose options ask for remote IO, or null for a
+/// local process (mode 0, an unknown mode, or a missing callback). Surface
+/// options use 1 for remote (GHOSTTY_SURFACE_IO_REMOTE).
+pub fn fromOptions(io_mode: c_int, userdata: ?*anyopaque, write_fn: ?WriteFn, resize_fn: ?ResizeFn) ?Config {
+    if (io_mode != 1) return null;
+    return .{
+        .userdata = userdata,
+        .write = write_fn orelse return null,
+        .resize = resize_fn orelse return null,
+    };
+}
+
 /// Written to the screen when the connection drops. When the app attaches
 /// again tmux redraws the whole screen, which replaces it.
 pub const disconnected_notice = "\x1b[0m\r\n\x1b[2mreconnecting\u{2026}\x1b[0m";
@@ -261,4 +273,18 @@ test "lostty remote: runtime counts from creation" {
     var sink: TestSink = .{};
     const remote = try Remote.init(sink.config());
     try std.testing.expect(remote.runtimeMs() < 5_000);
+}
+
+test "lostty remote: surface options ask for the remote backend only when complete" {
+    const t = std.testing;
+    var sink: TestSink = .{};
+    // Default: a local process.
+    try t.expect(fromOptions(0, null, TestSink.write, TestSink.resize) == null);
+    // Remote mode with both callbacks.
+    const cfg = fromOptions(1, &sink, TestSink.write, TestSink.resize).?;
+    try t.expect(cfg.userdata == @as(?*anyopaque, &sink));
+    // Remote mode missing a callback falls back to local.
+    try t.expect(fromOptions(1, null, TestSink.write, null) == null);
+    // An unknown mode is local.
+    try t.expect(fromOptions(7, null, TestSink.write, TestSink.resize) == null);
 }
