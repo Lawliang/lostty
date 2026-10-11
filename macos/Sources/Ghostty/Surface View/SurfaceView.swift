@@ -647,6 +647,19 @@ extension Ghostty {
         #endif
     }
 
+    /// Lostty Mobile: a surface whose program runs elsewhere (the core's
+    /// remote backend, termio/Remote.zig). The core calls `write` on its IO
+    /// thread and `resize` during surface creation and on its IO thread;
+    /// both copy what they need and return at once.
+    protocol RemoteIO: AnyObject {
+        func write(_ bytes: UnsafeRawBufferPointer)
+        func resize(cols: UInt16, rows: UInt16, widthPx: UInt32, heightPx: UInt32)
+        /// The surface exists: start delivering bytes to it.
+        func attach(to surface: ghostty_surface_t)
+        /// The view is going away: stop calling into the surface.
+        func detach()
+    }
+
     /// The configuration for a surface. For any configuration not set, defaults will be chosen from
     /// libghostty, usually from the Ghostty configuration.
     struct SurfaceConfiguration {
@@ -670,6 +683,9 @@ extension Ghostty {
 
         /// Context for surface creation
         var context: ghostty_surface_context_e = GHOSTTY_SURFACE_CONTEXT_WINDOW
+
+        /// Lostty Mobile: set for a remote surface (see `RemoteIO`).
+        var remoteIO: RemoteIO?
 
         init() {}
 
@@ -728,6 +744,24 @@ extension Ghostty {
 
             // Set context
             config.context = context
+
+            // Lostty Mobile: a remote surface's bytes come from `remoteIO`.
+            if let remoteIO {
+                config.io_mode = GHOSTTY_SURFACE_IO_REMOTE
+                config.io_userdata = Unmanaged.passUnretained(remoteIO as AnyObject).toOpaque()
+                config.io_write = { userdata, bytes, len in
+                    guard let userdata, let bytes,
+                          let io = Unmanaged<AnyObject>.fromOpaque(userdata).takeUnretainedValue() as? RemoteIO
+                    else { return }
+                    io.write(UnsafeRawBufferPointer(start: bytes, count: len))
+                }
+                config.io_resize = { userdata, cols, rows, width, height in
+                    guard let userdata,
+                          let io = Unmanaged<AnyObject>.fromOpaque(userdata).takeUnretainedValue() as? RemoteIO
+                    else { return }
+                    io.resize(cols: cols, rows: rows, widthPx: width, heightPx: height)
+                }
+            }
 
             // Use withCString to ensure strings remain valid for the duration of the closure
             return try workingDirectory.withCString { cWorkingDir in

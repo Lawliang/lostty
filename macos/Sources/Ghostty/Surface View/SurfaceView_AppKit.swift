@@ -17,6 +17,9 @@ extension Ghostty {
         /// Lostty's tmux. A constant so `deinit` can read it.
         let inTmuxSession: Bool
 
+        /// Lostty Mobile: the remote IO of a remote pane (see Ghostty.RemoteIO).
+        private let remoteIO: Ghostty.RemoteIO?
+
         // The current title of the surface as defined by the pty. This can be
         // changed with escape codes. This is public because the callbacks go
         // to the app level and it is set from there.
@@ -177,6 +180,8 @@ extension Ghostty {
         // exit safely.
         var needsConfirmQuit: Bool {
             guard let surface = self.surface else { return false }
+            // Lostty Mobile: closing a remote pane only closes the viewer.
+            if remoteIO != nil { return false }
             let core = ghostty_surface_needs_confirm_quit(surface)
             // Lostty Mobile: tmux draws in the alternate screen, where the
             // core never sees a prompt and always asks. Ask tmux what the
@@ -272,7 +277,8 @@ extension Ghostty {
             // Lostty Mobile: the pane's shell lives in its own session on
             // Lostty's tmux, so it outlives the window and can be opened
             // from the phone. Decided before super.init (deinit reads it).
-            let tmuxLaunch = SessionLaunch.command(
+            self.remoteIO = baseConfig?.remoteIO
+            let tmuxLaunch = baseConfig?.remoteIO != nil ? nil : SessionLaunch.command(
                 existing: baseConfig?.command,
                 binary: Bundle.main.executableURL?.path,
                 disabled: UserDefaults.ghostty.bool(forKey: TmuxConstants.disabledDefaultsKey))
@@ -435,6 +441,13 @@ extension Ghostty {
             }
             self.surfaceModel = Ghostty.Surface(cSurface: surface)
 
+            // Lostty Mobile: a remote pane starts its session now that the
+            // surface exists, and its IO lives until the surface is freed.
+            if let remoteIO {
+                surfaceModel?.keepAlive = remoteIO
+                remoteIO.attach(to: surface)
+            }
+
             // Setup our tracking area so we get mouse moved events
             updateTrackingAreas()
 
@@ -453,6 +466,10 @@ extension Ghostty {
                 ClaudeRuntime.shared.surfaceClosed(closedID)
                 ClaudeUsageRuntime.shared.surfaceClosed(closedID)
             }
+
+            // Lostty Mobile: a remote pane closes its channel; the session
+            // keeps running on the Mac.
+            remoteIO?.detach()
 
             // Lostty Mobile: closing a pane ends its tmux session, as
             // closing a plain terminal ends its shell.
