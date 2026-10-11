@@ -58,11 +58,13 @@ private final class ScriptedAttacher: RemoteAttacher, @unchecked Sendable {
             _sizes.append("\(cols)x\(rows)")
             return results.isEmpty ? .success(.exited(0)) : results.removeFirst()
         }
+        // A failed connect never opens a channel or produces output.
+        let end = try next.get()
         let terminal = FakeTerminal()
         lock.withLock { _terminals.append(terminal) }
         onOpen(terminal)
         onOutput(output)
-        return try next.get()
+        return end
     }
 }
 
@@ -83,13 +85,39 @@ private final class HoldingAttacher: RemoteAttacher, @unchecked Sendable {
     }
 }
 
+/// Opens a terminal, waits until released, then delivers output and ends.
+private final class GatedAttacher: RemoteAttacher, @unchecked Sendable {
+    private let lock = NSLock()
+    private var _open = false
+    private var _released = false
+    var isOpen: Bool { lock.withLock { _open } }
+    func release() { lock.withLock { _released = true } }
+
+    func attach(cols: Int, rows: Int,
+                onOpen: @escaping @Sendable (RemoteTerminal) -> Void,
+                onOutput: @escaping @Sendable (Data) -> Void) async throws -> AttachEnd {
+        onOpen(FakeTerminal())
+        lock.withLock { _open = true }
+        while !lock.withLock({ _released }) { try? await Task.sleep(for: .milliseconds(5)) }
+        onOutput(Data("late".utf8))
+        return .lost
+    }
+}
+
+private final class DelayLog: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _values: [TimeInterval] = []
+    var values: [TimeInterval] { lock.withLock { _values } }
+    func add(_ v: TimeInterval) { lock.withLock { _values.append(v) } }
+}
+
 private let fakeSurface = UnsafeMutableRawPointer(bitPattern: 0x1)!
 
 struct RemoteSurfaceIOTests {
     @Test func attachesAtTheSizeTheCoreReportedAndFeedsOutput() async {
         let log = SurfaceLog()
         let attacher = ScriptedAttacher([.success(.exited(0))])
-        let io = RemoteSurfaceIO(attacher: attacher, surfaceCalls: log.calls, delays: { _ in })
+        let io = RemoteSurfaceIO(attacher: attacher, surfaceCalls: log.calls, delays: { _ in }, onMain: { $0() })
         io.resize(cols: 100, rows: 30, widthPx: 1000, heightPx: 600)
         io.attach(to: fakeSurface)
         await io.finished()
@@ -101,7 +129,7 @@ struct RemoteSurfaceIOTests {
     @Test func aLostConnectionShowsReconnectingAndAttachesAgain() async {
         let log = SurfaceLog()
         let attacher = ScriptedAttacher([.success(.lost), .success(.exited(0))])
-        let io = RemoteSurfaceIO(attacher: attacher, surfaceCalls: log.calls, delays: { _ in })
+        let io = RemoteSurfaceIO(attacher: attacher, surfaceCalls: log.calls, delays: { _ in }, onMain: { $0() })
         io.resize(cols: 80, rows: 24, widthPx: 0, heightPx: 0)
         io.attach(to: fakeSurface)
         await io.finished()
@@ -113,7 +141,7 @@ struct RemoteSurfaceIOTests {
         struct Down: Error {}
         let log = SurfaceLog()
         let attacher = ScriptedAttacher([.failure(Down()), .failure(Down()), .success(.exited(0))])
-        let io = RemoteSurfaceIO(attacher: attacher, surfaceCalls: log.calls, delays: { _ in })
+        let io = RemoteSurfaceIO(attacher: attacher, surfaceCalls: log.calls, delays: { _ in }, onMain: { $0() })
         io.attach(to: fakeSurface)
         await io.finished()
         #expect(attacher.sizes.count == 3)
@@ -124,7 +152,7 @@ struct RemoteSurfaceIOTests {
         let log = SurfaceLog()
         let changed = RemoteError.hostKeyChanged(host: "localhost", pinned: "A", offered: "B")
         let attacher = ScriptedAttacher([.failure(changed), .success(.exited(0))])
-        let io = RemoteSurfaceIO(attacher: attacher, surfaceCalls: log.calls, delays: { _ in })
+        let io = RemoteSurfaceIO(attacher: attacher, surfaceCalls: log.calls, delays: { _ in }, onMain: { $0() })
         io.attach(to: fakeSurface)
         await io.finished()
         #expect(attacher.sizes.count == 1)
@@ -135,7 +163,7 @@ struct RemoteSurfaceIOTests {
     @Test func typingGoesToTheOpenTerminalAndResizesFollow() async throws {
         let log = SurfaceLog()
         let attacher = HoldingAttacher()
-        let io = RemoteSurfaceIO(attacher: attacher, surfaceCalls: log.calls, delays: { _ in })
+        let io = RemoteSurfaceIO(attacher: attacher, surfaceCalls: log.calls, delays: { _ in }, onMain: { $0() })
         io.attach(to: fakeSurface)
         var terminal: FakeTerminal?
         for _ in 0..<50 where terminal == nil {
@@ -156,12 +184,39 @@ struct RemoteSurfaceIOTests {
     @Test func afterDetachNothingReachesTheSurface() async {
         let log = SurfaceLog()
         let attacher = ScriptedAttacher([.success(.lost), .success(.exited(0))])
-        let io = RemoteSurfaceIO(attacher: attacher, surfaceCalls: log.calls, delays: { _ in })
+        let io = RemoteSurfaceIO(attacher: attacher, surfaceCalls: log.calls, delays: { _ in }, onMain: { $0() })
         io.detach()
         io.attach(to: fakeSurface)
         await io.finished()
         #expect(log.fed.isEmpty)
         #expect(log.events.isEmpty)
+    }
+
+    @Test func detachingMidAttachSilencesLateOutputAndTheEnd() async throws {
+        let log = SurfaceLog()
+        let attacher = GatedAttacher()
+        let io = RemoteSurfaceIO(attacher: attacher, surfaceCalls: log.calls, delays: { _ in }, onMain: { $0() })
+        io.attach(to: fakeSurface)
+        for _ in 0..<100 where !attacher.isOpen { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(attacher.isOpen)
+        io.detach()
+        attacher.release()
+        await io.finished()
+        #expect(log.fed.isEmpty)
+        #expect(log.events.isEmpty)
+    }
+
+    @Test func aDropAfterAGoodSessionRetriesQuicklyEvenAfterEarlierFailures() async {
+        struct Down: Error {}
+        let log = SurfaceLog()
+        let waits = DelayLog()
+        let attacher = ScriptedAttacher([.failure(Down()), .failure(Down()), .success(.lost), .success(.exited(0))])
+        let io = RemoteSurfaceIO(
+            attacher: attacher, surfaceCalls: log.calls,
+            delays: { waits.add($0) }, onMain: { $0() })
+        io.attach(to: fakeSurface)
+        await io.finished()
+        #expect(waits.values == [0.5, 1, 0.5])
     }
 }
 #endif

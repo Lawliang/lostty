@@ -33,30 +33,41 @@ final class RemoteSurfaceIO: Ghostty.RemoteIO, @unchecked Sendable {
                 }
             },
             disconnected: { ghostty_surface_io_disconnected($0) },
-            exited: { surface, code in
-                DispatchQueue.main.async { ghostty_surface_io_exited(surface, code) }
-            })
+            // Called on the main thread (see `reportExit`).
+            exited: { ghostty_surface_io_exited($0, $1) })
     }
 
     private let attacher: RemoteAttacher
     private let calls: SurfaceCalls
     private let delays: @Sendable (TimeInterval) async throws -> Void
+    private let onMain: @Sendable (@escaping @Sendable () -> Void) -> Void
 
-    private let lock = NSLock()
+    // Two locks, never nested while waiting on each other:
+    // - `surfaceLock` guards only `surface`. It is held across a feed (the
+    //   core may block in it until its IO thread drains replies, which come
+    //   back through `write`), so `write` and `resize` must never take it.
+    // - `stateLock` guards everything else and is only held briefly.
+    // `detach` takes `stateLock`, releases it, then takes `surfaceLock`.
+    private let surfaceLock = NSLock()
     private var surface: ghostty_surface_t?
+
+    private let stateLock = NSLock()
     private var terminal: RemoteTerminal?
     private var size = (cols: 80, rows: 24)
     private var detached = false
+    private var didOpen = false
     private var task: Task<Void, Never>?
 
     init(
         attacher: RemoteAttacher,
         surfaceCalls: SurfaceCalls = .live,
-        delays: @escaping @Sendable (TimeInterval) async throws -> Void = { try await Task.sleep(for: .seconds($0)) }
+        delays: @escaping @Sendable (TimeInterval) async throws -> Void = { try await Task.sleep(for: .seconds($0)) },
+        onMain: @escaping @Sendable (@escaping @Sendable () -> Void) -> Void = { DispatchQueue.main.async(execute: $0) }
     ) {
         self.attacher = attacher
         self.calls = surfaceCalls
         self.delays = delays
+        self.onMain = onMain
     }
 
     // MARK: Ghostty.RemoteIO
@@ -64,11 +75,11 @@ final class RemoteSurfaceIO: Ghostty.RemoteIO, @unchecked Sendable {
     func write(_ bytes: UnsafeRawBufferPointer) {
         let data = Data(bytes)
         // Typing while not attached (connecting, reconnecting) is dropped.
-        lock.withLock { terminal }?.write(data)
+        stateLock.withLock { terminal }?.write(data)
     }
 
     func resize(cols: UInt16, rows: UInt16, widthPx: UInt32, heightPx: UInt32) {
-        let open: RemoteTerminal? = lock.withLock {
+        let open: RemoteTerminal? = stateLock.withLock {
             size = (Int(cols), Int(rows))
             return terminal
         }
@@ -76,27 +87,31 @@ final class RemoteSurfaceIO: Ghostty.RemoteIO, @unchecked Sendable {
     }
 
     func attach(to surface: ghostty_surface_t) {
-        lock.withLock {
-            guard !detached else { return }
-            self.surface = surface
+        // The surface is set before the loop can feed it.
+        surfaceLock.withLock { self.surface = surface }
+        let start: Bool = stateLock.withLock {
+            guard !detached else { return false }
             task = Task { [self] in await run() }
+            return true
         }
+        if !start { surfaceLock.withLock { self.surface = nil } }
     }
 
     func detach() {
-        let open: RemoteTerminal? = lock.withLock {
+        let open: RemoteTerminal? = stateLock.withLock {
             detached = true
-            surface = nil
             task?.cancel()
             defer { terminal = nil }
             return terminal
         }
+        // Waits for a feed in flight; none starts after this.
+        surfaceLock.withLock { surface = nil }
         open?.close()
     }
 
     /// Waits for the session loop to end (tests).
     func finished() async {
-        await lock.withLock { task }?.value
+        await stateLock.withLock { task }?.value
     }
 
     // MARK: Session loop
@@ -104,7 +119,10 @@ final class RemoteSurfaceIO: Ghostty.RemoteIO, @unchecked Sendable {
     private func run() async {
         var policy = ReconnectPolicy()
         while !Task.isCancelled {
-            let (cols, rows) = lock.withLock { size }
+            let (cols, rows) = stateLock.withLock {
+                didOpen = false
+                return size
+            }
             let end: AttachEnd
             do {
                 end = try await attacher.attach(
@@ -116,7 +134,7 @@ final class RemoteSurfaceIO: Ghostty.RemoteIO, @unchecked Sendable {
                 // Host key changed, key refused, no Secure Enclave: say why
                 // and stop; retrying cannot help.
                 received(Data("\r\n\u{1b}[31m\(error.message)\u{1b}[0m\r\n".utf8))
-                withSurface { calls.exited($0, 1) }
+                reportExit(1)
                 return
             } catch {
                 // Could not connect (or the pane closed mid-attach): try
@@ -130,42 +148,51 @@ final class RemoteSurfaceIO: Ghostty.RemoteIO, @unchecked Sendable {
             closed()
             switch end {
             case .exited(let code):
-                withSurface { calls.exited($0, UInt32(bitPattern: code)) }
+                reportExit(UInt32(bitPattern: code))
                 return
             case .lost:
+                // A connection that worked starts the backoff over.
+                if stateLock.withLock({ didOpen }) { policy.reset() }
                 withSurface { calls.disconnected($0) }
                 guard (try? await delays(policy.nextDelay())) != nil else { return }
             }
-            policy.reset()
         }
     }
 
+    /// The core handles exits on the main thread, and the view frees the
+    /// surface there, so the check for a still-attached surface happens on
+    /// main too: `detach` (view deinit) cannot run between check and call.
+    private func reportExit(_ code: UInt32) {
+        onMain { [self] in withSurface { calls.exited($0, code) } }
+    }
+
     private func opened(_ terminal: RemoteTerminal) {
-        let keep: Bool = lock.withLock {
+        let keep: Bool = stateLock.withLock {
             guard !detached else { return false }
             self.terminal = terminal
+            didOpen = true
             return true
         }
         if !keep { terminal.close() }
     }
 
     private func closed() {
-        lock.withLock { terminal = nil }
+        stateLock.withLock { terminal = nil }
     }
 
     /// Received bytes go to the surface while it exists. The lock is held
     /// across the call so `detach` (before the surface is freed) waits for
     /// a feed in flight.
     private func received(_ data: Data) {
-        lock.lock()
-        defer { lock.unlock() }
+        surfaceLock.lock()
+        defer { surfaceLock.unlock() }
         guard let surface else { return }
         calls.feed(surface, data)
     }
 
     private func withSurface(_ body: (ghostty_surface_t) -> Void) {
-        lock.lock()
-        defer { lock.unlock() }
+        surfaceLock.lock()
+        defer { surfaceLock.unlock() }
         guard let surface else { return }
         body(surface)
     }
