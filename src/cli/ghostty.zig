@@ -23,6 +23,8 @@ const skins = @import("skins.zig");
 const claude_state = @import("claude_state.zig");
 const claude_hooks = @import("claude_hooks.zig");
 const claude_usage = @import("claude_usage.zig");
+const tmux_launch = @import("tmux_launch.zig");
+const tmux_rename = @import("tmux_rename.zig");
 
 /// Special commands that can be invoked via CLI flags. These are all
 /// invoked by using `+<action>` as a CLI flag. The only exception is
@@ -85,6 +87,14 @@ pub const Action = enum {
     // Lostty: Claude Code's status line command; reports context and plan
     // usage to this pane.
     @"claude-usage",
+
+    // Lostty Mobile: run a new pane's shell in its own session on Lostty's
+    // private tmux, or adopt an existing session.
+    @"tmux-launch",
+
+    // Lostty Mobile: name the pane's tmux session after its project (run
+    // by the zsh snippet).
+    @"tmux-rename",
 
     pub fn detectSpecialCase(arg: []const u8) ?SpecialCase(Action) {
         // If we see a "-e" and we haven't seen a command yet, then
@@ -168,6 +178,8 @@ pub const Action = enum {
             .@"claude-state" => try claude_state.run(alloc),
             .@"claude-hooks" => try claude_hooks.run(alloc),
             .@"claude-usage" => try claude_usage.run(alloc),
+            .@"tmux-launch" => try tmux_launch.run(alloc),
+            .@"tmux-rename" => try tmux_rename.run(alloc),
         };
     }
 
@@ -211,6 +223,8 @@ pub const Action = enum {
                 .@"claude-state" => claude_state.Options,
                 .@"claude-hooks" => claude_hooks.Options,
                 .@"claude-usage" => claude_usage.Options,
+                .@"tmux-launch" => tmux_launch.Options,
+                .@"tmux-rename" => tmux_rename.Options,
             };
         }
     }
@@ -331,6 +345,8 @@ test {
     _ = claude_state;
     _ = claude_hooks;
     _ = claude_usage;
+    _ = tmux_launch;
+    _ = tmux_rename;
     _ = @import("tmux/naming.zig");
     _ = @import("tmux/session.zig");
     _ = @import("tmux/snippet_test.zig");
