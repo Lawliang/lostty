@@ -333,4 +333,5 @@ test {
     _ = claude_usage;
     _ = @import("tmux/naming.zig");
     _ = @import("tmux/session.zig");
+    _ = @import("tmux/snippet_test.zig");
 }
