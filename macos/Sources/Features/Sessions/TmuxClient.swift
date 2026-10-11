@@ -56,7 +56,7 @@ struct TmuxClient {
 
         let deadline = DispatchTime.now() + timeout
         guard exited.wait(timeout: deadline) == .success else {
-            process.terminate()
+            kill(process.processIdentifier, SIGKILL)
             return nil
         }
         guard read.wait(timeout: deadline) == .success,

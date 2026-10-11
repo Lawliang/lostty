@@ -91,7 +91,14 @@ struct TmuxPaneTests {
     }
 }
 
-struct TmuxClientTests {
+final class TmuxClientTests {
+    /// Stand-in tmux scripts this test wrote; removed when it ends.
+    private var fakes: [URL] = []
+
+    deinit {
+        fakes.forEach { try? FileManager.default.removeItem(at: $0) }
+    }
+
     @Test func locatePrefersHomebrewOverABarePATH() {
         let found = TmuxClient.locate(path: "/usr/bin:/bin") {
             $0 == "/opt/homebrew/bin/tmux" || $0 == "/usr/bin/tmux"
@@ -119,6 +126,7 @@ struct TmuxClientTests {
             .appendingPathComponent("fake-tmux-\(UUID().uuidString)")
         try "#!/bin/sh\n\(body)\n".write(to: url, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
+        fakes.append(url)
         return url.path
     }
 
@@ -133,10 +141,23 @@ struct TmuxClientTests {
     }
 
     @Test func aHungTmuxGivesUpAtTheTimeout() throws {
-        let client = TmuxClient(tmuxPath: try fakeTmux("sleep 30"), timeout: 0.3)
+        let pidFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("fake-tmux-pid-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: pidFile) }
+        // Long enough for macOS's first-run scan of the new script (~1 s).
+        let client = TmuxClient(tmuxPath: try fakeTmux("echo $$ > '\(pidFile.path)'; exec sleep 30"), timeout: 3)
         let start = Date()
         #expect(client.run(["list-sessions"]) == nil)
-        #expect(Date().timeIntervalSince(start) < 3)
+        #expect(Date().timeIntervalSince(start) < 6)
+        let pid = try #require(Int32(String(contentsOf: pidFile, encoding: .utf8)
+            .trimmingCharacters(in: .whitespacesAndNewlines)))
+        // Killed and reaped (a zombie still answers kill(pid, 0)).
+        var gone = false
+        for _ in 0..<20 where !gone {
+            gone = kill(pid, 0) != 0
+            if !gone { usleep(50_000) }
+        }
+        #expect(gone, "the hung tmux is still running")
     }
 }
 #endif

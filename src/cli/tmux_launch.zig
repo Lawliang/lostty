@@ -20,8 +20,9 @@ pub const Options = struct {
 /// the pane's shell in its own session on Lostty's private tmux (`tmux -L
 /// lostty`) and attaches to it, so the shell outlives the window and can be
 /// picked up from the phone. `--attach=<session id>` adopts an existing
-/// session instead, and a pane a crashed Lostty showed adopts its old one. If tmux is missing or fails, it prints one line saying
-/// so and runs a plain login shell.
+/// session instead, and a pane a crashed Lostty showed adopts its old one.
+/// If tmux is missing or fails, it prints one line saying so and runs a
+/// plain login shell.
 pub fn run(gpa: Allocator) !u8 {
     var arena_state = std.heap.ArenaAllocator.init(gpa);
     defer arena_state.deinit();
@@ -40,8 +41,10 @@ pub fn run(gpa: Allocator) !u8 {
 
     // A window macOS restored after a crash keeps its pane id: it picks up
     // the shell the crashed Lostty left running instead of starting another.
-    const adopt: ?[]const u8 = attach_id orelse findOrphan(alloc, tmux, surface, &clean_env);
-    const failed: session.Notice = if (adopt != null) .session_gone else .tmux_failed;
+    // Claiming it (tagging it with this pane and Lostty) settles the race
+    // with its shell exiting: if the tag fails, the pane starts a new one.
+    const adopt: ?[]const u8 = attach_id orelse claimOrphan(alloc, tmux, surface, env.app_pid, &clean_env);
+    const failed: session.Notice = if (attach_id != null) .session_gone else .tmux_failed;
 
     const id: []const u8 = if (adopt) |want| want else create: {
         var cwd_buf: [std.fs.max_path_bytes]u8 = undefined;
@@ -82,11 +85,21 @@ pub fn run(gpa: Allocator) !u8 {
     return fallback(alloc, env, .tmux_failed);
 }
 
-/// The session a crashed Lostty left showing this pane, if any.
-fn findOrphan(alloc: Allocator, tmux: []const u8, surface: []const u8, env_map: *const std.process.EnvMap) ?[]const u8 {
-    const argv = session.listArgv(alloc, tmux) catch return null;
-    const out = runTmuxEnv(alloc, argv, env_map) orelse return null;
-    return session.orphanFor(out, surface, &isAlive);
+/// The session a crashed Lostty left showing this pane, tagged as this
+/// pane's; null when there is none or it ended before it could be tagged.
+fn claimOrphan(
+    alloc: Allocator,
+    tmux: []const u8,
+    surface: []const u8,
+    app_pid: ?[]const u8,
+    env_map: *const std.process.EnvMap,
+) ?[]const u8 {
+    const list = session.listArgv(alloc, tmux) catch return null;
+    const out = runTmuxEnv(alloc, list, env_map) orelse return null;
+    const id = session.orphanFor(out, surface, &isAlive) orelse return null;
+    const tag = session.tagArgv(alloc, tmux, id, surface, app_pid, null) catch return null;
+    _ = runTmuxEnv(alloc, tag, env_map) orelse return null;
+    return id;
 }
 
 /// Whether process `pid` exists (a Lostty that owns sessions).

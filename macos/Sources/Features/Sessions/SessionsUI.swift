@@ -14,7 +14,7 @@ enum SessionsUI {
             }.value
             let openPanes = Set(NSApp.windows
                 .compactMap { $0.windowController as? BaseTerminalController }
-                .flatMap { $0.surfaceTree.map(\.id) })
+                .flatMap { $0.surfaceTree.filter(\.inTmuxSession).map(\.id) })
             let orphans = TmuxOwnership.reopenable(found, openPanes: openPanes)
             guard !orphans.isEmpty else { return }
             let text = SessionsPrompt.reopen(orphans)
