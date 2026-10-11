@@ -437,6 +437,19 @@ typedef enum {
   GHOSTTY_SURFACE_CONTEXT_SPLIT = 2,
 } ghostty_surface_context_e;
 
+// Lostty Mobile: a remote surface's program runs elsewhere (termio/Remote.zig).
+typedef enum {
+  GHOSTTY_SURFACE_IO_LOCAL = 0,
+  GHOSTTY_SURFACE_IO_REMOTE = 1,
+} ghostty_surface_io_mode_e;
+
+typedef void (*ghostty_surface_io_write_cb)(void*, const uint8_t*, size_t);
+typedef void (*ghostty_surface_io_resize_cb)(void*,
+                                             uint16_t,
+                                             uint16_t,
+                                             uint32_t,
+                                             uint32_t);
+
 typedef struct {
   ghostty_platform_e platform_tag;
   ghostty_platform_u platform;
@@ -450,6 +463,11 @@ typedef struct {
   const char* initial_input;
   bool wait_after_command;
   ghostty_surface_context_e context;
+  // Lostty Mobile: remote IO (see ghostty_surface_io_mode_e).
+  ghostty_surface_io_mode_e io_mode;
+  void* io_userdata;
+  ghostty_surface_io_write_cb io_write;
+  ghostty_surface_io_resize_cb io_resize;
 } ghostty_surface_config_s;
 
 typedef struct {
@@ -1104,6 +1122,10 @@ bool ghostty_surface_key_is_binding(ghostty_surface_t,
                                     ghostty_input_key_s,
                                     ghostty_binding_flags_e*);
 void ghostty_surface_text(ghostty_surface_t, const char*, uintptr_t);
+// Lostty Mobile: remote surfaces.
+void ghostty_surface_io_feed(ghostty_surface_t, const uint8_t*, size_t);
+void ghostty_surface_io_disconnected(ghostty_surface_t);
+void ghostty_surface_io_exited(ghostty_surface_t, uint32_t);
 void ghostty_surface_preedit(ghostty_surface_t, const char*, uintptr_t);
 bool ghostty_surface_mouse_captured(ghostty_surface_t);
 bool ghostty_surface_mouse_button(ghostty_surface_t,

@@ -19,6 +19,7 @@ const CoreApp = @import("../App.zig");
 const CoreInspector = @import("../inspector/main.zig").Inspector;
 const CoreSurface = @import("../Surface.zig");
 const configpkg = @import("../config.zig");
+const termio = @import("../termio.zig");
 const tmux_session = @import("../cli/tmux/session.zig");
 const Config = configpkg.Config;
 
@@ -420,6 +421,10 @@ pub const Surface = struct {
     /// that getTitle works without the implementer needing to save it.
     title: ?[:0]const u8 = null,
 
+    /// Lostty Mobile: set when the app created a remote surface; the core
+    /// surface reads it through `termioRemote` to pick its backend.
+    remote_io: ?termio.Remote.Config = null,
+
     /// Surface initialization options.
     pub const Options = extern struct {
         /// The platform that this surface is being initialized for and
@@ -461,6 +466,14 @@ pub const Surface = struct {
 
         /// Context for the new surface
         context: apprt.surface.NewSurfaceContext = .window,
+
+        /// Lostty Mobile: 0 runs a local process (the default); 1 makes this
+        /// a remote surface (termio/Remote.zig) whose bytes come from
+        /// `ghostty_surface_io_feed` and go out through these callbacks.
+        io_mode: c_int = 0,
+        io_userdata: ?*anyopaque = null,
+        io_write: ?termio.Remote.WriteFn = null,
+        io_resize: ?termio.Remote.ResizeFn = null,
     };
 
     pub fn init(self: *Surface, app: *App, opts: Options) !void {
@@ -468,6 +481,7 @@ pub const Surface = struct {
             .app = app,
             .platform = try .init(opts.platform_tag, opts.platform),
             .userdata = opts.userdata,
+            .remote_io = remoteConfig(opts), // Lostty Mobile
             .core_surface = undefined,
             .content_scale = .{
                 .x = @floatCast(opts.scale_factor),
@@ -982,6 +996,12 @@ pub const Surface = struct {
         return env;
     }
 
+    /// Lostty Mobile: the remote IO the app asked for, or null for a local
+    /// process. Read by the core surface when it starts its termio.
+    pub fn termioRemote(self: *const Surface) ?termio.Remote.Config {
+        return self.remote_io;
+    }
+
     /// The cursor position from the host directly is in screen coordinates but
     /// all our interface works in pixels.
     fn cursorPosToPixels(self: *const Surface, pos: apprt.CursorPos) !apprt.CursorPos {
@@ -989,6 +1009,17 @@ pub const Surface = struct {
         return .{ .x = pos.x * scale.x, .y = pos.y * scale.y };
     }
 };
+
+/// Lostty Mobile: the remote backend's config from surface options, or null
+/// for a local process (the default, an unknown mode, or a missing callback).
+fn remoteConfig(opts: Surface.Options) ?termio.Remote.Config {
+    if (opts.io_mode != 1) return null;
+    return .{
+        .userdata = opts.io_userdata,
+        .write = opts.io_write orelse return null,
+        .resize = opts.io_resize orelse return null,
+    };
+}
 
 /// Inspector is the state required for the terminal inspector. A terminal
 /// inspector is 1:1 with a Surface.
@@ -1807,6 +1838,41 @@ pub const CAPI = struct {
         surface.textCallback(ptr[0..len]);
     }
 
+    /// Lostty Mobile: bytes received for a remote surface, processed as a
+    /// local process's output would be. Safe from any thread. Ignored for
+    /// local surfaces.
+    export fn ghostty_surface_io_feed(
+        surface: *Surface,
+        ptr: [*]const u8,
+        len: usize,
+    ) void {
+        if (surface.core_surface.io.backend != .remote) return;
+        surface.core_surface.io.processOutput(ptr[0..len]);
+    }
+
+    /// Lostty Mobile: a remote surface lost its connection; shows a quiet
+    /// "reconnecting…" line. Safe from any thread.
+    export fn ghostty_surface_io_disconnected(surface: *Surface) void {
+        if (surface.core_surface.io.backend != .remote) return;
+        surface.core_surface.io.processOutput(termio.Remote.disconnected_notice);
+    }
+
+    /// Lostty Mobile: a remote surface's program ended (the tmux session
+    /// is gone); handled as a local process exit, so the surface closes
+    /// unless it waits after commands. Main thread only.
+    export fn ghostty_surface_io_exited(surface: *Surface, exit_code: u32) void {
+        const remote = switch (surface.core_surface.io.backend) {
+            .remote => |*r| r,
+            else => return,
+        };
+        surface.core_surface.handleMessage(.{ .child_exited = .{
+            .exit_code = exit_code,
+            .runtime_ms = remote.runtimeMs(),
+        } }) catch |err| {
+            log.warn("error handling remote exit err={}", .{err});
+        };
+    }
+
     /// Set the preedit text for the surface. This is used for IME
     /// composition. If the length is 0, then the preedit text is cleared.
     export fn ghostty_surface_preedit(
@@ -2232,3 +2298,25 @@ pub const CAPI = struct {
         }
     };
 };
+
+fn testWrite(_: ?*anyopaque, _: [*]const u8, _: usize) callconv(.c) void {}
+fn testResize(_: ?*anyopaque, _: u16, _: u16, _: u32, _: u32) callconv(.c) void {}
+
+test "lostty remote: surface options ask for the remote backend only when complete" {
+    const t = std.testing;
+    // Default: a local process.
+    try t.expect(remoteConfig(.{}) == null);
+    // Remote mode with both callbacks.
+    var ud: u8 = 0;
+    const cfg = remoteConfig(.{
+        .io_mode = 1,
+        .io_userdata = &ud,
+        .io_write = testWrite,
+        .io_resize = testResize,
+    }).?;
+    try t.expect(cfg.userdata == @as(?*anyopaque, &ud));
+    // Remote mode missing a callback falls back to local.
+    try t.expect(remoteConfig(.{ .io_mode = 1, .io_write = testWrite }) == null);
+    // An unknown mode is local.
+    try t.expect(remoteConfig(.{ .io_mode = 7, .io_write = testWrite, .io_resize = testResize }) == null);
+}
