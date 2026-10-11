@@ -95,6 +95,41 @@ Design:
 - **Fallback.** If tmux is missing or the launcher fails, the window opens a
   plain local shell and shows a small notice.
 
+As built (phase 1):
+
+- **Session per pane.** Every pane, tab and split runs `+tmux-launch`, which
+  creates its own session on `tmux -L lostty` (server always started with
+  `-f <resources>/shell-integration/lostty-tmux/tmux.conf`) and `exec`s an
+  attach. `+tmux-rename` renames it to the project on directory change.
+- **Session options.** Each session carries `@lostty_surface` (pane id),
+  `@lostty_owner` (the Lostty app's pid) and `@lostty_shell`. Ownership is by
+  pid: a session whose owner is dead is an orphan.
+- **Signals.** Ghostty's own zsh integration is loaded inside tmux; Lostty's
+  snippet sends only OSC 133 C/D, OSC 7 and `SetUserVar=LOSTTY_PROJECT` through
+  passthrough. OSC 133 A/B/P are never sent, because Ghostty fresh-lines on
+  them.
+- **Close and quit.** Closing a pane kills its session. Close confirmation asks
+  tmux whether the pane's foreground command differs from `@lostty_shell`, so
+  a pane at its prompt closes without asking, splits included. Quitting kills
+  every session the app owns. A pane whose shell exits closes like a plain
+  pane (the core's forced wait-after-command is skipped for the launcher).
+- **Crash.** At launch, orphaned sessions are offered with "Reopen N terminal
+  sessions?". Not Now disowns them; the command palette then lists
+  `Open Session: <name>` for each.
+- **Mouse.** A drag copies and leaves copy mode. tmux's root-table mouse menus
+  and pane-changing bindings are unbound, so right- and middle-click do nothing
+  inside a pane (Shift+right-click opens Lostty's menu).
+- **Off switch.** The `LosttyTmuxDisabled` user default makes new panes plain
+  shells.
+- **Desk check.** Normal terminal behavior through tmux (skins, the Claude
+  trace and usage bar, keys, mouse, title, cwd for tabs and splits), close
+  confirmation and a second attached client all passed. Quit, crash reopen,
+  the missing-tmux fallback and Touch ID `sudo` were not checked by hand
+  (smoke test and unit tests only).
+- **Deferred.** After a crash, restored windows sit beside the reopened
+  sessions as duplicates. `TmuxClient` calls have no timeout. Shells other than
+  zsh get no signals inside tmux.
+
 ## 3. Lostty core: `remote` termio backend
 
 Today `src/termio/backend.zig` has one kind, `exec`, which spawns a local
