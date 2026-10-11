@@ -57,7 +57,7 @@ pane_says() { "$TMUX_BIN" -L lostty-smoke capture-pane -p -t outer | grep -qF "$
     { echo "FAIL: $RES has no lostty-tmux; run zig build -Demit-macos-app=false, then rebuild the app"; exit 1; }
 
 "$TMUX_BIN" -L lostty-smoke -f /dev/null new-session -d -s outer -x 120 -y 40 -c "$PROJECT" \
-    "env -u TMUX -u TMUX_PANE TERM=xterm-ghostty TERMINFO='$APP/Resources/terminfo' LOSTTY_SURFACE=$SURFACE LOSTTY_APP_PID=$$ LOSTTY_BIN='$BIN' GHOSTTY_RESOURCES_DIR='$RES' SHELL=/bin/zsh '$BIN' +tmux-launch"
+    "env TMUX=/private/tmp/tmux-fake/default,1,0 TMUX_PANE=%99 TERM=xterm-ghostty TERMINFO='$APP/Resources/terminfo' LOSTTY_SURFACE=$SURFACE LOSTTY_APP_PID=$$ LOSTTY_BIN='$BIN' GHOSTTY_RESOURCES_DIR='$RES' SHELL=/bin/zsh '$BIN' +tmux-launch"
 "$TMUX_BIN" -L lostty-smoke set -g remain-on-exit on
 "$TMUX_BIN" -L lostty-smoke pipe-pane -t outer "cat >> '$RAW'"
 
