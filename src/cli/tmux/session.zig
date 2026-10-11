@@ -170,6 +170,27 @@ pub fn attachIdFromArgs(argv: []const []const u8) ?[]const u8 {
     return null;
 }
 
+/// Lists every session as "id<TAB>surface<TAB>owner", for `orphanFor`.
+pub fn listArgv(alloc: Allocator, tmux: []const u8) ![]const []const u8 {
+    const format = "#{session_id}\t#{" ++ opt_surface ++ "}\t#{" ++ opt_owner ++ "}";
+    return alloc.dupe([]const u8, &.{ tmux, "-L", socket, "list-sessions", "-F", format });
+}
+
+/// The session a crashed Lostty left showing pane `surface`, from
+/// `listArgv` output: macOS restores the window with the same pane id, so
+/// it picks its shell back up instead of starting a new one beside it.
+pub fn orphanFor(list: []const u8, surface: []const u8, isAlive: *const fn (i32) bool) ?[]const u8 {
+    var lines = std.mem.splitScalar(u8, list, '\n');
+    while (lines.next()) |line| {
+        var fields = std.mem.splitScalar(u8, line, '\t');
+        const id = fields.next() orelse continue;
+        const s = fields.next() orelse continue;
+        const owner = std.fmt.parseInt(i32, fields.next() orelse continue, 10) catch continue;
+        if (isSessionId(id) and std.mem.eql(u8, s, surface) and !isAlive(owner)) return id;
+    }
+    return null;
+}
+
 /// True when the pane's command is Lostty's tmux launcher (see
 /// SessionLaunch.swift), i.e. the pane's shell rather than a script.
 pub fn isLauncherCommand(cmd: []const u8) bool {
@@ -394,4 +415,22 @@ test "lostty tmux session: isLauncherCommand" {
     try t.expect(!isLauncherCommand("vim foo"));
     try t.expect(!isLauncherCommand(""));
     try t.expect(!isLauncherCommand("echo +tmux-launch"));
+}
+
+test "lostty tmux session: orphanFor finds the crashed Lostty's session for this pane" {
+    const t = std.testing;
+    const isAlive = struct {
+        fn f(pid: i32) bool {
+            return pid == 100;
+        }
+    }.f;
+    const list =
+        "$1\t" ++ test_surface ++ "\t100\n" ++ // this pane, a live Lostty (a Debug build beside it)
+        "$2\tOTHER\t300\n" ++ // another pane's orphan
+        "$3\t" ++ test_surface ++ "\t300\n" ++ // this pane, crashed Lostty
+        "$4\t\t\n"; // phone session, no owner
+    try t.expectEqualStrings("$3", orphanFor(list, test_surface, &isAlive).?);
+    try t.expect(orphanFor("$1\t" ++ test_surface ++ "\t100\n", test_surface, &isAlive) == null);
+    try t.expect(orphanFor("", test_surface, &isAlive) == null);
+    try t.expect(orphanFor("garbage\n$5\t" ++ test_surface ++ "\tnope\n", test_surface, &isAlive) == null);
 }

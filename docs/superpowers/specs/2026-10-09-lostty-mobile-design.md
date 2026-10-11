@@ -126,9 +126,12 @@ As built (phase 1):
   confirmation and a second attached client all passed. Quit, crash reopen,
   the missing-tmux fallback and Touch ID `sudo` were not checked by hand
   (smoke test and unit tests only).
-- **Deferred.** After a crash, restored windows sit beside the reopened
-  sessions as duplicates. `TmuxClient` calls have no timeout. Shells other than
-  zsh get no signals inside tmux.
+- **Crash, restored windows.** A window macOS restores keeps its pane id, so
+  its launcher adopts the session the crashed Lostty left for that pane, and
+  the reopen prompt leaves those sessions out.
+- **Timeouts.** Every tmux call, in the app and in the launcher, gives up
+  after 2 s; a hung tmux can't freeze close or quit or leave a pane blank.
+- **Deferred.** Shells other than zsh get no signals inside tmux.
 
 ## 3. Lostty core: `remote` termio backend
 

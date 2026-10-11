@@ -49,6 +49,11 @@ our_session() {
 }
 named_and_tagged() { our_session | grep -q "^$SURFACE|my_project|$$|zsh\$"; }
 gone() { ! our_session; }
+our_id() {
+    "$TMUX_BIN" -L lostty list-sessions -F '#{session_id} #{@lostty_surface}' 2>/dev/null |
+        awk -v s="$SURFACE" '$2 == s { print $1 }'
+}
+attached() { "$TMUX_BIN" -L lostty list-clients -t "$(our_id)" | grep -q .; }
 saw() { grep -qF "$1" "$RAW"; }
 pane_says() { "$TMUX_BIN" -L lostty-smoke capture-pane -p -t outer | grep -qF "$1"; }
 
@@ -56,8 +61,8 @@ pane_says() { "$TMUX_BIN" -L lostty-smoke capture-pane -p -t outer | grep -qF "$
 [ -f "$RES/shell-integration/lostty-tmux/tmux.conf" ] ||
     { echo "FAIL: $RES has no lostty-tmux; run zig build -Demit-macos-app=false, then rebuild the app"; exit 1; }
 
-"$TMUX_BIN" -L lostty-smoke -f /dev/null new-session -d -s outer -x 120 -y 40 -c "$PROJECT" \
-    "env TMUX=/private/tmp/tmux-fake/default,1,0 TMUX_PANE=%99 TERM=xterm-ghostty TERMINFO='$APP/Resources/terminfo' LOSTTY_SURFACE=$SURFACE LOSTTY_APP_PID=$$ LOSTTY_BIN='$BIN' GHOSTTY_RESOURCES_DIR='$RES' SHELL=/bin/zsh '$BIN' +tmux-launch"
+LAUNCH="env TMUX=/private/tmp/tmux-fake/default,1,0 TMUX_PANE=%99 TERM=xterm-ghostty TERMINFO='$APP/Resources/terminfo' LOSTTY_SURFACE=$SURFACE LOSTTY_APP_PID=$$ LOSTTY_BIN='$BIN' GHOSTTY_RESOURCES_DIR='$RES' SHELL=/bin/zsh '$BIN' +tmux-launch"
+"$TMUX_BIN" -L lostty-smoke -f /dev/null new-session -d -s outer -x 120 -y 40 -c "$PROJECT" "$LAUNCH"
 "$TMUX_BIN" -L lostty-smoke set -g remain-on-exit on
 "$TMUX_BIN" -L lostty-smoke pipe-pane -t outer "cat >> '$RAW'"
 
@@ -84,6 +89,17 @@ saw "]7;kitty-shell-cwd://" || fail "no OSC 7"
 saw "SetUserVar=LOSTTY_PROJECT=" || fail "no LOSTTY_PROJECT user var"
 saw "]133;A" && fail "OSC 133;A reached the outer terminal"
 [ "$(cat "$PROJECT/colors.txt")" = "256" ] || fail "TERM inside tmux is not a 256-color terminal"
+
+# A crash: the session outlives its Lostty (owner now a dead pid). The
+# window macOS restores has the same pane id, and picks the shell back up
+# instead of starting a second session beside it.
+before=$(our_id)
+dead=$(sh -c 'echo $$')
+"$TMUX_BIN" -L lostty set-option -t "$before" @lostty_owner "$dead"
+"$TMUX_BIN" -L lostty-smoke respawn-pane -k -t outer -c "$PROJECT" "$LAUNCH"
+wait_for "the restored pane to adopt its session" named_and_tagged
+[ "$(our_id)" = "$before" ] || fail "restored pane started a new session ($(our_id)) instead of adopting $before"
+wait_for "the restored pane to attach" attached
 
 # Leaving the shell ends the session.
 "$TMUX_BIN" -L lostty-smoke send-keys -t outer 'exit' Enter

@@ -20,7 +20,7 @@ pub const Options = struct {
 /// the pane's shell in its own session on Lostty's private tmux (`tmux -L
 /// lostty`) and attaches to it, so the shell outlives the window and can be
 /// picked up from the phone. `--attach=<session id>` adopts an existing
-/// session instead. If tmux is missing or fails, it prints one line saying
+/// session instead, and a pane a crashed Lostty showed adopts its old one. If tmux is missing or fails, it prints one line saying
 /// so and runs a plain login shell.
 pub fn run(gpa: Allocator) !u8 {
     var arena_state = std.heap.ArenaAllocator.init(gpa);
@@ -34,12 +34,16 @@ pub fn run(gpa: Allocator) !u8 {
 
     const argv = std.process.argsAlloc(alloc) catch return fallback(alloc, env, .tmux_failed);
     const attach_id = session.attachIdFromArgs(argv);
-    const failed: session.Notice = if (attach_id != null) .session_gone else .tmux_failed;
     const tmux = session.findTmux(alloc, env.path, isExecutable) orelse return fallback(alloc, env, .no_tmux);
     const surface = env.surface orelse return fallback(alloc, env, .tmux_failed);
     const resources = env.resources_dir orelse return fallback(alloc, env, .tmux_failed);
 
-    const id: []const u8 = if (attach_id) |want| want else create: {
+    // A window macOS restored after a crash keeps its pane id: it picks up
+    // the shell the crashed Lostty left running instead of starting another.
+    const adopt: ?[]const u8 = attach_id orelse findOrphan(alloc, tmux, surface, &clean_env);
+    const failed: session.Notice = if (adopt != null) .session_gone else .tmux_failed;
+
+    const id: []const u8 = if (adopt) |want| want else create: {
         var cwd_buf: [std.fs.max_path_bytes]u8 = undefined;
         const cwd = std.posix.getcwd(&cwd_buf) catch return fallback(alloc, env, .tmux_failed);
         const create = session.newSessionArgv(alloc, .{
@@ -55,27 +59,40 @@ pub fn run(gpa: Allocator) !u8 {
         break :create std.mem.trim(u8, out, " \r\n");
     };
     if (!session.isSessionId(id)) {
-        if (attach_id == null) killCreated(alloc, tmux, id, &clean_env);
+        if (adopt == null) killCreated(alloc, tmux, id, &clean_env);
         return fallback(alloc, env, failed);
     }
 
     // A new session records its shell, for "is this pane busy?" when its
     // window closes; an adopted one keeps what it has.
-    const shell_name: ?[]const u8 = if (attach_id == null) std.fs.path.basename(env.shellPath()) else null;
+    const shell_name: ?[]const u8 = if (adopt == null) std.fs.path.basename(env.shellPath()) else null;
     const tag = session.tagArgv(alloc, tmux, id, surface, env.app_pid, shell_name) catch {
-        if (attach_id == null) killCreated(alloc, tmux, id, &clean_env);
+        if (adopt == null) killCreated(alloc, tmux, id, &clean_env);
         return fallback(alloc, env, failed);
     };
     if (runTmuxEnv(alloc, tag, &clean_env) == null) {
-        if (attach_id == null) killCreated(alloc, tmux, id, &clean_env);
+        if (adopt == null) killCreated(alloc, tmux, id, &clean_env);
         return fallback(alloc, env, failed);
     }
-    if (attach_id != null) reportPwd(alloc, tmux, id, &clean_env);
+    if (adopt != null) reportPwd(alloc, tmux, id, &clean_env);
 
     const attach = session.attachArgv(alloc, tmux, id) catch return fallback(alloc, env, failed);
     const err = std.process.execve(alloc, attach, &clean_env);
     std.log.warn("lostty: could not attach to tmux: {}", .{err});
     return fallback(alloc, env, .tmux_failed);
+}
+
+/// The session a crashed Lostty left showing this pane, if any.
+fn findOrphan(alloc: Allocator, tmux: []const u8, surface: []const u8, env_map: *const std.process.EnvMap) ?[]const u8 {
+    const argv = session.listArgv(alloc, tmux) catch return null;
+    const out = runTmuxEnv(alloc, argv, env_map) orelse return null;
+    return session.orphanFor(out, surface, &isAlive);
+}
+
+/// Whether process `pid` exists (a Lostty that owns sessions).
+fn isAlive(pid: i32) bool {
+    std.posix.kill(pid, 0) catch |err| return err != error.ProcessNotFound;
+    return true;
 }
 
 /// Best effort: a session this launcher created but could not tag would

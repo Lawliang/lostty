@@ -49,6 +49,13 @@ enum TmuxOwnership {
         sessions.filter { session in session.owner.map { !isAlive($0) } ?? false }
     }
 
+    /// The orphans worth offering after a crash: not those whose window
+    /// macOS restored (same pane id), whose launcher picks them back up.
+    static func reopenable(_ orphans: [TmuxSession], openPanes: Set<UUID>) -> [TmuxSession] {
+        let open = Set(openPanes.map(\.uuidString))
+        return orphans.filter { session in session.surface.map { !open.contains($0) } ?? true }
+    }
+
     /// Owned by `pid`: ended when that Lostty quits.
     static func owned(by pid: Int32, in sessions: [TmuxSession]) -> [TmuxSession] {
         sessions.filter { $0.owner == pid }

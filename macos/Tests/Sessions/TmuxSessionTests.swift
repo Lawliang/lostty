@@ -50,6 +50,13 @@ struct TmuxOwnershipTests {
         #expect(TmuxOwnership.available(sessions, isAlive: alive).map(\.id) == ["$3", "$4"])
     }
 
+    @Test func aRestoredWindowsSessionIsNotOfferedAgain() {
+        // macOS restored $3's window (same pane id); its launcher adopts $3.
+        let orphans = TmuxOwnership.orphans(sessions, isAlive: alive)
+        #expect(TmuxOwnership.reopenable(orphans, openPanes: [paneA]).isEmpty)
+        #expect(TmuxOwnership.reopenable(orphans, openPanes: [paneB]).map(\.id) == ["$3"])
+    }
+
     @Test func closingAPaneEndsOnlyThisLosttysSession() {
         #expect(TmuxOwnership.showing(paneA, ownedBy: 100, in: sessions).map(\.id) == ["$1"])
     }
