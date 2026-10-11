@@ -50,3 +50,38 @@ struct PinnedHostKeysTests {
         }
     }
 }
+
+struct KeyAuthTests {
+    func request(_ auth: KeyAuth, _ methods: NIOSSHAvailableUserAuthenticationMethods) -> Result<NIOSSHUserAuthenticationOffer?, Error> {
+        let loop = EmbeddedEventLoop()
+        let promise = loop.makePromise(of: NIOSSHUserAuthenticationOffer?.self)
+        auth.nextAuthenticationType(availableMethods: methods, nextChallengePromise: promise)
+        var result: Result<NIOSSHUserAuthenticationOffer?, Error>?
+        promise.futureResult.whenComplete { result = $0 }
+        loop.run()
+        return result!
+    }
+
+    @Test func offersTheKeyOnceThenReportsItRejected() {
+        let auth = KeyAuth(user: "me", key: RemoteKey(software: P256.Signing.PrivateKey()))
+        guard case .success(let offer?) = request(auth, .publicKey) else {
+            Issue.record("expected an offer")
+            return
+        }
+        #expect(offer.username == "me")
+        guard case .failure(let error) = request(auth, .publicKey) else {
+            Issue.record("expected a failure")
+            return
+        }
+        #expect(error as? RemoteError == .keyRejected)
+    }
+
+    @Test func failsWhenPublicKeyAuthIsNotOffered() {
+        let auth = KeyAuth(user: "me", key: RemoteKey(software: P256.Signing.PrivateKey()))
+        guard case .failure(let error) = request(auth, .password) else {
+            Issue.record("expected a failure")
+            return
+        }
+        #expect(error as? RemoteError == .keyRejected)
+    }
+}

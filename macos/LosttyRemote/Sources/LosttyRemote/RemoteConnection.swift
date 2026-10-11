@@ -57,14 +57,16 @@ public final class RemoteConnection: @unchecked Sendable {
         do {
             let out = try await client.executeCommand(TmuxRemote.listCommand)
             return TmuxRemote.parse(String(buffer: out))
-        } catch is SSHClient.CommandFailed {
+        } catch let failed as SSHClient.CommandFailed where failed.exitCode == 1 {
+            // tmux exits 1 when no server is running; anything else
+            // (127: tmux missing, …) is a real failure.
             return []
         }
     }
 
     /// Attaches to session `sessionID` on a PTY and runs until the client
     /// ends. `onOpen` hands over the input side once the PTY is up;
-    /// `onOutput` gets every received byte, on Citadel's event loop.
+    /// `onOutput` gets every received byte, from a task-group child task.
     public func attach(
         sessionID: String,
         cols: Int,
@@ -86,19 +88,29 @@ public final class RemoteConnection: @unchecked Sendable {
             terminalPixelWidth: 0,
             terminalPixelHeight: 0,
             terminalModes: .init([:]))
+        let outcome = AttachOutcome()
         do {
             try await client.withPTY(request, environment: []) { inbound, outbound in
                 let (inputs, input) = AsyncStream.makeStream(of: PTYInput.self)
                 let terminal = PTYTerminal(input: input)
-                input.yield(.data(Data((command + "\n").utf8)))
+                // Citadel's .pty mode always starts the login shell (there is
+                // no PTY+exec mode), so the attach command is typed into it.
+                // The leading space keeps it out of zsh history
+                // (HIST_IGNORE_SPACE).
+                input.yield(.data(Data((" " + command + "\n").utf8)))
                 onOpen(terminal)
                 try await withThrowingTaskGroup(of: Void.self) { group in
                     group.addTask {
-                        for try await output in inbound {
-                            switch output {
-                            case .stdout(let buffer), .stderr(let buffer):
-                                onOutput(Data(buffer: buffer))
+                        do {
+                            for try await output in inbound {
+                                switch output {
+                                case .stdout(let buffer), .stderr(let buffer):
+                                    onOutput(Data(buffer: buffer))
+                                }
                             }
+                            outcome.record(remoteEnded: true, exitCode: 0)
+                        } catch let failed as SSHClient.CommandFailed {
+                            outcome.record(remoteEnded: true, exitCode: failed.exitCode)
                         }
                     }
                     group.addTask {
@@ -109,6 +121,7 @@ public final class RemoteConnection: @unchecked Sendable {
                             case .resize(let cols, let rows):
                                 try await outbound.changeSize(cols: cols, rows: rows, pixelWidth: 0, pixelHeight: 0)
                             case .close:
+                                outcome.recordClosedLocally()
                                 return
                             }
                         }
@@ -120,11 +133,9 @@ public final class RemoteConnection: @unchecked Sendable {
                     input.finish()
                 }
             }
-            return .from(finished: true, exitCode: nil)
-        } catch let failed as SSHClient.CommandFailed {
-            return .from(finished: true, exitCode: failed.exitCode)
+            return outcome.end(afterError: nil)
         } catch {
-            return .from(finished: false, exitCode: nil)
+            return outcome.end(afterError: error)
         }
     }
 
@@ -150,4 +161,35 @@ final class PTYTerminal: RemoteTerminal, @unchecked Sendable {
     func write(_ data: Data) { input.yield(.data(data)) }
     func resize(cols: Int, rows: Int) { input.yield(.resize(cols: cols, rows: rows)) }
     func close() { input.yield(.close) }
+}
+
+/// What happened inside the PTY closure. Citadel's own throw after the
+/// closure is unreliable (it closes an already closed channel), so the end is
+/// decided from what the closure saw.
+final class AttachOutcome: @unchecked Sendable {
+    private let lock = NSLock()
+    private var recorded: AttachEnd?
+
+    /// The first outcome wins.
+    func record(remoteEnded: Bool, exitCode: Int?) {
+        set(remoteEnded ? .exited(Int32(exitCode ?? 0)) : nil)
+    }
+
+    func recordClosedLocally() {
+        set(.exited(0))
+    }
+
+    private func set(_ end: AttachEnd?) {
+        lock.lock()
+        defer { lock.unlock() }
+        if recorded == nil { recorded = end }
+    }
+
+    /// A recorded outcome beats any error thrown afterwards; `.lost` only when
+    /// nothing was recorded.
+    func end(afterError error: Error?) -> AttachEnd {
+        lock.lock()
+        defer { lock.unlock() }
+        return recorded ?? .lost
+    }
 }

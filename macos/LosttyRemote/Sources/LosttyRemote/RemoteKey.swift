@@ -45,14 +45,16 @@ public struct RemoteKey: @unchecked Sendable {
     /// Loads the key whose handle is at `url`, creating it on first use.
     public static func secureEnclave(storedAt url: URL) throws -> RemoteKey {
         guard SecureEnclave.isAvailable else { throw RemoteError.secureEnclaveUnavailable }
-        if let data = try? Data(contentsOf: url) {
+        // Never replace an existing handle: that would silently invalidate the
+        // authorized_keys line. If it exists but can't be used, throw.
+        if FileManager.default.fileExists(atPath: url.path) {
             return RemoteKey(NIOSSHPrivateKey(secureEnclaveP256Key:
-                try SecureEnclave.P256.Signing.PrivateKey(dataRepresentation: data)))
+                try SecureEnclave.P256.Signing.PrivateKey(dataRepresentation: Data(contentsOf: url))))
         }
         var error: Unmanaged<CFError>?
         guard let access = SecAccessControlCreateWithFlags(
             nil, kSecAttrAccessibleWhenUnlockedThisDeviceOnly, [.privateKeyUsage, .userPresence], &error)
-        else { throw error!.takeRetainedValue() as Error }
+        else { throw error?.takeRetainedValue() ?? RemoteError.secureEnclaveUnavailable }
         let key = try SecureEnclave.P256.Signing.PrivateKey(accessControl: access)
         try FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
