@@ -13,6 +13,10 @@ extension Ghostty {
         /// Unique ID per surface
         let id: UUID
 
+        /// Lostty Mobile: true when this pane's shell runs in a session on
+        /// Lostty's tmux. A constant so `deinit` can read it.
+        let inTmuxSession: Bool
+
         // The current title of the surface as defined by the pty. This can be
         // changed with escape codes. This is public because the callbacks go
         // to the app level and it is set from there.
@@ -173,7 +177,15 @@ extension Ghostty {
         // exit safely.
         var needsConfirmQuit: Bool {
             guard let surface = self.surface else { return false }
-            return ghostty_surface_needs_confirm_quit(surface)
+            let core = ghostty_surface_needs_confirm_quit(surface)
+            // Lostty Mobile: tmux draws in the alternate screen, where the
+            // core never sees a prompt and always asks. Ask tmux what the
+            // pane runs instead.
+            guard core, inTmuxSession, !readonly,
+                  (NSApp.delegate as? AppDelegate)?.ghostty.config.confirmCloseSurface != "always"
+            else { return core }
+            let pid = ProcessInfo.processInfo.processIdentifier
+            return TmuxClient().isBusy(surface: id, ownedBy: pid) ?? core
         }
 
         // Returns true if the process in this surface has exited.
@@ -256,6 +268,15 @@ extension Ghostty {
         init(_ app: ghostty_app_t, baseConfig: SurfaceConfiguration? = nil, uuid: UUID? = nil) {
             self.markedText = NSMutableAttributedString()
             self.id = uuid ?? .init()
+
+            // Lostty Mobile: the pane's shell lives in its own session on
+            // Lostty's tmux, so it outlives the window and can be opened
+            // from the phone. Decided before super.init (deinit reads it).
+            let tmuxLaunch = SessionLaunch.command(
+                existing: baseConfig?.command,
+                binary: Bundle.main.executableURL?.path,
+                disabled: UserDefaults.ghostty.bool(forKey: TmuxConstants.disabledDefaultsKey))
+            self.inTmuxSession = SessionLaunch.isLauncher(tmuxLaunch ?? baseConfig?.command)
 
             // Our initial config always is our application wide config.
             if let appDelegate = NSApplication.shared.delegate as? AppDelegate {
@@ -399,6 +420,12 @@ extension Ghostty {
             if let bin = Bundle.main.executableURL?.path {
                 surface_cfg.environmentVariables[ClaudeConstants.binEnvKey] = bin
             }
+            // Lostty Mobile: the launcher tags the pane's session with this pid.
+            surface_cfg.environmentVariables[TmuxConstants.appPIDEnvKey] =
+                String(ProcessInfo.processInfo.processIdentifier)
+            if let tmuxLaunch {
+                surface_cfg.command = tmuxLaunch
+            }
             let surface = surface_cfg.withCValue(view: self) { surface_cfg_c in
                 ghostty_surface_new(app, &surface_cfg_c)
             }
@@ -425,6 +452,15 @@ extension Ghostty {
             Task { @MainActor in
                 ClaudeRuntime.shared.surfaceClosed(closedID)
                 ClaudeUsageRuntime.shared.surfaceClosed(closedID)
+            }
+
+            // Lostty Mobile: closing a pane ends its tmux session, as
+            // closing a plain terminal ends its shell.
+            if inTmuxSession {
+                let pid = ProcessInfo.processInfo.processIdentifier
+                Task.detached(priority: .utility) {
+                    TmuxClient().endSessions(showing: closedID, ownedBy: pid)
+                }
             }
 
             // Remove all of our notificationcenter subscriptions

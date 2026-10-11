@@ -433,6 +433,10 @@ class AppDelegate: NSObject,
         // If our app says we don't need to confirm, we can exit now.
         if !ghostty.needsConfirmQuit { return .terminateNow }
 
+        // Lostty Mobile: the core counts every pane in a tmux session as
+        // busy (tmux draws in the alternate screen); ask each pane.
+        if !Self.anyPaneNeedsConfirmQuit() { return .terminateNow }
+
         // We have some visible window. Show an app-wide modal to confirm quitting.
         let alert = NSAlert()
         alert.messageText = "Quit Ghostty?"
@@ -449,11 +453,24 @@ class AppDelegate: NSObject,
         }
     }
 
+    /// Lostty Mobile: whether any open pane is running something. Panes in
+    /// tmux sessions ask tmux; the others answer as the core does.
+    private static func anyPaneNeedsConfirmQuit() -> Bool {
+        NSApp.windows
+            .compactMap { $0.windowController as? BaseTerminalController }
+            .contains { $0.surfaceTree.contains(where: { $0.needsConfirmQuit }) }
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         // We have no notifications we want to persist after death,
         // so remove them all now. In the future we may want to be
         // more selective and only remove surface-targeted notifications.
         UNUserNotificationCenter.current().removeAllDeliveredNotifications()
+
+        // Lostty Mobile: quitting ends this Lostty's tmux sessions, as
+        // quitting a plain terminal ends its shells. Sessions made on the
+        // phone, and other Lostty processes' sessions, stay.
+        TmuxClient().endSessions(ownedBy: ProcessInfo.processInfo.processIdentifier)
     }
 
     /// This is called when the application is already open and someone double-clicks the icon

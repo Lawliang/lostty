@@ -219,6 +219,16 @@ extension Ghostty {
             return String(cString: ptr)
         }
 
+        /// `confirm-close-surface`: "true", "false" or "always".
+        var confirmCloseSurface: String {
+            guard let config = self.config else { return "true" }
+            var v: UnsafePointer<Int8>?
+            let key = "confirm-close-surface"
+            guard ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8))) else { return "true" }
+            guard let ptr = v else { return "true" }
+            return String(cString: ptr)
+        }
+
         var windowPositionX: Int16? {
             guard let config = self.config else { return nil }
             var v: Int16 = 0
