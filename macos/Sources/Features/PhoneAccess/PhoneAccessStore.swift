@@ -26,12 +26,34 @@ final class PhoneAccessStore: ObservableObject {
     private var names: PhoneAccessNames { PhoneAccessNames(defaults: defaults) }
 
     var lockdownSkipped: Bool {
-        get { defaults.bool(forKey: Self.skipDefaultsKey) }
+        get {
+            #if DEBUG
+            if let galleryLockdownSkipped { return galleryLockdownSkipped }
+            #endif
+            return defaults.bool(forKey: Self.skipDefaultsKey)
+        }
         set {
             defaults.set(newValue, forKey: Self.skipDefaultsKey)
             objectWillChange.send()
         }
     }
+
+    #if DEBUG
+    /// Design Gallery only: a window frozen in one state.
+    static func gallery(
+        status: PhoneAccessStatus, lockdownSkipped: Bool = false, phones: [PairedPhone] = [],
+        pairing: Pairing? = nil, message: String? = nil
+    ) -> PhoneAccessStore {
+        let store = PhoneAccessStore()
+        store.status = status
+        store.phones = phones
+        store.pairing = pairing
+        store.message = message
+        store.galleryLockdownSkipped = lockdownSkipped
+        return store
+    }
+    private var galleryLockdownSkipped: Bool?
+    #endif
 
     var rows: [PhoneAccessRow] {
         status.map { PhoneAccessRow.rows(for: $0, lockdownSkipped: lockdownSkipped) } ?? []
@@ -40,6 +62,9 @@ final class PhoneAccessStore: ObservableObject {
     var canPair: Bool { status?.readyToPair(lockdownSkipped: lockdownSkipped) == true }
 
     func refresh() {
+        #if DEBUG
+        if galleryLockdownSkipped != nil { return }
+        #endif
         checking = true
         let requested = defaults.bool(forKey: PhoneAccessFolders.requestedDefaultsKey)
         Task.detached(priority: .userInitiated) {
@@ -53,12 +78,18 @@ final class PhoneAccessStore: ObservableObject {
     }
 
     func reloadPhones() {
+        #if DEBUG
+        if galleryLockdownSkipped != nil { return }
+        #endif
         phones = PhoneAccessNames.phones(keysText: (try? keysFile.read()) ?? "", names: names.entries())
     }
 
     // MARK: Fixes
 
     func fix(_ fix: PhoneAccessRow.Fix) {
+        #if DEBUG
+        if galleryLockdownSkipped != nil { return }
+        #endif
         switch fix {
         case .installTailscale:
             NSWorkspace.shared.open(URL(string: "https://tailscale.com/download/mac")!)
@@ -119,6 +150,9 @@ final class PhoneAccessStore: ObservableObject {
     // MARK: Pairing
 
     func startPairing() {
+        #if DEBUG
+        if galleryLockdownSkipped != nil { return }
+        #endif
         guard let tailscale = status?.tailscale, let name = tailscale.name, let ip = tailscale.ipv4 else { return }
         do {
             let pub = try String(contentsOfFile: PhoneAccessHostKey.path, encoding: .utf8)
@@ -229,6 +263,9 @@ final class PhoneAccessStore: ObservableObject {
     // MARK: Paired phones
 
     func rename(_ phone: PairedPhone, to name: String) {
+        #if DEBUG
+        if galleryLockdownSkipped != nil { return }
+        #endif
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         names.set(phone.id, .init(name: trimmed, paired: phone.paired ?? Date()))
@@ -236,6 +273,9 @@ final class PhoneAccessStore: ObservableObject {
     }
 
     func remove(_ phone: PairedPhone) {
+        #if DEBUG
+        if galleryLockdownSkipped != nil { return }
+        #endif
         do {
             try keysFile.write(AuthorizedKeys.removing(id: phone.id, from: try keysFile.read()))
             names.set(phone.id, nil)
@@ -248,6 +288,9 @@ final class PhoneAccessStore: ObservableObject {
     /// Removes every paired phone, then offers to turn password logins back
     /// on. Remote Login is left as it is.
     func turnOff() {
+        #if DEBUG
+        if galleryLockdownSkipped != nil { return }
+        #endif
         let confirm = NSAlert()
         confirm.messageText = "Turn off Phone Access?"
         confirm.informativeText = "Every paired phone is removed from ~/.ssh/authorized_keys and can't open your sessions anymore."

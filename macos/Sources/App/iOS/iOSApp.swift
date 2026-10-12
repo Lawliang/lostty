@@ -17,13 +17,23 @@ struct Ghostty_iOSApp: App {
 
     var body: some Scene {
         WindowGroup {
-            SessionsScreen()
-                .environmentObject(ghostty_app)
-                .environmentObject(store)
-                .preferredColorScheme(.dark)
-                .tint(LosttyTheme.accent)
-                // The Mac's pairing code scanned with the Camera app.
-                .onOpenURL { store.openPairingLink($0) }
+            Group {
+                #if DEBUG
+                if UserDefaults.standard.bool(forKey: "LosttyDesignGallery") {
+                    DesignGalleryScreen()
+                } else {
+                    SessionsScreen()
+                }
+                #else
+                SessionsScreen()
+                #endif
+            }
+            .environmentObject(ghostty_app)
+            .environmentObject(store)
+            .preferredColorScheme(.dark)
+            .tint(LosttyTheme.accent)
+            // The Mac's pairing code scanned with the Camera app.
+            .onOpenURL { store.openPairingLink($0) }
         }
         .onChange(of: scenePhase) { _, phase in store.scenePhaseChanged(phase) }
     }

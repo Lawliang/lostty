@@ -101,6 +101,9 @@ final class MobileStore: ObservableObject {
     }
 
     func refresh() async {
+        #if DEBUG
+        if isGallery { return }
+        #endif
         let hosts = settings.remoteHosts
         guard !hosts.isEmpty else {
             message = settings.problem
@@ -123,6 +126,9 @@ final class MobileStore: ObservableObject {
     /// Ends the session on the Mac; false (with `message` set) when it failed.
     @discardableResult
     func kill(_ session: RemoteSession) async -> Bool {
+        #if DEBUG
+        if isGallery { return false }
+        #endif
         let hosts = settings.remoteHosts
         guard !hosts.isEmpty else { return false }
         do {
@@ -197,6 +203,26 @@ final class MobileStore: ObservableObject {
     private var allowedPayload: PairingPayload?
 
     static let noSessionsMessage = "No sessions. Is Lostty open on your Mac?"
+
+    #if DEBUG
+    /// Design Gallery only: a store frozen in one state that never connects.
+    private(set) var isGallery = false
+
+    static func gallery(
+        sessions: [RemoteSession] = [], message: String? = nil, pairing: PairingPhase = .idle,
+        needsPairing: Bool = false, settings: RemoteHostSettings = RemoteHostSettings()
+    ) -> MobileStore {
+        let store = MobileStore(defaults: UserDefaults(suiteName: "lostty-design-gallery")!)
+        store.isGallery = true
+        store.settings = settings
+        store.sessions = sessions
+        store.message = message
+        store.pairing = pairing
+        store.needsPairing = needsPairing
+        return store
+    }
+    #endif
+
     static let tailscaleHint = "Is Tailscale on and signed into the same account as your Mac?"
 
     /// Identifies the running pairing attempt; cancelling bumps it so a late
@@ -219,6 +245,9 @@ final class MobileStore: ObservableObject {
     }
 
     func resetPairing() {
+        #if DEBUG
+        if isGallery { return }
+        #endif
         pairingAttempt = UUID()
         pairing = .idle
         allowedPayload = nil
@@ -226,12 +255,18 @@ final class MobileStore: ObservableObject {
 
     /// The user backed out: stop acting on whatever the attempt still gets.
     func cancelPairing() {
+        #if DEBUG
+        if isGallery { return }
+        #endif
         resetPairing()
     }
 
     /// Scan → find the Mac nearby → send this phone's key → wait for Allow
     /// → test over Tailscale. Only a working test saves the pairing.
     func pair(link: String) async {
+        #if DEBUG
+        if isGallery { return }
+        #endif
         switch pairing {
         case .idle, .failed: break
         default: return
@@ -274,6 +309,9 @@ final class MobileStore: ObservableObject {
 
     /// Pins the Mac's key from the QR and connects over Tailscale.
     func retryPairingTest() async {
+        #if DEBUG
+        if isGallery { return }
+        #endif
         guard case .failed(_, canRetryTest: true) = pairing else { return }
         pairingAttempt = UUID()
         await runPairingTest(attempt: pairingAttempt)

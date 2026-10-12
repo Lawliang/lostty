@@ -360,6 +360,11 @@ class AppDelegate: NSObject,
 
             // Lostty Mobile: open a session over SSH to localhost.
             RemoteDebugUI.installMenuItems(after: item)
+
+            // Lostty design: the Phone Access window in each state.
+            let gallery = NSMenuItem(title: "Phone Access Design Gallery", action: #selector(showPhoneAccessGallery(_:)), keyEquivalent: "")
+            gallery.target = self
+            menu.insertItem(gallery, at: menu.index(of: item) + 1)
         }
         #endif
     }
@@ -369,6 +374,10 @@ class AppDelegate: NSObject,
         guard let controller = NSApp.keyWindow?.windowController as? BaseTerminalController,
               let surface = controller.focusedSurface else { return }
         MainActor.assumeIsolated { ClaudeRuntime.shared.debugCycle(surface.id) }
+    }
+
+    @objc private func showPhoneAccessGallery(_ sender: Any?) {
+        MainActor.assumeIsolated { PhoneAccessGallery.show() }
     }
     #endif
 
