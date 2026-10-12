@@ -269,11 +269,37 @@ private struct SessionLine: View {
     }
 }
 
+/// The agent's state dot. It pulses while working and is steady otherwise,
+/// whenever the state changes while the dot stays on screen.
+private struct AgentDot: View {
+    let agent: AgentState
+    let color: Color
+    @State private var pulse = false
+
+    var body: some View {
+        Circle()
+            .fill(color)
+            .frame(width: 7, height: 7)
+            .overlay(Circle().strokeBorder(Color.black.opacity(0.5), lineWidth: 0.5))
+            .opacity(agent == .working && pulse ? 0.35 : 1)
+            .onAppear { restart() }
+            .onChange(of: agent) { _ in restart() }
+    }
+
+    private func restart() {
+        var stop = Transaction()
+        stop.disablesAnimations = true
+        withTransaction(stop) { pulse = false }
+        guard agent == .working else { return }
+        DispatchQueue.main.async {
+            withAnimation(.easeInOut(duration: 0.8).repeatForever()) { pulse = true }
+        }
+    }
+}
+
 /// A session's initial (or a phone), with its agent's state as a dot.
 private struct SessionAvatar: View {
     let session: BranchSession
-    @State private var pulse = false
-
     var body: some View {
         ZStack {
             Circle().fill(LosttyTheme.surfaceRaised)
@@ -288,16 +314,8 @@ private struct SessionAvatar: View {
         .frame(width: 18, height: 18)
         .overlay(alignment: .bottomTrailing) {
             if let agent = session.agent {
-                Circle()
-                    .fill(color(agent))
-                    .frame(width: 7, height: 7)
-                    .overlay(Circle().strokeBorder(Color.black.opacity(0.5), lineWidth: 0.5))
-                    .opacity(agent == .working && pulse ? 0.35 : 1)
+                AgentDot(agent: agent, color: color(agent))
                     .offset(x: 2, y: 2)
-                    .onAppear {
-                        guard agent == .working else { return }
-                        withAnimation(.easeInOut(duration: 0.8).repeatForever()) { pulse = true }
-                    }
             }
         }
         .accessibilityLabel(label)
