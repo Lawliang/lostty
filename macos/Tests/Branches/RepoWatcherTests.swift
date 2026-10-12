@@ -6,14 +6,20 @@ import Testing
 @MainActor
 struct RepoWatcherTests {
     @Test func classifiesGitDirChanges() {
-        #expect(RepoWatcher.classify("/r/.git/refs/heads/main") == .refs)
-        #expect(RepoWatcher.classify("/r/.git/HEAD") == .refs)
-        #expect(RepoWatcher.classify("/r/.git/worktrees/wt/HEAD") == .refs)
-        #expect(RepoWatcher.classify("/r/.git/index") == .index)
-        #expect(RepoWatcher.classify("/r/.git/worktrees/wt/index") == .index)
-        #expect(RepoWatcher.classify("/r/.git/objects/ab/cdef") == nil)
-        #expect(RepoWatcher.classify("/r/.git/logs/HEAD") == nil)
-        #expect(RepoWatcher.classify("/r/.git/refs/heads/main.lock") == nil)
+        #expect(RepoWatcher.classify("/r/.git/refs/heads/main", gitDir: "/r/.git") == .refs)
+        #expect(RepoWatcher.classify("/r/.git/HEAD", gitDir: "/r/.git") == .refs)
+        #expect(RepoWatcher.classify("/r/.git/worktrees/wt/HEAD", gitDir: "/r/.git") == .refs)
+        #expect(RepoWatcher.classify("/r/.git/index", gitDir: "/r/.git") == .index)
+        #expect(RepoWatcher.classify("/r/.git/worktrees/wt/index", gitDir: "/r/.git") == .index)
+        #expect(RepoWatcher.classify("/r/.git/objects/ab/cdef", gitDir: "/r/.git") == nil)
+        #expect(RepoWatcher.classify("/r/.git/logs/HEAD", gitDir: "/r/.git") == nil)
+        #expect(RepoWatcher.classify("/r/.git/refs/heads/main.lock", gitDir: "/r/.git") == nil)
+    }
+
+    @Test func onlyThePathInsideTheGitDirCounts() {
+        #expect(RepoWatcher.classify("/w/logs/svc/.git/refs/heads/main", gitDir: "/w/logs/svc/.git") == .refs)
+        #expect(RepoWatcher.classify("/r/.git/refs/heads/logs/x", gitDir: "/r/.git") == .refs)
+        #expect(RepoWatcher.classify("/r/.git/worktrees/wt/logs/HEAD", gitDir: "/r/.git") == nil)
     }
 
     @Test func reportsACommit() async throws {

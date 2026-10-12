@@ -80,6 +80,7 @@ final class BranchesModel: ObservableObject {
     @Published private(set) var refreshing = false
     @Published private(set) var expanded: Set<String> = []
     @Published private(set) var details: [String: BranchDetails] = [:]
+    /// Keyed by repo and branch; read through `summaryState(for:)`.
     @Published private(set) var summaryStates: [String: SummaryState] = [:]
     @Published private(set) var claude: ClaudeLookup = .unknown
 
@@ -144,6 +145,7 @@ final class BranchesModel: ObservableObject {
     }
 
     func focusChanged(_ pane: UUID?) {
+        focused = pane
         Task { await setFocus(pane) }
     }
 
@@ -236,7 +238,12 @@ final class BranchesModel: ObservableObject {
     private func sessionsChanged() {
         guard isOpen else { return }
         if let focused, env.pwd(focused) != lastPwd {
-            Task { await setFocus(focused) }
+            // Read the focus when the task runs, so a focus change queued
+            // meanwhile isn't overridden by this older one.
+            Task { [weak self] in
+                guard let self, let current = self.focused else { return }
+                await self.setFocus(current)
+            }
         }
         rebuildSections()
     }
@@ -289,6 +296,16 @@ final class BranchesModel: ObservableObject {
         claude = path.map(ClaudeLookup.found) ?? .missing
     }
 
+    private func runKey(_ commonDir: String, _ name: String) -> String {
+        "\(commonDir)\n\(name)"
+    }
+
+    /// The summary state of `name` in the repo showing now.
+    func summaryState(for name: String) -> SummaryState? {
+        guard let snapshot else { return nil }
+        return summaryStates[runKey(snapshot.commonDir, name)]
+    }
+
     func summary(for name: String) -> BranchSummary? {
         guard let snapshot else { return nil }
         return env.cache.summary(repo: snapshot.commonDir, branch: name)
@@ -301,30 +318,32 @@ final class BranchesModel: ObservableObject {
     func summarizeNow(_ name: String) async {
         guard case .found(let claude) = claude, let snapshot, let base = snapshot.base, name != base,
               let branch = snapshot.branches.first(where: { $0.name == name }),
-              summaryStates[name] != .running else { return }
+              summaryStates[runKey(snapshot.commonDir, name)] != .running else { return }
+        let key = runKey(snapshot.commonDir, name)
         let handle = RunHandle()
-        runs[name] = handle
-        summaryStates[name] = .running
+        runs[key] = handle
+        summaryStates[key] = .running
         let run = env.summarize
         let root = snapshot.root
         let result = await Task.detached { run(name, base, root, claude, handle) }.value
-        guard runs[name] === handle else { return }
-        runs[name] = nil
+        guard runs[key] === handle else { return }
+        runs[key] = nil
         switch result {
         case .success(let text):
             env.cache.store(
                 BranchSummary(tip: branch.tip, text: text, createdAt: env.now()),
                 repo: snapshot.commonDir, branch: name)
-            summaryStates[name] = nil
+            summaryStates[key] = nil
         case .failure(.cancelled):
-            summaryStates[name] = nil
+            summaryStates[key] = nil
         case .failure(let error):
-            summaryStates[name] = .failed(error.message)
+            summaryStates[key] = .failed(error.message)
         }
     }
 
     func cancelSummary(_ name: String) {
-        runs[name]?.cancel()
+        guard let snapshot else { return }
+        runs[runKey(snapshot.commonDir, name)]?.cancel()
     }
 }
 #endif

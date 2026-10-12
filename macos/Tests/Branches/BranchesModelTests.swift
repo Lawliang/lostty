@@ -196,7 +196,7 @@ struct BranchesModelTests {
         await model.lookUpClaude()
         #expect(model.canSummarize)
         await model.summarizeNow("feat")
-        #expect(model.summaryStates["feat"] == nil)
+        #expect(model.summaryState(for: "feat") == nil)
         #expect(model.summary(for: "feat")?.text == "Adds X.")
         #expect(model.summary(for: "feat")?.tip == "feat-tip")
     }
@@ -209,7 +209,38 @@ struct BranchesModelTests {
         await model.open(focused: pane).value
         await model.lookUpClaude()
         await model.summarizeNow("feat")
-        #expect(model.summaryStates["feat"] == .failed("Not logged in"))
+        #expect(model.summaryState(for: "feat") == .failed("Not logged in"))
+    }
+
+    @Test func aSummaryFailureDoesNotShowOnAnotherRepo() async throws {
+        let pane = UUID()
+        let other = UUID()
+        let world = try world(pane: pane)
+        world.pwds[other] = "/b/src"
+        world.summaryResult = .failure(.failed("Not logged in"))
+        let model = BranchesModel(env: world.environment())
+        await model.open(focused: pane).value
+        await model.lookUpClaude()
+        await model.summarizeNow("feat")
+        #expect(model.summaryState(for: "feat") == .failed("Not logged in"))
+        await model.setFocus(other)
+        #expect(model.snapshot?.root == "/b")
+        #expect(model.summaryState(for: "feat") == nil)
+    }
+
+    @Test func aStaleSessionsChangeDoesNotOverrideTheLatestFocus() async throws {
+        let pane = UUID()
+        let fast = UUID()
+        let world = try world(pane: pane)
+        world.pwds[fast] = "/b/src"
+        let model = BranchesModel(env: world.environment())
+        await model.open(focused: pane).value
+        model.focusChanged(fast)
+        world.changes.send()
+        for _ in 0..<100 where model.snapshot?.root != "/b" {
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        #expect(model.snapshot?.root == "/b")
     }
 
     @Test func noClaudeMeansNoSummaries() async throws {
