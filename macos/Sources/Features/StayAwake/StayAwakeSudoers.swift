@@ -9,7 +9,7 @@ enum StayAwakeSudoers {
     /// nil for a name that isn't a plain account name: anything else could
     /// change what the rule means.
     static func rule(user: String) -> String? {
-        guard user.range(of: #"^[A-Za-z0-9_][A-Za-z0-9._-]*$"#, options: .regularExpression) != nil,
+        guard user.range(of: #"\A[A-Za-z0-9_][A-Za-z0-9._-]*\z"#, options: .regularExpression) != nil,
               user != "ALL"
         else { return nil }
         let commands = PowerCommand.all.map { (["/usr/bin/pmset"] + $0.pmsetArguments).joined(separator: " ") }

@@ -48,7 +48,7 @@ struct StayAwakeSudoersTests {
     }
 
     @Test func refusesUnsafeUserNames() {
-        for bad in ["", "a b", "a,b", "ALL", "-x", "a\nb", "a:b", "a=b", "%admin"] {
+        for bad in ["", "a b", "a,b", "ALL", "-x", "a\nb", "a:b", "a=b", "%admin", "lawliang\n", "lawliang\r"] {
             #expect(StayAwakeSudoers.rule(user: bad) == nil, "\(bad)")
             #expect(StayAwakeSudoers.installScript(user: bad) == nil, "\(bad)")
         }
