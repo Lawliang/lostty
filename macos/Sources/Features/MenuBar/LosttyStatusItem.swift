@@ -174,21 +174,34 @@ final class LosttyStatusItem: NSObject, NSMenuDelegate {
     }
 }
 
-/// The axolotl as an 18 pt template image: outline when off, body filled
-/// when Stay Awake is on, a dot when a Claude is waiting.
+/// The chibi axolotl as an 18 pt template image: outline when off, filled
+/// (eyes cut out) when Stay Awake is on, a dot when a Claude is waiting.
 enum StatusIcon {
     @MainActor
     static func image(on: Bool, dot: Bool) -> NSImage? {
+        let line = StrokeStyle(lineWidth: 1.2, lineCap: .round, lineJoin: .round)
+        let eyes = StrokeStyle(lineWidth: 1.4, lineCap: .round, lineJoin: .round)
         let view = ZStack(alignment: .topTrailing) {
             ZStack {
-                if on { AxolotlBody().fill(.black) }
-                AxolotlBody().stroke(.black, lineWidth: 1.4)
-                AxolotlStalks(side: .left).stroke(.black, lineWidth: 1.2)
-                AxolotlStalks(side: .right).stroke(.black, lineWidth: 1.2)
-                AxolotlFronds(side: .left).stroke(.black, lineWidth: 1)
-                AxolotlFronds(side: .right).stroke(.black, lineWidth: 1)
-                if !on { AxolotlEyes().stroke(.black, lineWidth: 1.2) }
+                if on {
+                    AxolotlPart(kind: .gills(.left)).fill(.black)
+                    AxolotlPart(kind: .gills(.right)).fill(.black)
+                    AxolotlPart(kind: .tail).fill(.black)
+                    AxolotlPart(kind: .body).fill(.black)
+                    AxolotlPart(kind: .head).fill(.black)
+                    AxolotlEyes().stroke(.black, style: eyes).blendMode(.destinationOut)
+                } else {
+                    AxolotlPart(kind: .gills(.left)).stroke(.black, style: line)
+                    AxolotlPart(kind: .gills(.right)).stroke(.black, style: line)
+                    AxolotlPart(kind: .tail).stroke(.black, style: line)
+                    AxolotlPart(kind: .body).stroke(.black, style: line)
+                    // The head covers the gills' and body's lines behind it.
+                    AxolotlPart(kind: .head).fill(.black).blendMode(.destinationOut)
+                    AxolotlPart(kind: .head).stroke(.black, style: line)
+                    AxolotlEyes().stroke(.black, style: eyes)
+                }
             }
+            .compositingGroup()
             if dot { Circle().fill(.black).frame(width: 5, height: 5) }
         }
         .frame(width: 18, height: 18)
