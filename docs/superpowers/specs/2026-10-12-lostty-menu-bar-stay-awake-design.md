@@ -282,6 +282,15 @@ If 2 fails, the "no internet" half and the hotspot picker are cut from this
 spec and the plan; the checklist row stays. The results are written into
 this section before implementation continues.
 
+**Spike results (2026-10-12).**
+
+- Precondition: `/etc/sudoers` line 64 is `#includedir /private/etc/sudoers.d`.
+- Lid closed with `disablesleep 1`, on battery, no charger or display: on a
+  2 s logger, `AppleClamshellState` read `Yes` from 12:51:35 to 12:54:38
+  (about 3 min) with no gap over 3 s. The Mac stayed awake.
+- `pmset -g` on this Mac reports `lowpowermode` (no `powermode` key).
+- Hotspot questions 1–2: not yet run.
+
 ## Error handling
 
 | Case | Behavior |
