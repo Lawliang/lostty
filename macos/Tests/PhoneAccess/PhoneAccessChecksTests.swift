@@ -109,6 +109,11 @@ struct PhoneAccessChecksTests {
         #expect(PhoneAccessTerminfo.installed(bundle: bundle, home: home))
     }
 
+    @Test func commandsCanAddEnvironmentVariables() {
+        let out = Command.run("/bin/sh", ["-c", "echo \"$LOSTTY_TEST_VAR:$HOME\""], environment: ["LOSTTY_TEST_VAR": "set"])
+        #expect(out?.output == "set:\(NSHomeDirectory())\n")
+    }
+
     @Test func commandsReturnOutputAndGiveUpOnHangs() {
         let echo = Command.run("/bin/sh", ["-c", "echo out; echo err >&2; exit 3"])
         #expect(echo?.status == 3)

@@ -88,10 +88,16 @@ enum Command {
         var data = Data()
     }
 
-    static func run(_ path: String, _ arguments: [String], timeout: TimeInterval = 5) -> Result? {
+    /// `environment` is added to Lostty's own.
+    static func run(
+        _ path: String, _ arguments: [String], environment: [String: String] = [:], timeout: TimeInterval = 5
+    ) -> Result? {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: path)
         process.arguments = arguments
+        if !environment.isEmpty {
+            process.environment = ProcessInfo.processInfo.environment.merging(environment) { _, added in added }
+        }
         let pipe = Pipe()
         process.standardOutput = pipe
         process.standardError = pipe
@@ -174,7 +180,9 @@ enum PhoneAccessProbe {
     static func run(foldersRequested: Bool) -> PhoneAccessStatus {
         var tailscale: PhoneAccessStatus.Tailscale?
         if FileManager.default.isExecutableFile(atPath: tailscaleCLI) {
-            let out = Command.run(tailscaleCLI, ["status", "--json"])?.output ?? ""
+            // The App Store Tailscale is its app binary; without a terminal
+            // it tries to open its GUI instead, unless told to be the CLI.
+            let out = Command.run(tailscaleCLI, ["status", "--json"], environment: ["TAILSCALE_BE_CLI": "1"])?.output ?? ""
             tailscale = PhoneAccessParse.tailscale(statusJSON: Data(out.utf8))
                 ?? .init(running: false, name: nil, ipv4: nil)
         }
