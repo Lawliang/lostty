@@ -22,8 +22,8 @@ enum TracePhase: Equatable {
     }
 }
 
-/// What to draw at one instant. Positions are fractions of the perimeter,
-/// clockwise from the top-left corner.
+/// What to draw at one instant. Positions are fractions of the right edge's
+/// round trip (`EdgePath`), starting at the top going down.
 struct TraceFrame: Equatable {
     /// Head position, 0..<1.
     var head: Double
@@ -41,13 +41,13 @@ struct TraceFrame: Equatable {
             intensity: min(1, elapsed / TraceTiming.fadeIn))
     }
 
-    /// Seconds the head spends on each side at `speed = 1`. Every side gets
-    /// the same time, whatever its length, so the ease into and out of each
-    /// corner is always long enough to see.
-    static let secondsPerSide: Double = 0.6
+    /// Seconds the head spends on each leg (down or up the right edge) at
+    /// `speed = 1`, whatever the pane's height, so the ease into and out of
+    /// each turnaround is always long enough to see.
+    static let secondsPerLeg: Double = 0.6
 
     static func lapSeconds(speed: Double) -> Double {
-        4 * secondsPerSide / speed
+        2 * secondsPerLeg / speed
     }
 }
 #endif

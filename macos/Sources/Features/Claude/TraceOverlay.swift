@@ -48,12 +48,12 @@ struct TraceOverlay: View {
         .background(OcclusionProbe(visible: $windowVisible))
     }
 
-    /// Reduce Motion: no racing; the border breathes with a 2s period.
+    /// Reduce Motion: no racing; the right edge breathes with a 2s period.
     static func drawCalmGlow(
         in ctx: inout GraphicsContext, along path: EdgePath, frame: TraceFrame, time: Double, colors: TraceColors
     ) {
         let breath = 0.25 + 0.35 * (0.5 + 0.5 * sin(2 * .pi * time / 2))
-        ctx.stroke(path.outline, with: .color(colors.head.opacity(breath * frame.intensity)), lineWidth: 2)
+        ctx.stroke(path.line, with: .color(colors.head.opacity(breath * frame.intensity)), lineWidth: 2)
     }
 }
 

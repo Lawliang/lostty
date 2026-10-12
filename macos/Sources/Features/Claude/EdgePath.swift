@@ -1,9 +1,11 @@
 #if os(macOS)
 import SwiftUI
 
-/// A pane's inside edge as one clockwise loop starting at the top-left
-/// corner, in SwiftUI coordinates (y grows down). Fractions of the
-/// perimeter wrap, so any real number is a valid position.
+/// A pane's right inside edge as one shuttle loop, in SwiftUI coordinates
+/// (y grows down): down from the top-right corner to the bottom-right, then
+/// back up the same line. Fractions of the round trip wrap, so any real
+/// number is a valid position, and a tail that runs past a turnaround
+/// doubles back along the edge.
 struct EdgePath {
     struct Sample: Equatable {
         var point: CGPoint
@@ -15,7 +17,8 @@ struct EdgePath {
 
     let rect: CGRect
 
-    var perimeter: Double { 2 * Double(rect.width + rect.height) }
+    /// One round trip: down the right edge and back up.
+    var loopLength: Double { 2 * Double(rect.height) }
 
     init(size: CGSize, inset: CGFloat) {
         let width = max(0, size.width - 2 * inset)
@@ -29,49 +32,34 @@ struct EdgePath {
     }
 
     func sample(at fraction: Double) -> Sample {
-        let total = perimeter
+        let normal = CGVector(dx: -1, dy: 0)
+        let total = loopLength
         guard total > 0 else {
-            return Sample(point: rect.origin, tangent: CGVector(dx: 1, dy: 0), normal: CGVector(dx: 0, dy: 1))
+            return Sample(point: rect.origin, tangent: CGVector(dx: 0, dy: 1), normal: normal)
         }
         var wrapped = fraction.truncatingRemainder(dividingBy: 1)
         if wrapped < 0 { wrapped += 1 }
-        var d = CGFloat(wrapped * total)
-        let w = rect.width, h = rect.height
-        if d < w {
-            return Sample(point: CGPoint(x: rect.minX + d, y: rect.minY),
-                          tangent: CGVector(dx: 1, dy: 0), normal: CGVector(dx: 0, dy: 1))
-        }
-        d -= w
+        let d = CGFloat(wrapped * total)
+        let h = rect.height
         if d < h {
             return Sample(point: CGPoint(x: rect.maxX, y: rect.minY + d),
-                          tangent: CGVector(dx: 0, dy: 1), normal: CGVector(dx: -1, dy: 0))
+                          tangent: CGVector(dx: 0, dy: 1), normal: normal)
         }
-        d -= h
-        if d < w {
-            return Sample(point: CGPoint(x: rect.maxX - d, y: rect.maxY),
-                          tangent: CGVector(dx: -1, dy: 0), normal: CGVector(dx: 0, dy: -1))
-        }
-        d -= w
-        return Sample(point: CGPoint(x: rect.minX, y: rect.maxY - d),
-                      tangent: CGVector(dx: 0, dy: -1), normal: CGVector(dx: 1, dy: 0))
+        return Sample(point: CGPoint(x: rect.maxX, y: rect.maxY - (d - h)),
+                      tangent: CGVector(dx: 0, dy: -1), normal: normal)
     }
 
     /// Maps a lap position (0..<1 of the lap's time) to a place on the edge.
-    /// Each side takes a quarter of the lap. Along a side the speed is a
-    /// sine: the head leaves the corner at rest, is fastest mid-side, and
-    /// comes to rest again at the next corner.
+    /// Each leg (down, then up) takes half the lap. Along a leg the speed is
+    /// a sine: the head leaves the end at rest, is fastest mid-edge, and
+    /// comes to rest again at the other end.
     func easedFraction(_ lap: Double) -> Double {
-        let total = perimeter
-        guard total > 0 else { return lap }
         var wrapped = lap.truncatingRemainder(dividingBy: 1)
         if wrapped < 0 { wrapped += 1 }
-        let side = min(3, Int(wrapped * 4))
-        let u = wrapped * 4 - Double(side)
-        let w = Double(rect.width), h = Double(rect.height)
-        let lengths = [w, h, w, h]
-        let start = lengths[..<side].reduce(0, +)
+        let leg = min(1, Int(wrapped * 2))
+        let u = wrapped * 2 - Double(leg)
         let eased = (1 - cos(.pi * u)) / 2
-        return (start + eased * lengths[side]) / total
+        return (Double(leg) + eased) / 2
     }
 
     /// The point `inward` points into the pane from the edge at `fraction`.
@@ -81,12 +69,12 @@ struct EdgePath {
     }
 
     /// The edge between two fractions (`to` ≥ `from`), as a polyline with
-    /// ~3pt resolution and the corners it passes included.
+    /// ~3pt resolution and the turnarounds it passes included.
     func segment(from: Double, to: Double) -> Path {
         var path = Path()
         let span = max(0, to - from)
-        guard perimeter > 0, span > 0 else { return path }
-        let steps = min(800, max(2, Int(span * perimeter / 3)))
+        guard loopLength > 0, span > 0 else { return path }
+        let steps = min(800, max(2, Int(span * loopLength / 3)))
         for i in 0...steps {
             let point = sample(at: from + span * Double(i) / Double(steps)).point
             if i == 0 { path.move(to: point) } else { path.addLine(to: point) }
@@ -94,7 +82,12 @@ struct EdgePath {
         return path
     }
 
-    /// The whole loop.
-    var outline: Path { Path(rect) }
+    /// The whole right edge, top to bottom.
+    var line: Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.maxX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        return path
+    }
 }
 #endif
