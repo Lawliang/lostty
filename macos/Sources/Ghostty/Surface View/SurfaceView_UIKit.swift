@@ -201,6 +201,20 @@ extension Ghostty {
             return CAMetalLayer.self
         }
 
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            // Lostty Mobile: on iOS the renderer's IOSurfaceLayer is added as a
+            // sublayer (not the view's own layer) and nothing sizes it, so it
+            // stays 0x0 and draws nothing. Fit it to the view.
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            for sublayer in layer.sublayers ?? [] {
+                sublayer.frame = bounds
+                sublayer.contentsScale = contentScaleFactor
+            }
+            CATransaction.commit()
+        }
+
         override func didMoveToWindow() {
             sizeDidChange(frame.size)
         }
