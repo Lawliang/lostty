@@ -354,6 +354,13 @@ class AppDelegate: NSObject,
         // the previous Lostty left running.
         SessionsUI.offerOrphansAtLaunch(ghostty)
 
+        // Lostty Mobile: watch tmux for session changes (labels, a phone
+        // attaching) and give a tmux server without them the change hooks.
+        // Not in the test host: it would write to the user's live server.
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil {
+            SessionWatcher.shared.start()
+        }
+
         #if DEBUG
         // Lostty Claude trace: preview the focused pane's trace style.
         if let anchor = menuOpenConfig, let menu = anchor.menu {

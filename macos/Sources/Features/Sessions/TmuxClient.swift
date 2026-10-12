@@ -1,5 +1,6 @@
 #if os(macOS)
 import Foundation
+import LosttyRemote
 
 /// Runs `tmux -L lostty …` synchronously. Each call takes a few
 /// milliseconds; run it off the main thread except where a decision is
@@ -76,19 +77,44 @@ struct TmuxClient {
         run(["list-sessions", "-F", TmuxSession.listFormat]).map(TmuxSession.parseList) ?? []
     }
 
-    func end(_ session: TmuxSession) {
-        run(["kill-session", "-t", session.id])
+    /// Every session with the phone's columns (label, Claude state, title,
+    /// folder, last use), for the menu bar and the sync.
+    func remoteSessions() -> [RemoteSession] {
+        run(["list-sessions", "-F", TmuxRemote.listFormat]).map(TmuxRemote.parse) ?? []
+    }
+
+    /// Wakes everything waiting on `lostty-changed`: the phone's list, other
+    /// Lostty processes, this one's watcher.
+    func signalChanged() {
+        run(TmuxHooks.signalArgs)
+    }
+
+    /// Ends `session`, first noting why (`@lostty_end_<n>`), so a phone
+    /// attached to it can say so.
+    func end(_ session: TmuxSession, reason: String) {
+        run(Self.endArgs(session, reason: reason))
+    }
+
+    static func endArgs(_ session: TmuxSession, reason: String) -> [String] {
+        guard let option = try? TmuxRemote.endOption(sessionID: session.id) else {
+            return ["kill-session", "-t", session.id]
+        }
+        return ["set-option", "-g", option, reason, ";", "kill-session", "-t", session.id]
     }
 
     /// Ends the session showing pane `surface`: closing a pane ends its
     /// shell, as on a plain terminal.
     func endSessions(showing surface: UUID, ownedBy pid: Int32) {
-        TmuxOwnership.showing(surface, ownedBy: pid, in: sessions()).forEach(end)
+        for session in TmuxOwnership.showing(surface, ownedBy: pid, in: sessions()) {
+            end(session, reason: TmuxRemote.EndTag.macClose)
+        }
     }
 
     /// Ends every session Lostty `pid` shows: quitting ends its shells.
     func endSessions(ownedBy pid: Int32) {
-        TmuxOwnership.owned(by: pid, in: sessions()).forEach(end)
+        for session in TmuxOwnership.owned(by: pid, in: sessions()) {
+            end(session, reason: TmuxRemote.EndTag.macQuit)
+        }
     }
 
     /// Lets go of a session: no Lostty shows it any more, so it is not

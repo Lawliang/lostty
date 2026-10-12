@@ -1,5 +1,6 @@
 #if os(macOS)
 import Foundation
+import LosttyRemote
 import Testing
 @testable import Ghostty
 
@@ -138,6 +139,59 @@ final class TmuxClientTests {
     @Test func runReportsFailure() throws {
         let client = TmuxClient(tmuxPath: try fakeTmux("echo out; exit 1"))
         #expect(client.run(["list-sessions"]) == nil)
+    }
+
+    /// A stand-in tmux that lists `sessions` (4 columns) and appends every
+    /// other call's arguments to `log`.
+    private func loggingTmux(sessions: String, log: URL) throws -> TmuxClient {
+        TmuxClient(tmuxPath: try fakeTmux("""
+            if [ "$4" = list-sessions ]; then printf '\(sessions)'; exit 0; fi
+            echo "$@" >> '\(log.path)'
+            """), timeout: 10)
+    }
+
+    private func tempLog() -> URL {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("fake-tmux-log-\(UUID().uuidString)")
+        fakes.append(url)
+        return url
+    }
+
+    @Test func quittingTagsEachOwnSessionBeforeEndingIt() throws {
+        let log = tempLog()
+        let client = try loggingTmux(sessions: "$3\\tlostty\\t\(paneA.uuidString)\\t100\\n$4\\tnotes\\t\\t200\\n", log: log)
+        client.endSessions(ownedBy: 100)
+        #expect(try String(contentsOf: log, encoding: .utf8)
+            == "-u -L lostty set-option -g @lostty_end_3 mac-quit ; kill-session -t $3\n")
+    }
+
+    @Test func closingAPaneTagsItsSessionMacClose() throws {
+        let log = tempLog()
+        let client = try loggingTmux(sessions: "$5\\tapi\\t\(paneA.uuidString)\\t100\\n", log: log)
+        client.endSessions(showing: paneA, ownedBy: 100)
+        #expect(try String(contentsOf: log, encoding: .utf8)
+            == "-u -L lostty set-option -g @lostty_end_5 mac-close ; kill-session -t $5\n")
+    }
+
+    @Test func aBadIDIsKilledWithoutATag() {
+        let odd = TmuxSession(id: "$x", name: "n", surface: nil, owner: nil)
+        #expect(TmuxClient.endArgs(odd, reason: "mac-close") == ["kill-session", "-t", "$x"])
+    }
+
+    @Test func signallingNeverStartsAServerWithTheUsersConfig() throws {
+        let log = tempLog()
+        let client = try loggingTmux(sessions: "", log: log)
+        client.signalChanged()
+        #expect(try String(contentsOf: log, encoding: .utf8) == "-u -L lostty -f /dev/null wait-for -S lostty-changed\n")
+    }
+
+    @Test func remoteSessionsAskForThePhonesColumns() throws {
+        let client = TmuxClient(tmuxPath: try fakeTmux("""
+            [ "$6" = '\(TmuxRemote.listFormat)' ] || exit 1
+            printf '$1\\tlostty\\t\\t\\tDeploy\\twaiting\\t100\\t2.1.296\\t/x\\t✳ Fix login\\n'
+            """), timeout: 10)
+        let found = client.remoteSessions()
+        #expect(found.map(\.label) == ["Deploy"])
+        #expect(found.first?.claude == .waiting)
     }
 
     @Test func aHungTmuxGivesUpAtTheTimeout() throws {
