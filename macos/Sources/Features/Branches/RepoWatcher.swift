@@ -13,35 +13,60 @@ final class RepoWatcher {
         case index
     }
 
-    /// nil for churn the panel doesn't show (objects, reflogs, lock files).
+    /// What a path inside the git dir means for the panel. An allowlist of
+    /// what it shows: branch refs, HEADs, worktrees coming and going, rebase
+    /// state, and the staging area. Everything else (objects, reflogs, lock
+    /// files, FETCH_HEAD, fsmonitor cookies, submodules…) is nil, so the
+    /// panel's own `git status` can't set off another read.
     /// Judged by the path inside `gitDir`, so folders above it can't matter.
     static func classify(_ path: String, gitDir: String) -> Change? {
-        guard let relative = relativePath(path, in: gitDir) else { return nil }
-        let parts = relative.split(separator: "/").map(String.init)
-        guard let name = parts.last else { return nil }
-        if parts.first == "objects" || parts.first == "logs" || name.hasSuffix(".lock") { return nil }
-        if parts.count > 2, parts[0] == "worktrees", parts[2] == "logs" { return nil }
-        return name == "index" ? .index : .refs
+        classify(path, roots: roots(of: gitDir))
     }
 
-    private static func relativePath(_ path: String, in gitDir: String) -> String? {
+    /// `gitDir` as given and with symlinks resolved; event paths may use either.
+    static func roots(of gitDir: String) -> [String] {
         let canonical = URL(fileURLWithPath: gitDir).resolvingSymlinksInPath().path
-        for root in [gitDir, canonical] {
+        return canonical == gitDir ? [gitDir] : [gitDir, canonical]
+    }
+
+    static func classify(_ path: String, roots: [String]) -> Change? {
+        guard let relative = relativePath(path, roots: roots) else { return nil }
+        let parts = relative.split(separator: "/").map(String.init)
+        guard let name = parts.last, !name.hasSuffix(".lock") else { return nil }
+        if parts.first == "refs" { return .refs }
+        if parts.count == 2, parts[0] == "worktrees" { return .refs }
+        // The rest is per checkout: at the top for the main one, under
+        // worktrees/<name>/ for a linked one.
+        let local = parts.count > 2 && parts[0] == "worktrees" ? Array(parts.dropFirst(2)) : parts
+        switch local {
+        case ["HEAD"]: return .refs
+        case ["packed-refs"]: return parts.count == 1 ? .refs : nil
+        case ["index"]: return .index
+        case ["rebase-merge"], ["rebase-apply"], ["rebase-merge", "head-name"], ["rebase-apply", "head-name"]:
+            return .refs
+        default: return nil
+        }
+    }
+
+    private static func relativePath(_ path: String, roots: [String]) -> String? {
+        for root in roots {
             let prefix = root.hasSuffix("/") ? root : root + "/"
             if path.hasPrefix(prefix) { return String(path.dropFirst(prefix.count)) }
         }
+        guard let canonical = roots.last else { return nil }
         let resolved = URL(fileURLWithPath: path).resolvingSymlinksInPath().path
         let prefix = canonical + "/"
         return resolved.hasPrefix(prefix) ? String(resolved.dropFirst(prefix.count)) : nil
     }
 
-    private let gitDir: String
+    /// The watched dir as given and canonical, worked out once.
+    private let roots: [String]
     private var stream: FSEventStreamRef?
     private let onChange: @MainActor (Set<Change>) -> Void
 
     init?(gitDir: String, latency: TimeInterval = 0.3, onChange: @escaping @MainActor (Set<Change>) -> Void) {
         self.onChange = onChange
-        self.gitDir = gitDir
+        self.roots = RepoWatcher.roots(of: gitDir)
         var context = FSEventStreamContext(
             version: 0, info: Unmanaged.passUnretained(self).toOpaque(),
             retain: nil, release: nil, copyDescription: nil)
@@ -49,7 +74,7 @@ final class RepoWatcher {
             guard let info else { return }
             let watcher = Unmanaged<RepoWatcher>.fromOpaque(info).takeUnretainedValue()
             let list = (unsafeBitCast(paths, to: NSArray.self) as? [String]) ?? []
-            let changes = Set(list.compactMap { RepoWatcher.classify($0, gitDir: watcher.gitDir) })
+            let changes = Set(list.compactMap { RepoWatcher.classify($0, roots: watcher.roots) })
             guard !changes.isEmpty else { return }
             MainActor.assumeIsolated { watcher.onChange(changes) }
         }
