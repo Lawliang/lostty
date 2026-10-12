@@ -13,22 +13,14 @@ struct ExtensionSidebarModelTests {
 
     @Test func clickingAnIconOpensItAndClickingAgainCloses() {
         let model = ExtensionSidebarModel()
-        model.select(.codebaseVisualizer)
-        #expect(model.active == .codebaseVisualizer)
-        model.select(.codebaseVisualizer)
+        model.select(.skins)
+        #expect(model.active == .skins)
+        model.select(.skins)
         #expect(model.active == nil)
     }
 
-    @Test func clickingAnotherIconSwitchesToIt() {
-        let model = ExtensionSidebarModel()
-        model.select(.codebaseVisualizer)
-        model.select(.skins)
-        #expect(model.active == .skins)
-    }
-
-    @Test func sidebarOrderIsVisualizerThenSkins() {
-        #expect(LosttyExtension.allCases == [.codebaseVisualizer, .skins])
-        #expect(LosttyExtension.codebaseVisualizer.title == "Codebase visualizer")
+    @Test func sidebarListsSkins() {
+        #expect(LosttyExtension.allCases == [.skins])
         #expect(LosttyExtension.skins.title == "Skins")
     }
 

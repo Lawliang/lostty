@@ -4,14 +4,12 @@ import Combine
 
 /// An extension reachable from the window's sidebar. Order is sidebar order.
 enum LosttyExtension: String, CaseIterable, Identifiable {
-    case codebaseVisualizer
     case skins
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .codebaseVisualizer: "Codebase visualizer"
         case .skins: "Skins"
         }
     }
