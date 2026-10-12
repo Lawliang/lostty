@@ -4,13 +4,29 @@ import Combine
 
 /// An extension reachable from the window's sidebar. Order is sidebar order.
 enum LosttyExtension: String, CaseIterable, Identifiable {
+    case branches
     case skins
+
+    /// How an open extension shows: over the terminal, or inside the
+    /// sidebar, which widens to `width` over the terminal's edge.
+    enum Presentation: Equatable {
+        case overlay
+        case sidebar(width: CGFloat)
+    }
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
+        case .branches: "Branches"
         case .skins: "Skins"
+        }
+    }
+
+    var presentation: Presentation {
+        switch self {
+        case .branches: .sidebar(width: 340)
+        case .skins: .overlay
         }
     }
 }
@@ -29,6 +45,11 @@ final class ExtensionSidebarModel: ObservableObject {
     /// Clicking an icon opens its extension; clicking the open one closes it.
     func select(_ ext: LosttyExtension) {
         active = active == ext ? nil : ext
+    }
+
+    /// A panel's back button and Esc.
+    func close() {
+        active = nil
     }
 }
 #endif

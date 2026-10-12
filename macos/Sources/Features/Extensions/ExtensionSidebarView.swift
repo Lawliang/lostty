@@ -96,10 +96,52 @@ private struct ExtensionIcon: View {
 
     var body: some View {
         switch ext {
+        case .branches:
+            BranchesIcon()
         case .skins:
             SkinsIcon(skin: skin)
                 .frame(width: 44, height: 44)
                 .modifier(IOSIconChrome())
+        }
+    }
+}
+
+/// A git-branch mark on deep green.
+private struct BranchesIcon: View {
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                colors: [Color(red: 0.16, green: 0.56, blue: 0.38), Color(red: 0.03, green: 0.22, blue: 0.15)],
+                startPoint: .top, endPoint: .bottom)
+            BranchGlyph()
+                .frame(width: 24, height: 24)
+                .shadow(color: Color(red: 0.55, green: 1, blue: 0.75).opacity(0.6), radius: 3)
+        }
+        .frame(width: 44, height: 44)
+        .modifier(IOSIconChrome())
+    }
+}
+
+/// A trunk with a branch forking off it, three commit dots.
+private struct BranchGlyph: View {
+    var body: some View {
+        Canvas { ctx, size in
+            let s = size.width / 24
+            func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * s, y: y * s) }
+            let line = Color(red: 0.86, green: 1, blue: 0.92)
+            var trunk = Path()
+            trunk.move(to: p(7, 4))
+            trunk.addLine(to: p(7, 20))
+            var fork = Path()
+            fork.move(to: p(17, 6.5))
+            fork.addCurve(to: p(7, 16), control1: p(17, 12), control2: p(9, 11))
+            ctx.stroke(trunk, with: .color(line), lineWidth: 2 * s)
+            ctx.stroke(fork, with: .color(line), lineWidth: 2 * s)
+            for center in [p(7, 4), p(7, 20), p(17, 6.5)] {
+                let r = 2.6 * s
+                ctx.fill(Path(ellipseIn: CGRect(x: center.x - r, y: center.y - r, width: 2 * r, height: 2 * r)),
+                         with: .color(.white))
+            }
         }
     }
 }
@@ -145,6 +187,8 @@ struct ExtensionContentView: View {
 
     var body: some View {
         switch ext {
+        case .branches:
+            BranchesPanel(onClose: model.close)
         case .skins:
             if let id = model.focusedSurfaceID {
                 // `.id(id)` starts the picker fresh if the target pane changes.

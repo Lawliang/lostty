@@ -19,9 +19,29 @@ struct ExtensionSidebarModelTests {
         #expect(model.active == nil)
     }
 
-    @Test func sidebarListsSkins() {
-        #expect(LosttyExtension.allCases == [.skins])
+    @Test func clickingAnotherIconSwitchesToIt() {
+        let model = ExtensionSidebarModel()
+        model.select(.branches)
+        model.select(.skins)
+        #expect(model.active == .skins)
+    }
+
+    @Test func closeLeavesAnyOpenApp() {
+        let model = ExtensionSidebarModel()
+        model.select(.branches)
+        model.close()
+        #expect(model.active == nil)
+    }
+
+    @Test func sidebarOrderIsBranchesThenSkins() {
+        #expect(LosttyExtension.allCases == [.branches, .skins])
+        #expect(LosttyExtension.branches.title == "Branches")
         #expect(LosttyExtension.skins.title == "Skins")
+    }
+
+    @Test func branchesOpensInTheSidebarAndSkinsOverTheTerminal() {
+        #expect(LosttyExtension.branches.presentation == .sidebar(width: 340))
+        #expect(LosttyExtension.skins.presentation == .overlay)
     }
 
     @Test func tracksTheFocusedPane() {
