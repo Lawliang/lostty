@@ -188,7 +188,7 @@ struct ExtensionContentView: View {
     var body: some View {
         switch ext {
         case .branches:
-            BranchesPanel(onClose: model.close)
+            BranchesPanel(model: model.branches, onClose: model.close)
         case .skins:
             if let id = model.focusedSurfaceID {
                 // `.id(id)` starts the picker fresh if the target pane changes.

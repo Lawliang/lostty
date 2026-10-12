@@ -37,10 +37,22 @@ enum SessionsUI {
     /// Opens a window showing `session`. The launcher re-tags the session
     /// with the new pane and this Lostty.
     @MainActor static func open(_ session: TmuxSession, ghostty: Ghostty.App) {
-        guard let binary = Bundle.main.executableURL?.path else { return }
-        var config = Ghostty.SurfaceConfiguration()
-        config.command = SessionLaunch.attachCommand(binary: binary, sessionID: session.id)
+        guard let config = attachConfig(session.id) else { return }
         _ = TerminalController.newWindow(ghostty, withBaseConfig: config)
+    }
+
+    /// Opens session `sessionID` in a new tab of `window` (a new window when
+    /// there is none).
+    @MainActor static func openInTab(_ sessionID: String, from window: NSWindow?, ghostty: Ghostty.App) {
+        guard let config = attachConfig(sessionID) else { return }
+        _ = TerminalController.newTab(ghostty, from: window, withBaseConfig: config)
+    }
+
+    private static func attachConfig(_ sessionID: String) -> Ghostty.SurfaceConfiguration? {
+        guard let binary = Bundle.main.executableURL?.path else { return nil }
+        var config = Ghostty.SurfaceConfiguration()
+        config.command = SessionLaunch.attachCommand(binary: binary, sessionID: sessionID)
+        return config
     }
 }
 
