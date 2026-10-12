@@ -61,7 +61,7 @@ struct iOS_GhosttyInitView: View {
                 .resizable()
                 .aspectRatio(contentMode: .fit)
                 .frame(maxHeight: 96)
-            Text("Ghostty")
+            Text("Lostty")
             Text("State: \(ghostty_app.readiness.rawValue)")
         }
         .padding()

@@ -3,8 +3,9 @@ import SwiftUI
 struct AboutView: View {
     @Environment(\.openURL) var openURL
 
-    private let githubURL = URL(string: "https://github.com/ghostty-org/ghostty")
-    private let docsURL = URL(string: "https://ghostty.org/docs")
+    private let githubURL = URL(string: "https://github.com/Lawliang/ghostty-skins")
+    private let ghosttyURL = URL(string: "https://ghostty.org")
+    private let docsURL = URL(string: "https://github.com/Lawliang/ghostty-skins/tree/main/docs")
 
     /// Read the commit from the bundle.
     private var build: String? { Bundle.main.infoDictionary?["CFBundleVersion"] as? String }
@@ -47,7 +48,7 @@ struct AboutView: View {
 
             VStack(alignment: .center, spacing: 32) {
                 VStack(alignment: .center, spacing: 8) {
-                    Text("Ghostty")
+                    Text("Lostty")
                         .bold()
                         .font(.title)
                     Text("Fast, native, feature-rich terminal \nemulator pushing modern features.")
@@ -56,6 +57,11 @@ struct AboutView: View {
                         .font(.caption)
                         .tint(.secondary)
                         .opacity(0.8)
+                    if let url = ghosttyURL {
+                        Link("Built on Ghostty by Mitchell Hashimoto", destination: url)
+                            .font(.caption)
+                            .opacity(0.8)
+                    }
                 }
                 .textSelection(.enabled)
 
