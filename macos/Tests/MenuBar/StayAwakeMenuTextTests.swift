@@ -1,5 +1,6 @@
 #if os(macOS)
 import Foundation
+import LosttyRemote
 import Testing
 @testable import Ghostty
 
@@ -44,17 +45,24 @@ struct StayAwakeMenuTextTests {
         #expect(StayAwakeMenuText.attached("api-server") == "A phone or SSH client is attached to api-server")
     }
 
-    @Test func claudeRowsWaitingFirstThenByTitle() {
-        let a = UUID(), b = UUID(), c = UUID()
-        let titles = [a: "zeta", b: "alpha", c: "mid"]
-        let rows = StayAwakeMenuText.claudeRows(phases: [a, b], awaiting: [c], title: { titles[$0] })
-        #expect(rows.map(\.title) == ["mid", "alpha", "zeta"])
-        #expect(rows.map(\.waiting) == [true, false, false])
+    @Test func sessionLinesMarkWaitingAndWorking() {
+        let waiting = SessionLabel.row(for: RemoteSession(
+            id: "$1", name: "lostty", surface: "A", owner: 1, claude: .waiting,
+            title: "✳ Fix login", command: "2.1.296"), now: now)
+        #expect(StayAwakeMenuText.sessionLine(waiting) == "   ● Fix login — Waiting")
+        let working = SessionLabel.row(for: RemoteSession(
+            id: "$1", name: "lostty", surface: "A", owner: 1, claude: .working,
+            title: "◐ Fix login", command: "2.1.296"), now: now)
+        #expect(StayAwakeMenuText.sessionLine(working) == "   ○ Fix login — Working")
     }
 
-    @Test func untitledPanesAreCalledClaude() {
-        let a = UUID()
-        #expect(StayAwakeMenuText.claudeRows(phases: [a], awaiting: [], title: { _ in "" }).first?.title == "Claude")
+    @Test func otherSessionsSayWhenTheyWereUsed() {
+        let used = SessionLabel.row(for: RemoteSession(
+            id: "$2", name: "notes-2", surface: nil, owner: nil, command: "zsh",
+            activity: now.addingTimeInterval(-300)), now: now)
+        #expect(StayAwakeMenuText.sessionLine(used) == "   notes — 5m ago")
+        let unknown = SessionLabel.row(for: RemoteSession(id: "$3", name: "notes", surface: nil, owner: nil), now: now)
+        #expect(StayAwakeMenuText.sessionLine(unknown) == "   notes")
     }
 }
 #endif

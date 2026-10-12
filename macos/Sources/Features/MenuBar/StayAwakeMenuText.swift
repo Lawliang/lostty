@@ -1,5 +1,6 @@
 #if os(macOS)
 import Foundation
+import LosttyRemote
 
 enum StayAwakeMenuText {
     static func status(_ state: StayAwakeModel.State, power: PowerState?, permissionInstalled: Bool, now: Date) -> String? {
@@ -31,19 +32,16 @@ enum StayAwakeMenuText {
 
     static func attached(_ session: String) -> String { "A phone or SSH client is attached to \(session)" }
 
-    struct ClaudeRow: Equatable {
-        var id: UUID
-        var title: String
-        var waiting: Bool
-    }
-
-    /// Waiting panes first, then working ones, each by title.
-    static func claudeRows(phases: Set<UUID>, awaiting: Set<UUID>, title: (UUID) -> String?) -> [ClaudeRow] {
-        phases.union(awaiting).map { id in
-            let t = title(id)?.trimmingCharacters(in: .whitespaces) ?? ""
-            return ClaudeRow(id: id, title: t.isEmpty ? "Claude" : t, waiting: awaiting.contains(id))
+    /// A Sessions row: "● task — Waiting", "○ task — Working", "project — 5m ago".
+    static func sessionLine(_ row: SessionRow) -> String {
+        let marker: String
+        switch row.status {
+        case .waiting: marker = "● "
+        case .working: marker = "○ "
+        case .lastUsed: marker = ""
         }
-        .sorted { ($0.waiting ? 0 : 1, $0.title) < ($1.waiting ? 0 : 1, $1.title) }
+        let right = row.statusText.isEmpty ? "" : " — \(row.statusText)"
+        return "   \(marker)\(row.title)\(right)"
     }
 
     private static func timeLeft(_ seconds: TimeInterval) -> String {

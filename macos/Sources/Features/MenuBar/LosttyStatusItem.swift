@@ -92,18 +92,16 @@ final class LosttyStatusItem: NSObject, NSMenuDelegate {
         for phone in phones { menu.addItem(disabled("   " + phone.name)) }
         for session in AttachedPhones.current() { menu.addItem(disabled("   " + StayAwakeMenuText.attached(session))) }
 
-        let rows = StayAwakeMenuText.claudeRows(
-            phases: Set(ClaudeRuntime.shared.phases.keys), awaiting: ClaudeRuntime.shared.awaiting,
-            title: { (NSApp.delegate as? AppDelegate)?.findSurface(forUUID: $0)?.title })
-        if !rows.isEmpty {
+        let sessions = TmuxClient().remoteSessions()
+        if !sessions.isEmpty {
+            let groups = SessionLabel.ordered(sessions)
+            let now = Date()
             menu.addItem(.separator())
-            menu.addItem(disabled("Claude"))
-            for row in rows {
-                let r = NSMenuItem(title: "   \(row.waiting ? "●" : "○") \(row.title) — \(row.waiting ? "waiting for you" : "working")",
-                                   action: #selector(focusPane(_:)), keyEquivalent: "")
-                r.target = self
-                r.representedObject = row.id
-                menu.addItem(r)
+            menu.addItem(disabled("Sessions"))
+            for session in groups.open { menu.addItem(sessionItem(session, now: now)) }
+            if !groups.notOpen.isEmpty {
+                menu.addItem(disabled("Not open on Mac"))
+                for session in groups.notOpen { menu.addItem(sessionItem(session, now: now)) }
             }
         }
 
@@ -136,6 +134,19 @@ final class LosttyStatusItem: NSObject, NSMenuDelegate {
         return item
     }
 
+    private func sessionItem(_ session: RemoteSession, now: Date) -> NSMenuItem {
+        let row = SessionLabel.row(for: session, now: now)
+        let item = NSMenuItem(title: StayAwakeMenuText.sessionLine(row), action: #selector(openSession(_:)), keyEquivalent: "")
+        item.target = self
+        item.representedObject = session
+        if #available(macOS 14.4, *) { item.subtitle = row.detail }
+        // Another running Lostty (a Debug build) shows it: nothing to do here.
+        if let owner = session.owner, owner != ProcessInfo.processInfo.processIdentifier, ProcessLiveness.isAlive(owner) {
+            item.action = nil
+        }
+        return item
+    }
+
     @objc private func turnOn(_ sender: NSMenuItem) {
         guard let raw = sender.representedObject as? String, let duration = StayAwakeDuration(rawValue: raw) else { return }
         stayAwake.turnOn(duration)
@@ -163,14 +174,24 @@ final class LosttyStatusItem: NSObject, NSMenuDelegate {
         (NSApp.delegate as? AppDelegate)?.newWindow(nil)
     }
 
-    @objc private func focusPane(_ sender: NSMenuItem) {
-        guard let id = sender.representedObject as? UUID,
-              let surface = (NSApp.delegate as? AppDelegate)?.findSurface(forUUID: id),
-              let controller = surface.window?.windowController as? BaseTerminalController
+    /// This Lostty's session: focus its pane. One no Lostty shows: open it.
+    @objc private func openSession(_ sender: NSMenuItem) {
+        guard let session = sender.representedObject as? RemoteSession,
+              let delegate = NSApp.delegate as? AppDelegate
         else { return }
+        if session.owner == ProcessInfo.processInfo.processIdentifier,
+           let pane = session.surface.flatMap(UUID.init(uuidString:)),
+           let surface = delegate.findSurface(forUUID: pane),
+           let controller = surface.window?.windowController as? BaseTerminalController {
+            NSApp.activate(ignoringOtherApps: true)
+            surface.window?.makeKeyAndOrderFront(nil)
+            controller.focusSurface(surface)
+            return
+        }
         NSApp.activate(ignoringOtherApps: true)
-        surface.window?.makeKeyAndOrderFront(nil)
-        controller.focusSurface(surface)
+        SessionsUI.open(
+            TmuxSession(id: session.id, name: session.name, surface: session.surface, owner: session.owner),
+            ghostty: delegate.ghostty)
     }
 }
 
