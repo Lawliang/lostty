@@ -1,6 +1,8 @@
-# Lostty Mobile: Mac host setup
+# Lostty Mobile: manual Mac setup (Advanced)
 
-Do these once on the Mac the phone connects to.
+Most people should use Lostty → Phone Access instead
+(docs/lostty-mobile-phone-access.md). These are the steps it automates, for
+setting up by hand.
 
 1. **tmux**: `brew install tmux` (phase 1 needs it too).
 2. **Remote Login**: System Settings → General → Sharing → Remote Login on,
