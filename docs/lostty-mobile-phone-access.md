@@ -45,3 +45,6 @@ If you deleted Lostty instead, clean up by hand:
   same account, and the Mac is awake.
 - **"This Mac's identity changed"**: if you reinstalled macOS, pair again.
   Otherwise don't connect; something else is answering at that address.
+- **"Your Mac doesn't accept this phone"** right after pairing: in System
+  Settings → General → Sharing → Remote Login, check that "Allow access for"
+  includes your user.
