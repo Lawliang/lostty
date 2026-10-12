@@ -24,8 +24,11 @@ struct SessionsScreen: View {
                 }
             }
             .navigationTitle("Lostty")
+            .losttyScreen()
             .toolbar {
-                Button { showSettings = true } label: { Image(systemName: "gearshape") }
+                Button { showSettings = true } label: {
+                    Image(systemName: "gearshape").foregroundStyle(LosttyTheme.textSecondary)
+                }
             }
             .navigationDestination(for: String.self) { _ in
                 if let open {
@@ -65,11 +68,18 @@ struct SessionsScreen: View {
 
     private var sessionList: some View {
         List {
-            if let message = store.message {
-                Text(message).foregroundStyle(.secondary)
-            }
-            if store.needsPairing {
-                Button("Pair Again") { showPairing = true }
+            if let message = store.message, !showsEmptyState {
+                LosttyCard {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(message).font(LosttyFont.body).foregroundStyle(LosttyTheme.textSecondary)
+                        if store.needsPairing {
+                            Button("Pair Again") { showPairing = true }.buttonStyle(.lostty(.primary))
+                        }
+                    }
+                }
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+                .listRowInsets(EdgeInsets(top: 6, leading: LosttyTheme.margin, bottom: 6, trailing: LosttyTheme.margin))
             }
             ForEach(store.sessions, id: \.id) { session in
                 Button {
@@ -77,26 +87,67 @@ struct SessionsScreen: View {
                     open = (session, terminal.view, terminal.io)
                     path = ["terminal"]
                 } label: {
-                    HStack {
-                        Text(session.name).font(.body.monospaced())
-                        Spacer()
-                        if session.owner != nil {
-                            Image(systemName: "desktopcomputer").foregroundStyle(.secondary)
-                                .accessibilityLabel("Open on the Mac")
+                    LosttyCard(padding: 14) {
+                        HStack(spacing: 12) {
+                            Text(session.name)
+                                .font(LosttyFont.mono(.callout, weight: .medium))
+                                .foregroundStyle(LosttyTheme.textPrimary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            Spacer(minLength: 8)
+                            if session.owner != nil {
+                                Circle().fill(LosttyTheme.accent).frame(width: 8, height: 8)
+                                    .accessibilityLabel("Open on the Mac")
+                            }
+                            Image(systemName: "chevron.right")
+                                .font(.footnote.weight(.semibold))
+                                .foregroundStyle(LosttyTheme.textSecondary)
                         }
                     }
                 }
+                .buttonStyle(.plain)
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+                .listRowInsets(EdgeInsets(top: 6, leading: LosttyTheme.margin, bottom: 6, trailing: LosttyTheme.margin))
                 .swipeActions {
                     Button("Close", role: .destructive) { confirmKill = session }
                 }
             }
         }
-        .overlay { if store.loading && store.sessions.isEmpty { ProgressView() } }
+        .listStyle(.plain)
+        .overlay {
+            if showsEmptyState {
+                EmptySessions()
+            } else if store.loading && store.sessions.isEmpty {
+                ProgressView().tint(LosttyTheme.accent)
+            }
+        }
         .refreshable { await store.refresh() }
+    }
+
+    /// No sessions and nothing else to say: the friendly empty state.
+    private var showsEmptyState: Bool {
+        store.sessions.isEmpty && !store.loading && store.message == MobileStore.noSessionsMessage
     }
 
     private func refreshIfSetUp() async {
         if store.settings.remoteHost != nil { await store.refresh() }
+    }
+}
+
+private struct EmptySessions: View {
+    var body: some View {
+        ZStack {
+            BlueprintBackground()
+            VStack(spacing: 16) {
+                Axolotl(pose: .resting).frame(width: 120, height: 120)
+                Text("Nothing running yet. Open Lostty on your Mac.")
+                    .font(LosttyFont.body)
+                    .foregroundStyle(LosttyTheme.textSecondary)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(LosttyTheme.margin)
+        }
     }
 }
 #endif

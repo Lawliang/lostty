@@ -7,19 +7,48 @@ struct WelcomeScreen: View {
     var settings: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            Text("Open your Mac's Lostty sessions from here.").font(.title2.bold())
-            Label("Install Tailscale on your Mac and this iPhone, signed into the same account.", systemImage: "1.circle")
-            Label("On your Mac, open Lostty → Phone Access.", systemImage: "2.circle")
-            Label("Tap Pair with Mac.", systemImage: "3.circle")
-            Button(action: pair) {
-                Text("Pair with Mac").frame(maxWidth: .infinity)
+        ZStack {
+            BlueprintBackground()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    Axolotl(pose: .resting)
+                        .frame(width: 160, height: 160)
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 24)
+                    Text("Open your Mac's Lostty sessions from here.")
+                        .font(LosttyFont.largeTitle)
+                        .foregroundStyle(LosttyTheme.textPrimary)
+                    VStack(alignment: .leading, spacing: LosttyTheme.gap) {
+                        step(1, "Install Tailscale on your Mac and this iPhone, signed into the same account.")
+                        step(2, "On your Mac, open Lostty → Phone Access.")
+                        step(3, "Tap Pair with Mac.")
+                    }
+                }
+                .padding(LosttyTheme.margin)
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            Button("Advanced Setup", action: settings).font(.footnote)
+            .safeAreaInset(edge: .bottom) {
+                VStack(spacing: 4) {
+                    Button("Pair with Mac", action: pair).buttonStyle(.lostty(.primary, fullWidth: true))
+                    Button("Set Up by Hand", action: settings).buttonStyle(.lostty(.quiet))
+                }
+                .padding(LosttyTheme.margin)
+                .background(LosttyTheme.background.opacity(0.9))
+            }
         }
-        .padding()
+    }
+
+    private func step(_ number: Int, _ text: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Text("\(number)")
+                .font(LosttyFont.mono(.footnote, size: 13, weight: .semibold))
+                .foregroundStyle(LosttyTheme.accent)
+                .frame(width: 26, height: 26)
+                .background(LosttyTheme.accentSoft, in: Circle())
+            Text(text)
+                .font(LosttyFont.body)
+                .foregroundStyle(LosttyTheme.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 }
 #endif

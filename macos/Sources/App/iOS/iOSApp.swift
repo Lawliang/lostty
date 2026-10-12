@@ -21,6 +21,7 @@ struct Ghostty_iOSApp: App {
                 .environmentObject(ghostty_app)
                 .environmentObject(store)
                 .preferredColorScheme(.dark)
+                .tint(LosttyTheme.accent)
                 // The Mac's pairing code scanned with the Camera app.
                 .onOpenURL { store.openPairingLink($0) }
         }
