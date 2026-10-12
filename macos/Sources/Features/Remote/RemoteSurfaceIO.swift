@@ -1,4 +1,3 @@
-#if os(macOS)
 import Foundation
 import GhosttyKit
 import LosttyRemote
@@ -59,6 +58,11 @@ final class RemoteSurfaceIO: Ghostty.RemoteIO, @unchecked Sendable {
     /// The size the current attach started with.
     private var attachedSize = (cols: 80, rows: 24)
     private var task: Task<Void, Never>?
+    /// Set by `restart()`: the current attach's end is a restart, not an
+    /// exit or a drop.
+    private var restartRequested = false
+    /// The backoff wait in progress, so `restart()` can cut it short.
+    private var delay: Task<Void, Error>?
 
     init(
         attacher: RemoteAttacher,
@@ -113,6 +117,20 @@ final class RemoteSurfaceIO: Ghostty.RemoteIO, @unchecked Sendable {
         open?.close()
     }
 
+    /// Drops the connection and attaches again at once. For the phone
+    /// coming back to the foreground or changing networks, when the old
+    /// connection may be dead without anyone having noticed. Does nothing
+    /// before `attach(to:)` or after `detach()`.
+    func restart() {
+        let open: RemoteTerminal? = stateLock.withLock {
+            guard !detached, task != nil else { return nil }
+            restartRequested = true
+            delay?.cancel()
+            return terminal
+        }
+        open?.close()
+    }
+
     /// Waits for the session loop to end (tests).
     func finished() async {
         await stateLock.withLock { task }?.value
@@ -147,11 +165,13 @@ final class RemoteSurfaceIO: Ghostty.RemoteIO, @unchecked Sendable {
                 // again unless the pane is gone.
                 closed()
                 if Task.isCancelled { return }
-                guard (try? await delays(policy.nextDelay())) != nil else { return }
+                if takeRestart() { policy.reset(); continue }
+                guard await pause(policy.nextDelay()) else { return }
                 continue
             }
             if Task.isCancelled { return }
             closed()
+            if takeRestart() { policy.reset(); continue }
             switch end {
             case .exited(let code):
                 reportExit(UInt32(bitPattern: code))
@@ -160,8 +180,32 @@ final class RemoteSurfaceIO: Ghostty.RemoteIO, @unchecked Sendable {
                 // A connection that worked starts the backoff over.
                 if stateLock.withLock({ didOpen }) { policy.reset() }
                 withSurface { calls.disconnected($0) }
-                guard (try? await delays(policy.nextDelay())) != nil else { return }
+                guard await pause(policy.nextDelay()) else { return }
             }
+        }
+    }
+
+    /// Waits `seconds` (the backoff), ending early on `restart()`. False
+    /// when the pane is gone.
+    private func pause(_ seconds: TimeInterval) async -> Bool {
+        let wait = Task { try await delays(seconds) }
+        stateLock.withLock { delay = wait }
+        // Closing the pane cancels this loop; the wait must end with it.
+        await withTaskCancellationHandler {
+            _ = try? await wait.value
+        } onCancel: {
+            wait.cancel()
+        }
+        // A restart during the wait has done its job by ending it.
+        stateLock.withLock { delay = nil; restartRequested = false }
+        return !Task.isCancelled
+    }
+
+    /// Consumes a pending restart request.
+    private func takeRestart() -> Bool {
+        stateLock.withLock {
+            defer { restartRequested = false }
+            return restartRequested
         }
     }
 
@@ -209,10 +253,12 @@ final class RemoteSurfaceIO: Ghostty.RemoteIO, @unchecked Sendable {
 
 /// Attaches over SSH: a fresh connection per attempt, so a dropped network
 /// reconnects from scratch.
-@available(macOS 15, *)
+@available(macOS 15, iOS 17, *)
 struct SSHAttacher: RemoteAttacher {
     let host: RemoteHost
-    let key: RemoteKey
+    /// The key, fetched for each attempt: the phone replaces its key (and
+    /// Face ID context) after the app has been in the background.
+    let key: @Sendable () async throws -> RemoteKey
     let knownHosts: KnownHosts
     let sessionID: String
 
@@ -222,11 +268,10 @@ struct SSHAttacher: RemoteAttacher {
         onOpen: @escaping @Sendable (RemoteTerminal) -> Void,
         onOutput: @escaping @Sendable (Data) -> Void
     ) async throws -> AttachEnd {
-        let connection = try await RemoteConnection.connect(to: host, key: key, knownHosts: knownHosts)
+        let connection = try await RemoteConnection.connect(to: host, key: try await key(), knownHosts: knownHosts)
         let end = await connection.attach(
             sessionID: sessionID, cols: cols, rows: rows, onOpen: onOpen, onOutput: onOutput)
         await connection.close()
         return end
     }
 }
-#endif

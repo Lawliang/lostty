@@ -136,6 +136,44 @@ private final class DelayLog: @unchecked Sendable {
     func add(_ v: TimeInterval) { lock.withLock { _values.append(v) } }
 }
 
+/// Each attach opens a terminal and stays attached until that terminal is
+/// closed, then returns `.exited(0)` — as a real channel does on a local
+/// close. Records how many attaches ran.
+private final class CloseEndsAttacher: RemoteAttacher, @unchecked Sendable {
+    private let lock = NSLock()
+    private var _attaches = 0
+    var attaches: Int { lock.withLock { _attaches } }
+
+    final class Terminal: RemoteTerminal, @unchecked Sendable {
+        let onClose: @Sendable () -> Void
+        init(onClose: @escaping @Sendable () -> Void) { self.onClose = onClose }
+        func write(_ data: Data) {}
+        func resize(cols: Int, rows: Int) {}
+        func close() { onClose() }
+    }
+
+    func attach(cols: Int, rows: Int,
+                onOpen: @escaping @Sendable (RemoteTerminal) -> Void,
+                onOutput: @escaping @Sendable (Data) -> Void) async throws -> AttachEnd {
+        lock.withLock { _attaches += 1 }
+        await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in
+            let once = OnceFlag()
+            onOpen(Terminal { if once.claim() { done.resume() } })
+        }
+        return .exited(0)
+    }
+}
+
+private final class OnceFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var used = false
+    func claim() -> Bool { lock.withLock { defer { used = true }; return !used } }
+}
+
+private func waitUntil(_ condition: @escaping () -> Bool) async throws {
+    for _ in 0..<100 where !condition() { try await Task.sleep(for: .milliseconds(20)) }
+}
+
 private let fakeSurface = UnsafeMutableRawPointer(bitPattern: 0x1)!
 
 struct RemoteSurfaceIOTests {
@@ -265,6 +303,45 @@ struct RemoteSurfaceIOTests {
         io.attach(to: fakeSurface)
         await io.finished()
         #expect(waits.values == [0.5, 1, 0.5])
+    }
+
+    @Test func restartWhileAttachedReattachesWithoutClosingThePane() async throws {
+        let log = SurfaceLog()
+        let attacher = CloseEndsAttacher()
+        let io = RemoteSurfaceIO(attacher: attacher, surfaceCalls: log.calls, delays: { _ in }, onMain: { $0() })
+        io.attach(to: fakeSurface)
+        try await waitUntil { attacher.attaches == 1 }
+        io.restart()
+        try await waitUntil { attacher.attaches == 2 }
+        #expect(attacher.attaches == 2)
+        #expect(log.events.isEmpty, "a restart is neither an exit nor a disconnect")
+        io.detach()
+        await io.finished()
+    }
+
+    @Test func restartDuringBackoffAttachesNow() async throws {
+        let log = SurfaceLog()
+        let attacher = ScriptedAttacher([.success(.lost), .success(.exited(0))])
+        let io = RemoteSurfaceIO(attacher: attacher, surfaceCalls: log.calls, delays: { _ in
+            try await Task.sleep(for: .seconds(60))
+        }, onMain: { $0() })
+        io.attach(to: fakeSurface)
+        try await waitUntil { log.events == ["disconnected"] }
+        io.restart()
+        await io.finished()
+        #expect(attacher.sizes.count == 2)
+        #expect(log.events == ["disconnected", "exited 0"])
+    }
+
+    @Test func restartAfterDetachDoesNothing() async {
+        let log = SurfaceLog()
+        let attacher = ScriptedAttacher([.success(.exited(0))])
+        let io = RemoteSurfaceIO(attacher: attacher, surfaceCalls: log.calls, delays: { _ in }, onMain: { $0() })
+        io.detach()
+        io.restart()
+        io.attach(to: fakeSurface)
+        await io.finished()
+        #expect(attacher.sizes.isEmpty)
     }
 }
 #endif
