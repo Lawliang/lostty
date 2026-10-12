@@ -52,6 +52,20 @@ enum PhoneAccessUI {
         window?.makeKeyAndOrderFront(nil)
     }
 
+    /// Pair a Phone from the menu bar: opening the window runs the checks;
+    /// pair once they say it can (up to 5 s), else leave the checklist showing.
+    static func startPairingWhenReady() {
+        Task { @MainActor in
+            for _ in 0..<20 {
+                if store.canPair {
+                    store.startPairing()
+                    return
+                }
+                try? await Task.sleep(for: .milliseconds(250))
+            }
+        }
+    }
+
     @MainActor
     final class MenuTarget: NSObject {
         static let shared = MenuTarget()

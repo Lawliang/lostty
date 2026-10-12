@@ -344,6 +344,10 @@ class AppDelegate: NSObject,
 
         // Lostty Mobile: pair a phone and check this Mac's setup for it.
         PhoneAccessUI.installMenuItem(after: menuOpenConfig)
+        // Lostty Mobile: put back power settings a crashed Lostty left
+        // changed, then the menu bar icon (Stay Awake for Phone).
+        StayAwakeStore.shared.start()
+        LosttyStatusItem.shared.installIfEnabled()
         HookNotifications.checkAtLaunch()
 
         // Lostty Mobile: after a crash, offer to reopen the tmux sessions
@@ -411,6 +415,18 @@ class AppDelegate: NSObject,
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        // Lostty Mobile: quitting ends Stay Awake for Phone and this Mac's
+        // sessions; one confirmation covers both. Never on shutdown.
+        if StayAwakeStore.shared.isOn && !Self.systemIsEnding() {
+            let alert = NSAlert()
+            alert.messageText = "Stay Awake for Phone is on."
+            alert.informativeText = "Quitting lets the Mac sleep and ends this Mac's sessions."
+            alert.addButton(withTitle: "Quit")
+            alert.addButton(withTitle: "Cancel")
+            alert.alertStyle = .warning
+            return alert.runModal() == .alertFirstButtonReturn ? .terminateNow : .terminateCancel
+        }
+
         let windows = NSApplication.shared.windows
         if windows.isEmpty { return .terminateNow }
 
@@ -474,6 +490,18 @@ class AppDelegate: NSObject,
 
     /// Lostty Mobile: whether any open pane is running something. Panes in
     /// tmux sessions ask tmux; the others answer as the core does.
+    /// Lostty Mobile: shutdown, restart or logout, which never ask first.
+    private static func systemIsEnding() -> Bool {
+        guard let event = NSAppleEventManager.shared().currentAppleEvent,
+              let keyword = AEKeyword("why?"),
+              let why = event.attributeDescriptor(forKeyword: keyword)
+        else { return false }
+        switch why.typeCodeValue {
+        case kAEShutDown, kAERestart, kAEReallyLogOut: return true
+        default: return false
+        }
+    }
+
     private static func anyPaneNeedsConfirmQuit() -> Bool {
         NSApp.windows
             .compactMap { $0.windowController as? BaseTerminalController }
@@ -485,6 +513,9 @@ class AppDelegate: NSObject,
         // so remove them all now. In the future we may want to be
         // more selective and only remove surface-targeted notifications.
         UNUserNotificationCenter.current().removeAllDeliveredNotifications()
+
+        // Lostty Mobile: let the Mac sleep again as it did before.
+        StayAwakeStore.shared.quit()
 
         // Lostty Mobile: quitting ends this Lostty's tmux sessions, as
         // quitting a plain terminal ends its shells. Sessions made on the
