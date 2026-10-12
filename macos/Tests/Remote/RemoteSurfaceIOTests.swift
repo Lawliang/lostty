@@ -143,6 +143,9 @@ private final class CloseEndsAttacher: RemoteAttacher, @unchecked Sendable {
     private let lock = NSLock()
     private var _attaches = 0
     var attaches: Int { lock.withLock { _attaches } }
+    /// Runs on each attach just before the terminal opens (a restart that
+    /// arrives while connecting).
+    var beforeOpen: (@Sendable (Int) -> Void)?
 
     final class Terminal: RemoteTerminal, @unchecked Sendable {
         let onClose: @Sendable () -> Void
@@ -155,7 +158,8 @@ private final class CloseEndsAttacher: RemoteAttacher, @unchecked Sendable {
     func attach(cols: Int, rows: Int,
                 onOpen: @escaping @Sendable (RemoteTerminal) -> Void,
                 onOutput: @escaping @Sendable (Data) -> Void) async throws -> AttachEnd {
-        lock.withLock { _attaches += 1 }
+        let n = lock.withLock { _attaches += 1; return _attaches }
+        beforeOpen?(n)
         await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in
             let once = OnceFlag()
             onOpen(Terminal { if once.claim() { done.resume() } })
@@ -331,6 +335,29 @@ struct RemoteSurfaceIOTests {
         await io.finished()
         #expect(attacher.sizes.count == 2)
         #expect(log.events == ["disconnected", "exited 0"])
+    }
+
+    @Test func restartWhileConnectingDropsThatConnectionAndReattaches() async throws {
+        let log = SurfaceLog()
+        let attacher = CloseEndsAttacher()
+        let io = RemoteSurfaceIO(attacher: attacher, surfaceCalls: log.calls, delays: { _ in }, onMain: { $0() })
+        attacher.beforeOpen = { n in if n == 1 { io.restart() } }
+        io.attach(to: fakeSurface)
+        try await waitUntil { attacher.attaches == 2 }
+        #expect(attacher.attaches == 2)
+        #expect(log.events.isEmpty, "a restart is neither an exit nor a disconnect")
+        io.detach()
+        await io.finished()
+    }
+
+    @Test func restartBeforeAttachIsIgnored() async {
+        let log = SurfaceLog()
+        let attacher = ScriptedAttacher([.success(.exited(0))])
+        let io = RemoteSurfaceIO(attacher: attacher, surfaceCalls: log.calls, delays: { _ in }, onMain: { $0() })
+        io.restart()
+        io.attach(to: fakeSurface)
+        await io.finished()
+        #expect(log.events == ["exited 0"])
     }
 
     @Test func restartAfterDetachDoesNothing() async {

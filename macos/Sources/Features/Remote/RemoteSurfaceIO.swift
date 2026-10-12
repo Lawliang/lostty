@@ -189,7 +189,17 @@ final class RemoteSurfaceIO: Ghostty.RemoteIO, @unchecked Sendable {
     /// when the pane is gone.
     private func pause(_ seconds: TimeInterval) async -> Bool {
         let wait = Task { try await delays(seconds) }
-        stateLock.withLock { delay = wait }
+        // A restart that came in since the last check ends the wait before
+        // it starts.
+        let skip: Bool = stateLock.withLock {
+            if restartRequested { restartRequested = false; return true }
+            delay = wait
+            return false
+        }
+        if skip {
+            wait.cancel()
+            return !Task.isCancelled
+        }
         // Closing the pane cancels this loop; the wait must end with it.
         await withTaskCancellationHandler {
             _ = try? await wait.value
@@ -219,7 +229,8 @@ final class RemoteSurfaceIO: Ghostty.RemoteIO, @unchecked Sendable {
     private func opened(_ terminal: RemoteTerminal) {
         // A resize while connecting only updated `size`; tell tmux now.
         let (keep, stale): (Bool, (cols: Int, rows: Int)?) = stateLock.withLock {
-            guard !detached else { return (false, nil) }
+            // A restart asked for while connecting drops this connection.
+            guard !detached, !restartRequested else { return (false, nil) }
             self.terminal = terminal
             didOpen = true
             let differs = size != attachedSize
