@@ -83,5 +83,24 @@ struct SidebarAutoHideTests {
         pending.forEach { $0() }
         #expect(driver.isVisible == false)
     }
+
+    @MainActor
+    @Test func theDriverRearmsWhenItsTimerFiresEarly() {
+        var clock = t0
+        var pending: [@MainActor () -> Void] = []
+        let driver = SidebarAutoHideDriver(now: { clock }, schedule: { _, work in pending.append(work) })
+        driver.pointer(.edge, inside: true)
+        driver.pointer(.edge, inside: false)
+        #expect(pending.count == 1)
+        clock = t0.addingTimeInterval(0.2)
+        let early = pending
+        pending = []
+        early.forEach { $0() }
+        #expect(driver.isVisible)
+        #expect(pending.count == 1)
+        clock = t0.addingTimeInterval(0.5)
+        pending.forEach { $0() }
+        #expect(driver.isVisible == false)
+    }
 }
 #endif

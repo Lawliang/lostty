@@ -105,6 +105,9 @@ final class SidebarAutoHideDriver: ObservableObject {
         schedule(max(0, deadline.timeIntervalSince(now()))) { [weak self] in
             guard let self else { return }
             self.machine.tick(now: self.now())
+            // The timer can fire before the wall-clock deadline (clock
+            // adjustment); keep waiting rather than stay stuck in .hiding.
+            self.armHide()
         }
     }
 }

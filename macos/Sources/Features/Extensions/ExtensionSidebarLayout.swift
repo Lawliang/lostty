@@ -34,6 +34,7 @@ struct ExtensionSidebarLayout<Content: View>: View {
         }
         .animation(.easeOut(duration: 0.18), value: model.active)
         .animation(.easeOut(duration: 0.18), value: autoHide.isVisible)
+        .onAppear { autoHide.appChanged(open: model.active != nil) }
         .onChange(of: model.active) { active in autoHide.appChanged(open: active != nil) }
         .onChange(of: preferences.autoHide) { _ in autoHide.reset(appOpen: model.active != nil) }
     }
