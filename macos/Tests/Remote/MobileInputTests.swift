@@ -18,6 +18,10 @@ struct MobileInputTests {
         #expect(MI.presses(typed: "c", ctrl: true) == [P(key: .c, mods: .ctrl, text: nil, unshifted: 0x63)])
     }
 
+    @Test func ctrlWithAnUppercaseLetterDropsShift() {
+        #expect(MI.presses(typed: "C", ctrl: true) == [P(key: .c, mods: .ctrl, text: nil, unshifted: 0x63)])
+    }
+
     @Test func ctrlAppliesToTheFirstCharacterOnly() {
         #expect(MI.presses(typed: "cd", ctrl: true) == [
             P(key: .c, mods: .ctrl, text: nil, unshifted: 0x63),

@@ -4,8 +4,8 @@ extension Ghostty {
     /// Lostty Mobile: turns phone input — soft-keyboard text, the key row and
     /// a sticky Ctrl — into key presses for `ghostty_surface_key`, so the
     /// core's encoder still applies the terminal's modes (application cursor
-    /// keys, the kitty keyboard protocol). Shared with the macOS target only
-    /// so it can be unit-tested there.
+    /// keys, the kitty keyboard protocol). Compiled for iOS, and unit-tested from the macOS
+    /// target (which compiles it too).
     enum MobileInput {
         /// The keys a phone press can name. Keycodes are the macOS virtual
         /// keycodes that `Ghostty.Input.Key.keyCode` uses, so the core maps
@@ -183,7 +183,8 @@ extension Ghostty {
 
             let lower = Character(character.lowercased())
             if let key = letterKeys[lower], let scalar = lower.unicodeScalars.first {
-                let shifted: Mods = character == lower ? [] : .shift
+                // Ctrl+letter is a control code: shift is dropped.
+                let shifted: Mods = (character == lower || ctrl) ? [] : .shift
                 return Press(
                     key: key,
                     mods: ctrlMods.union(shifted),

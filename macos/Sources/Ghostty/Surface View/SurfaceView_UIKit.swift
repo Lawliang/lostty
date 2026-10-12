@@ -161,11 +161,19 @@ extension Ghostty {
             if pan.state == .began { pendingScroll = 0 }
             pendingScroll += pan.translation(in: self).y
             pan.setTranslation(.zero, in: self)
+            // One wheel tick is multiplied by mouse-scroll-multiplier (3) and
+            // tmux scrolls 5 lines per wheel event, so send one tick per ~5
+            // rows of finger travel.
             let line = max(CGFloat(surfaceSize?.cell_height_px ?? 0) / contentScaleFactor, 8)
-            let lines = (pendingScroll / line).rounded(.towardZero)
-            guard lines != 0 else { return }
-            pendingScroll -= lines * line
-            ghostty_surface_mouse_scroll(surface, 0, Double(lines), 0)
+            let step = 5 * line
+            let ticks = (pendingScroll / step).rounded(.towardZero)
+            guard ticks != 0 else { return }
+            pendingScroll -= ticks * step
+            // iOS has no mouse, so the core's cursor sits at (-1,-1) and
+            // drops wheel events outside the viewport: put it under the finger.
+            let loc = pan.location(in: self)
+            ghostty_surface_mouse_pos(surface, loc.x, loc.y, GHOSTTY_MODS_NONE)
+            ghostty_surface_mouse_scroll(surface, 0, Double(ticks), 0)
         }
 
         func send(_ presses: [MobileInput.Press]) {
@@ -208,7 +216,7 @@ extension Ghostty.SurfaceView: UIKeyInput {
     var smartQuotesType: UITextSmartQuotesType { get { .no } set {} }
     var smartDashesType: UITextSmartDashesType { get { .no } set {} }
     var smartInsertDeleteType: UITextSmartInsertDeleteType { get { .no } set {} }
-    var keyboardType: UIKeyboardType { get { .asciiCapable } set {} }
+    var keyboardType: UIKeyboardType { get { .default } set {} }
     var keyboardAppearance: UIKeyboardAppearance { get { .dark } set {} }
 
     func insertText(_ text: String) {

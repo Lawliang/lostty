@@ -20,6 +20,8 @@ extension Ghostty {
                 let button = UIButton(type: .system)
                 button.setTitle(key.label, for: .normal)
                 button.titleLabel?.font = .monospacedSystemFont(ofSize: 15, weight: .medium)
+                button.titleLabel?.adjustsFontSizeToFitWidth = true
+                button.titleLabel?.minimumScaleFactor = 0.6
                 button.backgroundColor = .secondarySystemBackground
                 button.layer.cornerRadius = 5
                 button.accessibilityLabel = key.rawValue
