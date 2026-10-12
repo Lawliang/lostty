@@ -64,5 +64,40 @@ struct ExtensionSidebarModelTests {
         model.select(.skins)
         #expect(branches.isOpen == false)
     }
+
+    @Test func closingAnAppHandsFocusBackToThePane() throws {
+        let (model, _) = try makeModel()
+        var focused = 0
+        model.focusTerminal = { focused += 1 }
+        model.select(.branches)
+        #expect(focused == 0)
+        model.close()
+        #expect(focused == 1)
+        model.select(.skins)
+        model.select(.skins)
+        #expect(focused == 2)
+        model.select(.branches)
+        model.select(.branches)
+        #expect(focused == 3)
+    }
+
+    @Test func leavingBranchesForAnotherAppHandsFocusBack() throws {
+        let (model, _) = try makeModel()
+        var focused = 0
+        model.focusTerminal = { focused += 1 }
+        model.select(.skins)
+        model.select(.branches)
+        #expect(focused == 0)
+        model.select(.skins)
+        #expect(focused == 1)
+    }
+
+    @Test func closingWithNothingOpenLeavesFocusAlone() throws {
+        let (model, _) = try makeModel()
+        var focused = 0
+        model.focusTerminal = { focused += 1 }
+        model.close()
+        #expect(focused == 0)
+    }
 }
 #endif

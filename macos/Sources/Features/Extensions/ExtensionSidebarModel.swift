@@ -44,6 +44,12 @@ final class ExtensionSidebarModel: ObservableObject {
             } else if oldValue == .branches {
                 branches.close()
             }
+            // A closing app may hold keyboard focus (the Branches panel takes
+            // it, for Esc); hand it back to the pane. Branches giving way to
+            // another app does the same, since that app doesn't take focus.
+            if oldValue != nil, active == nil || oldValue == .branches {
+                focusTerminal()
+            }
         }
     }
     /// The window's focused (or last focused) pane, set by the controller.
@@ -54,6 +60,10 @@ final class ExtensionSidebarModel: ObservableObject {
     }
     /// The title bar's color (the top pane's background), set by the window.
     @Published var chromeColor: NSColor?
+
+    /// Gives keyboard focus back to the window's focused pane. Set by the
+    /// window's controller.
+    var focusTerminal: @MainActor () -> Void = {}
 
     /// The Branches panel's state; idle until Branches opens.
     let branches: BranchesModel
