@@ -17,6 +17,7 @@ final class PhoneAccessStore: ObservableObject {
     @Published var pairing: Pairing?
     @Published var message: String?
 
+    static let stayAwakePrompt = "Lostty wants to keep this Mac awake for your phone when you ask it to."
     static let skipDefaultsKey = "LosttyPhoneAccessSkipLockdown"
     private let defaults = UserDefaults.ghostty
     private var server: PairingServer?
@@ -120,6 +121,16 @@ final class PhoneAccessStore: ObservableObject {
                 message = "Couldn't copy the terminal definition: \(error.localizedDescription)"
             }
             refresh()
+        case .installStayAwake:
+            guard let script = StayAwakeSudoers.installScript(user: NSUserName()) else {
+                message = "Stay Awake for Phone can't be set up for this account name."
+                return
+            }
+            if case .failed(let text) = PhoneAccessAdmin.run(script, prompt: Self.stayAwakePrompt) {
+                message = text
+            }
+            StayAwakeStore.shared.refreshAvailability()
+            refresh()
         case .grantFolders:
             // macOS asks once per folder and the read waits for each answer.
             checking = true
@@ -136,14 +147,22 @@ final class PhoneAccessStore: ObservableObject {
     }
 
     private func runAdmin(enableRemoteLogin: Bool, lockPasswords: Bool) {
-        guard let script = PhoneAccessAdmin.setupScript(enableRemoteLogin: enableRemoteLogin, lockPasswords: lockPasswords) else {
+        let setup = PhoneAccessAdmin.setupScript(enableRemoteLogin: enableRemoteLogin, lockPasswords: lockPasswords)
+        let stayAwake = status?.stayAwakePermission == false ? StayAwakeSudoers.installScript(user: NSUserName()) : nil
+        let script = [setup, stayAwake].compactMap { $0 }.joined(separator: "\n")
+        guard !script.isEmpty else {
             refresh()
             return
         }
-        switch PhoneAccessAdmin.run(script, prompt: PhoneAccessAdmin.prompt(enableRemoteLogin: enableRemoteLogin, lockPasswords: lockPasswords)) {
+        var prompt = setup == nil
+            ? Self.stayAwakePrompt
+            : PhoneAccessAdmin.prompt(enableRemoteLogin: enableRemoteLogin, lockPasswords: lockPasswords)
+        if setup != nil && stayAwake != nil { prompt += " It also lets Lostty keep this Mac awake for your phone when you ask." }
+        switch PhoneAccessAdmin.run(script, prompt: prompt) {
         case .done, .cancelled: break
         case .failed(let text): message = text
         }
+        StayAwakeStore.shared.refreshAvailability()
         refresh()
     }
 
@@ -298,11 +317,18 @@ final class PhoneAccessStore: ObservableObject {
         confirm.addButton(withTitle: "Cancel")
         guard confirm.runModal() == .alertFirstButtonReturn else { return }
         stopPairing()
+        StayAwakeStore.shared.turnOff()
         do {
             try keysFile.write(AuthorizedKeys.removingAll(from: try keysFile.read()))
             for phone in phones { names.set(phone.id, nil) }
         } catch {
             message = "Couldn't update ~/.ssh/authorized_keys: \(error.localizedDescription)"
+        }
+        var adminScripts: [String] = []
+        var prompts: [String] = []
+        if FileManager.default.fileExists(atPath: StayAwakeSudoers.path) {
+            adminScripts.append(StayAwakeSudoers.removeScript)
+            prompts.append("remove its permission to keep this Mac awake")
         }
         if FileManager.default.fileExists(atPath: PhoneAccessProbe.lockdownPath) {
             let unlock = NSAlert()
@@ -310,11 +336,17 @@ final class PhoneAccessStore: ObservableObject {
             unlock.informativeText = "Lostty turned them off for Phone Access. Keeping them off is safer."
             unlock.addButton(withTitle: "Keep Them Off")
             unlock.addButton(withTitle: "Turn Back On")
-            if unlock.runModal() == .alertSecondButtonReturn,
-               case .failed(let text) = PhoneAccessAdmin.run(PhoneAccessAdmin.unlockScript, prompt: "Lostty wants to turn password logins back on.") {
-                message = text
+            if unlock.runModal() == .alertSecondButtonReturn {
+                adminScripts.append(PhoneAccessAdmin.unlockScript)
+                prompts.append("turn password logins back on")
             }
         }
+        if !adminScripts.isEmpty,
+           case .failed(let text) = PhoneAccessAdmin.run(adminScripts.joined(separator: "\n"),
+                                                         prompt: "Lostty wants to " + prompts.joined(separator: " and ") + ".") {
+            message = text
+        }
+        StayAwakeStore.shared.refreshAvailability()
         lockdownSkipped = false
         refresh()
     }

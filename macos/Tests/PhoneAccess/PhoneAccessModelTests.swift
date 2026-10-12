@@ -9,7 +9,8 @@ struct PhoneAccessRowsTests {
         tailscale: .init(running: true, name: "mac.ts.net", ipv4: "100.1.2.3"),
         tmuxPath: "/opt/homebrew/bin/tmux", remoteLogin: true, authMethods: ["publickey"],
         lockdownFileExists: true, blockAllIncoming: false, terminfoInstalled: true,
-        folders: ["Desktop": true, "Documents": true, "Downloads": true])
+        folders: ["Desktop": true, "Documents": true, "Downloads": true],
+        stayAwakePermission: true)
 
     func row(_ kind: PhoneAccessRow.Kind, _ status: PhoneAccessStatus, skipped: Bool = false) -> PhoneAccessRow {
         PhoneAccessRow.rows(for: status, lockdownSkipped: skipped).first { $0.id == kind }!
@@ -17,8 +18,21 @@ struct PhoneAccessRowsTests {
 
     @Test func allDoneIsAllOK() {
         let rows = PhoneAccessRow.rows(for: ready, lockdownSkipped: false)
-        #expect(rows.map(\.id) == [.tailscale, .tmux, .remoteLogin, .passwords, .firewall, .terminfo, .folders])
+        #expect(rows.map(\.id) == [.tailscale, .tmux, .remoteLogin, .passwords, .firewall, .terminfo, .stayAwake, .folders])
         #expect(rows.allSatisfy { $0.state == .ok })
+    }
+
+    @Test func stayAwakePermissionIsOfferedAndNeverBlocksPairing() {
+        var s = ready
+        s.stayAwakePermission = false
+        let r = row(.stayAwake, s)
+        #expect(r.state == .missing)
+        #expect(r.fixes == [.installStayAwake])
+        #expect(r.title == "Stay-awake permission")
+        #expect(s.readyToPair(lockdownSkipped: false))
+        s.stayAwakePermission = true
+        #expect(row(.stayAwake, s).state == .ok)
+        #expect(row(.stayAwake, s).fixes.isEmpty)
     }
 
     @Test func folderAccessIsOfferedUntilGrantedAndNeverBlocksPairing() {

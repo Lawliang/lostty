@@ -23,6 +23,9 @@ struct PhoneAccessStatus: Equatable {
     /// Which of `PhoneAccessFolders.names` Lostty can read; nil until the
     /// customer has clicked Grant Now (checking earlier would make macOS ask).
     var folders: [String: Bool]? = nil
+    /// The sudoers rule Stay Awake for Phone needs. Optional: never blocks
+    /// pairing.
+    var stayAwakePermission: Bool = false
 
     var tailscaleReady: Bool {
         tailscale?.running == true && tailscale?.name != nil && tailscale?.ipv4 != nil
@@ -206,7 +209,8 @@ enum PhoneAccessProbe {
             blockAllIncoming: PhoneAccessParse.blockAll(firewallOutput: firewall),
             terminfoInstalled: PhoneAccessTerminfo.installed(
                 bundle: PhoneAccessTerminfo.bundleDirectory, home: PhoneAccessTerminfo.homeDirectory),
-            folders: foldersRequested ? PhoneAccessFolders.check() : nil)
+            folders: foldersRequested ? PhoneAccessFolders.check() : nil,
+            stayAwakePermission: SystemPowerControl().hasPermission())
     }
 }
 #endif

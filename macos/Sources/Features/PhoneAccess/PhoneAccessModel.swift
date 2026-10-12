@@ -4,9 +4,9 @@ import LosttyRemote
 
 /// One checklist row: what it checks, how it stands, and what can fix it.
 struct PhoneAccessRow: Identifiable, Equatable {
-    enum Kind: String { case tailscale, tmux, remoteLogin, passwords, firewall, terminfo, folders }
+    enum Kind: String { case tailscale, tmux, remoteLogin, passwords, firewall, terminfo, stayAwake, folders }
     enum State: Equatable { case ok, warning, missing }
-    enum Fix: Equatable { case installTailscale, openTailscale, copyBrew, adminSetup, lockPasswords, skipLockdown, openFirewall, installTerminfo, grantFolders, openFilesAndFolders }
+    enum Fix: Equatable { case installTailscale, openTailscale, copyBrew, adminSetup, lockPasswords, skipLockdown, openFirewall, installTerminfo, installStayAwake, grantFolders, openFilesAndFolders }
 
     var id: Kind
     var title: String
@@ -71,6 +71,12 @@ struct PhoneAccessRow: Identifiable, Equatable {
         rows.append(s.terminfoInstalled
             ? .init(id: .terminfo, title: "Terminal definition", detail: "In ~/.terminfo.", state: .ok, fixes: [])
             : .init(id: .terminfo, title: "Terminal definition", detail: "Lets tmux draw Lostty's terminal correctly for your phone.", state: .missing, fixes: [.installTerminfo]))
+
+        rows.append(s.stayAwakePermission
+            ? .init(id: .stayAwake, title: "Stay-awake permission", detail: "Lostty can keep this Mac awake for your phone.", state: .ok, fixes: [])
+            : .init(id: .stayAwake, title: "Stay-awake permission",
+                    detail: "Lets Stay Awake for Phone keep this Mac awake with the lid closed. Lostty may then run only pmset's sleep and Low Power Mode settings as root.",
+                    state: .missing, fixes: [.installStayAwake]))
 
         // Optional: never blocks pairing.
         switch s.folders {

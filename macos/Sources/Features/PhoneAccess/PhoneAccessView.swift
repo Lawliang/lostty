@@ -28,8 +28,12 @@ struct PhoneAccessView: View {
                         }
                     }
                 }
-                Text("Your phone can reach this Mac only while it's awake.")
+                Text("Your phone can reach this Mac only while it's awake. Stay Awake for Phone in the menu bar keeps it awake with the lid closed.")
                     .font(LosttyFont.detail).foregroundStyle(LosttyTheme.textSecondary)
+                Toggle("Show Lostty in the menu bar", isOn: Binding(
+                    get: { LosttyStatusItem.isEnabled },
+                    set: { LosttyStatusItem.isEnabled = $0 }))
+                    .font(LosttyFont.body).foregroundStyle(LosttyTheme.textPrimary)
 
                 Button("Pair a Phone…") { store.startPairing() }
                     .buttonStyle(.lostty(.primary, fullWidth: true))
@@ -121,6 +125,7 @@ struct PhoneAccessView: View {
         case .skipLockdown: "Skip"
         case .openFirewall: "Open Network Settings"
         case .installTerminfo: "Install"
+        case .installStayAwake: "Install…"
         case .grantFolders: "Grant Now…"
         case .openFilesAndFolders: "Open Privacy Settings"
         }
