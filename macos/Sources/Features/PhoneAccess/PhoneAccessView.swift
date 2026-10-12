@@ -106,12 +106,9 @@ struct PhoneAccessView: View {
 
 private struct PairingSheetItem: Identifiable {
     var pairing: PhoneAccessStore.Pairing
-    var id: String {
-        switch pairing {
-        case .showing(let payload, _): payload.url.absoluteString
-        case .expired: "expired"
-        }
-    }
+    // Constant, so a new code or expiry updates the open sheet instead of
+    // replacing it (which could dismiss it and stop the new server).
+    var id: String { "pairing" }
 }
 
 private struct PairingSheet: View {

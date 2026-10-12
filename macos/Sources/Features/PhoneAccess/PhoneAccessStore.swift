@@ -21,6 +21,7 @@ final class PhoneAccessStore: ObservableObject {
     private let defaults = UserDefaults.ghostty
     private var server: PairingServer?
     private var pairingID = UUID()
+    private var decision: PairingDecision?
     private let keysFile = AuthorizedKeysFile.standard
     private var names: PhoneAccessNames { PhoneAccessNames(defaults: defaults) }
 
@@ -113,13 +114,14 @@ final class PhoneAccessStore: ObservableObject {
             let id = UUID()
             let server = try PairingServer(
                 secret: payload.secret,
-                decide: { [weak self] request in await self?.ask(request) ?? false },
+                decide: { [weak self] request in await self?.ask(request, pairing: id) ?? false },
                 onFinish: { [weak self] allowed in
                     Task { @MainActor in self?.pairingFinished(id, allowed: allowed) }
                 })
             stopPairing()
             self.server = server
             pairingID = id
+            decision = nil
             pairing = .showing(payload, expires: Date().addingTimeInterval(120))
             Task {
                 do {
@@ -152,8 +154,8 @@ final class PhoneAccessStore: ObservableObject {
     }
 
     /// The Allow prompt; on Allow, adds the key.
-    private func ask(_ request: PairingRequest) async -> Bool {
-        guard let key = request.acceptedKey else { return false }
+    private func ask(_ request: PairingRequest, pairing id: UUID) async -> Bool {
+        guard pairingID == id, let key = request.acceptedKey else { return false }
         let model = request.displayModel
         NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()
@@ -161,7 +163,13 @@ final class PhoneAccessStore: ObservableObject {
         alert.informativeText = "It can open and type in every Lostty session on this Mac. You can remove it later in Phone Access."
         alert.addButton(withTitle: "Allow")
         alert.addButton(withTitle: "Deny")
-        guard alert.runModal() == .alertFirstButtonReturn else { return false }
+        let allowed = alert.runModal() == .alertFirstButtonReturn
+        // Cancel or expiry can happen while the alert is up.
+        guard pairingID == id else { return false }
+        guard allowed else {
+            decision = .denied
+            return false
+        }
         do {
             let id = UUID().uuidString.lowercased()
             let text = try keysFile.read()
@@ -169,8 +177,10 @@ final class PhoneAccessStore: ObservableObject {
                 try keysFile.write(updated)
                 names.set(id, .init(name: model, paired: Date()))
             }
+            decision = .allowed
             return true
         } catch {
+            decision = .writeFailed
             message = "Couldn't add the phone to ~/.ssh/authorized_keys: \(error.localizedDescription)"
             return false
         }
@@ -180,7 +190,7 @@ final class PhoneAccessStore: ObservableObject {
         guard pairingID == id else { return }
         server = nil
         pairing = nil
-        message = allowed ? "Paired. Finish on your phone." : "Pairing was declined."
+        if let text = PairingDecision.finishedMessage(decision, allowed: allowed) { message = text }
         reloadPhones()
     }
 

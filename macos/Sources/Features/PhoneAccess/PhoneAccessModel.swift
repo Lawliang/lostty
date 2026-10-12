@@ -69,6 +69,22 @@ struct PhoneAccessRow: Identifiable, Equatable {
     }
 }
 
+/// What the customer (or the keys file) decided for one pairing.
+enum PairingDecision: Equatable {
+    case allowed, denied, writeFailed
+
+    /// The message once a pairing ends; nil keeps the message already shown
+    /// (a write failure already explained itself).
+    static func finishedMessage(_ decision: PairingDecision?, allowed: Bool) -> String? {
+        switch decision {
+        case .writeFailed: nil
+        case .denied: "Pairing was declined."
+        case .allowed: "Paired. Finish on your phone."
+        case nil: allowed ? "Paired. Finish on your phone." : "Pairing didn't finish."
+        }
+    }
+}
+
 struct PairedPhone: Identifiable, Equatable {
     var id: String
     var name: String

@@ -70,6 +70,15 @@ struct PhoneAccessRowsTests {
     }
 }
 
+struct PairingDecisionTests {
+    @Test func finishedMessageKeepsWriteFailure() {
+        #expect(PairingDecision.finishedMessage(.writeFailed, allowed: false) == nil)
+        #expect(PairingDecision.finishedMessage(.denied, allowed: false) == "Pairing was declined.")
+        #expect(PairingDecision.finishedMessage(.allowed, allowed: true) == "Paired. Finish on your phone.")
+        #expect(PairingDecision.finishedMessage(nil, allowed: false) == "Pairing didn't finish.")
+    }
+}
+
 struct PhoneAccessNamesTests {
     @Test func storesNamesAndMergesThemWithTheKeysFile() {
         let names = PhoneAccessNames(defaults: UserDefaults(suiteName: "lostty-phones-\(UUID().uuidString)")!)
