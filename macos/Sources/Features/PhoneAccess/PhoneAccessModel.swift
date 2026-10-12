@@ -14,6 +14,11 @@ struct PhoneAccessRow: Identifiable, Equatable {
     var state: State
     var fixes: [Fix]
 
+    /// "5 of 7 ready": ⚠ counts as not ready.
+    static func readiness(_ rows: [PhoneAccessRow]) -> (ready: Int, total: Int) {
+        (rows.filter { $0.state == .ok }.count, rows.count)
+    }
+
     static let skipWarning = "Without this, anyone who can reach this Mac can try your password over SSH, on any network, for every account on this Mac. If you SSH into this Mac with a password from elsewhere, that keeps working."
 
     static func rows(for s: PhoneAccessStatus, lockdownSkipped: Bool) -> [PhoneAccessRow] {

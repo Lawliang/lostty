@@ -21,6 +21,12 @@ enum PhoneAccessUI {
             let window = NSWindow(contentViewController: host)
             window.title = "Phone Access"
             window.styleMask = [.titled, .closable, .resizable]
+            // Always dark: a branded setup window, one palette.
+            window.appearance = NSAppearance(named: .darkAqua)
+            window.backgroundColor = NSColor(LosttyTheme.background)
+            window.titlebarAppearsTransparent = true
+            window.contentMinSize = NSSize(width: 560, height: 520)
+            window.contentMaxSize = NSSize(width: 560, height: 4000)
             window.isReleasedWhenClosed = false
             window.center()
             // Re-check when the customer comes back from a fix (Terminal,
