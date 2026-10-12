@@ -30,3 +30,7 @@ vgcore.*
 # Lostty Mobile: LosttyRemote package build output
 macos/LosttyRemote/.build/
 macos/LosttyRemote/.swiftpm/
+
+# LLVM coverage output: a coverage-instrumented Lostty writes one into
+# whatever directory its Claude hooks run in.
+*.profraw
