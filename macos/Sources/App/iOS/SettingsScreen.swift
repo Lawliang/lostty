@@ -29,13 +29,16 @@ struct SettingsScreen: View {
         Form {
             Section("Mac") {
                 if store.settings.paired {
-                    LabeledContent("Paired with", value: store.settings.host)
+                    LabeledContent("Paired with") {
+                        Text(store.settings.host).font(LosttyFont.mono(.callout)).foregroundStyle(LosttyTheme.textSecondary)
+                    }
                     if let date = store.settings.pairedAt {
                         LabeledContent("Since", value: date.formatted(date: .abbreviated, time: .omitted))
                     }
                 }
                 Button(store.settings.paired ? "Pair with a Different Mac" : "Pair with Mac") { showPairing = true }
             }
+            .listRowBackground(LosttyTheme.surface)
 
             Section {
                 DisclosureGroup("Advanced", isExpanded: $showAdvanced) {
@@ -49,7 +52,7 @@ struct SettingsScreen: View {
                     TextField("Port", value: $store.settings.port, format: .number.grouping(.never))
                         .keyboardType(.numberPad)
                     if let problem = store.settings.problem, !store.settings.host.isEmpty {
-                        Text(problem).foregroundStyle(.red)
+                        Text(problem).foregroundStyle(LosttyTheme.danger)
                     }
                     Button("Show This Phone's Key") {
                         do {
@@ -60,9 +63,9 @@ struct SettingsScreen: View {
                             keyError = (error as? RemoteError)?.message ?? error.localizedDescription
                         }
                     }
-                    if let keyError { Text(keyError).foregroundStyle(.red) }
+                    if let keyError { Text(keyError).foregroundStyle(LosttyTheme.danger) }
                     if let publicKey {
-                        Text(publicKey).font(.footnote.monospaced()).textSelection(.enabled)
+                        Text(publicKey).font(LosttyFont.mono(.footnote, size: 13)).textSelection(.enabled)
                         ShareLink(item: publicKey)
                     }
                     Button("Forget the Mac's Host Key", role: .destructive) { confirmForget = true }
@@ -70,8 +73,10 @@ struct SettingsScreen: View {
             } footer: {
                 Text("For setting up by hand. Pairing fills these in for you.")
             }
+            .listRowBackground(LosttyTheme.surface)
         }
         .navigationTitle("Settings")
+        .losttyScreen()
         .confirmationDialog(
             "Forget the Mac's host key?", isPresented: $confirmForget, titleVisibility: .visible
         ) {

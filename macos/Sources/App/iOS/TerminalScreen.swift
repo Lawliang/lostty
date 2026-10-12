@@ -21,11 +21,15 @@ struct TerminalScreen: View {
         .ignoresSafeArea(.container, edges: .bottom)
         .navigationTitle(session.name)
         .navigationBarTitleDisplayMode(.inline)
+        .losttyScreen()
         .toolbar {
-            Menu {
-                Button("Close Session", role: .destructive) { confirmClose = true }
-            } label: {
-                Image(systemName: "ellipsis.circle")
+            ToolbarItem(placement: .principal) { TerminalTitle(name: session.name) }
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Button("Close Session", role: .destructive) { confirmClose = true }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
             }
         }
         .confirmationDialog(
@@ -56,6 +60,18 @@ struct TerminalScreen: View {
                 Task { await store.terminalClosedItself(session) }
             }
         }
+    }
+}
+
+/// The session's name in the terminal's top bar.
+struct TerminalTitle: View {
+    var name: String
+    var body: some View {
+        Text(name)
+            .font(LosttyFont.mono(.headline, weight: .semibold))
+            .foregroundStyle(LosttyTheme.textPrimary)
+            .lineLimit(1)
+            .truncationMode(.middle)
     }
 }
 #endif

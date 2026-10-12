@@ -22,8 +22,10 @@ extension Ghostty {
                 button.titleLabel?.font = .monospacedSystemFont(ofSize: 15, weight: .medium)
                 button.titleLabel?.adjustsFontSizeToFitWidth = true
                 button.titleLabel?.minimumScaleFactor = 0.6
-                button.backgroundColor = .secondarySystemBackground
-                button.layer.cornerRadius = 5
+                button.backgroundColor = LosttyUIColor.surfaceRaised
+                button.setTitleColor(LosttyUIColor.textPrimary, for: .normal)
+                button.layer.cornerRadius = 8
+                button.layer.cornerCurve = .continuous
                 button.accessibilityLabel = key.rawValue
                 button.addAction(UIAction { [weak self] _ in self?.onKey?(key) }, for: .touchUpInside)
                 if key == .ctrl { ctrlButton = button }
@@ -43,10 +45,11 @@ extension Ghostty {
             fatalError("init(coder:) is not supported")
         }
 
-        /// Shows whether Ctrl is latched.
+        /// Shows whether Ctrl is latched; a light tap when it latches.
         func setCtrl(_ on: Bool) {
-            ctrlButton?.backgroundColor = on ? .tintColor : .secondarySystemBackground
-            ctrlButton?.setTitleColor(on ? .white : nil, for: .normal)
+            ctrlButton?.backgroundColor = on ? LosttyUIColor.accent : LosttyUIColor.surfaceRaised
+            ctrlButton?.setTitleColor(on ? .white : LosttyUIColor.textPrimary, for: .normal)
+            if on { UIImpactFeedbackGenerator(style: .light).impactOccurred() }
         }
     }
 }
