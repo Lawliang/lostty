@@ -109,7 +109,9 @@ enum Command {
             _ = drained.wait(timeout: .now() + 1)
             return nil
         }
-        drained.wait()
+        // A grandchild can keep the pipe open after the child exits; don't
+        // wait on it forever.
+        if drained.wait(timeout: .now() + 1) == .timedOut { return nil }
         return Result(status: process.terminationStatus, output: String(decoding: collected.data, as: UTF8.self))
     }
 }

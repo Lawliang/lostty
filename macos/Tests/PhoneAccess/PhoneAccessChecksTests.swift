@@ -93,5 +93,11 @@ struct PhoneAccessChecksTests {
         #expect(Date().timeIntervalSince(start) < 3)
         #expect(Command.run("/nonexistent/tool", []) == nil)
     }
+
+    @Test func aLeftoverGrandchildHoldingThePipeDoesNotHangIt() {
+        let start = Date()
+        _ = Command.run("/bin/sh", ["-c", "sleep 30 >/dev/null 2>&1 & sleep 30 & exit 0"], timeout: 2)
+        #expect(Date().timeIntervalSince(start) < 5)
+    }
 }
 #endif
