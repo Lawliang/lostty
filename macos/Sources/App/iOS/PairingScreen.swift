@@ -53,7 +53,10 @@ struct PairingScreen: View {
         .padding()
         .navigationTitle("Pair with Mac")
         .toolbar {
-            Button("Cancel") { dismiss() }
+            Button("Cancel") {
+                store.cancelPairing()
+                dismiss()
+            }
         }
         .onAppear { store.resetPairing() }
         .task {
@@ -61,7 +64,7 @@ struct PairingScreen: View {
             cameraAllowed = await AVCaptureDevice.requestAccess(for: .video)
         }
         .onDisappear {
-            if store.pairing == .done { store.resetPairing() }
+            if store.pairing == .done { store.resetPairing() } else { store.cancelPairing() }
         }
     }
 }

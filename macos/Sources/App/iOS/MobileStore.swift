@@ -199,14 +199,30 @@ final class MobileStore: ObservableObject {
     static let noSessionsMessage = "No sessions. Is Lostty open on your Mac?"
     static let tailscaleHint = "Is Tailscale on and signed into the same account as your Mac?"
 
+    /// Identifies the running pairing attempt; cancelling bumps it so a late
+    /// result of an abandoned attempt is dropped.
+    private var pairingAttempt = UUID()
+
     func resetPairing() {
+        pairingAttempt = UUID()
         pairing = .idle
         allowedPayload = nil
+    }
+
+    /// The user backed out: stop acting on whatever the attempt still gets.
+    func cancelPairing() {
+        resetPairing()
     }
 
     /// Scan → find the Mac nearby → send this phone's key → wait for Allow
     /// → test over Tailscale. Only a working test saves the pairing.
     func pair(link: String) async {
+        switch pairing {
+        case .idle, .failed: break
+        default: return
+        }
+        pairingAttempt = UUID()
+        let attempt = pairingAttempt
         guard let url = URL(string: link.trimmingCharacters(in: .whitespacesAndNewlines)),
               let payload = try? PairingPayload(url: url)
         else {
@@ -217,38 +233,50 @@ final class MobileStore: ObservableObject {
             let key = try remoteKey()
             pairing = .finding
             let endpoint = try await PairingClient.find(secret: payload.secret)
+            guard attempt == pairingAttempt else { return }
             pairing = .waitingForAllow
             let response = try await PairingClient.send(
                 PairingRequest(publicKey: key.publicKeyLine, model: DeviceModel.current),
                 to: endpoint, secret: payload.secret)
+            guard attempt == pairingAttempt else { return }
             guard response.result == .allowed else {
                 pairing = .failed("Your Mac declined. Try again from Phone Access.", canRetryTest: false)
                 return
             }
             allowedPayload = payload
         } catch let error as PairingError {
+            guard attempt == pairingAttempt else { return }
             pairing = .failed(error.message, canRetryTest: false)
             return
         } catch {
+            guard attempt == pairingAttempt else { return }
             pairing = .failed(describe(error), canRetryTest: false)
             return
         }
-        await retryPairingTest()
+        await runPairingTest(attempt: attempt)
     }
 
     /// Pins the Mac's key from the QR and connects over Tailscale.
     func retryPairingTest() async {
-        guard let payload = allowedPayload else { return }
+        guard case .failed(_, canRetryTest: true) = pairing else { return }
+        pairingAttempt = UUID()
+        await runPairingTest(attempt: pairingAttempt)
+    }
+
+    private func runPairingTest(attempt: UUID) async {
+        guard attempt == pairingAttempt, let payload = allowedPayload else { return }
         pairing = .testing
         let candidate = RemoteHostSettings.paired(with: payload, at: Date())
         do {
             for host in candidate.remoteHosts {
+                guard attempt == pairingAttempt else { return }
                 try knownHosts.pin(host: host.host, port: host.port, key: payload.hostKeyLine)
             }
             let connection = try await RemoteConnection.connect(
                 toFirstReachable: candidate.remoteHosts, key: try remoteKey(), knownHosts: knownHosts)
             let found = try await connection.sessions()
             await connection.close()
+            guard attempt == pairingAttempt else { return }
             settings = candidate
             saveSettings()
             sessions = RemoteSession.forPicking(found)
@@ -257,6 +285,7 @@ final class MobileStore: ObservableObject {
             allowedPayload = nil
             pairing = .done
         } catch {
+            guard attempt == pairingAttempt else { return }
             let text = RemoteError.isUnreachable(error)
                 ? "Your Mac allowed this phone, but Lostty couldn't reach it. \(Self.tailscaleHint)"
                 : describe(error)
