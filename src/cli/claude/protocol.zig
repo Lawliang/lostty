@@ -7,10 +7,69 @@ const Allocator = std.mem.Allocator;
 pub const user_var_name = "LOSTTY_CLAUDE";
 pub const surface_env = "LOSTTY_SURFACE";
 
-pub const State = enum { busy, idle, exit };
+/// `agents`: Claude finished its turn but its subagents are still working,
+/// so it carries on by itself when they finish. `resumed`: the last of
+/// them finished, so Claude itself works again.
+pub const State = enum { busy, idle, exit, agents, resumed };
 
 pub fn parseState(s: []const u8) ?State {
     return std.meta.stringToEnum(State, s);
+}
+
+/// Background task types that are agents working for Claude, as Claude
+/// Code names them in the Stop and SubagentStop hook input's
+/// `background_tasks` (which lists only running and pending tasks).
+/// Shells and monitors are left out: a dev server can run for hours.
+const agent_task_types = [_][]const u8{ "subagent", "workflow", "teammate" };
+
+/// Refines the hook's `state` with the hook input Claude Code passes on
+/// stdin. Returns null when the hook should send nothing.
+/// - Stop (`idle`): `agents` while agent tasks are still running.
+/// - SubagentStop (`resumed`): nothing while other agent tasks still run.
+/// - Notification: nothing for `idle_prompt` and `auth_success`, which
+///   don't mean Claude is waiting on the person to continue.
+/// Input that isn't a hook payload leaves `state` as it is.
+pub fn refine(alloc: Allocator, state: State, input: []const u8) ?State {
+    const parsed = std.json.parseFromSlice(std.json.Value, alloc, input, .{}) catch return state;
+    defer parsed.deinit();
+    const root = parsed.value;
+    if (root != .object) return state;
+    const event = stringField(root, "hook_event_name") orelse return state;
+    if (std.mem.eql(u8, event, "Notification")) {
+        const kind = stringField(root, "notification_type") orelse return state;
+        if (std.mem.eql(u8, kind, "idle_prompt") or std.mem.eql(u8, kind, "auth_success")) return null;
+        return state;
+    }
+    if (std.mem.eql(u8, event, "Stop") and state == .idle) {
+        return if (runningAgents(root, null)) .agents else .idle;
+    }
+    if (std.mem.eql(u8, event, "SubagentStop") and state == .resumed) {
+        return if (runningAgents(root, stringField(root, "agent_id"))) null else .resumed;
+    }
+    return state;
+}
+
+fn stringField(object: std.json.Value, key: []const u8) ?[]const u8 {
+    const value = object.object.get(key) orelse return null;
+    return if (value == .string) value.string else null;
+}
+
+/// Whether `background_tasks` lists an agent task other than `except` (the
+/// subagent that is stopping; its task id is its agent id).
+fn runningAgents(root: std.json.Value, except: ?[]const u8) bool {
+    const tasks = root.object.get("background_tasks") orelse return false;
+    if (tasks != .array) return false;
+    for (tasks.array.items) |task| {
+        if (task != .object) continue;
+        const kind = stringField(task, "type") orelse continue;
+        const is_agent = for (agent_task_types) |t| {
+            if (std.mem.eql(u8, kind, t)) break true;
+        } else false;
+        if (!is_agent) continue;
+        if (except) |id| if (stringField(task, "id")) |task_id| if (std.mem.eql(u8, task_id, id)) continue;
+        return true;
+    }
+    return false;
 }
 
 /// The state named right after `+claude-state` in argv, if valid.
@@ -123,6 +182,8 @@ test "claude protocol: parseState" {
     try t.expectEqual(State.busy, parseState("busy").?);
     try t.expectEqual(State.idle, parseState("idle").?);
     try t.expectEqual(State.exit, parseState("exit").?);
+    try t.expectEqual(State.agents, parseState("agents").?);
+    try t.expectEqual(State.resumed, parseState("resumed").?);
     try t.expect(parseState("BUSY") == null);
     try t.expect(parseState("") == null);
 }
@@ -155,4 +216,63 @@ test "claude protocol: encodeSequence wraps for tmux" {
     defer alloc.free(seq);
     try std.testing.expect(std.mem.startsWith(u8, seq, "\x1bPtmux;\x1b\x1b]1337;SetUserVar=LOSTTY_CLAUDE="));
     try std.testing.expect(std.mem.endsWith(u8, seq, "\x07\x1b\\"));
+}
+
+test "claude protocol: Stop with subagents still running reports agents" {
+    const t = std.testing;
+    const alloc = t.allocator;
+    const running =
+        \\{"hook_event_name":"Stop","stop_hook_active":false,"background_tasks":[
+        \\{"id":"b1","type":"shell","status":"running","description":"dev server"},
+        \\{"id":"a7","type":"subagent","status":"running","description":"Explore","agent_type":"Explore"}]}
+    ;
+    try t.expectEqual(State.agents, refine(alloc, .idle, running).?);
+    const workflow =
+        \\{"hook_event_name":"Stop","background_tasks":[{"id":"w1","type":"workflow","status":"pending"}]}
+    ;
+    try t.expectEqual(State.agents, refine(alloc, .idle, workflow).?);
+    // Shells and monitors alone don't count.
+    const shells =
+        \\{"hook_event_name":"Stop","background_tasks":[{"id":"b1","type":"shell","status":"running"},
+        \\{"id":"m1","type":"monitor","status":"running"}]}
+    ;
+    try t.expectEqual(State.idle, refine(alloc, .idle, shells).?);
+    try t.expectEqual(State.idle, refine(alloc, .idle, "{\"hook_event_name\":\"Stop\",\"background_tasks\":[]}").?);
+    try t.expectEqual(State.idle, refine(alloc, .idle, "{\"hook_event_name\":\"Stop\"}").?);
+}
+
+test "claude protocol: SubagentStop resumes only when it was the last agent" {
+    const t = std.testing;
+    const alloc = t.allocator;
+    const last =
+        \\{"hook_event_name":"SubagentStop","agent_id":"a7","background_tasks":[
+        \\{"id":"a7","type":"subagent","status":"running"},{"id":"b1","type":"shell","status":"running"}]}
+    ;
+    try t.expectEqual(State.resumed, refine(alloc, .resumed, last).?);
+    const others =
+        \\{"hook_event_name":"SubagentStop","agent_id":"a7","background_tasks":[
+        \\{"id":"a7","type":"subagent","status":"running"},{"id":"a8","type":"subagent","status":"running"}]}
+    ;
+    try t.expect(refine(alloc, .resumed, others) == null);
+}
+
+test "claude protocol: idle and auth notifications send nothing" {
+    const t = std.testing;
+    const alloc = t.allocator;
+    try t.expect(refine(alloc, .idle, "{\"hook_event_name\":\"Notification\",\"notification_type\":\"idle_prompt\"}") == null);
+    try t.expect(refine(alloc, .idle, "{\"hook_event_name\":\"Notification\",\"notification_type\":\"auth_success\"}") == null);
+    try t.expectEqual(State.idle, refine(alloc, .idle, "{\"hook_event_name\":\"Notification\",\"notification_type\":\"permission_prompt\"}").?);
+    try t.expectEqual(State.idle, refine(alloc, .idle, "{\"hook_event_name\":\"Notification\"}").?);
+}
+
+test "claude protocol: input that isn't a hook payload keeps the state" {
+    const t = std.testing;
+    const alloc = t.allocator;
+    try t.expectEqual(State.idle, refine(alloc, .idle, "").?);
+    try t.expectEqual(State.idle, refine(alloc, .idle, "not json").?);
+    try t.expectEqual(State.resumed, refine(alloc, .resumed, "[1,2]").?);
+    try t.expectEqual(State.busy, refine(alloc, .busy, "{\"hook_event_name\":\"UserPromptSubmit\"}").?);
+    // Only a Stop hook's idle is refined to agents.
+    const stop = "{\"hook_event_name\":\"Stop\",\"background_tasks\":[{\"id\":\"a\",\"type\":\"subagent\"}]}";
+    try t.expectEqual(State.exit, refine(alloc, .exit, stop).?);
 }

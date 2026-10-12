@@ -1,11 +1,12 @@
 #if os(macOS)
 import AppKit
 
-/// Which part of a pane's edge the Claude trace travels: the whole border,
-/// or back and forth along one side. Saved in user defaults and set from
-/// Lostty → Claude Trace Path.
+/// Which part of a pane's edge the Claude trace travels while Claude works:
+/// the whole border, or back and forth along one side. The bottom edge is
+/// kept for subagents (TraceCourse.subagents). Saved in user defaults and
+/// set from Lostty → Claude Trace Path.
 enum TraceRoute: String, CaseIterable {
-    case all, right, top, bottom, left
+    case all, right, top, left
 
     static let defaultsKey = "LosttyTraceRoute"
     /// What a new Lostty shows until the person picks another.
@@ -16,7 +17,6 @@ enum TraceRoute: String, CaseIterable {
         case .all: "All Around"
         case .right: "Right Only"
         case .top: "Top Only"
-        case .bottom: "Bottom Only"
         case .left: "Left Only"
         }
     }
@@ -45,6 +45,10 @@ final class TraceRouteMenu: NSObject, NSMenuDelegate {
             item.representedObject = route.rawValue
             submenu.addItem(item)
         }
+        submenu.addItem(.separator())
+        let note = NSMenuItem(title: "Bottom edge: only subagents working", action: nil, keyEquivalent: "")
+        note.isEnabled = false
+        submenu.addItem(note)
         let item = NSMenuItem(title: "Claude Trace Path", action: nil, keyEquivalent: "")
         item.submenu = submenu
         menu.insertItem(item, at: menu.index(of: anchor) + 1)
@@ -52,7 +56,7 @@ final class TraceRouteMenu: NSObject, NSMenuDelegate {
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         let current = TraceRoute.current()
-        for item in menu.items {
+        for item in menu.items where item.representedObject != nil {
             item.state = item.representedObject as? String == current.rawValue ? .on : .off
         }
     }

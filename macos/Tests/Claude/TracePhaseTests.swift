@@ -17,6 +17,7 @@ struct TracePhaseTests {
 
     @Test func idleWhileRacingStopsAtOnce() {
         #expect(TracePhase.racing(since: t0).applying(.idle, now: at(3)) == .off)
+        #expect(TracePhase.racing(since: t0, subagents: true).applying(.idle, now: at(3)) == .off)
     }
 
     @Test func exitWhileRacingStopsAtOnce() {
@@ -28,25 +29,28 @@ struct TracePhaseTests {
         #expect(TracePhase.off.applying(.exit, now: t0) == .off)
     }
 
-    @Test func racingFrameFadesInAndWraps() throws {
-        let start = try #require(TraceFrame.make(.racing(since: t0), now: t0, lapSeconds: 2, length: 0.2))
-        #expect(start.head == 0)
-        #expect(start.intensity == 0)
-        let later = try #require(TraceFrame.make(.racing(since: t0), now: at(3), lapSeconds: 2, length: 0.2))
-        #expect(abs(later.head - 0.5) < 1e-9)
-        #expect(later.intensity == 1)
-        #expect(later.length == 0.2)
+    // The head keeps its journey (same start) across the hand-offs.
+    @Test func agentsKeepTheStartAndMarkSubagents() {
+        #expect(TracePhase.racing(since: t0).applying(.agents, now: at(4)) == .racing(since: t0, subagents: true))
+        #expect(TracePhase.off.applying(.agents, now: at(4)) == .racing(since: at(4), subagents: true))
     }
 
-    @Test func offHasNoFrame() {
-        #expect(TraceFrame.make(.off, now: t0, lapSeconds: 2, length: 0.2) == nil)
+    @Test func resumedAndBusyLeaveSubagents() {
+        let subagents = TracePhase.racing(since: t0, subagents: true)
+        #expect(subagents.applying(.resumed, now: at(9)) == .racing(since: t0))
+        #expect(subagents.applying(.busy, now: at(9)) == .racing(since: t0))
+        #expect(TracePhase.off.applying(.resumed, now: t0) == .off)
     }
 
-    @Test func lapIsPointSixSecondsPerLeg() {
-        #expect(abs(TraceFrame.lapSeconds(speed: 1, legs: 4) - 2.4) < 1e-9)
-        #expect(abs(TraceFrame.lapSeconds(speed: 1, legs: 2) - 1.2) < 1e-9)
-        #expect(abs(TraceFrame.lapSeconds(speed: 2, legs: 2) - 0.6) < 1e-9)
+    @Test func intensityFadesIn() {
+        #expect(TraceFrame.intensity(elapsed: 0) == 0)
+        #expect(abs(TraceFrame.intensity(elapsed: 0.1) - 0.5) < 1e-9)
+        #expect(TraceFrame.intensity(elapsed: 3) == 1)
     }
 
+    @Test func legIsPointSixSecondsAtNormalSpeed() {
+        #expect(abs(TraceFrame.legSeconds(speed: 1) - 0.6) < 1e-9)
+        #expect(abs(TraceFrame.legSeconds(speed: 2) - 0.3) < 1e-9)
+    }
 }
 #endif

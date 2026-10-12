@@ -11,7 +11,7 @@ struct TideTrace: TraceRenderer {
             let t = Double(i) / Double(steps)
             let along = frame.head - frame.length * (1 - t)
             let envelope = sin(.pi * t)
-            let lift = swell * envelope * (0.5 + 0.5 * sin(along * path.loopLength / 26 - time * 9))
+            let lift = swell * envelope * (0.5 + 0.5 * sin(along * path.length / 26 - time * 9))
             let p = path.offsetPoint(at: along, inward: CGFloat(lift))
             if i == 0 { wave.move(to: p) } else { wave.addLine(to: p) }
         }

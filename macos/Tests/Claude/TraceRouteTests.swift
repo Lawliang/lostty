@@ -27,10 +27,13 @@ struct TraceRouteTests {
         let defaults = freshDefaults()
         defaults.set("diagonal", forKey: TraceRoute.defaultsKey)
         #expect(TraceRoute.current(in: defaults) == .right)
+        // Bottom Only was a route before the bottom edge meant subagents.
+        defaults.set("bottom", forKey: TraceRoute.defaultsKey)
+        #expect(TraceRoute.current(in: defaults) == .right)
     }
 
     @Test func menuOffersEveryRouteAllAroundFirst() {
-        #expect(TraceRoute.allCases.map(\.title) == ["All Around", "Right Only", "Top Only", "Bottom Only", "Left Only"])
+        #expect(TraceRoute.allCases.map(\.title) == ["All Around", "Right Only", "Top Only", "Left Only"])
     }
 }
 #endif

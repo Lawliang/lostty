@@ -27,34 +27,66 @@ struct TraceOverlay: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(TraceRoute.defaultsKey, store: .ghostty) private var route = TraceRoute.initial
     @State private var windowVisible = true
+    @State private var journey = Journey()
+
+    /// The head's motion, kept across frames. A class so drawing can
+    /// advance it without invalidating the view.
+    final class Journey {
+        var since: Date?
+        var motion = TraceMotion()
+    }
 
     var body: some View {
         TimelineView(.animation(paused: !windowVisible)) { timeline in
             Canvas { ctx, size in
-                let path = EdgePath(size: size, inset: Self.inset, route: route)
-                let lap = TraceFrame.lapSeconds(speed: trace.speed, legs: path.legs.count)
-                guard var frame = TraceFrame.make(phase, now: timeline.date, lapSeconds: lap, length: trace.length) else { return }
-                frame.head = path.easedFraction(frame.head)
+                guard case .racing(let since, let subagents) = phase else { return }
+                let rect = Self.edgeRect(size)
+                let course: TraceCourse = subagents ? .subagents : .route(route)
+                let elapsed = max(0, timeline.date.timeIntervalSince(since))
                 let colors = TraceColors(trace)
                 let time = timeline.date.timeIntervalSinceReferenceDate
                 ctx.blendMode = .plusLighter
                 if reduceMotion {
-                    Self.drawCalmGlow(in: &ctx, along: path, frame: frame, time: time, colors: colors)
-                } else {
-                    TraceRenderers.renderer(for: trace.style)
-                        .draw(in: &ctx, along: path, frame: frame, time: time, colors: colors)
+                    Self.drawCalmGlow(in: &ctx, outline: course.outline(in: rect),
+                                      intensity: TraceFrame.intensity(elapsed: elapsed), time: time, colors: colors)
+                    return
                 }
+
+                if journey.since != since {
+                    journey.since = since
+                    journey.motion = TraceMotion()
+                }
+                let legSeconds = TraceFrame.legSeconds(speed: trace.speed)
+                journey.motion.advance(to: elapsed, course: course, legSeconds: legSeconds)
+                let path = journey.motion.path(in: rect, at: elapsed, legSeconds: legSeconds)
+                guard path.length > 0 else { return }
+                // The tail is sized by the person's route, so it keeps its
+                // length on the bottom edge; early on it is only as long as
+                // the way travelled.
+                let tail = min(path.length, trace.length * TraceCourse.route(route).lapLength(in: rect))
+                let frame = TraceFrame(head: 1, length: tail / path.length, intensity: TraceFrame.intensity(elapsed: elapsed))
+                TraceRenderers.renderer(for: trace.style)
+                    .draw(in: &ctx, along: path, frame: frame, time: time, colors: colors)
             }
         }
         .background(OcclusionProbe(visible: $windowVisible))
     }
 
-    /// Reduce Motion: no racing; the route's edge breathes with a 2s period.
+    /// The pane's inside edge. Degenerate panes collapse to a point so every
+    /// position stays finite.
+    static func edgeRect(_ size: CGSize) -> CGRect {
+        let width = max(0, size.width - 2 * inset)
+        let height = max(0, size.height - 2 * inset)
+        guard width > 0, height > 0 else { return CGRect(x: inset, y: inset, width: 0, height: 0) }
+        return CGRect(x: inset, y: inset, width: width, height: height)
+    }
+
+    /// Reduce Motion: no racing; the course's edge breathes with a 2s period.
     static func drawCalmGlow(
-        in ctx: inout GraphicsContext, along path: EdgePath, frame: TraceFrame, time: Double, colors: TraceColors
+        in ctx: inout GraphicsContext, outline: Path, intensity: Double, time: Double, colors: TraceColors
     ) {
         let breath = 0.25 + 0.35 * (0.5 + 0.5 * sin(2 * .pi * time / 2))
-        ctx.stroke(path.outline, with: .color(colors.head.opacity(breath * frame.intensity)), lineWidth: 2)
+        ctx.stroke(outline, with: .color(colors.head.opacity(breath * intensity)), lineWidth: 2)
     }
 }
 

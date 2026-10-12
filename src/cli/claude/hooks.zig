@@ -13,10 +13,13 @@ pub const Event = struct { name: []const u8, state: []const u8 };
 /// The coding agents whose hook files Lostty edits.
 pub const Agent = enum { claude, codex };
 
-/// Claude Code hook events and the `+claude-state` each one sends.
+/// Claude Code hook events and the `+claude-state` each one sends. Stop,
+/// SubagentStop and Notification are refined from the hook input
+/// (protocol.refine): a Stop with subagents still working sends `agents`.
 const claude_events = [_]Event{
     .{ .name = "UserPromptSubmit", .state = "busy" },
     .{ .name = "Stop", .state = "idle" },
+    .{ .name = "SubagentStop", .state = "resumed" },
     .{ .name = "Notification", .state = "idle" },
     .{ .name = "SessionEnd", .state = "exit" },
 };
@@ -424,7 +427,7 @@ test "claude hooks: command and detection" {
     try std.testing.expectEqualStrings("not-installed", Status.not_installed.label());
 }
 
-test "claude hooks: preview lists the four events" {
+test "claude hooks: preview lists every event" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
