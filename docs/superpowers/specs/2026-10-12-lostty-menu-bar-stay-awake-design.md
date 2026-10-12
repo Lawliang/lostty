@@ -26,6 +26,10 @@ and also carries general Lostty shortcuts.
 - Nothing asks for a password after the one-time permission install.
 - The menu shows whether a phone is attached right now and which Claude
   sessions are waiting.
+- While Stay Awake is on, losing working Wi-Fi (gone, or connected with no
+  internet) moves the Mac to the customer's iPhone hotspot without anyone
+  touching the Mac. The "connected with no internet" half depends on the
+  spike in §10.
 
 ## Facts this design rests on
 
@@ -67,6 +71,10 @@ and also carries general Lostty shortcuts.
 | Icon visibility | Always shown; checkbox in Phone Access to hide | It is a general Lostty menu |
 | Settings storage | `UserDefaults`, like Phone Access and Claude usage | Lostty features don't add Ghostty config keys |
 | Phone push | `PhoneNotifier` hook, no-op until "Lostty phone push" lands | Push needs APNs work of its own |
+| Wi-Fi gone | macOS auto-joins the iPhone hotspot; Lostty checks the setting | macOS already does it |
+| Wi-Fi with no internet | Lostty switches to the hotspot after ~60 s, if the spike confirms CoreWLAN can | macOS stays on a broken network |
+| Which hotspot | Chosen once from known networks in Phone Access | Names change; guessing breaks |
+| Switching back | Left to macOS | Flapping would drop the phone's session |
 
 ## Architecture
 
@@ -78,7 +86,8 @@ PowerMonitor ──events──▶ StayAwakeModel ──actions──▶ StayAwa
 LosttyStatusItem ◀── StayAwakeStore, PhoneAccessStore, ClaudeRuntime, AttachedPhones
 ```
 
-New code lives in `macos/Sources/Features/StayAwake/` and
+`HotspotFallback` (§10) runs beside `StayAwakeStore` while it is on. New code
+lives in `macos/Sources/Features/StayAwake/` and
 `macos/Sources/Features/MenuBar/`, tests in `macos/Tests/StayAwake/` and
 `macos/Tests/MenuBar/`.
 
@@ -224,6 +233,53 @@ Battery Floor                         ▸  10% / 15% / 20% / 30%
   for Phone is on. Quitting lets the Mac sleep and ends this Mac's sessions."
   On quit, restores settings before sessions end.
 
+### 10. Wi-Fi fallback
+
+Two halves, the second gated on a spike.
+
+**Wi-Fi gone.** macOS can join the iPhone's hotspot by itself when no known
+Wi-Fi is available (Wi-Fi settings, joining hotspots automatically). Phone
+Access gets a checklist row "Joins your iPhone's hotspot automatically" that
+reads the setting and, when it is off, opens Wi-Fi settings. How to read the
+setting is a spike question; if it can't be read, the row is informational
+with an Open Settings button and no ✓.
+
+**Wi-Fi with no internet.** `HotspotFallback`, active only while Stay Awake is
+on:
+
+- Watches `NWPathMonitor` and probes reachability (an HTTPS HEAD to a fixed
+  captive-portal check URL) every 15 s while on Wi-Fi.
+- After 60 s on Wi-Fi with every probe failing, and the current network is
+  not the chosen hotspot, it associates with the chosen hotspot through
+  CoreWLAN (`CWInterface.associate(to:password:)`), password from the
+  system keychain entry for that network.
+- Does not switch again for 10 minutes after a switch, and never switches
+  back; macOS rejoins known Wi-Fi on its own.
+- Records the switch for the status line ("Moved to iPhone hotspot · 9:41
+  PM"), sends `notifyMac` and `notifyPhone`.
+- The rules (timing, cooldown, "already on hotspot") live in a pure
+  `HotspotFallbackModel` like `StayAwakeModel`; CoreWLAN and the probe sit
+  behind protocols.
+
+Phone Access gets a "Your iPhone's hotspot" picker listing known Wi-Fi
+networks (CoreWLAN known profiles), saved in `UserDefaults`. Without a choice,
+`HotspotFallback` stays idle and the menu says so.
+
+**Spike (first task of the plan, throwaway).** On the MacBook, with Stay Awake
+set by hand (`sudo pmset -a disablesleep 1`) and the lid closed:
+
+1. Turn the router's Wi-Fi off: does macOS join the iPhone hotspot, and how
+   long does it take? Can Lostty read the "join hotspots" setting?
+2. Keep Wi-Fi up with no internet (unplug the router's uplink): from a small
+   script, can CoreWLAN see the hotspot (Personal Hotspot with "Allow Others
+   to Join" off, so only Instant Hotspot advertises it), read its password,
+   and associate, without any prompt? What permission does reading network
+   names need (Location Services)?
+
+If 2 fails, the "no internet" half and the hotspot picker are cut from this
+spec and the plan; the checklist row stays. The results are written into
+this section before implementation continues.
+
 ## Error handling
 
 | Case | Behavior |
@@ -233,6 +289,8 @@ Battery Floor                         ▸  10% / 15% / 20% / 30%
 | Lostty force-quit and never reopened | Mac stays awake; the docs give the one-line undo |
 | Battery info unavailable (desktop Mac) | No battery cut-off; status line omits battery |
 | `list-clients` fails or tmux not running | Phones section shows paired phones without "attached" |
+| Hotspot not visible or association fails | Stays on the current network; status line "Couldn't reach iPhone hotspot"; retries after the cooldown |
+| Location or keychain access denied | `HotspotFallback` stays idle; Phone Access row shows what to allow |
 
 ## Testing
 
@@ -244,6 +302,10 @@ Battery Floor                         ▸  10% / 15% / 20% / 30%
 - `PowerControl` parsing of `pmset -g` output samples.
 - The sudoers line and admin script text.
 - `AttachedPhones` parsing and ancestry with fake process tables.
+- `HotspotFallbackModel` unit tests: switches only after 60 s of failed
+  probes on Wi-Fi, not when already on the hotspot, not without a chosen
+  hotspot, not when Stay Awake is off, honours the 10-minute cooldown, never
+  switches back.
 - Manual checklist on a MacBook:
   - turn on, close the lid on battery, attach from the phone over LTE, run a
     command, open the lid; `pmset -g` shows the previous Low Power Mode;
@@ -251,7 +313,11 @@ Battery Floor                         ▸  10% / 15% / 20% / 30%
     restored settings;
   - `kill -9` Lostty while on, relaunch, `pmset -g` shows `SleepDisabled 0`;
   - set `disablesleep 1` by hand, turn on then off, it is still 1;
-  - Turn Off Phone Access removes `/etc/sudoers.d/lostty`.
+  - Turn Off Phone Access removes `/etc/sudoers.d/lostty`;
+  - lid closed, router Wi-Fi off: the Mac lands on the hotspot and the phone
+    reattaches;
+  - lid closed, router uplink unplugged: within ~75 s the Mac moves to the
+    hotspot and the phone reattaches.
 
 ## Docs
 
@@ -259,7 +325,8 @@ Battery Floor                         ▸  10% / 15% / 20% / 30%
   keep the manual `pmset` lines as the undo.
 - `docs/lostty-mobile-phone-access.md`: replace "only while the Mac is awake
   and Lostty is open" with how to use Stay Awake, and add the force-quit undo
-  to troubleshooting and the clean-up list.
+  to troubleshooting and the clean-up list. Mention the hotspot setting and
+  picker.
 
 ## Out of scope
 
@@ -269,6 +336,8 @@ Battery Floor                         ▸  10% / 15% / 20% / 30%
 - Tailscale status, skins, and Claude state for sessions started from the
   phone.
 - A privileged helper (`SMAppService`).
+- Switching back from the hotspot to Wi-Fi (left to macOS), and turning on
+  the iPhone's Personal Hotspot remotely.
 - Always-on hosts such as a Mac mini (nothing to build).
 
 ## Risks
@@ -278,5 +347,10 @@ Battery Floor                         ▸  10% / 15% / 20% / 30%
   seconds while on is the fallback.
 - A closed MacBook can still get hot under heavy builds; the critical thermal
   cut-off is the backstop, not a guarantee.
+- CoreWLAN may not see or join an Instant Hotspot network that isn't
+  broadcasting, or may need prompts nobody can answer with the lid closed;
+  the spike decides whether the "no internet" half ships.
+- Each switch to the hotspot uses cellular data, and the phone's battery
+  drains faster while it is the Mac's uplink.
 - macOS may change `pmset` keys or output; `PowerControl` parsing tests pin
   today's format and a failed read keeps Stay Awake off.
