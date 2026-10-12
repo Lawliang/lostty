@@ -29,6 +29,7 @@
 		A5B30539299BEAAB0047F10C /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A5B30538299BEAAB0047F10C /* Assets.xcassets */; };
 		FC5218FA2D10FFCE004C93E0 /* zsh in Resources */ = {isa = PBXBuildFile; fileRef = FC5218F92D10FFC7004C93E0 /* zsh */; };
 		FC9ABA9C2D0F53F80020D4C8 /* bash-completion in Resources */ = {isa = PBXBuildFile; fileRef = FC9ABA9B2D0F538D0020D4C8 /* bash-completion */; };
+		4C5A00052F7A000000C0FFEE /* LosttyRemote in Frameworks */ = {isa = PBXBuildFile; productRef = 4C5A00062F7A000000C0FFEE /* LosttyRemote */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -311,6 +312,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A53D0C8E2B53B0EA00305CE6 /* GhosttyKit.xcframework in Frameworks */,
+				4C5A00052F7A000000C0FFEE /* LosttyRemote in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -485,6 +487,9 @@
 				81F82BC72E82815D001EDFA7 /* Sources */,
 			);
 			name = "Ghostty-iOS";
+			packageProductDependencies = (
+				4C5A00062F7A000000C0FFEE /* LosttyRemote */,
+			);
 			productName = "Ghostty-iOS";
 			productReference = A5D4499D2B53AE7B000F5B83 /* Ghostty-iOS.app */;
 			productType = "com.apple.product-type.application";
@@ -1255,7 +1260,8 @@
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = Ghostty;
+				INFOPLIST_KEY_CFBundleDisplayName = Lostty;
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "Lostty uses Face ID to unlock the key it signs in to your Mac with.";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -1270,7 +1276,7 @@
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MARKETING_VERSION = 0.1;
 				"OTHER_LDFLAGS[arch=*]" = "-lstdc++";
-				PRODUCT_BUNDLE_IDENTIFIER = "com.mitchellh.ghostty-ios";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.lawliang.lostty-mobile";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
@@ -1294,7 +1300,8 @@
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = Ghostty;
+				INFOPLIST_KEY_CFBundleDisplayName = Lostty;
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "Lostty uses Face ID to unlock the key it signs in to your Mac with.";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -1309,7 +1316,7 @@
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MARKETING_VERSION = 0.1;
 				"OTHER_LDFLAGS[arch=*]" = "-lstdc++";
-				PRODUCT_BUNDLE_IDENTIFIER = "com.mitchellh.ghostty-ios";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.lawliang.lostty-mobile";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -1333,7 +1340,8 @@
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = Ghostty;
+				INFOPLIST_KEY_CFBundleDisplayName = Lostty;
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "Lostty uses Face ID to unlock the key it signs in to your Mac with.";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -1348,7 +1356,7 @@
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MARKETING_VERSION = 0.1;
 				"OTHER_LDFLAGS[arch=*]" = "-lstdc++";
-				PRODUCT_BUNDLE_IDENTIFIER = "com.mitchellh.ghostty-ios";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.lawliang.lostty-mobile";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -1448,6 +1456,11 @@
 			productName = Sparkle;
 		};
 		4C5A00022F7A000000C0FFEE /* LosttyRemote */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4C5A00032F7A000000C0FFEE /* XCLocalSwiftPackageReference "LosttyRemote" */;
+			productName = LosttyRemote;
+		};
+		4C5A00062F7A000000C0FFEE /* LosttyRemote */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 4C5A00032F7A000000C0FFEE /* XCLocalSwiftPackageReference "LosttyRemote" */;
 			productName = LosttyRemote;

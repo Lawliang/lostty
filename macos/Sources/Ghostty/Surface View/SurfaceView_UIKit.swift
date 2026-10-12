@@ -64,8 +64,23 @@ extension Ghostty {
 
         private(set) var surface: ghostty_surface_t?
 
+        /// Lostty Mobile: the remote IO of a remote surface.
+        private let remoteIO: RemoteIO?
+        /// The sticky Ctrl from the key row, used by the next key.
+        var ctrlLatched = false {
+            didSet { keyRow.setCtrl(ctrlLatched) }
+        }
+        private lazy var keyRow: KeyRowView = {
+            let row = KeyRowView()
+            row.onKey = { [weak self] key in self?.rowKey(key) }
+            return row
+        }()
+        /// Scroll distance not yet sent, in points.
+        private var pendingScroll: CGFloat = 0
+
         init(_ app: ghostty_app_t, baseConfig: SurfaceConfiguration? = nil, uuid: UUID? = nil) {
             self.id = uuid ?? .init()
+            self.remoteIO = baseConfig?.remoteIO
 
             // Initialize with some default frame size. The important thing is that this
             // is non-zero so that our layer bounds are non-zero so that our renderer
@@ -82,6 +97,11 @@ extension Ghostty {
                 return
             }
             self.surface = surface
+
+            // Lostty Mobile: a remote surface starts its session now.
+            remoteIO?.attach(to: surface)
+            addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(tapped)))
+            addGestureRecognizer(UIPanGestureRecognizer(target: self, action: #selector(panned(_:))))
         }
 
         required init?(coder: NSCoder) {
@@ -89,6 +109,9 @@ extension Ghostty {
         }
 
         deinit {
+            // Lostty Mobile: stop feeding before the surface is freed. Freeing
+            // joins the core's threads, so no callback reaches remoteIO after.
+            remoteIO?.detach()
             guard let surface = self.surface else { return }
             ghostty_surface_free(surface)
         }
@@ -121,6 +144,47 @@ extension Ghostty {
 
         // MARK: UIView
 
+        override var canBecomeFirstResponder: Bool { true }
+        override var inputAccessoryView: UIView? { keyRow }
+
+        func showKeyboard() {
+            _ = becomeFirstResponder()
+        }
+
+        @objc private func tapped() {
+            showKeyboard()
+        }
+
+        /// A vertical pan scrolls (tmux turns the wheel into its scrollback).
+        @objc private func panned(_ pan: UIPanGestureRecognizer) {
+            guard let surface else { return }
+            pendingScroll += pan.translation(in: self).y
+            pan.setTranslation(.zero, in: self)
+            let line = max(cellSize.height / contentScaleFactor, 8)
+            let lines = (pendingScroll / line).rounded(.towardZero)
+            guard lines != 0 else { return }
+            pendingScroll -= lines * line
+            ghostty_surface_mouse_scroll(surface, 0, Double(lines), 0)
+        }
+
+        func send(_ presses: [MobileInput.Press]) {
+            guard let surface else { return }
+            for press in presses {
+                press.withCValue(action: GHOSTTY_ACTION_PRESS) { _ = ghostty_surface_key(surface, $0) }
+                press.withCValue(action: GHOSTTY_ACTION_RELEASE) { _ = ghostty_surface_key(surface, $0) }
+            }
+        }
+
+        private func rowKey(_ key: MobileInput.RowKey) {
+            if key == .ctrl {
+                ctrlLatched.toggle()
+                return
+            }
+            let ctrl = ctrlLatched
+            ctrlLatched = false
+            if let press = MobileInput.press(for: key, ctrl: ctrl) { send([press]) }
+        }
+
         override class var layerClass: AnyClass {
             return CAMetalLayer.self
         }
@@ -128,5 +192,31 @@ extension Ghostty {
         override func didMoveToWindow() {
             sizeDidChange(frame.size)
         }
+    }
+}
+
+extension Ghostty.SurfaceView: UIKeyInput {
+    // Always true, so the keyboard's delete key always reaches us.
+    var hasText: Bool { true }
+
+    // UITextInputTraits: a terminal wants exactly what was typed. Declared
+    // here, with the conformance, so UIKit sees them.
+    var autocorrectionType: UITextAutocorrectionType { get { .no } set {} }
+    var autocapitalizationType: UITextAutocapitalizationType { get { .none } set {} }
+    var spellCheckingType: UITextSpellCheckingType { get { .no } set {} }
+    var smartQuotesType: UITextSmartQuotesType { get { .no } set {} }
+    var smartDashesType: UITextSmartDashesType { get { .no } set {} }
+    var smartInsertDeleteType: UITextSmartInsertDeleteType { get { .no } set {} }
+    var keyboardType: UIKeyboardType { get { .asciiCapable } set {} }
+    var keyboardAppearance: UIKeyboardAppearance { get { .dark } set {} }
+
+    func insertText(_ text: String) {
+        let ctrl = ctrlLatched
+        ctrlLatched = false
+        send(Ghostty.MobileInput.presses(typed: text, ctrl: ctrl))
+    }
+
+    func deleteBackward() {
+        send([Ghostty.MobileInput.backspace])
     }
 }
