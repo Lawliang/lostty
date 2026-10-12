@@ -14,10 +14,14 @@ struct TmuxRemoteTests {
 
     @Test func attachChecksTheNameThenQuotesTheSessionIDAndNeverDetachesOthers() throws {
         let cmd = try TmuxRemote.attachCommand(sessionID: "$3", name: "proj", terminfoDir: "/Applications/Lostty.app/Contents/Resources/terminfo")
-        #expect(cmd == "[ \"$(\(Self.guardPrefix) '$3' '#{session_name}' 2>/dev/null)\" = 'proj' ] || exit 1; "
-            + "exec env LANG=\"${LANG:-en_US.UTF-8}\" TERMINFO='/Applications/Lostty.app/Contents/Resources/terminfo' "
+        #expect(cmd == "export TERMINFO='/Applications/Lostty.app/Contents/Resources/terminfo'; "
+            + "[ \"$(\(Self.guardPrefix) '$3' '#{session_name}' 2>/dev/null)\" = 'proj' ] || exit 1; "
+            + "exec env LANG=\"${LANG:-en_US.UTF-8}\" "
             + "PATH=/opt/homebrew/bin:/usr/local/bin:$PATH tmux -u -L lostty -f /dev/null attach-session -t '$3'")
         #expect(!cmd.contains(" -d"))
+        let export = try #require(cmd.range(of: "export TERMINFO="))
+        let guardAt = try #require(cmd.range(of: "display-message"))
+        #expect(export.lowerBound < guardAt.lowerBound)
     }
 
     @Test func attachRefusesAnythingButASessionID() {

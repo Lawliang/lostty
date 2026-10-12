@@ -49,8 +49,10 @@ public enum TmuxRemote {
     /// checks the session's name and exits 1 if it differs.
     public static func attachCommand(sessionID: String, name: String, terminfoDir: String) throws -> String {
         guard isSessionID(sessionID) else { throw TmuxRemoteError.badSessionID(sessionID) }
-        return nameGuard(sessionID: sessionID, name: name) + "exec env LANG=\"${LANG:-en_US.UTF-8}\" TERMINFO=\(shellQuote(terminfoDir)) "
-            + "\(pathPrefix) tmux -u -L lostty -f /dev/null attach-session -t \(shellQuote(sessionID))"
+        // TERMINFO goes first: the shell's TERM is xterm-ghostty, and the
+        // guard's tmux fails on an unknown terminal without it.
+        return "export TERMINFO=\(shellQuote(terminfoDir)); " + nameGuard(sessionID: sessionID, name: name)
+            + "exec env LANG=\"${LANG:-en_US.UTF-8}\" \(pathPrefix) tmux -u -L lostty -f /dev/null attach-session -t \(shellQuote(sessionID))"
     }
 
     /// Ends session `sessionID` (and with it the Mac window showing it).
