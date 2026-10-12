@@ -107,6 +107,9 @@ struct StayAwakeModel {
         switch event {
         case .turnOn(let until, let current):
             guard !isOn else { return [] }
+            // A failed restore left the record for the next launch; a new
+            // baseline taken now would overwrite it with the stuck settings.
+            if case .off(.restoreFailed?, _) = state { return [] }
             if let power, let reason = cutOff(power) {
                 state = .off(reason: reason, at: now)
                 return []
@@ -157,7 +160,11 @@ struct StayAwakeModel {
                     state = .off(reason: error == .permissionMissing ? .permissionMissing : .failed(Self.text(error)), at: now)
                     return [.clearRecord]
                 }
-                return [.notifyMac(StayAwakeCopy.lowPowerFailed)]
+                // A half-done change: keep remembering it so turn off retries the restore.
+                guard case .on(let until, var record) = state else { return [] }
+                record.lowPowerApplied = true
+                state = .on(until: until, record: record)
+                return [.saveRecord(record), .notifyMac(StayAwakeCopy.lowPowerFailed)]
             }
             state = .off(reason: .restoreFailed, at: now)
             return [.notifyMac(StayAwakeCopy.restoreFailed)]
@@ -178,8 +185,9 @@ struct StayAwakeModel {
     }
 
     private func restore(_ record: StayAwakeRecord) -> [StayAwakeAction] {
-        (record.lowPowerApplied ? restoreLowPower(record.settings) : [])
-            + [.run(.disableSleep(record.settings.disableSleep))]
+        // Sleep first: a failed Low Power Mode restore must not leave the Mac awake.
+        [.run(.disableSleep(record.settings.disableSleep))]
+            + (record.lowPowerApplied ? restoreLowPower(record.settings) : [])
     }
 
     private func restoreLowPower(_ settings: PowerSettings) -> [StayAwakeAction] {

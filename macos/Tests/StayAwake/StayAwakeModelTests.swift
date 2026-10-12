@@ -50,8 +50,8 @@ struct StayAwakeModelTests {
         var m = onModel(lid: closed)
         let actions = m.handle(.turnOff, now: t0)
         #expect(actions == [
-            .run(.lowPower(.battery, true)), .run(.lowPower(.ac, false)),
-            .run(.disableSleep(false)), .clearRecord,
+            .run(.disableSleep(false)),
+            .run(.lowPower(.battery, true)), .run(.lowPower(.ac, false)), .clearRecord,
         ])
         #expect(m.state == .off(reason: .turnedOff, at: t0))
     }
@@ -63,7 +63,7 @@ struct StayAwakeModelTests {
         _ = m.handle(.turnOn(until: nil, current: mine), now: t0)
         _ = m.handle(.power(closed), now: t0)
         #expect(m.handle(.turnOff, now: t0) == [
-            .run(.lowPower(.ac, false)), .run(.disableSleep(true)), .clearRecord,
+            .run(.disableSleep(true)), .run(.lowPower(.ac, false)), .clearRecord,
         ])
     }
 
@@ -130,8 +130,8 @@ struct StayAwakeModelTests {
         var m = StayAwakeModel()
         let record = StayAwakeRecord(settings: before, lowPowerApplied: true)
         #expect(m.handle(.launch(record), now: t0) == [
-            .run(.lowPower(.battery, true)), .run(.lowPower(.ac, false)),
-            .run(.disableSleep(false)), .clearRecord,
+            .run(.disableSleep(false)),
+            .run(.lowPower(.battery, true)), .run(.lowPower(.ac, false)), .clearRecord,
         ])
         #expect(m.handle(.launch(nil), now: t0) == [])
     }
@@ -157,8 +157,34 @@ struct StayAwakeModelTests {
         var m = onModel()
         _ = m.handle(.power(closed), now: t0)
         let actions = m.handle(.controlFailed(.failed("x"), command: .lowPowerEverywhere), now: t0)
-        #expect(actions == [.notifyMac("Lostty couldn't change Low Power Mode.")])
+        #expect(actions == [
+            .saveRecord(.init(settings: before, lowPowerApplied: true)),
+            .notifyMac("Lostty couldn't change Low Power Mode."),
+        ])
         #expect(m.isOn)
+    }
+
+    @Test func noTurnOnAfterAFailedRestore() {
+        var m = onModel()
+        _ = m.handle(.turnOff, now: t0)
+        _ = m.handle(.controlFailed(.failed("nope"), command: .disableSleep(false)), now: t0)
+        let stuck = PowerSettings(disableSleep: true, lowPowerOnBattery: true, lowPowerOnAC: true)
+        #expect(m.handle(.turnOn(until: nil, current: stuck), now: t0) == [])
+        #expect(m.state == .off(reason: .restoreFailed, at: t0))
+    }
+
+    @Test func failedLidOpenRestoreIsRetriedAtTurnOff() {
+        var m = onModel()
+        _ = m.handle(.power(closed), now: t0)
+        _ = m.handle(.power(open), now: t0)
+        #expect(m.handle(.controlFailed(.failed("x"), command: .lowPower(.battery, true)), now: t0) == [
+            .saveRecord(.init(settings: before, lowPowerApplied: true)),
+            .notifyMac("Lostty couldn't change Low Power Mode."),
+        ])
+        #expect(m.handle(.turnOff, now: t0) == [
+            .run(.disableSleep(false)),
+            .run(.lowPower(.battery, true)), .run(.lowPower(.ac, false)), .clearRecord,
+        ])
     }
 
     @Test func durations() {
