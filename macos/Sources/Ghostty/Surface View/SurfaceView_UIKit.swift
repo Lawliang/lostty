@@ -158,9 +158,10 @@ extension Ghostty {
         /// A vertical pan scrolls (tmux turns the wheel into its scrollback).
         @objc private func panned(_ pan: UIPanGestureRecognizer) {
             guard let surface else { return }
+            if pan.state == .began { pendingScroll = 0 }
             pendingScroll += pan.translation(in: self).y
             pan.setTranslation(.zero, in: self)
-            let line = max(cellSize.height / contentScaleFactor, 8)
+            let line = max(CGFloat(surfaceSize?.cell_height_px ?? 0) / contentScaleFactor, 8)
             let lines = (pendingScroll / line).rounded(.towardZero)
             guard lines != 0 else { return }
             pendingScroll -= lines * line
@@ -217,6 +218,7 @@ extension Ghostty.SurfaceView: UIKeyInput {
     }
 
     func deleteBackward() {
+        ctrlLatched = false
         send([Ghostty.MobileInput.backspace])
     }
 }

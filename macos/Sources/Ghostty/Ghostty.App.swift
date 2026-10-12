@@ -299,7 +299,12 @@ extension Ghostty {
             // goes back to the session list.
             guard let userdata else { return }
             let view = Unmanaged<SurfaceView>.fromOpaque(userdata).takeUnretainedValue()
-            NotificationCenter.default.post(name: .losttySurfaceClosed, object: view)
+            // Asynchronously: the core calls this from inside a surface call, and
+            // a synchronous observer that drops the view would free the surface
+            // mid-call.
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: .losttySurfaceClosed, object: view)
+            }
         }
         #endif
 

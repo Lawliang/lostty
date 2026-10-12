@@ -4,6 +4,9 @@ import GhosttyKit
 @main
 struct Ghostty_iOSApp: App {
     @StateObject private var ghostty_app: Ghostty.App
+    // Lostty Mobile: sessions, settings, key and reconnects.
+    @StateObject private var store = MobileStore()
+    @Environment(\.scenePhase) private var scenePhase
 
     init() {
         if ghostty_init(UInt(CommandLine.argc), CommandLine.unsafeArgv) != GHOSTTY_SUCCESS {
@@ -14,9 +17,12 @@ struct Ghostty_iOSApp: App {
 
     var body: some Scene {
         WindowGroup {
-            iOS_GhosttyTerminal()
+            SessionsScreen()
                 .environmentObject(ghostty_app)
+                .environmentObject(store)
+                .preferredColorScheme(.dark)
         }
+        .onChange(of: scenePhase) { _, phase in store.scenePhaseChanged(phase) }
     }
 }
 
