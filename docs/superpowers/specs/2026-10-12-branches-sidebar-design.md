@@ -4,8 +4,9 @@ Status: draft for review (2026-10-12)
 
 Builds on the extensions sidebar on `skins`
 (`macos/Sources/Features/Extensions/`): a 64pt icon strip on the right edge of
-every terminal window, whose apps (Skins, Codebase visualizer) open over the
-terminal.
+every terminal window, whose one app (Skins) opens over the terminal. The
+Codebase visualizer placeholder was removed when MindControl was shelved
+(`4b0f273ad`).
 
 ## Goal
 
@@ -84,7 +85,7 @@ the way when no app is open.
 | 20 | Esc in the terminal always goes to the terminal. |
 | 21 | Auto-hide lives in a real Settings window ("Sidebar" section), applies to all windows at once. |
 | 22 | Branch `branches` off `skins`. |
-| 23 | A small timeout-guarded `Git` runner local to this feature; reconcile with mindcontrol's when it merges. |
+| 23 | A small timeout-guarded `Git` runner local to this feature. MindControl is shelved, so there is nothing to reconcile now. |
 
 ## Architecture
 
@@ -335,12 +336,11 @@ test calls `claude`).
 ## Risks
 
 - **Overlay click handling.** Views over the terminal must take their own
-  clicks; mindcontrol needed `clickLands(on:atWindowPoint:)` for this. If the
-  panel loses clicks to the surface, port that helper.
+  clicks; the shelved `mindcontrol` branch needed
+  `clickLands(on:atWindowPoint:)` in `SurfaceView_AppKit.swift` for this. If
+  the panel loses clicks to the surface, port that helper.
 - **Auto-hide edge strip vs scrollbars.** The 4pt strip sits on the
   terminal's right edge where a scrollbar may appear; it must pass clicks and
   scrolls through and only use hover.
 - **`claude -p` flags drift.** The flags above match today's `claude --help`;
   if one is rejected, Summarize shows the stderr rather than failing silently.
-- **Merge with mindcontrol.** Both branches touch `ExtensionSidebarModel` and
-  `ExtensionSidebarView`; expect a small manual merge.
