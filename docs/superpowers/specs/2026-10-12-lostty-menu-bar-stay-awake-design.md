@@ -62,7 +62,7 @@ and also carries general Lostty shortcuts.
 | Low Power Mode | On only while the lid is closed, previous setting restored on open | Nobody is looking; runs cooler in a bag |
 | Safety cut-offs | Battery floor (default 15%, on battery only) and critical thermal state | A bag can drain or cook the Mac |
 | After a cut-off | Stays off until turned on again | No surprise re-arming |
-| Root access | One-time sudoers rule for four exact `pmset` commands | Cut-offs and lid changes happen with nobody to type a password |
+| Root access | One-time sudoers rule for seven exact `pmset` commands | Cut-offs and lid changes happen with nobody to type a password |
 | Restoring | Record previous `disablesleep` and `lowpowermode`, restore them | Respects a hand-set `disablesleep 1` |
 | Quitting Lostty | Turns it off after a confirmation | Lostty owns the setting; its sessions end anyway |
 | Crash | Next launch restores from the saved record | `disablesleep` would otherwise outlive Lostty |
@@ -96,23 +96,25 @@ lives in `macos/Sources/Features/StayAwake/` and
 A protocol with a real implementation and a test fake.
 
 - `read() -> PowerSettings` parses `pmset -g` for `disablesleep` (shown as
-  `SleepDisabled`) and `lowpowermode`.
-- `set(disableSleep: Bool)` and `set(lowPowerMode: Bool)` run
-  `/usr/bin/sudo -n /usr/bin/pmset -a disablesleep|lowpowermode 0|1`.
+  `SleepDisabled`) and `pmset -g custom` for `lowpowermode` per power source
+  (battery and AC), so "Low Power Mode: Only on Battery" is restored as it was.
+- `run(_ command)` runs `/usr/bin/sudo -n /usr/bin/pmset` with one of seven
+  argument lists: `-a disablesleep 0|1`, `-a lowpowermode 1` (lid closed),
+  `-b lowpowermode 0|1` and `-c lowpowermode 0|1` (restore).
   `-n` never prompts: a missing rule fails at once with
   `PowerControlError.permissionMissing`; any other non-zero exit is
   `PowerControlError.failed(stderr)`.
 
 ### 2. PowerMonitor
 
-Publishes `PowerState { lidClosed, onBattery, batteryPercent, thermal }`.
+Reads `PowerState { lidClosed, onBattery, batteryPercent, thermal }`; the
+store polls it every 5 s while Stay Awake is on (and when the menu opens).
+Polling is simpler than three notification sources and nothing needs the
+state while Stay Awake is off.
 
-- Lid: `AppleClamshellState` on `IOPMrootDomain`, updated by an
-  `IOServiceAddInterestNotification` for `kIOPMMessageClamshellStateChange`.
-- Battery: `IOPSCopyPowerSourcesInfo`, updated by
-  `IOPSNotificationCreateRunLoopSource`.
-- Thermal: `ProcessInfo.thermalState` and
-  `thermalStateDidChangeNotification`.
+- Lid: `AppleClamshellState` on `IOPMrootDomain`.
+- Battery: `IOPSCopyPowerSourcesInfo`.
+- Thermal: `ProcessInfo.thermalState`.
 
 ### 3. StayAwakeModel
 
@@ -214,7 +216,7 @@ Battery Floor                         ▸  10% / 15% / 20% / 30%
   root, mode 0440:
 
   ```
-  <user> ALL=(root) NOPASSWD: /usr/bin/pmset -a disablesleep 0, /usr/bin/pmset -a disablesleep 1, /usr/bin/pmset -a lowpowermode 0, /usr/bin/pmset -a lowpowermode 1
+  <user> ALL=(root) NOPASSWD: /usr/bin/pmset -a disablesleep 0, /usr/bin/pmset -a disablesleep 1, /usr/bin/pmset -a lowpowermode 1, /usr/bin/pmset -b lowpowermode 0, /usr/bin/pmset -b lowpowermode 1, /usr/bin/pmset -c lowpowermode 0, /usr/bin/pmset -c lowpowermode 1
   ```
 
   `<user>` is `NSUserName()`. The row is ✓ when `sudo -n -l /usr/bin/pmset -a
@@ -342,9 +344,8 @@ this section before implementation continues.
 
 ## Risks
 
-- `kIOPMMessageClamshellStateChange` delivery while `disablesleep` is set
-  needs checking on hardware first; polling `AppleClamshellState` every few
-  seconds while on is the fallback.
+- `AppleClamshellState` must stay readable (and the Mac awake) with the lid
+  closed while `disablesleep` is set; the spike checks this first.
 - A closed MacBook can still get hot under heavy builds; the critical thermal
   cut-off is the backstop, not a guarantee.
 - CoreWLAN may not see or join an Instant Hotspot network that isn't
