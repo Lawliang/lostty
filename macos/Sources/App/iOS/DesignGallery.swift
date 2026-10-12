@@ -3,7 +3,8 @@ import LosttyRemote
 import SwiftUI
 
 /// Debug only: every Lostty screen in every state, with fake data, for
-/// review. Open with launch argument `-LosttyDesignGallery YES`. Each entry
+/// review. Open with launch argument `-LosttyDesignGallery YES` (add
+/// `-LosttyDesignGalleryEntry "<title>"` to open one entry directly). Each entry
 /// opens full screen (screens bring their own navigation stacks, which
 /// can't be nested), with a Close button.
 struct DesignGalleryScreen: View {
@@ -13,8 +14,8 @@ struct DesignGalleryScreen: View {
     }
 
     private static let paired = RemoteHostSettings(
-        host: "laws-macbook-pro.tail278d1f.ts.net", port: 22, user: "lawliang",
-        fallbackHost: "100.126.63.10", pairedAt: Date(timeIntervalSince1970: 1_791_000_000))
+        host: "studio-mac.example.ts.net", port: 22, user: "alex",
+        fallbackHost: "100.64.0.10", pairedAt: Date(timeIntervalSince1970: 1_791_000_000))
     private static let sessions = [
         RemoteSession(id: "$1", name: "lostty", surface: "A", owner: 1),
         RemoteSession(id: "$2", name: "ghostty-skins-experiments-with-a-very-long-name", surface: nil, owner: nil),
@@ -86,6 +87,11 @@ struct DesignGalleryScreen: View {
             }
             .navigationTitle("Design Gallery")
             .losttyScreen()
+        }
+        .onAppear {
+            // For screenshots: open the entry named on the command line.
+            guard shown == nil, let title = UserDefaults.standard.string(forKey: "LosttyDesignGalleryEntry") else { return }
+            shown = sections.flatMap(\.1).first { $0.id == title }
         }
         .fullScreenCover(item: $shown) { entry in
             entry.screen()

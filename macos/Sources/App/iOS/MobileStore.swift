@@ -54,6 +54,9 @@ final class MobileStore: ObservableObject {
     /// Drops the pinned host key for the Mac in the settings, so the next
     /// connect trusts whatever key it offers.
     func forgetHostKey() {
+        #if DEBUG
+        if isGallery { return }
+        #endif
         // The pins are written under the trimmed addresses, so forget them there.
         let hosts = settings.remoteHosts
         guard !hosts.isEmpty else {
@@ -152,6 +155,9 @@ final class MobileStore: ObservableObject {
     /// A terminal view attached to `session`, with its IO; nil (with a message)
     /// when the settings or key aren't ready.
     func terminal(for session: RemoteSession, app: ghostty_app_t) -> (view: Ghostty.SurfaceView, io: RemoteSurfaceIO)? {
+        #if DEBUG
+        if isGallery { return nil }
+        #endif
         let hosts = settings.remoteHosts
         guard !hosts.isEmpty else {
             message = settings.problem

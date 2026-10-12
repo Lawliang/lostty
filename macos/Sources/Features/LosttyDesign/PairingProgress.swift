@@ -51,8 +51,7 @@ struct StepIndicator: View {
                         case .done:
                             Image(systemName: "checkmark").font(.caption.weight(.bold)).foregroundStyle(LosttyTheme.accent)
                         case .current:
-                            Circle().fill(LosttyTheme.accent).frame(width: 8, height: 8)
-                                .symbolEffect(.pulse, options: .repeating)
+                            PulsingDot()
                         case .pending:
                             Text("\(step.rawValue + 1)").font(LosttyFont.mono(.footnote, size: 13, weight: .semibold))
                                 .foregroundStyle(LosttyTheme.textSecondary)
@@ -67,6 +66,26 @@ struct StepIndicator: View {
                 .accessibilityLabel("\(step.title), \(state == .done ? "done" : state == .current ? "in progress" : "not started")")
             }
         }
+    }
+}
+
+/// The current step's dot. (`.symbolEffect` doesn't animate a shape.)
+private struct PulsingDot: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion)) { context in
+            Circle().fill(LosttyTheme.accent).frame(width: 8, height: 8)
+                .opacity(StepPulse.opacity(at: context.date.timeIntervalSinceReferenceDate, reduceMotion: reduceMotion))
+        }
+    }
+}
+
+/// The current step's pulse, kept pure so it can be tested.
+enum StepPulse {
+    /// 0…1 over 1.2 s; steady under Reduce Motion.
+    static func opacity(at time: TimeInterval, reduceMotion: Bool) -> Double {
+        reduceMotion ? 1 : 0.5 + 0.5 * sin(time * 2 * .pi / 1.2)
     }
 }
 

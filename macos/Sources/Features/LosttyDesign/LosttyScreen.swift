@@ -2,14 +2,13 @@
 import SwiftUI
 
 extension View {
-    /// A Lostty screen: near-black background and a matching navigation bar.
+    /// A Lostty screen: near-black background. The navigation bar is left to
+    /// the system: on iOS 26, `toolbarBackground`/`toolbarColorScheme` hide
+    /// the navigation title.
     func losttyScreen() -> some View {
         self
             .scrollContentBackground(.hidden)
             .background(LosttyTheme.background.ignoresSafeArea())
-            .toolbarBackground(LosttyTheme.background, for: .navigationBar)
-            .toolbarBackground(.visible, for: .navigationBar)
-            .toolbarColorScheme(.dark, for: .navigationBar)
     }
 }
 #endif

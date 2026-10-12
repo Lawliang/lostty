@@ -117,7 +117,8 @@ struct SessionsScreen: View {
         .listStyle(.plain)
         .overlay {
             if showsEmptyState {
-                EmptySessions()
+                // Let pulls reach the list underneath (pull to refresh).
+                EmptySessions().allowsHitTesting(false)
             } else if store.loading && store.sessions.isEmpty {
                 ProgressView().tint(LosttyTheme.accent)
             }

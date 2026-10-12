@@ -10,7 +10,7 @@ enum PhoneAccessGallery {
 
     static func show() {
         let ready = PhoneAccessStatus(
-            tailscale: .init(running: true, name: "laws-macbook-pro.tail278d1f.ts.net", ipv4: "100.126.63.10"),
+            tailscale: .init(running: true, name: "studio-mac.example.ts.net", ipv4: "100.64.0.10"),
             tmuxPath: "/opt/homebrew/bin/tmux", remoteLogin: true, authMethods: ["publickey"],
             lockdownFileExists: true, blockAllIncoming: false, terminfoInstalled: true,
             folders: ["Desktop": true, "Documents": true, "Downloads": true])
@@ -21,10 +21,10 @@ enum PhoneAccessGallery {
         mixed.folders = nil
         let phones = [
             PairedPhone(id: "a", name: "iPhone 13", paired: Date(timeIntervalSince1970: 1_791_000_000)),
-            PairedPhone(id: "b", name: "Law's other iPhone", paired: nil),
+            PairedPhone(id: "b", name: "Alex's other iPhone", paired: nil),
         ]
         let payload = try? PairingPayload(
-            name: "laws-macbook-pro.tail278d1f.ts.net", ip: "100.126.63.10", user: "lawliang",
+            name: "studio-mac.example.ts.net", ip: "100.64.0.10", user: "alex",
             hostKey: "AAAAC3NzaC1lZDI1NTE5AAAAIO2ib6szt8DC6VJejVmS+ZXbDzWg/68qdlqbp2uhPYfl",
             secret: Data(repeating: 7, count: 32))
         let variants: [(String, PhoneAccessStore)] = [
