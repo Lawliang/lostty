@@ -162,17 +162,20 @@ extension Ghostty {
             pendingScroll += pan.translation(in: self).y
             pan.setTranslation(.zero, in: self)
             // One wheel tick is multiplied by mouse-scroll-multiplier (3) and
-            // tmux scrolls 5 lines per wheel event, so send one tick per ~5
-            // rows of finger travel.
+            // tmux scrolls 5 lines per wheel event, so one tick per 15 rows
+            // of finger travel moves the content 1:1 with the finger.
             let line = max(CGFloat(surfaceSize?.cell_height_px ?? 0) / contentScaleFactor, 8)
-            let step = 5 * line
+            let step = 15 * line
             let ticks = (pendingScroll / step).rounded(.towardZero)
             guard ticks != 0 else { return }
             pendingScroll -= ticks * step
             // iOS has no mouse, so the core's cursor sits at (-1,-1) and
             // drops wheel events outside the viewport: put it under the finger.
-            let loc = pan.location(in: self)
-            ghostty_surface_mouse_pos(surface, loc.x, loc.y, GHOSTTY_MODS_NONE)
+            // A finger dragged past the edge keeps scrolling: clamp to bounds.
+            let raw = pan.location(in: self)
+            let x = min(max(raw.x, bounds.minX), bounds.maxX)
+            let y = min(max(raw.y, bounds.minY), bounds.maxY)
+            ghostty_surface_mouse_pos(surface, x, y, GHOSTTY_MODS_NONE)
             ghostty_surface_mouse_scroll(surface, 0, Double(ticks), 0)
         }
 

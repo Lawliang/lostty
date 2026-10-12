@@ -54,8 +54,13 @@ final class MobileStore: ObservableObject {
     /// Drops the pinned host key for the Mac in the settings, so the next
     /// connect trusts whatever key it offers.
     func forgetHostKey() {
+        // The pin is written under the trimmed address, so forget it there.
+        guard let host = settings.remoteHost else {
+            message = settings.problem
+            return
+        }
         do {
-            try knownHosts.forget(host: settings.host, port: settings.port)
+            try knownHosts.forget(host: host.host, port: host.port)
             message = "Forgot the Mac's host key. The next connection will trust the key it offers."
         } catch {
             message = error.localizedDescription
