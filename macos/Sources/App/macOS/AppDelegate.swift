@@ -175,6 +175,15 @@ class AppDelegate: NSObject,
     // MARK: - NSApplicationDelegate
 
     func applicationWillFinishLaunching(_ notification: Notification) {
+        // The tmux server outlives its last session (the phone reads why it
+        // ended); stop one an earlier Lostty left empty, so new sessions get
+        // the current tmux.conf and environment. Synchronous and first: window
+        // restoration and the first window start after this, so no
+        // `new-session` client is connected to the server being killed. Not in
+        // the test host: it would touch the user's live server.
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil {
+            TmuxClient().stopServerIfEmpty()
+        }
         #if DEBUG
         if
             let suite = UserDefaults.ghosttySuite,
@@ -358,10 +367,6 @@ class AppDelegate: NSObject,
         // attaching) and give a tmux server without them the change hooks.
         // Not in the test host: it would write to the user's live server.
         if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil {
-            // The server outlives its last session (the phone reads why it
-            // ended); stop one an earlier Lostty left empty, so new
-            // sessions get the current tmux.conf and environment.
-            DispatchQueue.global(qos: .utility).async { TmuxClient().stopServerIfEmpty() }
             SessionWatcher.shared.start()
             // Lostty Mobile: each pane's Claude state, for the phone's badges.
             ClaudeTmuxSync.shared.start()

@@ -132,9 +132,12 @@ struct TmuxClient {
     /// can still read why a session ended. At launch one left empty is
     /// stopped, so the next session starts a server with the current
     /// tmux.conf and environment, and the old end reasons go with it.
-    /// tmux decides in one command, so a session made meanwhile (a restored
-    /// window) is never caught between a check and the kill. `-f
-    /// /dev/null`: never starts a server.
+    /// Runs synchronously in `applicationWillFinishLaunching`, before any
+    /// window exists, so this Lostty's own sessions cannot be caught by the
+    /// kill. tmux decides in one command, so the check and the kill cannot
+    /// be split by a session made between them; another Lostty or the phone
+    /// creating a session at that exact instant is still a theoretical race.
+    /// `-f /dev/null`: never starts a server.
     static let stopIfEmptyArgs = ["-f", "/dev/null", "if-shell", "-F", "#{==:#{server_sessions},0}", "kill-server"]
 
     func stopServerIfEmpty() {
