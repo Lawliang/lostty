@@ -1,6 +1,6 @@
 # Branches sidebar app and sidebar auto-hide — design
 
-Status: draft for review (2026-10-12)
+Status: implemented; manual app check pending (plan docs/superpowers/plans/2026-10-12-branches-sidebar.md)
 
 Builds on the extensions sidebar on `skins`
 (`macos/Sources/Features/Extensions/`): a 64pt icon strip on the right edge of
@@ -86,6 +86,15 @@ the way when no app is open.
 | 21 | Auto-hide lives in a real Settings window ("Sidebar" section), applies to all windows at once. |
 | 22 | Branch `branches` off `skins`. |
 | 23 | A small timeout-guarded `Git` runner local to this feature. MindControl is shelved, so there is nothing to reconcile now. |
+
+### Changes made during planning
+
+- The agent badge is generic: Lostty can't tell Claude from Codex, and only
+  knows "idle" for Claude (its usage reports). Working and waiting show for
+  both.
+- Settings open from a new "Lostty Settings…" app-menu item; ⌘,
+  ("Preferences…") still opens the config file.
+- Summary state is tracked per repo and branch (`BranchesModel.summaryState(for:)`), so a run in one repo never shows or is cancelled in another.
 
 ## Architecture
 
