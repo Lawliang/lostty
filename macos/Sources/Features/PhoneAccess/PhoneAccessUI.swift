@@ -33,6 +33,13 @@ enum PhoneAccessUI {
                     if !store.checking && store.pairing == nil { store.refresh() }
                 }
             }
+            // A code left showing after the window closes would keep
+            // listening for a phone nobody is watching for.
+            NotificationCenter.default.addObserver(
+                forName: NSWindow.willCloseNotification, object: window, queue: .main
+            ) { _ in
+                MainActor.assumeIsolated { store.stopPairing() }
+            }
             self.window = window
         }
         NSApp.activate(ignoringOtherApps: true)

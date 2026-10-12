@@ -46,8 +46,14 @@ struct PhoneAccessRowsTests {
         s.authMethods = ["publickey", "password"]
         let r = row(.passwords, s)
         #expect(r.state == .missing)
-        #expect(r.fixes.isEmpty)
+        #expect(r.fixes == [.skipLockdown])
         #expect(r.detail.contains("/etc/ssh/sshd_config"))
+        let skipped = row(.passwords, s, skipped: true)
+        #expect(skipped.state == .warning)
+        #expect(skipped.fixes.isEmpty)
+        #expect(skipped.detail == r.detail)
+        #expect(s.readyToPair(lockdownSkipped: true))
+        #expect(!s.readyToPair(lockdownSkipped: false))
     }
 
     @Test func remoteLoginOffNeedsTheAdminStep() {

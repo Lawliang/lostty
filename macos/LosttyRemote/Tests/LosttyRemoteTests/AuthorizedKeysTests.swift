@@ -43,6 +43,43 @@ struct AuthorizedKeysTests {
     }
 }
 
+struct AuthorizedKeysStatusTests {
+    let key = "ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBKEY1"
+    let b64 = "AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBKEY1"
+    let mine = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMINE me@laptop"
+
+    @Test func absentLosttyAndForeign() {
+        #expect(AuthorizedKeys.status(of: key, in: mine + "\n") == .absent)
+        #expect(AuthorizedKeys.status(of: key, in: "") == .absent)
+        let lostty = AuthorizedKeys.line(key: key, id: "a1")
+        #expect(AuthorizedKeys.status(of: key, in: mine + "\n" + lostty + "\n") == .lostty("a1"))
+        #expect(AuthorizedKeys.status(of: key, in: lostty + "\r\n") == .lostty("a1"))
+        #expect(AuthorizedKeys.status(of: key, in: "ecdsa-sha2-nistp256 \(b64) hand\n") == .foreign)
+        #expect(AuthorizedKeys.status(of: key, in: "# ecdsa-sha2-nistp256 \(b64) old\n") == .foreign)
+        #expect(AuthorizedKeys.status(of: key, in: "from=\"10.0.0.0/8\" ecdsa-sha2-nistp256 \(b64)\r\n") == .foreign)
+    }
+
+    @Test func replacingForeignDropsEveryHandLineAndKeepsTheRestByteForByte() {
+        let text = "# keep\n" + mine + "\r\n# ecdsa-sha2-nistp256 \(b64) old\n"
+            + "from=\"1.2.3.4\" ecdsa-sha2-nistp256 \(b64) work\r\n\n  indented keep  \n"
+        let out = AuthorizedKeys.replacingForeign(key: key, id: "n1", in: text)
+        #expect(out == "# keep\n" + mine + "\r\n\n  indented keep  \n" + AuthorizedKeys.line(key: key, id: "n1") + "\n")
+        #expect(AuthorizedKeys.status(of: key, in: out) == .lostty("n1"))
+    }
+
+    @Test func replacingForeignWithoutTrailingNewline() {
+        let out = AuthorizedKeys.replacingForeign(key: key, id: "n1", in: mine + "\nssh-x \(b64)")
+        #expect(out == mine + "\n" + AuthorizedKeys.line(key: key, id: "n1") + "\n")
+    }
+
+    @Test func aLosttyLineWithTrailingBlanksIsStillOurs() {
+        let text = AuthorizedKeys.line(key: key, id: "a1") + " \t\r\n" + mine + "\n"
+        #expect(AuthorizedKeys.phones(in: text) == [.init(id: "a1", key: key)])
+        #expect(AuthorizedKeys.removing(id: "a1", from: text) == mine + "\n")
+        #expect(AuthorizedKeys.removingAll(from: text) == mine + "\n")
+    }
+}
+
 struct AuthorizedKeysFileTests {
     let home = FileManager.default.temporaryDirectory.appendingPathComponent("lostty-home-\(UUID().uuidString)")
 

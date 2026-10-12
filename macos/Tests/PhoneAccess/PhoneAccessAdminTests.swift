@@ -3,6 +3,12 @@ import Testing
 @testable import Ghostty
 
 struct PhoneAccessAdminTests {
+    @Test func thePromptSaysWhatTheScriptDoes() {
+        #expect(PhoneAccessAdmin.prompt(enableRemoteLogin: true, lockPasswords: false) == "Lostty wants to turn on Remote Login for your phone.")
+        #expect(PhoneAccessAdmin.prompt(enableRemoteLogin: false, lockPasswords: true) == "Lostty wants to turn off SSH password logins for every account on this Mac.")
+        #expect(PhoneAccessAdmin.prompt(enableRemoteLogin: true, lockPasswords: true) == "Lostty wants to turn on Remote Login and turn off SSH password logins for every account on this Mac.")
+    }
+
     @Test func turnsOnRemoteLoginWithLaunchctlNeverSystemsetup() throws {
         let script = try #require(PhoneAccessAdmin.setupScript(enableRemoteLogin: true, lockPasswords: false))
         #expect(script == """

@@ -27,17 +27,51 @@ public enum AuthorizedKeys {
         lines(text).compactMap(phone(in:))
     }
 
-    /// `text` plus a line for `key`; nil when the key's base64 is already on
-    /// some line (allowed before, by Lostty or by hand).
-    public static func adding(key: String, id: String, to text: String) -> String? {
+    /// Where a phone key stands in an authorized_keys file.
+    public enum Status: Equatable, Sendable {
+        /// No line mentions the key.
+        case absent
+        /// An active line Lostty wrote (its id).
+        case lostty(String)
+        /// Only lines Lostty didn't write mention it: hand-added, commented
+        /// out, or with options like `from=`.
+        case foreign
+    }
+
+    public static func status(of key: String, in text: String) -> Status {
         let fields = key.split(separator: " ")
-        guard fields.count == 2 else { return nil }
-        let present = lines(text).contains { line in
-            line.split(whereSeparator: \.isWhitespace).contains(fields[1])
+        guard fields.count == 2 else { return .absent }
+        let all = lines(text)
+        if let phone = all.compactMap(phone(in:)).first(where: { $0.key == key }) {
+            return .lostty(phone.id)
         }
-        guard !present else { return nil }
+        return all.contains { mentions($0, base64: fields[1]) } ? .foreign : .absent
+    }
+
+    /// `text` plus a line for `key`; nil when the key's base64 is already on
+    /// some line (see `status(of:in:)`).
+    public static func adding(key: String, id: String, to text: String) -> String? {
+        guard status(of: key, in: text) == .absent else { return nil }
+        return appending(key: key, id: id, to: text)
+    }
+
+    /// `text` without every line Lostty didn't write that mentions `key`,
+    /// plus a Lostty line for it. sshd uses the first matching line, so a
+    /// hand line would otherwise keep `restrict` from applying.
+    public static func replacingForeign(key: String, id: String, in text: String) -> String {
+        let fields = key.split(separator: " ")
+        guard fields.count == 2 else { return text }
+        let kept = lines(text).filter { phone(in: $0) != nil || !mentions($0, base64: fields[1]) }
+        return appending(key: key, id: id, to: kept.joined(separator: "\n"))
+    }
+
+    private static func appending(key: String, id: String, to text: String) -> String {
         let base = text.isEmpty || text.unicodeScalars.last == "\n" ? text : text + "\n"
         return base + line(key: key, id: id) + "\n"
+    }
+
+    private static func mentions(_ line: String, base64: Substring) -> Bool {
+        line.split(whereSeparator: \.isWhitespace).contains(base64)
     }
 
     /// `text` without the line for phone `id`.
@@ -51,8 +85,17 @@ public enum AuthorizedKeys {
     }
 
     /// A line exactly as `line(key:id:)` writes it, else nil.
+    /// Trailing spaces, tabs and a CR (a file edited on Windows) are ignored.
     private static func phone(in line: String) -> Phone? {
-        let fields = line.split(separator: " ")
+        var end = line.unicodeScalars.endIndex
+        let blanks: Set<Unicode.Scalar> = [" ", "\t", "\r"]
+        while end > line.unicodeScalars.startIndex {
+            let before = line.unicodeScalars.index(before: end)
+            guard blanks.contains(line.unicodeScalars[before]) else { break }
+            end = before
+        }
+        let trimmed = String(line.unicodeScalars[..<end])
+        let fields = trimmed.split(separator: " ")
         guard fields.count == 4, fields[0] == "restrict,pty", fields[3].hasPrefix(tag) else { return nil }
         let id = fields[3].dropFirst(tag.count)
         guard !id.isEmpty, !id.contains("\r") else { return nil }

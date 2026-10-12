@@ -96,7 +96,7 @@ final class PhoneAccessStore: ObservableObject {
             refresh()
             return
         }
-        switch PhoneAccessAdmin.run(script, prompt: "Lostty wants to set up Remote Login for your phone.") {
+        switch PhoneAccessAdmin.run(script, prompt: PhoneAccessAdmin.prompt(enableRemoteLogin: enableRemoteLogin, lockPasswords: lockPasswords)) {
         case .done, .cancelled: break
         case .failed(let text): message = text
         }
@@ -172,11 +172,29 @@ final class PhoneAccessStore: ObservableObject {
             return false
         }
         do {
-            let id = UUID().uuidString.lowercased()
             let text = try keysFile.read()
-            if let updated = AuthorizedKeys.adding(key: key, id: id, to: text) {
-                try keysFile.write(updated)
-                names.set(id, .init(name: model, paired: Date()))
+            switch AuthorizedKeys.status(of: key, in: text) {
+            case .lostty:
+                // Already paired: keep its line and name.
+                break
+            case .absent:
+                let newID = UUID().uuidString.lowercased()
+                try keysFile.write(AuthorizedKeys.adding(key: key, id: newID, to: text) ?? text)
+                names.set(newID, .init(name: model, paired: Date()))
+            case .foreign:
+                let replace = NSAlert()
+                replace.messageText = "This phone's key is already in ~/.ssh/authorized_keys on a line Lostty didn't add. Replace it with a Phone Access line?"
+                replace.addButton(withTitle: "Replace")
+                replace.addButton(withTitle: "Cancel")
+                let replaced = replace.runModal() == .alertFirstButtonReturn
+                guard pairingID == id else { return false }
+                guard replaced else {
+                    decision = .denied
+                    return false
+                }
+                let newID = UUID().uuidString.lowercased()
+                try keysFile.write(AuthorizedKeys.replacingForeign(key: key, id: newID, in: try keysFile.read()))
+                names.set(newID, .init(name: model, paired: Date()))
             }
             decision = .allowed
             return true

@@ -23,6 +23,15 @@ enum PhoneAccessAdmin {
     }
 
     /// Turns password logins back on (Turn Off Phone Access).
+    /// What the admin prompt says the script does.
+    static func prompt(enableRemoteLogin: Bool, lockPasswords: Bool) -> String {
+        switch (enableRemoteLogin, lockPasswords) {
+        case (true, true): "Lostty wants to turn on Remote Login and turn off SSH password logins for every account on this Mac."
+        case (false, true): "Lostty wants to turn off SSH password logins for every account on this Mac."
+        default: "Lostty wants to turn on Remote Login for your phone."
+        }
+    }
+
     static var unlockScript: String { "rm -f \(PhoneAccessProbe.lockdownPath)" }
 
     static func appleScript(running script: String, prompt: String) -> String {

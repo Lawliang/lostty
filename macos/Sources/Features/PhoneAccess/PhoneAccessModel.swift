@@ -48,7 +48,8 @@ struct PhoneAccessRow: Identifiable, Equatable {
         } else if s.lockdownFileExists {
             passwords = .init(id: .passwords, title: "Password logins off",
                               detail: "Another SSH setting on this Mac keeps password logins on. Check /etc/ssh/sshd_config and /etc/ssh/sshd_config.d.",
-                              state: .missing, fixes: [])
+                              state: lockdownSkipped ? .warning : .missing,
+                              fixes: lockdownSkipped ? [] : [.skipLockdown])
         } else if lockdownSkipped {
             passwords = .init(id: .passwords, title: "Password logins off", detail: skipWarning, state: .warning, fixes: [.lockPasswords])
         } else {
