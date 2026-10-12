@@ -14,8 +14,10 @@ Tailscale. Nothing goes through a Lostty server; there isn't one.
      password logins off, but anyone who can reach your Mac could then try
      your password over SSH.
    - **Terminal definition**: click Install.
+   - **Folder access** (optional): click Grant Now and allow Desktop, Documents
+     and Downloads, so commands from your phone never wait on a macOS prompt.
 3. Click **Pair a Phone…**. On the iPhone, open Lostty, tap **Pair with Mac**,
-   and scan the code. Click **Allow** on the Mac.
+   and scan the code (or scan it with the Camera app and tap **Open in Lostty**). Click **Allow** on the Mac.
 
 Your phone can reach the Mac only while the Mac is awake and Lostty is open.
 

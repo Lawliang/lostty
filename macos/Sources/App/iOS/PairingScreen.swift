@@ -58,7 +58,11 @@ struct PairingScreen: View {
                 dismiss()
             }
         }
-        .onAppear { store.resetPairing() }
+        .onAppear {
+            store.resetPairing()
+            startPendingLink()
+        }
+        .onChange(of: store.pendingPairingLink) { _, _ in startPendingLink() }
         .task {
             guard QRScannerView.isSupported else { return }
             cameraAllowed = await AVCaptureDevice.requestAccess(for: .video)
@@ -66,6 +70,12 @@ struct PairingScreen: View {
         .onDisappear {
             if store.pairing == .done { store.resetPairing() } else { store.cancelPairing() }
         }
+    }
+
+    /// Pairs with a link the Camera app opened Lostty with.
+    private func startPendingLink() {
+        guard let link = store.takePendingPairingLink() else { return }
+        Task { await store.pair(link: link) }
     }
 }
 #endif

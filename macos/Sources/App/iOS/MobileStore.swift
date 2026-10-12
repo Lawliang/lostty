@@ -203,6 +203,21 @@ final class MobileStore: ObservableObject {
     /// result of an abandoned attempt is dropped.
     private var pairingAttempt = UUID()
 
+    /// A pairing link opened from outside the app (the Camera app), waiting
+    /// for the pairing screen to pick it up.
+    @Published private(set) var pendingPairingLink: String?
+
+    func openPairingLink(_ url: URL) {
+        guard url.scheme == "lostty", url.host == "pair" else { return }
+        pendingPairingLink = url.absoluteString
+    }
+
+    /// The waiting link, once.
+    func takePendingPairingLink() -> String? {
+        defer { pendingPairingLink = nil }
+        return pendingPairingLink
+    }
+
     func resetPairing() {
         pairingAttempt = UUID()
         pairing = .idle

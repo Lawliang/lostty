@@ -51,6 +51,8 @@ struct SessionsScreen: View {
                 Text("This ends the session on the Mac and closes its window there.")
             }
             .task { await refreshIfSetUp() }
+            .onAppear { if store.pendingPairingLink != nil { showPairing = true } }
+            .onChange(of: store.pendingPairingLink) { _, link in if link != nil { showPairing = true } }
             .onChange(of: path) { _, newPath in
                 // Back from the terminal: drop it, and refresh the list.
                 if newPath.isEmpty {
