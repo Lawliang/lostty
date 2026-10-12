@@ -33,7 +33,7 @@ the way when no app is open.
 - With "Automatically hide sidebar" on, the terminal uses the full window
   width, the strip slides in when the mouse reaches the right edge, and it
   never hides while an app is open.
-- Opening the panel or toggling auto-hide never resizes the terminal.
+- Opening the panel, or the strip sliding in and out under auto-hide, never resizes the terminal.
 
 ## Facts this design rests on
 
