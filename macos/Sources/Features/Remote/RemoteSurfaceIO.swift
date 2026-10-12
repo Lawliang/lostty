@@ -16,13 +16,17 @@ protocol RemoteAttacher: Sendable {
 /// Joins a remote surface to a remote tmux session: the core's writes and
 /// resizes go to the session, received bytes go to the core, and a dropped
 /// connection shows "reconnecting…" and attaches again with backoff. The
-/// session ending closes the pane. Closing the pane closes only the channel.
+/// session ending reports an exit (the Mac closes the pane; the phone's screen
+/// decides). Closing the pane closes only the channel.
 final class RemoteSurfaceIO: Ghostty.RemoteIO, @unchecked Sendable {
     /// The surface calls this makes; tests replace them.
     struct SurfaceCalls: Sendable {
         var feed: @Sendable (ghostty_surface_t, Data) -> Void
         var disconnected: @Sendable (ghostty_surface_t) -> Void
         var exited: @Sendable (ghostty_surface_t, UInt32) -> Void
+        /// Connection events for the screen showing the pane (the phone's
+        /// overlay). On the main thread.
+        var status: @Sendable (RemoteLinkStatus) -> Void = { _ in }
 
         static let live = SurfaceCalls(
             feed: { surface, data in
@@ -34,6 +38,13 @@ final class RemoteSurfaceIO: Ghostty.RemoteIO, @unchecked Sendable {
             disconnected: { ghostty_surface_io_disconnected($0) },
             // Called on the main thread (see `reportExit`).
             exited: { ghostty_surface_io_exited($0, $1) })
+
+        /// The phone: no "reconnecting…" line and no exit in the terminal.
+        /// Its screen shows an overlay over the last screen instead, and
+        /// decides when to close.
+        static func overlaid(status: @escaping @Sendable (RemoteLinkStatus) -> Void) -> SurfaceCalls {
+            SurfaceCalls(feed: live.feed, disconnected: { _ in }, exited: { _, _ in }, status: status)
+        }
     }
 
     private let attacher: RemoteAttacher
@@ -63,17 +74,22 @@ final class RemoteSurfaceIO: Ghostty.RemoteIO, @unchecked Sendable {
     private var restartRequested = false
     /// The backoff wait in progress, so `restart()` can cut it short.
     private var delay: Task<Void, Error>?
+    private let now: @Sendable () -> Date
+    /// When input last reached an open terminal.
+    private var lastWrite: Date?
 
     init(
         attacher: RemoteAttacher,
         surfaceCalls: SurfaceCalls = .live,
         delays: @escaping @Sendable (TimeInterval) async throws -> Void = { try await Task.sleep(for: .seconds($0)) },
-        onMain: @escaping @Sendable (@escaping @Sendable () -> Void) -> Void = { DispatchQueue.main.async(execute: $0) }
+        onMain: @escaping @Sendable (@escaping @Sendable () -> Void) -> Void = { DispatchQueue.main.async(execute: $0) },
+        now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.attacher = attacher
         self.calls = surfaceCalls
         self.delays = delays
         self.onMain = onMain
+        self.now = now
     }
 
     // MARK: Ghostty.RemoteIO
@@ -81,7 +97,11 @@ final class RemoteSurfaceIO: Ghostty.RemoteIO, @unchecked Sendable {
     func write(_ bytes: UnsafeRawBufferPointer) {
         let data = Data(bytes)
         // Typing while not attached (connecting, reconnecting) is dropped.
-        stateLock.withLock { terminal }?.write(data)
+        let open: RemoteTerminal? = stateLock.withLock {
+            if terminal != nil { lastWrite = now() }
+            return terminal
+        }
+        open?.write(data)
     }
 
     func resize(cols: UInt16, rows: UInt16, widthPx: UInt32, heightPx: UInt32) {
@@ -136,6 +156,14 @@ final class RemoteSurfaceIO: Ghostty.RemoteIO, @unchecked Sendable {
         await stateLock.withLock { task }?.value
     }
 
+    /// Whether input reached the session in the last `seconds`: the person
+    /// typed `exit` (or Ctrl-D) rather than the session ending elsewhere.
+    func wroteRecently(within seconds: TimeInterval) -> Bool {
+        let last = stateLock.withLock { lastWrite }
+        guard let last else { return false }
+        return now().timeIntervalSince(last) <= seconds
+    }
+
     // MARK: Session loop
 
     private func run() async {
@@ -159,6 +187,7 @@ final class RemoteSurfaceIO: Ghostty.RemoteIO, @unchecked Sendable {
                 // is reported: that would close the pane and the message with
                 // it. Closing the pane never asks (remote panes don't confirm).
                 received(Data("\r\n\u{1b}[31m\(error.message)\u{1b}[0m\r\n".utf8))
+                report(.stopped)
                 return
             } catch {
                 // Could not connect (or the pane closed mid-attach): try
@@ -166,6 +195,7 @@ final class RemoteSurfaceIO: Ghostty.RemoteIO, @unchecked Sendable {
                 closed()
                 if Task.isCancelled { return }
                 if takeRestart() { policy.reset(); continue }
+                report(.lost)
                 guard await pause(policy.nextDelay()) else { return }
                 continue
             }
@@ -175,11 +205,13 @@ final class RemoteSurfaceIO: Ghostty.RemoteIO, @unchecked Sendable {
             switch end {
             case .exited(let code):
                 reportExit(UInt32(bitPattern: code))
+                report(.exited(code))
                 return
             case .lost:
                 // A connection that worked starts the backoff over.
                 if stateLock.withLock({ didOpen }) { policy.reset() }
                 withSurface { calls.disconnected($0) }
+                report(.lost)
                 guard await pause(policy.nextDelay()) else { return }
             }
         }
@@ -226,6 +258,14 @@ final class RemoteSurfaceIO: Ghostty.RemoteIO, @unchecked Sendable {
         onMain { [self] in withSurface { calls.exited($0, code) } }
     }
 
+    /// Tells the screen, on the main thread, unless the pane has closed.
+    private func report(_ status: RemoteLinkStatus) {
+        onMain { [self] in
+            guard !stateLock.withLock({ detached }) else { return }
+            calls.status(status)
+        }
+    }
+
     private func opened(_ terminal: RemoteTerminal) {
         // A resize while connecting only updated `size`; tell tmux now.
         let (keep, stale): (Bool, (cols: Int, rows: Int)?) = stateLock.withLock {
@@ -236,7 +276,7 @@ final class RemoteSurfaceIO: Ghostty.RemoteIO, @unchecked Sendable {
             let differs = size != attachedSize
             return (true, differs ? size : nil)
         }
-        if !keep { terminal.close() }
+        if !keep { terminal.close() } else { report(.attached) }
         if let stale { terminal.resize(cols: stale.cols, rows: stale.rows) }
     }
 

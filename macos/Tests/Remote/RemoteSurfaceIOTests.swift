@@ -174,6 +174,20 @@ private final class OnceFlag: @unchecked Sendable {
     func claim() -> Bool { lock.withLock { defer { used = true }; return !used } }
 }
 
+private final class StatusLog: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _values: [RemoteLinkStatus] = []
+    var values: [RemoteLinkStatus] { lock.withLock { _values } }
+    func add(_ s: RemoteLinkStatus) { lock.withLock { _values.append(s) } }
+}
+
+private final class TestClock: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _now = Date(timeIntervalSince1970: 1_000)
+    var now: Date { lock.withLock { _now } }
+    func advance(_ seconds: TimeInterval) { lock.withLock { _now = _now.addingTimeInterval(seconds) } }
+}
+
 private func waitUntil(_ condition: @escaping () -> Bool) async throws {
     for _ in 0..<100 where !condition() { try await Task.sleep(for: .milliseconds(20)) }
 }
@@ -181,6 +195,82 @@ private func waitUntil(_ condition: @escaping () -> Bool) async throws {
 private let fakeSurface = UnsafeMutableRawPointer(bitPattern: 0x1)!
 
 struct RemoteSurfaceIOTests {
+    @Test func statusFollowsTheConnection() async {
+        struct Down: Error {}
+        let log = SurfaceLog()
+        let statuses = StatusLog()
+        var calls = log.calls
+        calls.status = { statuses.add($0) }
+        let attacher = ScriptedAttacher([.failure(Down()), .success(.lost), .success(.exited(3))])
+        let io = RemoteSurfaceIO(attacher: attacher, surfaceCalls: calls, delays: { _ in }, onMain: { $0() })
+        io.attach(to: fakeSurface)
+        await io.finished()
+        #expect(statuses.values == [.lost, .attached, .lost, .attached, .exited(3)])
+        #expect(log.events == ["disconnected", "exited 3"])
+    }
+
+    @Test func aStopWithAMessageSaysStopped() async {
+        let statuses = StatusLog()
+        var calls = SurfaceLog().calls
+        calls.status = { statuses.add($0) }
+        let attacher = ScriptedAttacher([.failure(RemoteError.hostKeyChanged(host: "h", pinned: "A", offered: "B"))])
+        let io = RemoteSurfaceIO(attacher: attacher, surfaceCalls: calls, delays: { _ in }, onMain: { $0() })
+        io.attach(to: fakeSurface)
+        await io.finished()
+        #expect(statuses.values == [.stopped])
+    }
+
+    @Test func thePhoneShowsNoLineAndKeepsThePaneOnExit() async {
+        let log = SurfaceLog()
+        let statuses = StatusLog()
+        var calls = RemoteSurfaceIO.SurfaceCalls.overlaid(status: { statuses.add($0) })
+        calls.feed = log.calls.feed
+        let attacher = ScriptedAttacher([.success(.lost), .success(.exited(0))])
+        let io = RemoteSurfaceIO(attacher: attacher, surfaceCalls: calls, delays: { _ in }, onMain: { $0() })
+        io.attach(to: fakeSurface)
+        await io.finished()
+        #expect(log.events.isEmpty, "no disconnected line, no exit to the core")
+        #expect(log.fed == Data("hihi".utf8))
+        #expect(statuses.values == [.attached, .lost, .attached, .exited(0)])
+    }
+
+    @Test func typingCountsAsRecentForThreeSeconds() async throws {
+        let clock = TestClock()
+        let statuses = StatusLog()
+        var calls = SurfaceLog().calls
+        calls.status = { statuses.add($0) }
+        let attacher = HoldingAttacher()
+        let io = RemoteSurfaceIO(
+            attacher: attacher, surfaceCalls: calls, delays: { _ in }, onMain: { $0() },
+            now: { clock.now })
+        Data("x".utf8).withUnsafeBytes { io.write($0) }
+        #expect(!io.wroteRecently(within: 3), "nothing was attached to send it to")
+        io.attach(to: fakeSurface)
+        // `.attached` is reported after the IO holds the terminal.
+        try await waitUntil { statuses.values.contains(.attached) }
+        Data("exit\r".utf8).withUnsafeBytes { io.write($0) }
+        clock.advance(2)
+        #expect(io.wroteRecently(within: 3))
+        clock.advance(2)
+        #expect(!io.wroteRecently(within: 3))
+        io.detach()
+        await io.finished()
+    }
+
+    @Test func noStatusAfterThePaneCloses() async throws {
+        let statuses = StatusLog()
+        var calls = SurfaceLog().calls
+        calls.status = { statuses.add($0) }
+        let attacher = GatedAttacher()
+        let io = RemoteSurfaceIO(attacher: attacher, surfaceCalls: calls, delays: { _ in }, onMain: { $0() })
+        io.attach(to: fakeSurface)
+        try await waitUntil { attacher.isOpen }
+        io.detach()
+        attacher.release()
+        await io.finished()
+        #expect(statuses.values == [.attached])
+    }
+
     @Test func attachesAtTheSizeTheCoreReportedAndFeedsOutput() async {
         let log = SurfaceLog()
         let attacher = ScriptedAttacher([.success(.exited(0))])

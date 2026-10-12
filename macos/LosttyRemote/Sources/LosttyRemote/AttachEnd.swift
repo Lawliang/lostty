@@ -15,6 +15,18 @@ public enum AttachEnd: Equatable, Sendable {
     }
 }
 
+/// What the screen showing a remote terminal hears about its connection.
+public enum RemoteLinkStatus: Equatable, Sendable {
+    /// Attached (again).
+    case attached
+    /// Dropped, or couldn't connect; reconnecting with backoff.
+    case lost
+    /// tmux exited: the session ended or this client was detached.
+    case exited(Int32)
+    /// Gave up with a message in the terminal (host key changed, key refused).
+    case stopped
+}
+
 /// Delays between reconnect attempts: quick at first, then every 15 s.
 public struct ReconnectPolicy: Sendable {
     private static let delays: [TimeInterval] = [0.5, 1, 2, 4, 8, 15]
