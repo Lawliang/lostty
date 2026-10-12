@@ -1,11 +1,12 @@
 #if os(macOS)
 import SwiftUI
 
-/// A pane's right inside edge as one shuttle loop, in SwiftUI coordinates
-/// (y grows down): down from the top-right corner to the bottom-right, then
-/// back up the same line. Fractions of the round trip wrap, so any real
-/// number is a valid position, and a tail that runs past a turnaround
-/// doubles back along the edge.
+/// The part of a pane's inside edge a trace travels, as one loop in
+/// SwiftUI coordinates (y grows down). For `.all` it is the whole border,
+/// clockwise from the top-left corner. For one side it is a shuttle: along
+/// the side (top to bottom, or left to right), then back the same way.
+/// Fractions of the loop wrap, so any real number is a valid position, and
+/// a tail that runs past a shuttle's turnaround doubles back along the side.
 struct EdgePath {
     struct Sample: Equatable {
         var point: CGPoint
@@ -16,11 +17,10 @@ struct EdgePath {
     }
 
     let rect: CGRect
+    let route: TraceRoute
 
-    /// One round trip: down the right edge and back up.
-    var loopLength: Double { 2 * Double(rect.height) }
-
-    init(size: CGSize, inset: CGFloat) {
+    init(size: CGSize, inset: CGFloat, route: TraceRoute) {
+        self.route = route
         let width = max(0, size.width - 2 * inset)
         let height = max(0, size.height - 2 * inset)
         // Degenerate panes collapse to a point so every sample stays finite.
@@ -31,35 +31,95 @@ struct EdgePath {
         }
     }
 
+    /// The straight runs the head travels in one lap, in order. Each takes
+    /// the same time, eased to rest at both ends.
+    var legs: [Double] {
+        let w = Double(rect.width), h = Double(rect.height)
+        switch route {
+        case .all: return [w, h, w, h]
+        case .top, .bottom: return [w, w]
+        case .left, .right: return [h, h]
+        }
+    }
+
+    var loopLength: Double { legs.reduce(0, +) }
+
+    /// One side's start, end and inward normal, for the shuttle routes.
+    private var side: (start: CGPoint, end: CGPoint, normal: CGVector) {
+        switch route {
+        case .all, .right:
+            (CGPoint(x: rect.maxX, y: rect.minY), CGPoint(x: rect.maxX, y: rect.maxY), CGVector(dx: -1, dy: 0))
+        case .top:
+            (CGPoint(x: rect.minX, y: rect.minY), CGPoint(x: rect.maxX, y: rect.minY), CGVector(dx: 0, dy: 1))
+        case .bottom:
+            (CGPoint(x: rect.minX, y: rect.maxY), CGPoint(x: rect.maxX, y: rect.maxY), CGVector(dx: 0, dy: -1))
+        case .left:
+            (CGPoint(x: rect.minX, y: rect.minY), CGPoint(x: rect.minX, y: rect.maxY), CGVector(dx: 1, dy: 0))
+        }
+    }
+
     func sample(at fraction: Double) -> Sample {
-        let normal = CGVector(dx: -1, dy: 0)
         let total = loopLength
         guard total > 0 else {
-            return Sample(point: rect.origin, tangent: CGVector(dx: 0, dy: 1), normal: normal)
+            return Sample(point: rect.origin, tangent: CGVector(dx: 1, dy: 0), normal: CGVector(dx: 0, dy: 1))
         }
         var wrapped = fraction.truncatingRemainder(dividingBy: 1)
         if wrapped < 0 { wrapped += 1 }
         let d = CGFloat(wrapped * total)
-        let h = rect.height
-        if d < h {
-            return Sample(point: CGPoint(x: rect.maxX, y: rect.minY + d),
-                          tangent: CGVector(dx: 0, dy: 1), normal: normal)
-        }
-        return Sample(point: CGPoint(x: rect.maxX, y: rect.maxY - (d - h)),
-                      tangent: CGVector(dx: 0, dy: -1), normal: normal)
+        return route == .all ? sampleBorder(d) : sampleSide(d)
     }
 
-    /// Maps a lap position (0..<1 of the lap's time) to a place on the edge.
-    /// Each leg (down, then up) takes half the lap. Along a leg the speed is
-    /// a sine: the head leaves the end at rest, is fastest mid-edge, and
-    /// comes to rest again at the other end.
+    private func sampleBorder(_ distance: CGFloat) -> Sample {
+        var d = distance
+        let w = rect.width, h = rect.height
+        if d < w {
+            return Sample(point: CGPoint(x: rect.minX + d, y: rect.minY),
+                          tangent: CGVector(dx: 1, dy: 0), normal: CGVector(dx: 0, dy: 1))
+        }
+        d -= w
+        if d < h {
+            return Sample(point: CGPoint(x: rect.maxX, y: rect.minY + d),
+                          tangent: CGVector(dx: 0, dy: 1), normal: CGVector(dx: -1, dy: 0))
+        }
+        d -= h
+        if d < w {
+            return Sample(point: CGPoint(x: rect.maxX - d, y: rect.maxY),
+                          tangent: CGVector(dx: -1, dy: 0), normal: CGVector(dx: 0, dy: -1))
+        }
+        d -= w
+        return Sample(point: CGPoint(x: rect.minX, y: rect.maxY - d),
+                      tangent: CGVector(dx: 0, dy: -1), normal: CGVector(dx: 1, dy: 0))
+    }
+
+    private func sampleSide(_ distance: CGFloat) -> Sample {
+        let (start, end, normal) = side
+        let length = CGFloat(legs[0])
+        let dir = CGVector(dx: (end.x - start.x) / length, dy: (end.y - start.y) / length)
+        if distance < length {
+            return Sample(point: CGPoint(x: start.x + dir.dx * distance, y: start.y + dir.dy * distance),
+                          tangent: dir, normal: normal)
+        }
+        let back = distance - length
+        return Sample(point: CGPoint(x: end.x - dir.dx * back, y: end.y - dir.dy * back),
+                      tangent: CGVector(dx: -dir.dx, dy: -dir.dy), normal: normal)
+    }
+
+    /// Maps a lap position (0..<1 of the lap's time) to a place on the loop.
+    /// Each leg takes an equal share of the lap. Along a leg the speed is a
+    /// sine: the head leaves the corner or end at rest, is fastest midway,
+    /// and comes to rest again at the next one.
     func easedFraction(_ lap: Double) -> Double {
+        let lengths = legs
+        let total = loopLength
+        guard total > 0 else { return lap }
         var wrapped = lap.truncatingRemainder(dividingBy: 1)
         if wrapped < 0 { wrapped += 1 }
-        let leg = min(1, Int(wrapped * 2))
-        let u = wrapped * 2 - Double(leg)
+        let count = lengths.count
+        let leg = min(count - 1, Int(wrapped * Double(count)))
+        let u = wrapped * Double(count) - Double(leg)
+        let start = lengths[..<leg].reduce(0, +)
         let eased = (1 - cos(.pi * u)) / 2
-        return (Double(leg) + eased) / 2
+        return (start + eased * lengths[leg]) / total
     }
 
     /// The point `inward` points into the pane from the edge at `fraction`.
@@ -69,7 +129,7 @@ struct EdgePath {
     }
 
     /// The edge between two fractions (`to` ≥ `from`), as a polyline with
-    /// ~3pt resolution and the turnarounds it passes included.
+    /// ~3pt resolution and the corners and turnarounds it passes included.
     func segment(from: Double, to: Double) -> Path {
         var path = Path()
         let span = max(0, to - from)
@@ -82,11 +142,12 @@ struct EdgePath {
         return path
     }
 
-    /// The whole right edge, top to bottom.
-    var line: Path {
+    /// Everything the route covers: the whole border, or the one side.
+    var outline: Path {
+        guard route != .all else { return Path(rect) }
         var path = Path()
-        path.move(to: CGPoint(x: rect.maxX, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.move(to: side.start)
+        path.addLine(to: side.end)
         return path
     }
 }

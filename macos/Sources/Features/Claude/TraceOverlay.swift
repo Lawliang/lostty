@@ -25,13 +25,14 @@ struct TraceOverlay: View {
     let phase: TracePhase
     let trace: ResolvedTrace
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @AppStorage(TraceRoute.defaultsKey, store: .ghostty) private var route = TraceRoute.initial
     @State private var windowVisible = true
 
     var body: some View {
         TimelineView(.animation(paused: !windowVisible)) { timeline in
             Canvas { ctx, size in
-                let path = EdgePath(size: size, inset: Self.inset)
-                let lap = TraceFrame.lapSeconds(speed: trace.speed)
+                let path = EdgePath(size: size, inset: Self.inset, route: route)
+                let lap = TraceFrame.lapSeconds(speed: trace.speed, legs: path.legs.count)
                 guard var frame = TraceFrame.make(phase, now: timeline.date, lapSeconds: lap, length: trace.length) else { return }
                 frame.head = path.easedFraction(frame.head)
                 let colors = TraceColors(trace)
@@ -48,12 +49,12 @@ struct TraceOverlay: View {
         .background(OcclusionProbe(visible: $windowVisible))
     }
 
-    /// Reduce Motion: no racing; the right edge breathes with a 2s period.
+    /// Reduce Motion: no racing; the route's edge breathes with a 2s period.
     static func drawCalmGlow(
         in ctx: inout GraphicsContext, along path: EdgePath, frame: TraceFrame, time: Double, colors: TraceColors
     ) {
         let breath = 0.25 + 0.35 * (0.5 + 0.5 * sin(2 * .pi * time / 2))
-        ctx.stroke(path.line, with: .color(colors.head.opacity(breath * frame.intensity)), lineWidth: 2)
+        ctx.stroke(path.outline, with: .color(colors.head.opacity(breath * frame.intensity)), lineWidth: 2)
     }
 }
 

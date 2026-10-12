@@ -43,8 +43,9 @@ struct TracePhaseTests {
     }
 
     @Test func lapIsPointSixSecondsPerLeg() {
-        #expect(abs(TraceFrame.lapSeconds(speed: 1) - 1.2) < 1e-9)
-        #expect(abs(TraceFrame.lapSeconds(speed: 2) - 0.6) < 1e-9)
+        #expect(abs(TraceFrame.lapSeconds(speed: 1, legs: 4) - 2.4) < 1e-9)
+        #expect(abs(TraceFrame.lapSeconds(speed: 1, legs: 2) - 1.2) < 1e-9)
+        #expect(abs(TraceFrame.lapSeconds(speed: 2, legs: 2) - 0.6) < 1e-9)
     }
 
 }
