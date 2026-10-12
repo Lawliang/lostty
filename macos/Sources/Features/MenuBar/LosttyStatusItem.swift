@@ -65,6 +65,7 @@ final class LosttyStatusItem: NSObject, NSMenuDelegate {
         toggle.state = stayAwake.isOn ? .on : .off
         if !stayAwake.isOn {
             let durations = NSMenu()
+            durations.autoenablesItems = false
             for duration in StayAwakeDuration.allCases {
                 let d = NSMenuItem(title: duration.title, action: #selector(turnOn(_:)), keyEquivalent: "")
                 d.target = self
