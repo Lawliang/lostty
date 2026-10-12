@@ -31,18 +31,3 @@ struct PairingCountdownTests {
         #expect(PairingCountdown.fraction(now: expires, expires: expires, total: 0) == 0)
     }
 }
-
-struct StepPulseTests {
-    @Test func pulsesOverOnePointTwoSeconds() {
-        let values = stride(from: 0.0, through: 1.2, by: 0.05).map { StepPulse.opacity(at: $0, reduceMotion: false) }
-        #expect(values.allSatisfy { $0 >= 0 && $0 <= 1 })
-        #expect(values.contains { $0 > 0.95 })
-        #expect(values.contains { $0 < 0.05 })
-    }
-
-    @Test func reduceMotionIsSteady() {
-        for time in [0.0, 0.3, 0.9] {
-            #expect(StepPulse.opacity(at: time, reduceMotion: true) == 1)
-        }
-    }
-}

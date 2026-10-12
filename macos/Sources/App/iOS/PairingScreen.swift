@@ -31,7 +31,7 @@ struct PairingScreen: View {
                             .font(LosttyFont.title)
                             .foregroundStyle(LosttyTheme.textPrimary)
                             .multilineTextAlignment(.center)
-                        LosttyCard { StepIndicator(progress: progress) }
+                        LosttyCard(padding: 0) { StepIndicator(progress: progress) }
                     case .failed(let text, let canRetryTest):
                         Image(systemName: "exclamationmark.triangle.fill")
                             .font(.system(size: 36))
@@ -53,10 +53,16 @@ struct PairingScreen: View {
                         Text("Paired.").font(LosttyFont.largeTitle).foregroundStyle(LosttyTheme.textPrimary)
                         Text("Your Mac's sessions are ready.")
                             .font(LosttyFont.body).foregroundStyle(LosttyTheme.textSecondary)
-                        Button("Done") { dismiss() }.buttonStyle(.lostty(.primary, fullWidth: true))
                     }
                 }
                 .padding(LosttyTheme.margin)
+            }
+            .safeAreaInset(edge: .bottom) {
+                if store.pairing == .done {
+                    Button("Done") { dismiss() }
+                        .buttonStyle(.lostty(.primary, fullWidth: true))
+                        .padding(LosttyTheme.margin)
+                }
             }
         }
         .sensoryFeedback(.success, trigger: store.pairing == .done) { _, done in done }
