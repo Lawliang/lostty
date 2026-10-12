@@ -26,6 +26,25 @@ struct BranchSummarizerTests {
         #expect(result == .success("Adds feat one."))
     }
 
+    @Test func thePromptIsPlainWhateverTheGitConfig() throws {
+        let repo = try branchRepo()
+        let tool = try TempRepo.makeDirectory() + "/difftool"
+        try "#!/bin/sh\necho EXTERNAL-DIFF\n".write(toFile: tool, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: tool)
+        try repo.git("config", "diff.external", tool)
+        try repo.git("config", "color.ui", "always")
+        // This claude prints the prompt it was given.
+        let claude = try TempRepo.makeDirectory() + "/claude"
+        try "#!/bin/sh\ncat\n".write(toFile: claude, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: claude)
+
+        let result = BranchSummarizer.run(branch: "feat", base: "main", root: repo.root, claude: claude, handle: RunHandle())
+        let prompt = try result.get()
+        #expect(prompt.contains("+feat one"))
+        #expect(!prompt.contains("EXTERNAL-DIFF"))
+        #expect(!prompt.contains("\u{1B}["))
+    }
+
     @Test func reportsClaudesError() throws {
         let repo = try branchRepo()
         let claude = try fakeClaude("echo 'Not logged in' >&2; exit 1")

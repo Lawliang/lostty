@@ -53,7 +53,7 @@ enum RepoReader {
         if let base, base != branch.name {
             details.vsBase = branch.vsBase ?? aheadBehind(branch.name, base: base, in: root)
             details.changedFiles = Git.run(
-                ["diff", "--name-only", "refs/heads/\(base)...refs/heads/\(branch.name)"], in: root
+                ["diff", "--no-ext-diff", "--no-color", "--name-only", "refs/heads/\(base)...refs/heads/\(branch.name)"], in: root
             ).map(RepoParse.lineCount)
         }
         if let worktree {

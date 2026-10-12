@@ -34,9 +34,11 @@ enum BranchSummarizer {
     static func run(branch: String, base: String, root: String, claude: String, handle: RunHandle) -> Result<String, SummaryError> {
         let commits = "refs/heads/\(base)..refs/heads/\(branch)"
         let changes = "refs/heads/\(base)...refs/heads/\(branch)"
-        guard let log = Git.run(["log", "--format=%s%n%b", commits], in: root),
-              let diff = Git.run(["diff", changes], in: root, timeout: 15),
-              let stat = Git.run(["diff", "--stat", changes], in: root)
+        // Plain text whatever the user's config: no external diff tool
+        // (difftastic) and no color codes in what Claude reads.
+        guard let log = Git.run(["log", "--no-color", "--format=%s%n%b", commits], in: root),
+              let diff = Git.run(["diff", "--no-ext-diff", "--no-color", changes], in: root, timeout: 15),
+              let stat = Git.run(["diff", "--no-ext-diff", "--no-color", "--stat", changes], in: root)
         else { return .failure(.git) }
         guard !handle.isCancelled else { return .failure(.cancelled) }
 
