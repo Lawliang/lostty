@@ -341,6 +341,9 @@ class AppDelegate: NSObject,
         // Lostty Claude trace: menu item, and a bubble for each installed
         // agent (Claude, Codex) whose hooks aren't set up.
         ClaudeHooksUI.installMenuItem(after: menuOpenConfig)
+
+        // Lostty Mobile: pair a phone and check this Mac's setup for it.
+        PhoneAccessUI.installMenuItem(after: menuOpenConfig)
         HookNotifications.checkAtLaunch()
 
         // Lostty Mobile: after a crash, offer to reopen the tmux sessions
