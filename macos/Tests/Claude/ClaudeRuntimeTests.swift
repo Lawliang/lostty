@@ -231,5 +231,49 @@ struct ClaudeRuntimeTests {
         runtime.apply(.idle, to: pane)
         #expect(runtime.awaiting.isEmpty)
     }
+
+    // Subagents: Claude's Stop says its subagents are still working, so it
+    // carries on by itself. The trace keeps going (on the bottom edge) and
+    // nothing waits on the person until Claude really finishes.
+    @Test func subagentsKeepTheTraceAndDoNotAwait() {
+        let runtime = makeRuntime()
+        let start = harness.clock
+        runtime.focusChanged(pane, focused: false)
+        runtime.apply(.busy, to: pane)
+        harness.clock = harness.clock.addingTimeInterval(5)
+        runtime.userVarChanged(pane, name: "LOSTTY_CLAUDE", value: payload("agents"))
+        #expect(runtime.phase(pane) == .racing(since: start, subagents: true))
+        #expect(runtime.awaiting.isEmpty)
+        runtime.apply(.idle, to: pane)
+        #expect(runtime.phase(pane) == .off)
+        #expect(runtime.awaiting.contains(pane))
+    }
+
+    @Test func idleTitleWhileOnlySubagentsWorkKeepsTheTrace() {
+        let runtime = makeRuntime()
+        runtime.apply(.busy, to: pane)
+        runtime.titleChanged(pane, title: "◐ My session")
+        runtime.apply(.agents, to: pane)
+        runtime.titleChanged(pane, title: "✳ My session")
+        #expect(runtime.phase(pane) == .racing(since: harness.clock, subagents: true))
+    }
+
+    @Test func claudeTakingOverLeavesTheBottomEdge() {
+        let runtime = makeRuntime()
+        let start = harness.clock
+        runtime.apply(.agents, to: pane)
+        runtime.apply(.resumed, to: pane)
+        #expect(runtime.phase(pane) == .racing(since: start))
+        // Claude's own spinner says the same when no hook does.
+        runtime.apply(.agents, to: pane)
+        runtime.titleChanged(pane, title: "◐ My session")
+        #expect(runtime.phase(pane) == .racing(since: start))
+    }
+
+    @Test func resumedWithNoTraceDoesNothing() {
+        let runtime = makeRuntime()
+        runtime.apply(.resumed, to: pane)
+        #expect(runtime.phases.isEmpty)
+    }
 }
 #endif

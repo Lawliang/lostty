@@ -93,16 +93,25 @@ final class ClaudeRuntime: ObservableObject {
     /// (e.g. inside tmux) keep their trace until a hook ends it. Only title
     /// changes count: a title left over from before the prompt never stops
     /// the trace that prompt started.
+    /// While only subagents work, Claude's own title is idle; that is no
+    /// interrupt, and a spinner then means Claude took over again.
     func titleChanged(_ id: UUID, title: String) {
+        let subagents = isSubagentsOnly(id)
         if Self.isSpinner(title) {
             sawSpinner.insert(id)
             // Working again (e.g. after a permission prompt, which sends no
             // UserPromptSubmit): the next wait is new.
             seen.remove(id)
+            if subagents { apply(.resumed, to: id) }
             return
         }
-        guard title.hasPrefix("✳") || sawSpinner.contains(id) else { return }
+        guard !subagents, title.hasPrefix("✳") || sawSpinner.contains(id) else { return }
         if case .racing = phase(id) { apply(.exit, to: id) }
+    }
+
+    private func isSubagentsOnly(_ id: UUID) -> Bool {
+        if case .racing(_, subagents: true) = phase(id) { return true }
+        return false
     }
 
     func apply(_ state: ClaudeState, to id: UUID) {
@@ -111,9 +120,13 @@ final class ClaudeRuntime: ObservableObject {
 
         if next == .off { sawSpinner.remove(id) }
         switch state {
-        case .busy:
+        case .busy, .agents:
+            // Subagents still working means Claude carries on by itself:
+            // nothing to respond to yet.
             seen.remove(id)
             awaiting.remove(id)
+        case .resumed:
+            break
         case .exit:
             awaiting.remove(id)
         case .idle:
@@ -132,10 +145,12 @@ final class ClaudeRuntime: ObservableObject {
         return "◐◑◒◓".unicodeScalars.contains(first) || (0x2801...0x28FF).contains(first.value)
     }
 
-    /// Debug builds: a fake 4s busy → idle cycle to review a style by eye.
+    /// Debug builds: a fake busy (4s) → subagents only (6s) → idle cycle to
+    /// review a style and the bottom-edge hand-off by eye.
     func debugCycle(_ id: UUID) {
         apply(.busy, to: id)
-        schedule(4) { [weak self] in self?.apply(.idle, to: id) }
+        schedule(4) { [weak self] in self?.apply(.agents, to: id) }
+        schedule(10) { [weak self] in self?.apply(.idle, to: id) }
     }
 
     private func store(_ phase: TracePhase, for id: UUID) {

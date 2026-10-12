@@ -10,9 +10,12 @@ enum ClaudeConstants {
     static let binEnvKey = "LOSTTY_BIN"
 }
 
-/// What a Claude Code hook reports through `+claude-state`.
+/// What a Claude Code hook reports through `+claude-state`. `agents`:
+/// Claude finished its turn but its subagents are still working, so it
+/// carries on by itself. `resumed`: the last of them finished, so Claude
+/// itself works again.
 enum ClaudeState: String {
-    case busy, idle, exit
+    case busy, idle, exit, agents, resumed
 }
 
 enum ClaudeMessage {

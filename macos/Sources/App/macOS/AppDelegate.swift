@@ -353,6 +353,8 @@ class AppDelegate: NSObject,
 
         // Lostty Mobile: pair a phone and check this Mac's setup for it.
         PhoneAccessUI.installMenuItem(after: menuOpenConfig)
+        // Lostty Settings (sidebar auto-hide), right after Preferences….
+        SettingsUI.installMenuItem(after: menuOpenConfig)
         // Lostty Mobile: put back power settings a crashed Lostty left
         // changed, then the menu bar icon (Stay Awake for Phone).
         StayAwakeStore.shared.start()

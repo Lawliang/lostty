@@ -1016,6 +1016,11 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
         super.windowDidLoad()
         guard let window else { return }
 
+        // Lostty: closing a sidebar app hands keyboard focus back to the pane.
+        (window as? TerminalWindow)?.extensionSidebarModel.focusTerminal = { [weak self] in
+            if let surface = self?.focusedSurface { Ghostty.moveFocus(to: surface) }
+        }
+
         // I copy this because we may change the source in the future but also because
         // I regularly audit our codebase for "ghostty.config" access because generally
         // you shouldn't use it. Its safe in this case because for a new window we should

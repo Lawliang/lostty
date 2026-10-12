@@ -17,9 +17,12 @@ pub const Options = struct {
 
 /// The `claude-state` command is run by Lostty's Claude Code hooks to tell
 /// the pane it runs in whether Claude is working: `+claude-state busy`,
-/// `+claude-state idle` or `+claude-state exit`. It never fails and never
-/// prints: outside Lostty, without a terminal, or with a bad argument it
-/// does nothing and exits 0, so a hook can never break Claude.
+/// `idle`, `exit`, `agents` or `resumed`. For `idle` and `resumed` it reads
+/// the hook input on stdin, which can turn a Stop into `agents` (subagents
+/// still working) or mean nothing should be sent (protocol.refine). It
+/// never fails and never prints: outside Lostty, without a terminal, or
+/// with a bad argument it does nothing and exits 0, so a hook can never
+/// break Claude.
 pub fn run(gpa: Allocator) !u8 {
     var arena_state = std.heap.ArenaAllocator.init(gpa);
     defer arena_state.deinit();
@@ -28,8 +31,11 @@ pub fn run(gpa: Allocator) !u8 {
     const argv = std.process.argsAlloc(alloc) catch return 0;
     var args: std.ArrayList([]const u8) = .empty;
     for (argv) |arg| args.append(alloc, arg) catch return 0;
-    const state = protocol.stateFromArgs(args.items) orelse return 0;
+    var state = protocol.stateFromArgs(args.items) orelse return 0;
     if (std.posix.getenv(protocol.surface_env) == null) return 0;
+    if (state == .idle or state == .resumed) {
+        if (hookInput(alloc)) |input| state = protocol.refine(alloc, state, input) orelse return 0;
+    }
 
     const tmux = std.posix.getenv("TMUX") != null;
     const seq = protocol.encodeSequence(alloc, state, tmux) catch return 0;
@@ -37,6 +43,16 @@ pub fn run(gpa: Allocator) !u8 {
     defer tty.close();
     tty.writeAll(seq) catch {};
     return 0;
+}
+
+/// The hook input Claude Code writes to stdin, or null when stdin is a
+/// terminal (someone ran the command by hand) or can't be read.
+fn hookInput(alloc: Allocator) ?[]const u8 {
+    const stdin = std.fs.File.stdin();
+    if (std.posix.isatty(stdin.handle)) return null;
+    var buf: [4096]u8 = undefined;
+    var reader = stdin.reader(&buf);
+    return reader.interface.allocRemaining(alloc, .limited(4 << 20)) catch null;
 }
 
 /// `/dev/tty` when we have a controlling terminal; otherwise (Claude Code

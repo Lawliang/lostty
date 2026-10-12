@@ -1,31 +1,39 @@
+#if os(macOS)
 import SwiftUI
 
+/// Lostty Settings: preferences that live in the app rather than the
+/// config file.
 struct SettingsView: View {
-    // We need access to our app delegate to know if we're quitting or not.
-    @EnvironmentObject private var appDelegate: AppDelegate
+    @ObservedObject var sidebar: SidebarPreferences
 
     var body: some View {
-        HStack {
-            Image("AppIconImage")
-                .resizable()
-                .scaledToFit()
-                .frame(width: 128, height: 128)
-
-            VStack(alignment: .leading) {
-                Text("Coming Soon. 🚧").font(.title)
-                Text("You can't configure settings in the GUI yet. To modify settings, " +
-                     "edit the file at $HOME/.config/ghostty/config.ghostty and restart Ghostty.")
-                .multilineTextAlignment(.leading)
-                .lineLimit(nil)
+        VStack(alignment: .leading, spacing: 0) {
+            Form {
+                Section("Sidebar") {
+                    Toggle("Automatically hide sidebar", isOn: $sidebar.autoHide)
+                    Text("Shows when you move the pointer to the window's right edge. "
+                         + "Stays open while an app is open.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
+            .formStyle(.grouped)
+
+            Text("Terminal settings live in $HOME/.config/ghostty/config.ghostty "
+                 + "(Lostty → Preferences… opens it).")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 20)
+                .padding(.bottom, 16)
         }
-        .padding()
-        .frame(minWidth: 500, maxWidth: 500, minHeight: 156, maxHeight: 156)
+        .frame(width: 460)
+        .fixedSize(horizontal: false, vertical: true)
     }
 }
 
 struct SettingsView_Previews: PreviewProvider {
     static var previews: some View {
-        SettingsView()
+        SettingsView(sidebar: SidebarPreferences(defaults: UserDefaults(suiteName: "preview")!))
     }
 }
+#endif

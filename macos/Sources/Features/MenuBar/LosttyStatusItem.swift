@@ -181,11 +181,7 @@ final class LosttyStatusItem: NSObject, NSMenuDelegate {
         else { return }
         if session.owner == ProcessInfo.processInfo.processIdentifier,
            let pane = session.surface.flatMap(UUID.init(uuidString:)),
-           let surface = delegate.findSurface(forUUID: pane),
-           let controller = surface.window?.windowController as? BaseTerminalController {
-            NSApp.activate(ignoringOtherApps: true)
-            surface.window?.makeKeyAndOrderFront(nil)
-            controller.focusSurface(surface)
+           PaneFocus.focus(pane) {
             return
         }
         NSApp.activate(ignoringOtherApps: true)

@@ -96,57 +96,52 @@ private struct ExtensionIcon: View {
 
     var body: some View {
         switch ext {
+        case .branches:
+            BranchesIcon()
         case .skins:
             SkinsIcon(skin: skin)
                 .frame(width: 44, height: 44)
                 .modifier(IOSIconChrome())
-        case .codebaseVisualizer:
-            ZStack {
-                RadialGradient(
-                    colors: [
-                        Color(red: 0.23, green: 0.18, blue: 0.61),
-                        Color(red: 0.10, green: 0.10, blue: 0.35),
-                        Color(red: 0.04, green: 0.04, blue: 0.15),
-                    ],
-                    center: UnitPoint(x: 0.5, y: 0.38), startRadius: 0, endRadius: 30)
-                NodeGlyph()
-                    .frame(width: 26, height: 26)
-                    .shadow(color: Color(red: 0.59, green: 0.67, blue: 1).opacity(0.85), radius: 3)
-            }
-            .frame(width: 44, height: 44)
-            .modifier(IOSIconChrome())
         }
     }
 }
 
-/// A small neural cluster: a bright core joined to three colored nodes.
-private struct NodeGlyph: View {
+/// A git-branch mark on deep green.
+private struct BranchesIcon: View {
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                colors: [Color(red: 0.16, green: 0.56, blue: 0.38), Color(red: 0.03, green: 0.22, blue: 0.15)],
+                startPoint: .top, endPoint: .bottom)
+            BranchGlyph()
+                .frame(width: 24, height: 24)
+                .shadow(color: Color(red: 0.55, green: 1, blue: 0.75).opacity(0.6), radius: 3)
+        }
+        .frame(width: 44, height: 44)
+        .modifier(IOSIconChrome())
+    }
+}
+
+/// A trunk with a branch forking off it, three commit dots.
+private struct BranchGlyph: View {
     var body: some View {
         Canvas { ctx, size in
-            let s = size.width / 26
+            let s = size.width / 24
             func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * s, y: y * s) }
-            let core = p(13, 13)
-            let lineColor = Color(red: 0.56, green: 0.65, blue: 1)
-            for end in [p(5, 7), p(21, 8), p(11, 22)] {
-                var line = Path()
-                line.move(to: core)
-                line.addLine(to: end)
-                ctx.stroke(line, with: .color(lineColor), lineWidth: 1.2 * s)
+            let line = Color(red: 0.86, green: 1, blue: 0.92)
+            var trunk = Path()
+            trunk.move(to: p(7, 4))
+            trunk.addLine(to: p(7, 20))
+            var fork = Path()
+            fork.move(to: p(17, 6.5))
+            fork.addCurve(to: p(7, 16), control1: p(17, 12), control2: p(9, 11))
+            ctx.stroke(trunk, with: .color(line), lineWidth: 2 * s)
+            ctx.stroke(fork, with: .color(line), lineWidth: 2 * s)
+            for center in [p(7, 4), p(7, 20), p(17, 6.5)] {
+                let r = 2.6 * s
+                ctx.fill(Path(ellipseIn: CGRect(x: center.x - r, y: center.y - r, width: 2 * r, height: 2 * r)),
+                         with: .color(.white))
             }
-            var spur = Path()
-            spur.move(to: p(21, 8))
-            spur.addLine(to: p(22, 17))
-            ctx.stroke(spur, with: .color(lineColor), lineWidth: 1 * s)
-
-            func dot(_ c: CGPoint, _ r: CGFloat, _ color: Color) {
-                ctx.fill(Path(ellipseIn: CGRect(x: c.x - r * s, y: c.y - r * s, width: 2 * r * s, height: 2 * r * s)),
-                         with: .color(color))
-            }
-            dot(core, 3.4, Color(red: 0.95, green: 0.95, blue: 1))
-            dot(p(5, 7), 2.2, Color(red: 0.66, green: 0.55, blue: 1))
-            dot(p(21, 8), 2.2, Color(red: 0.44, green: 0.82, blue: 1))
-            dot(p(11, 22), 2.2, Color(red: 1, green: 0.54, blue: 0.85))
-            dot(p(22, 17), 1.6, Color(red: 0.44, green: 0.82, blue: 1))
         }
     }
 }
@@ -192,6 +187,8 @@ struct ExtensionContentView: View {
 
     var body: some View {
         switch ext {
+        case .branches:
+            BranchesPanel(model: model.branches, onClose: model.close)
         case .skins:
             if let id = model.focusedSurfaceID {
                 // `.id(id)` starts the picker fresh if the target pane changes.
@@ -206,26 +203,6 @@ struct ExtensionContentView: View {
                     Text("Click a pane, then open Skins.")
                         .font(.system(size: 13))
                         .foregroundStyle(.white.opacity(0.6))
-                }
-            }
-        case .codebaseVisualizer:
-            // MindControl (the `mindcontrol` branch) replaces this with its panel.
-            ZStack {
-                RadialGradient(
-                    colors: [
-                        Color(red: 0.05, green: 0.06, blue: 0.19),
-                        Color(red: 0.03, green: 0.03, blue: 0.09),
-                        Color(red: 0.01, green: 0.01, blue: 0.035),
-                    ],
-                    center: .center, startRadius: 0, endRadius: 700)
-                VStack(spacing: 8) {
-                    NodeGlyph().frame(width: 40, height: 40)
-                    Text("Codebase visualizer")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.9))
-                    Text("The 3D map arrives with MindControl.")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.white.opacity(0.55))
                 }
             }
         }
