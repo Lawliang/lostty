@@ -121,10 +121,12 @@ enum Command {
 enum PhoneAccessTerminfo {
     static let entries = ["78/xterm-ghostty", "67/ghostty"]
 
+    /// The bundle ships 67/ghostty as a symlink, and contentsEqual calls a
+    /// symlink and a plain file different whatever they hold: resolve it.
     static func installed(bundle: URL, home: URL) -> Bool {
         entries.allSatisfy { entry in
             FileManager.default.contentsEqual(
-                atPath: bundle.appendingPathComponent(entry).path,
+                atPath: bundle.appendingPathComponent(entry).resolvingSymlinksInPath().path,
                 andPath: home.appendingPathComponent(entry).path)
         }
     }

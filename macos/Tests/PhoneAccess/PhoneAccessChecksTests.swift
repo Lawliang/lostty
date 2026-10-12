@@ -83,6 +83,24 @@ struct PhoneAccessChecksTests {
         #expect(PhoneAccessTerminfo.installed(bundle: bundle, home: home))
     }
 
+    /// The app bundle ships 67/ghostty as a symlink to 78/xterm-ghostty;
+    /// the copy in ~/.terminfo is a plain file with the same bytes.
+    @Test func aSymlinkedBundleEntryStillCountsAsInstalled() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("lostty-ti-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let bundle = root.appendingPathComponent("bundle")
+        let home = root.appendingPathComponent("home/.terminfo")
+        let real = bundle.appendingPathComponent("78/xterm-ghostty")
+        try FileManager.default.createDirectory(at: real.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("terminfo".utf8).write(to: real)
+        try FileManager.default.createDirectory(at: bundle.appendingPathComponent("67"), withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(
+            atPath: bundle.appendingPathComponent("67/ghostty").path, withDestinationPath: "../78/xterm-ghostty")
+
+        try PhoneAccessTerminfo.install(bundle: bundle, home: home)
+        #expect(PhoneAccessTerminfo.installed(bundle: bundle, home: home))
+    }
+
     @Test func commandsReturnOutputAndGiveUpOnHangs() {
         let echo = Command.run("/bin/sh", ["-c", "echo out; echo err >&2; exit 3"])
         #expect(echo?.status == 3)
