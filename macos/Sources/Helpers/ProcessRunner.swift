@@ -12,6 +12,12 @@ struct ProcessResult: Equatable, Sendable {
 /// does: waits on semaphores (not `waitUntilExit`, which spins the run
 /// loop), reads output on background queues so a full pipe can't stall it,
 /// and SIGKILLs it at the deadline. Blocking: call it off the main thread.
+///
+/// The readers run on private serial queues, never `DispatchQueue.global`:
+/// callers may block Swift concurrency's cooperative threads (one per CPU),
+/// and while those are all blocked the system won't give global-queue work
+/// a thread, so the readers would never run and every call would time out.
+/// Private serial queues are overcommit and always get a thread.
 enum ProcessRunner {
     /// nil when the program can't start or runs past `timeout`. `onStart`
     /// gets the pid, so a caller can kill a run it no longer wants.
@@ -63,12 +69,12 @@ enum ProcessRunner {
         let output = Output()
         let read = DispatchGroup()
         read.enter()
-        DispatchQueue.global(qos: .userInitiated).async {
+        DispatchQueue(label: "lostty.process-runner.read", qos: .userInitiated).async {
             output.out = out.fileHandleForReading.readDataToEndOfFile()
             read.leave()
         }
         read.enter()
-        DispatchQueue.global(qos: .userInitiated).async {
+        DispatchQueue(label: "lostty.process-runner.read", qos: .userInitiated).async {
             output.err = err.fileHandleForReading.readDataToEndOfFile()
             read.leave()
         }

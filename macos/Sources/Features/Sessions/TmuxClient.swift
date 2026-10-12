@@ -48,10 +48,13 @@ struct TmuxClient {
             return nil
         }
 
-        // Read while it runs, so a full pipe can't stall it.
+        // Read while it runs, so a full pipe can't stall it. A private queue,
+        // not the global one: callers may be blocking every cooperative
+        // thread, and then global-queue work never gets a thread
+        // (see ProcessRunner).
         let output = Output()
         let read = DispatchSemaphore(value: 0)
-        DispatchQueue.global(qos: .userInitiated).async {
+        DispatchQueue(label: "lostty.tmux.read", qos: .userInitiated).async {
             output.data = out.fileHandleForReading.readDataToEndOfFile()
             read.signal()
         }
