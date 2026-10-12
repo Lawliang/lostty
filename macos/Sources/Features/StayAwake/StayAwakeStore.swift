@@ -102,7 +102,10 @@ final class StayAwakeStore: ObservableObject {
         guard available, !isOn else { return }
         lastDuration = duration
         // Nothing has changed yet, so an unreadable baseline just means no start.
-        guard let current = try? control.read() else { return }
+        guard let current = try? control.read() else {
+            notifyMac(StayAwakeCopy.unreadable)
+            return
+        }
         send(.power(readPower()))
         send(.turnOn(until: duration.seconds.map { now().addingTimeInterval($0) }, current: current))
         if isOn { startPolling() }

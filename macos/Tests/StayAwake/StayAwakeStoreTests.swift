@@ -10,7 +10,11 @@ struct StayAwakeStoreTests {
         var ran: [PowerCommand] = []
         var failOn: PowerCommand?
         var permission = true
-        func read() throws -> PowerSettings { settings }
+        var unreadable = false
+        func read() throws -> PowerSettings {
+            if unreadable { throw PowerControlError.unreadable }
+            return settings
+        }
         func run(_ command: PowerCommand) throws {
             if command == failOn { throw PowerControlError.failed("boom") }
             ran.append(command)
@@ -96,6 +100,24 @@ struct StayAwakeStoreTests {
         #expect(store.batteryFloor == 15)
         store.batteryFloor = 30
         #expect(make(FakeControl(), power: open, defaults: defaults).batteryFloor == 30)
+    }
+
+    @Test func unreadableSettingsNotifyAndChangeNothing() {
+        let control = FakeControl()
+        control.unreadable = true
+        let defaults = freshDefaults()
+        let notes = Notes()
+        let store = make(control, power: open, defaults: defaults, notes: notes)
+        store.refreshAvailability()
+        store.turnOn(.untilOff)
+        #expect(!store.isOn)
+        #expect(control.ran.isEmpty)
+        #expect(StayAwakeRecordStore(defaults: defaults).load() == nil)
+        #expect(notes.mac == [StayAwakeCopy.unreadable])
+        control.unreadable = false
+        store.turnOn(.untilOff)
+        #expect(store.isOn)
+        #expect(control.ran == [.disableSleep(true)])
     }
 }
 #endif

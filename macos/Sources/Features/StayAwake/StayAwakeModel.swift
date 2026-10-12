@@ -66,6 +66,7 @@ enum StayAwakeAction: Equatable {
 enum StayAwakeCopy {
     static let restoreFailed = "Lostty couldn't let your Mac sleep again. Run: sudo pmset -a disablesleep 0"
     static let lowPowerFailed = "Lostty couldn't change Low Power Mode."
+    static let unreadable = "Lostty couldn't read your power settings, so Stay Awake didn't turn on."
 
     static func goingToSleep(_ reason: StayAwakeReason) -> String? {
         switch reason {
