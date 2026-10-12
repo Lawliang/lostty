@@ -54,6 +54,7 @@ enum PowerParse {
         for line in pmsetCustom.split(separator: "\n") {
             if line.hasPrefix("Battery Power:") { section = .battery; continue }
             if line.hasPrefix("AC Power:") { section = .ac; continue }
+            if !line.hasPrefix(" "), !line.hasPrefix("\t"), line.hasSuffix(":") { section = nil; continue }
             let fields = line.split(whereSeparator: \.isWhitespace)
             guard fields.count == 2, fields[0] == "lowpowermode" else { continue }
             let on = fields[1] == "1"

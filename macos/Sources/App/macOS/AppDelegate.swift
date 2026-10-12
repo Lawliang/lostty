@@ -417,7 +417,7 @@ class AppDelegate: NSObject,
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         // Lostty Mobile: quitting ends Stay Awake for Phone and this Mac's
         // sessions; one confirmation covers both. Never on shutdown.
-        if StayAwakeStore.shared.isOn && !Self.systemIsEnding() {
+        if StayAwakeStore.shared.isOn && !Self.systemIsEnding() && !updateController.isInstalling {
             let alert = NSAlert()
             alert.messageText = "Stay Awake for Phone is on."
             alert.informativeText = "Quitting lets the Mac sleep and ends this Mac's sessions."
@@ -488,8 +488,6 @@ class AppDelegate: NSObject,
         }
     }
 
-    /// Lostty Mobile: whether any open pane is running something. Panes in
-    /// tmux sessions ask tmux; the others answer as the core does.
     /// Lostty Mobile: shutdown, restart or logout, which never ask first.
     private static func systemIsEnding() -> Bool {
         guard let event = NSAppleEventManager.shared().currentAppleEvent,
@@ -502,6 +500,8 @@ class AppDelegate: NSObject,
         }
     }
 
+    /// Lostty Mobile: whether any open pane is running something. Panes in
+    /// tmux sessions ask tmux; the others answer as the core does.
     private static func anyPaneNeedsConfirmQuit() -> Bool {
         NSApp.windows
             .compactMap { $0.windowController as? BaseTerminalController }
@@ -996,6 +996,11 @@ class AppDelegate: NSObject,
         willPresent: UNNotification,
         withCompletionHandler: (UNNotificationPresentationOptions) -> Void
     ) {
+        // Lostty: Stay Awake's notices carry no surface, so show them here.
+        if willPresent.request.content.userInfo["lostty"] as? String == "stay-awake" {
+            withCompletionHandler(LosttyMute.isMuted() ? [.banner] : [.banner, .sound])
+            return
+        }
         let shouldPresent = ghostty.shouldPresentNotification(notification: willPresent)
         // Lostty: the usage bar's mute keeps notifications silent.
         var options: UNNotificationPresentationOptions = shouldPresent ? [.banner, .sound] : []

@@ -20,6 +20,12 @@ struct PowerParseTests {
         #expect(lp.ac == false)
     }
 
+    @Test func otherPowerSectionsDoNotOverwriteAC() {
+        let lp = PowerParse.lowPower(pmsetCustom: custom + "\nUPS Power:\n lowpowermode         1\n")
+        #expect(lp.battery == true)
+        #expect(lp.ac == false)
+    }
+
     @Test func desktopHasNoBatterySection() {
         let lp = PowerParse.lowPower(pmsetCustom: "AC Power:\n lowpowermode         1\n")
         #expect(lp.battery == nil)

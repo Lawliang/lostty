@@ -23,7 +23,7 @@ enum StayAwakeMenuText {
             case .timer: return "Time ran out" + time
             case .restoreFailed: return StayAwakeCopy.restoreFailed
             case .failed(let message): return "Couldn't turn on: \(message)"
-            case .permissionMissing: return "Needs the stay-awake permission"
+            case .permissionMissing: return permissionInstalled ? nil : "Needs the stay-awake permission"
             case .turnedOff, nil: return permissionInstalled ? nil : "Needs the stay-awake permission"
             }
         }

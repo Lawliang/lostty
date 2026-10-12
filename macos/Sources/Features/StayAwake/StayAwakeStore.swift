@@ -49,7 +49,9 @@ final class StayAwakeStore: ObservableObject {
     private let hasPairedPhone: () -> Bool
     private let notifyMac: (String) -> Void
     private let now: () -> Date
+    private let requestNotifications: () -> Void
     private var timer: Timer?
+    private var activity: NSObjectProtocol?
 
     init(
         control: PowerControl = SystemPowerControl(),
@@ -58,7 +60,8 @@ final class StayAwakeStore: ObservableObject {
         readPower: @escaping () -> PowerState = PowerReader.read,
         hasPairedPhone: @escaping () -> Bool = StayAwakeStore.anyPhonePaired,
         notifyMac: @escaping (String) -> Void = StayAwakeStore.postMacNotification,
-        now: @escaping () -> Date = Date.init
+        now: @escaping () -> Date = Date.init,
+        requestNotifications: @escaping () -> Void = StayAwakeStore.requestNotificationAuthorization
     ) {
         self.control = control
         self.defaults = defaults
@@ -67,6 +70,7 @@ final class StayAwakeStore: ObservableObject {
         self.hasPairedPhone = hasPairedPhone
         self.notifyMac = notifyMac
         self.now = now
+        self.requestNotifications = requestNotifications
         model.batteryFloor = batteryFloor
     }
 
@@ -100,6 +104,7 @@ final class StayAwakeStore: ObservableObject {
     func turnOn(_ duration: StayAwakeDuration) {
         refreshAvailability()
         guard available, !isOn else { return }
+        requestNotifications()
         lastDuration = duration
         // Nothing has changed yet, so an unreadable baseline just means no start.
         guard let current = try? control.read() else {
@@ -127,18 +132,31 @@ final class StayAwakeStore: ObservableObject {
 
     private func startPolling() {
         timer?.invalidate()
-        timer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+        // .common so alerts and open menus don't stall the cut-offs.
+        let timer = Timer(timeInterval: 5, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.pollPower() }
         }
+        timer.tolerance = 1
+        RunLoop.main.add(timer, forMode: .common)
+        self.timer = timer
+        // With the lid closed every window is hidden; keep App Nap off the poll.
+        if activity == nil {
+            activity = ProcessInfo.processInfo.beginActivity(
+                options: .userInitiatedAllowingIdleSystemSleep, reason: "Stay Awake for Phone")
+        }
+    }
+
+    private func stopPolling() {
+        timer?.invalidate()
+        timer = nil
+        if let activity { ProcessInfo.processInfo.endActivity(activity) }
+        activity = nil
     }
 
     private func send(_ event: StayAwakeModel.Event) {
         let actions = model.handle(event, now: now())
         perform(actions)
-        if !isOn {
-            timer?.invalidate()
-            timer = nil
-        }
+        if !isOn { stopPolling() }
     }
 
     private func perform(_ actions: [StayAwakeAction]) {
@@ -165,10 +183,17 @@ final class StayAwakeStore: ObservableObject {
         !AuthorizedKeys.phones(in: (try? AuthorizedKeysFile.standard.read()) ?? "").isEmpty
     }
 
+    /// Asked when the person turns Stay Awake on, so its notices can show.
+    static func requestNotificationAuthorization() {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+    }
+
     static func postMacNotification(_ text: String) {
         let content = UNMutableNotificationContent()
         content.title = "Lostty"
         content.body = text
+        content.userInfo = ["lostty": "stay-awake"]
+        content.sound = LosttyMute.isMuted() ? nil : UNNotificationSound.default
         UNUserNotificationCenter.current().add(
             UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil))
     }

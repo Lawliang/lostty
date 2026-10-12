@@ -22,13 +22,14 @@ struct StayAwakeStoreTests {
         func hasPermission() -> Bool { permission }
     }
 
-    final class Notes { var mac: [String] = [] }
+    final class Notes { var mac: [String] = []; var authRequests = 0 }
 
     func make(_ control: FakeControl, power: PowerState, defaults: UserDefaults, notes: Notes = Notes()) -> StayAwakeStore {
         StayAwakeStore(
             control: control, defaults: defaults, phone: NoPhoneNotifier(),
             readPower: { power }, hasPairedPhone: { true },
-            notifyMac: { notes.mac.append($0) }, now: { Date(timeIntervalSince1970: 1_000) })
+            notifyMac: { notes.mac.append($0) }, now: { Date(timeIntervalSince1970: 1_000) },
+            requestNotifications: { notes.authRequests += 1 })
     }
 
     func freshDefaults() -> UserDefaults {
@@ -37,6 +38,20 @@ struct StayAwakeStoreTests {
     }
 
     let open = PowerState(lidClosed: false, onBattery: true, batteryPercent: 80, thermal: .nominal)
+
+    @Test func turnOnRequestsNotificationAuthorizationOnlyWhenAvailable() {
+        let notes = Notes()
+        let store = make(FakeControl(), power: open, defaults: freshDefaults(), notes: notes)
+        store.turnOn(.untilOff)
+        store.turnOff()
+        #expect(notes.authRequests == 1)
+
+        let blocked = FakeControl()
+        blocked.permission = false
+        let other = make(blocked, power: open, defaults: freshDefaults(), notes: notes)
+        other.turnOn(.untilOff)
+        #expect(notes.authRequests == 1)
+    }
 
     @Test func turnOnSavesTheRecordAndDisablesSleep() {
         let control = FakeControl()

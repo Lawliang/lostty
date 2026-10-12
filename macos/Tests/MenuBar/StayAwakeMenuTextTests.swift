@@ -35,6 +35,11 @@ struct StayAwakeMenuTextTests {
         #expect(StayAwakeMenuText.status(.off(reason: nil, at: nil), power: nil, permissionInstalled: false, now: now) == "Needs the stay-awake permission")
     }
 
+    @Test func permissionMissingClearsOnceInstalled() {
+        #expect(StayAwakeMenuText.status(.off(reason: .permissionMissing, at: now), power: nil, permissionInstalled: false, now: now) == "Needs the stay-awake permission")
+        #expect(StayAwakeMenuText.status(.off(reason: .permissionMissing, at: now), power: nil, permissionInstalled: true, now: now) == nil)
+    }
+
     @Test func attachedLineNamesNoPhone() {
         #expect(StayAwakeMenuText.attached("api-server") == "A phone or SSH client is attached to api-server")
     }
