@@ -107,6 +107,21 @@ final class TmuxClientTests {
         #expect(found == "/opt/homebrew/bin/tmux")
     }
 
+    @Test func renamingSetsOrClearsTheLabelThenSignals() {
+        #expect(TmuxClient.labelArgs("Deploy", sessionID: "$3")
+            == ["set-option", "-t", "$3", "@lostty_label", "Deploy", ";", "wait-for", "-S", "lostty-changed"])
+        #expect(TmuxClient.labelArgs(nil, sessionID: "$3")
+            == ["set-option", "-u", "-t", "$3", "@lostty_label", ";", "wait-for", "-S", "lostty-changed"])
+    }
+
+    @Test func aLabelEndingInASemicolonCannotBecomeASeparator() {
+        #expect(TmuxClient.labelArgs("Deploy;", sessionID: "$3")
+            == ["set-option", "-t", "$3", "@lostty_label", "Deploy", ";", "wait-for", "-S", "lostty-changed"])
+        // Nothing left after cleaning: clears the label instead.
+        #expect(TmuxClient.labelArgs(";", sessionID: "$3")
+            == ["set-option", "-u", "-t", "$3", "@lostty_label", ";", "wait-for", "-S", "lostty-changed"])
+    }
+
     @Test func locateFallsBackToPATH() {
         #expect(TmuxClient.locate(path: "/usr/bin:/custom/bin") { $0 == "/custom/bin/tmux" } == "/custom/bin/tmux")
     }

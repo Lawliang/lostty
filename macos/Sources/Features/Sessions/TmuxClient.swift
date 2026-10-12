@@ -125,6 +125,21 @@ struct TmuxClient {
              "set-option", "-u", "-t", session.id, TmuxConstants.ownerOption])
     }
 
+    /// Names the session showing pane `surface` (nil: back to automatic),
+    /// then wakes watchers so the phone shows it.
+    func setLabel(_ label: String?, surface: UUID, ownedBy pid: Int32) {
+        for session in TmuxOwnership.showing(surface, ownedBy: pid, in: sessions()) {
+            run(Self.labelArgs(label, sessionID: session.id))
+        }
+    }
+
+    static func labelArgs(_ label: String?, sessionID: String) -> [String] {
+        let clean = label.flatMap(SessionLabel.cleanLabel)
+        let set = clean.map { ["set-option", "-t", sessionID, TmuxRemote.labelOption, $0] }
+            ?? ["set-option", "-u", "-t", sessionID, TmuxRemote.labelOption]
+        return set + [";"] + TmuxHooks.signalCommand
+    }
+
     func isBusy(surface: UUID, ownedBy pid: Int32) -> Bool? {
         guard let out = run(["list-panes", "-a", "-F", TmuxPane.listFormat]) else { return nil }
         return TmuxPane.isBusy(surface, ownedBy: pid, panes: TmuxPane.parseList(out))

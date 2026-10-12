@@ -219,5 +219,17 @@ struct ClaudeRuntimeTests {
         #expect(runtime.phases[pane] == nil)
     }
 
+    @Test func aPhoneAttachingCountsAsSeeingTheWait() {
+        let runtime = makeRuntime()
+        runtime.focusChanged(pane, focused: false)
+        runtime.apply(.busy, to: pane)
+        runtime.apply(.idle, to: pane)
+        #expect(runtime.awaiting == [pane])
+        runtime.seenElsewhere(pane)
+        #expect(runtime.awaiting.isEmpty)
+        // The same wait doesn't come back.
+        runtime.apply(.idle, to: pane)
+        #expect(runtime.awaiting.isEmpty)
+    }
 }
 #endif

@@ -77,6 +77,14 @@ final class ClaudeRuntime: ObservableObject {
         }
     }
 
+    /// Lostty Mobile: a phone attached to this pane's session. Seeing it
+    /// there counts like focusing it here.
+    func seenElsewhere(_ id: UUID) {
+        guard awaiting.contains(id) else { return }
+        seen.insert(id)
+        awaiting.remove(id)
+    }
+
     /// Agents title the pane with a spinner while working: Claude "◐ …"
     /// (then "✳ …" when idle), Codex "⠋ …" (then just the folder name).
     /// An Esc interrupt sends no Stop hook, so a racing pane whose title

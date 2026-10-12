@@ -17,6 +17,11 @@ struct AttachedPhonesTests {
         #expect(AttachedPhones.sessions(clients: clients, parent: parent) == ["api-server"])
     }
 
+    @Test func sessionIDsComeFromTheSameWalk() {
+        #expect(AttachedPhones.idFormat == "#{client_pid}\t#{session_id}")
+        #expect(AttachedPhones.sessionIDs(clients: "500\t$3\n600\t$4\n", parent: parent) == ["$3"])
+    }
+
     @Test func junkAndUnknownPidsAreIgnored() {
         #expect(AttachedPhones.sessions(clients: "x\ty\n\n999\tlost\n", parent: parent) == [])
     }

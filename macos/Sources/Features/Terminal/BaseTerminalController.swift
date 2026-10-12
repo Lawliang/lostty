@@ -2,6 +2,7 @@ import Cocoa
 import SwiftUI
 import Combine
 import GhosttyKit
+import LosttyRemote
 
 /// A base class for windows that can contain Ghostty windows. This base class implements
 /// the bare minimum functionality that every terminal window in Ghostty should implement.
@@ -98,6 +99,10 @@ class BaseTerminalController: NSWindowController,
     var titleOverride: String? {
         didSet { applyTitleToWindow() }
     }
+
+    /// Lostty Mobile: the override came from the focused pane's session
+    /// label, so it follows focus and goes when the label does.
+    private var titleOverrideFromLabel = false
 
     /// The last computed title from the focused surface (without the override).
     private var lastComputedTitle: String = "👻"
@@ -382,12 +387,32 @@ class BaseTerminalController: NSWindowController,
             guard response == .alertFirstButtonReturn else { return }
 
             let newTitle = textField.stringValue
-            if newTitle.isEmpty {
-                self.titleOverride = nil
-            } else {
-                self.titleOverride = newTitle
-            }
+            self.renameTab(to: newTitle.isEmpty ? nil : newTitle)
         }
+    }
+
+    /// Lostty Mobile: shows the focused pane's session label (set here or
+    /// on the phone) as the tab title.
+    func applySessionLabel() {
+        let label = focusedSurface.flatMap { $0.inTmuxSession ? SessionSync.shared.labels[$0.id] : nil }
+        let next = SessionTitleOverride.next(current: titleOverride, fromLabel: titleOverrideFromLabel, label: label)
+        titleOverrideFromLabel = next.fromLabel
+        if titleOverride != next.title { titleOverride = next.title }
+    }
+
+    /// Rename Tab…: the tab's title, and the focused pane's session label,
+    /// so the phone shows the same name. nil restores both.
+    func renameTab(to title: String?) {
+        guard let surface = focusedSurface, surface.inTmuxSession else {
+            titleOverride = title
+            titleOverrideFromLabel = false
+            return
+        }
+        // Text that cleans to nothing clears the label, so it clears the title too.
+        let cleaned = title.flatMap(SessionLabel.cleanLabel)
+        titleOverride = cleaned
+        titleOverrideFromLabel = cleaned != nil
+        SessionSync.shared.setLabel(cleaned, forPane: surface.id)
     }
 
     /// Close a surface from a view.
@@ -830,6 +855,9 @@ class BaseTerminalController: NSWindowController,
             // There is no surface to listen to titles for.
             titleDidChange(to: "👻")
         }
+
+        // Lostty Mobile: the newly focused pane's session label, if any.
+        applySessionLabel()
     }
 
     private func computeTitle(title: String, bell: Bool) -> String {

@@ -361,6 +361,9 @@ class AppDelegate: NSObject,
             SessionWatcher.shared.start()
             // Lostty Mobile: each pane's Claude state, for the phone's badges.
             ClaudeTmuxSync.shared.start()
+            // Lostty Mobile: session labels as tab titles; a phone attaching
+            // counts as seeing a waiting Claude.
+            SessionSync.shared.start()
         }
 
         #if DEBUG

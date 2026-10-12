@@ -12,6 +12,19 @@ enum AttachedPhones {
         return sessions(clients: out, parent: processParent)
     }
 
+    static let idFormat = "#{client_pid}\t#{session_id}"
+
+    /// Session ids ("$3") with an SSH-attached client.
+    static func currentSessionIDs() -> [String] {
+        guard let out = TmuxClient().run(["list-clients", "-F", idFormat]) else { return [] }
+        return sessionIDs(clients: out, parent: processParent)
+    }
+
+    /// `list-clients` output in `idFormat`: the session ids SSH clients are on.
+    static func sessionIDs(clients: String, parent: (Int32) -> (ppid: Int32, name: String)?) -> [String] {
+        sessions(clients: clients, parent: parent)
+    }
+
     static func sessions(clients: String, parent: (Int32) -> (ppid: Int32, name: String)?) -> [String] {
         var names = Set<String>()
         for line in clients.split(separator: "\n") {
