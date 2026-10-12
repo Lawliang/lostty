@@ -17,9 +17,21 @@ struct DesignGalleryScreen: View {
         host: "studio-mac.example.ts.net", port: 22, user: "alex",
         fallbackHost: "100.64.0.10", pairedAt: Date(timeIntervalSince1970: 1_791_000_000))
     private static let sessions = [
-        RemoteSession(id: "$1", name: "lostty", surface: "A", owner: 1),
-        RemoteSession(id: "$2", name: "ghostty-skins-experiments-with-a-very-long-name", surface: nil, owner: nil),
-        RemoteSession(id: "$3", name: "home", surface: "B", owner: 1),
+        RemoteSession(
+            id: "$1", name: "lostty", surface: "A", owner: 1, claude: .waiting,
+            title: "✳ Lostty UI redesign plan", path: "/Users/alex/projectrepos/lostty",
+            command: "2.1.296", activity: Date().addingTimeInterval(-120)),
+        RemoteSession(
+            id: "$3", name: "home", surface: "B", owner: 1, label: "Deploy watch",
+            title: "~", path: "/Users/alex", command: "zsh", activity: Date().addingTimeInterval(-300)),
+        RemoteSession(
+            id: "$4", name: "lostty-2", surface: "C", owner: 1, claude: .working,
+            title: "◐ Fix the login bug", path: "/Users/alex/projectrepos/lostty/.claude/worktrees/stay-awake",
+            command: "2.1.296", activity: Date().addingTimeInterval(-10)),
+        RemoteSession(
+            id: "$2", name: "ghostty-skins-experiments-with-a-very-long-name", surface: nil, owner: nil,
+            title: "~/projectrepos/ghostty-skins-experiments-with-a-very-long-name", command: "zsh",
+            activity: Date().addingTimeInterval(-3 * 86400)),
     ]
 
     @State private var shown: Entry?
@@ -40,10 +52,10 @@ struct DesignGalleryScreen: View {
                 entry("Welcome — large text") { WelcomeScreen(pair: {}, settings: {}).dynamicTypeSize(.xxxLarge) },
             ]),
             ("Sessions", [
-                entry("Three sessions") {
+                entry("Sessions") {
                     SessionsScreen().environmentObject(MobileStore.gallery(sessions: Self.sessions, settings: Self.paired))
                 },
-                entry("Three sessions — large text") {
+                entry("Sessions — large text") {
                     SessionsScreen().environmentObject(MobileStore.gallery(sessions: Self.sessions, settings: Self.paired))
                         .dynamicTypeSize(.xxxLarge)
                 },

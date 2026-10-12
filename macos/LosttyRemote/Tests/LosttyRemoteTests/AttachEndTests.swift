@@ -18,4 +18,16 @@ struct AttachEndTests {
         policy.reset()
         #expect(policy.nextDelay() == 0.5)
     }
+
+    @Test func aWatchThatNeverDeliveredKeepsBackingOff() {
+        var policy = ReconnectPolicy()
+        _ = policy.nextDelay()
+        _ = policy.nextDelay()
+        // No tmux server: the watch ends at once; the delay keeps growing.
+        policy.watchEnded(deliveredChange: false)
+        #expect(policy.nextDelay() == 2)
+        // A watch that heard changes was a healthy connection.
+        policy.watchEnded(deliveredChange: true)
+        #expect(policy.nextDelay() == 0.5)
+    }
 }

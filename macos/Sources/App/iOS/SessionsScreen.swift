@@ -3,8 +3,8 @@ import GhosttyKit
 import LosttyRemote
 import SwiftUI
 
-/// Home: the Mac's Lostty sessions by project name; the welcome screen while
-/// no Mac is set up.
+/// Home: the Mac's Lostty sessions, kept current while on screen; the
+/// welcome screen while no Mac is set up.
 struct SessionsScreen: View {
     @EnvironmentObject private var store: MobileStore
     @EnvironmentObject private var ghostty: Ghostty.App
@@ -13,6 +13,7 @@ struct SessionsScreen: View {
     @State private var showSettings = false
     @State private var showPairing = false
     @State private var confirmKill: RemoteSession?
+    @State private var renaming: RemoteSession?
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -35,14 +36,14 @@ struct SessionsScreen: View {
                     TerminalScreen(session: open.session, surfaceView: open.view, io: open.io)
                 }
             }
-            .sheet(isPresented: $showSettings, onDismiss: { Task { await refreshIfSetUp() } }) {
+            .sheet(isPresented: $showSettings, onDismiss: { store.restartWatch() }) {
                 NavigationStack { SettingsScreen() }
             }
-            .sheet(isPresented: $showPairing, onDismiss: { Task { await refreshIfSetUp() } }) {
+            .sheet(isPresented: $showPairing, onDismiss: { store.restartWatch() }) {
                 NavigationStack { PairingScreen() }
             }
             .confirmationDialog(
-                "Close \(confirmKill?.name ?? "")?",
+                "Close \(confirmKill.map { SessionLabel.row(for: $0, now: Date()).title } ?? "")?",
                 isPresented: Binding(get: { confirmKill != nil }, set: { if !$0 { confirmKill = nil } }),
                 titleVisibility: .visible,
                 presenting: confirmKill
@@ -53,87 +54,163 @@ struct SessionsScreen: View {
             } message: { _ in
                 Text("This ends the session on the Mac and closes its window there.")
             }
-            .task { await refreshIfSetUp() }
-            .onAppear { if store.pendingPairingLink != nil { showPairing = true } }
+            .renameSession($renaming)
+            .onAppear {
+                if path.isEmpty { store.listAppeared() }
+                if store.pendingPairingLink != nil { showPairing = true }
+            }
             .onChange(of: store.pendingPairingLink) { _, link in if link != nil { showPairing = true } }
             .onChange(of: path) { _, newPath in
-                // Back from the terminal: drop it, and refresh the list.
                 if newPath.isEmpty {
+                    // Back from the terminal: drop it; the live list resumes.
                     open = nil
-                    Task { await refreshIfSetUp() }
+                    store.listAppeared()
+                } else {
+                    store.listDisappeared()
                 }
             }
         }
     }
 
     private var sessionList: some View {
-        List {
-            if let message = store.message, !showsEmptyState {
-                LosttyCard {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text(message).font(LosttyFont.body).foregroundStyle(LosttyTheme.textSecondary)
-                        if store.needsPairing {
-                            Button("Pair Again") { showPairing = true }.buttonStyle(.lostty(.primary))
-                        }
-                    }
-                }
-                .listRowBackground(Color.clear)
-                .listRowSeparator(.hidden)
-                .listRowInsets(EdgeInsets(top: 6, leading: LosttyTheme.margin, bottom: 6, trailing: LosttyTheme.margin))
-            }
-            ForEach(store.sessions, id: \.id) { session in
-                Button {
-                    guard let app = ghostty.app, let terminal = store.terminal(for: session, app: app) else { return }
-                    open = (session, terminal.view, terminal.io)
-                    path = ["terminal"]
-                } label: {
-                    LosttyCard(padding: 14) {
-                        HStack(spacing: 12) {
-                            Text(session.name)
-                                .font(LosttyFont.mono(.callout, weight: .medium))
-                                .foregroundStyle(LosttyTheme.textPrimary)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                            Spacer(minLength: 8)
-                            if session.owner != nil {
-                                Circle().fill(LosttyTheme.accent).frame(width: 8, height: 8)
-                                    .shadow(color: LosttyTheme.accent.opacity(0.7), radius: 4)
-                                    .accessibilityLabel("Open on the Mac")
+        // Once a minute, so "5m ago" stays true.
+        TimelineView(.periodic(from: .now, by: 60)) { context in
+            let groups = SessionLabel.ordered(store.sessions)
+            List {
+                if let message = store.message, !showsEmptyState {
+                    LosttyCard {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text(message).font(LosttyFont.body).foregroundStyle(LosttyTheme.textSecondary)
+                            if store.needsPairing {
+                                Button("Pair Again") { showPairing = true }.buttonStyle(.lostty(.primary))
                             }
-                            Image(systemName: "chevron.right")
-                                .font(.footnote.weight(.semibold))
-                                .foregroundStyle(LosttyTheme.textSecondary)
                         }
                     }
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets(top: 6, leading: LosttyTheme.margin, bottom: 6, trailing: LosttyTheme.margin))
                 }
-                .buttonStyle(.plain)
-                .listRowBackground(Color.clear)
-                .listRowSeparator(.hidden)
-                .listRowInsets(EdgeInsets(top: 6, leading: LosttyTheme.margin, bottom: 6, trailing: LosttyTheme.margin))
-                .swipeActions {
-                    Button("Close", role: .destructive) { confirmKill = session }
+                ForEach(groups.open, id: \.id) { session in
+                    row(session, now: context.date)
+                }
+                if !groups.notOpen.isEmpty {
+                    Section {
+                        ForEach(groups.notOpen, id: \.id) { session in
+                            row(session, now: context.date).opacity(0.55)
+                        }
+                    } header: {
+                        Text("Not open on Mac")
+                            .font(LosttyFont.detail)
+                            .foregroundStyle(LosttyTheme.textSecondary)
+                    }
                 }
             }
-        }
-        .listStyle(.plain)
-        .overlay {
-            if showsEmptyState {
-                // Let pulls reach the list underneath (pull to refresh).
-                EmptySessions().allowsHitTesting(false)
-            } else if store.loading && store.sessions.isEmpty {
-                ProgressView().tint(LosttyTheme.accent)
+            .listStyle(.plain)
+            .overlay {
+                if showsEmptyState {
+                    // Let pulls reach the list underneath (pull to refresh).
+                    EmptySessions().allowsHitTesting(false)
+                } else if store.loading && store.sessions.isEmpty {
+                    ProgressView().tint(LosttyTheme.accent)
+                }
             }
+            .refreshable { await store.refresh() }
         }
-        .refreshable { await store.refresh() }
+    }
+
+    private func row(_ session: RemoteSession, now: Date) -> some View {
+        Button {
+            guard let app = ghostty.app, let terminal = store.terminal(for: session, app: app) else { return }
+            open = (session, terminal.view, terminal.io)
+            path = ["terminal"]
+        } label: {
+            SessionRowView(row: SessionLabel.row(for: session, now: now))
+        }
+        .buttonStyle(.plain)
+        .listRowBackground(Color.clear)
+        .listRowSeparator(.hidden)
+        .listRowInsets(EdgeInsets(top: 6, leading: LosttyTheme.margin, bottom: 6, trailing: LosttyTheme.margin))
+        .swipeActions {
+            Button("Close", role: .destructive) { confirmKill = session }
+            Button("Rename") { renaming = session }.tint(LosttyTheme.accent)
+        }
     }
 
     /// No sessions and nothing else to say: the friendly empty state.
     private var showsEmptyState: Bool {
         store.sessions.isEmpty && !store.loading && store.message == MobileStore.noSessionsMessage
     }
+}
 
-    private func refreshIfSetUp() async {
-        if store.settings.remoteHost != nil { await store.refresh() }
+/// One session: what it is, its project and kind, and Waiting/Working or
+/// when it was last used.
+private struct SessionRowView: View {
+    let row: SessionRow
+
+    var body: some View {
+        LosttyCard(padding: 14) {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(row.title)
+                        .font(LosttyFont.bodyEmphasis)
+                        .foregroundStyle(LosttyTheme.textPrimary)
+                        .lineLimit(1)
+                    Text(row.detail)
+                        .font(LosttyFont.mono(.footnote, size: 13))
+                        .foregroundStyle(LosttyTheme.textSecondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                Spacer(minLength: 8)
+                if !row.statusText.isEmpty {
+                    Text(row.statusText)
+                        .font(row.status == .waiting ? LosttyFont.bodyEmphasis : LosttyFont.detail)
+                        .foregroundStyle(row.status == .waiting ? LosttyTheme.accent : LosttyTheme.textSecondary)
+                }
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(LosttyTheme.textSecondary)
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// Rename: one name everywhere (the Mac tab shows it too); blank goes back
+/// to the automatic name.
+struct RenameSessionAlert: ViewModifier {
+    @Binding var session: RemoteSession?
+    var renamed: (String?) -> Void
+    @EnvironmentObject private var store: MobileStore
+    @State private var text = ""
+
+    func body(content: Content) -> some View {
+        content
+            .alert(
+                "Rename",
+                isPresented: Binding(get: { session != nil }, set: { if !$0 { session = nil } }),
+                presenting: session
+            ) { target in
+                TextField("Name", text: $text)
+                Button("Save") {
+                    let typed = text
+                    Task {
+                        if await store.rename(target, to: typed) { renamed(SessionLabel.cleanLabel(typed)) }
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: { _ in
+                Text("Leave blank to use the automatic name.")
+            }
+            .onChange(of: session?.id) { _, id in
+                if id != nil { text = session?.label ?? "" }
+            }
+    }
+}
+
+extension View {
+    func renameSession(_ session: Binding<RemoteSession?>, renamed: @escaping (String?) -> Void = { _ in }) -> some View {
+        modifier(RenameSessionAlert(session: session, renamed: renamed))
     }
 }
 

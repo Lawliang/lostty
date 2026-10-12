@@ -43,4 +43,11 @@ public struct ReconnectPolicy: Sendable {
     public mutating func reset() {
         attempt = 0
     }
+
+    /// A watch that ended: only one that heard a change was a healthy
+    /// connection. With no tmux server it ends at once, and the delay must
+    /// keep growing rather than reconnect every 0.5 s.
+    public mutating func watchEnded(deliveredChange: Bool) {
+        if deliveredChange { reset() }
+    }
 }

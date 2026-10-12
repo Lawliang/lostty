@@ -117,7 +117,7 @@ final class MobileStore: ObservableObject {
         do {
             let connection = try await RemoteConnection.connect(toFirstReachable: hosts, key: try remoteKey(), knownHosts: knownHosts)
             defer { Task { await connection.close() } }
-            sessions = RemoteSession.forPicking(try await connection.sessions())
+            sessions = try await connection.sessions()
             message = sessions.isEmpty ? Self.noSessionsMessage : nil
             needsPairing = false
         } catch {
@@ -126,24 +126,61 @@ final class MobileStore: ObservableObject {
         }
     }
 
+    /// Connects to the first reachable Mac, runs `body`, and closes the
+    /// connection whether it succeeded or threw.
+    private func withConnection<T>(_ body: (RemoteConnection) async throws -> T) async throws -> T {
+        let connection = try await RemoteConnection.connect(toFirstReachable: settings.remoteHosts, key: try remoteKey(), knownHosts: knownHosts)
+        let result: T
+        do {
+            result = try await body(connection)
+        } catch {
+            await connection.close()
+            throw error
+        }
+        await connection.close()
+        return result
+    }
+
     /// Ends the session on the Mac; false (with `message` set) when it failed.
     @discardableResult
     func kill(_ session: RemoteSession) async -> Bool {
         #if DEBUG
         if isGallery { return false }
         #endif
-        let hosts = settings.remoteHosts
-        guard !hosts.isEmpty else { return false }
+        guard !settings.remoteHosts.isEmpty else { return false }
         do {
-            let connection = try await RemoteConnection.connect(toFirstReachable: hosts, key: try remoteKey(), knownHosts: knownHosts)
-            do {
+            try await withConnection { connection in
                 try await connection.killSession(session.id, name: session.name, device: DeviceModel.current)
-            } catch {
-                await connection.close()
-                throw error
             }
-            await connection.close()
             sessions.removeAll { $0.id == session.id }
+            return true
+        } catch {
+            message = describe(error)
+            noteNeedsPairing(error)
+            return false
+        }
+    }
+
+    static let renameGoneMessage = "Couldn't rename: that session has ended."
+
+    /// Names `session` on the Mac (blank: back to the automatic name); the
+    /// Mac tab shows it too. False (with `message` set) when it failed.
+    @discardableResult
+    func rename(_ session: RemoteSession, to typed: String) async -> Bool {
+        #if DEBUG
+        if isGallery { return false }
+        #endif
+        guard !settings.remoteHosts.isEmpty else { return false }
+        let label = SessionLabel.cleanLabel(typed)
+        do {
+            let renamed = try await withConnection { connection in
+                try await connection.setLabel(label, sessionID: session.id, name: session.name)
+            }
+            guard renamed else {
+                message = Self.renameGoneMessage
+                return false
+            }
+            if let index = sessions.firstIndex(where: { $0.id == session.id }) { sessions[index].label = label }
             return true
         } catch {
             message = describe(error)
@@ -188,6 +225,116 @@ final class MobileStore: ObservableObject {
     /// disappear of an old screen can't drop a newer terminal.
     func terminalClosed(_ io: RemoteSurfaceIO?) {
         if openIO === io { openIO = nil }
+    }
+
+    // MARK: Live list
+
+    /// The list is on screen; with the app active, one connection watches
+    /// tmux and re-lists on every change.
+    private var listVisible = false
+    private var appActive = true
+    private var watchTask: Task<Void, Never>?
+
+    func listAppeared() {
+        listVisible = true
+        updateWatch()
+    }
+
+    func listDisappeared() {
+        listVisible = false
+        updateWatch()
+    }
+
+    /// Settings or pairing may have changed the Mac: watch the current one.
+    func restartWatch() {
+        watchTask?.cancel()
+        watchTask = nil
+        updateWatch()
+    }
+
+    private func updateWatch() {
+        #if DEBUG
+        if isGallery { return }
+        #endif
+        let wanted = listVisible && appActive && !settings.remoteHosts.isEmpty
+        if wanted, watchTask == nil {
+            watchTask = Task { [weak self] in await self?.watchLoop() }
+        } else if !wanted, let task = watchTask {
+            task.cancel()
+            watchTask = nil
+        }
+    }
+
+    private func watchLoop() async {
+        var policy = ReconnectPolicy()
+        while !Task.isCancelled {
+            let hosts = settings.remoteHosts
+            guard !hosts.isEmpty else { break }
+            if sessions.isEmpty { loading = true }
+            do {
+                let connection = try await RemoteConnection.connect(toFirstReachable: hosts, key: try remoteKey(), knownHosts: knownHosts)
+                // Leaving the list cancels this task; closing the connection
+                // is what ends the watch's channel.
+                let delivered = await withTaskCancellationHandler {
+                    await watch(on: connection)
+                } onCancel: {
+                    Task { await connection.close() }
+                }
+                await connection.close()
+                policy.watchEnded(deliveredChange: delivered)
+            } catch {
+                loading = false
+                if Task.isCancelled { break }
+                message = describe(error)
+                noteNeedsPairing(error)
+                // Only pairing again fixes these; don't keep knocking.
+                if needsPairing { break }
+            }
+            if Task.isCancelled { break }
+            try? await Task.sleep(for: .seconds(policy.nextDelay()))
+        }
+        if !Task.isCancelled { watchTask = nil }
+    }
+
+    /// Lists, then lists again after each change (at most every 300 ms)
+    /// until the watch ends: no tmux server, or the connection dropped.
+    /// True when the change stream delivered at least one event.
+    private func watch(on connection: RemoteConnection) async -> Bool {
+        var lastList = Date.distantPast
+        var delivered = false
+        func relist() async throws {
+            let found = try await connection.sessions()
+            lastList = Date()
+            show(found)
+        }
+        do {
+            try await relist()
+        } catch {
+            loading = false
+            if !Task.isCancelled { message = describe(error) }
+            return false
+        }
+        do {
+            let changes = try await connection.watchChanges()
+            for await _ in changes {
+                delivered = true
+                let wait = ListPacing.delay(sinceLastList: lastList, now: Date())
+                if wait > 0 { try await Task.sleep(for: .seconds(wait)) }
+                try await relist()
+            }
+        } catch {
+            // The watch ended: cancelled, or the connection dropped.
+        }
+        // One more look, so a server that went away shows the empty state.
+        if !Task.isCancelled { try? await relist() }
+        return delivered
+    }
+
+    private func show(_ found: [RemoteSession]) {
+        sessions = found
+        loading = false
+        message = found.isEmpty ? Self.noSessionsMessage : nil
+        needsPairing = false
     }
 
     // MARK: Pairing
@@ -352,7 +499,7 @@ final class MobileStore: ObservableObject {
             }
             settings = candidate
             saveSettings()
-            sessions = RemoteSession.forPicking(found)
+            sessions = found
             message = sessions.isEmpty ? Self.noSessionsMessage : nil
             needsPairing = false
             allowedPayload = nil
@@ -379,6 +526,8 @@ final class MobileStore: ObservableObject {
     func scenePhaseChanged(_ phase: ScenePhase) {
         switch phase {
         case .active:
+            appActive = true
+            updateWatch()
             // .inactive -> .active also happens for the Face ID sheet and
             // Control Center; only a real trip to the background restarts.
             if wasBackgrounded {
@@ -387,6 +536,8 @@ final class MobileStore: ObservableObject {
             }
         case .background:
             wasBackgrounded = true
+            appActive = false
+            updateWatch()
             // Face ID again after the app has been away.
             context.invalidate()
             context = LAContext()
