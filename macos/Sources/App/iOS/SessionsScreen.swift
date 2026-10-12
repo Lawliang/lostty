@@ -8,7 +8,7 @@ struct SessionsScreen: View {
     @EnvironmentObject private var store: MobileStore
     @EnvironmentObject private var ghostty: Ghostty.App
     @State private var path: [String] = []
-    @State private var open: (session: RemoteSession, view: Ghostty.SurfaceView)?
+    @State private var open: (session: RemoteSession, view: Ghostty.SurfaceView, io: RemoteSurfaceIO)?
     @State private var showSettings = false
     @State private var confirmKill: RemoteSession?
 
@@ -20,8 +20,8 @@ struct SessionsScreen: View {
                 }
                 ForEach(store.sessions, id: \.id) { session in
                     Button {
-                        guard let app = ghostty.app, let view = store.terminal(for: session, app: app) else { return }
-                        open = (session, view)
+                        guard let app = ghostty.app, let terminal = store.terminal(for: session, app: app) else { return }
+                        open = (session, terminal.view, terminal.io)
                         path = ["terminal"]
                     } label: {
                         HStack {
@@ -46,7 +46,7 @@ struct SessionsScreen: View {
             }
             .navigationDestination(for: String.self) { _ in
                 if let open {
-                    TerminalScreen(session: open.session, surfaceView: open.view)
+                    TerminalScreen(session: open.session, surfaceView: open.view, io: open.io)
                 }
             }
             .sheet(isPresented: $showSettings, onDismiss: { Task { await store.refresh() } }) {
@@ -55,12 +55,13 @@ struct SessionsScreen: View {
             .confirmationDialog(
                 "Close \(confirmKill?.name ?? "")?",
                 isPresented: Binding(get: { confirmKill != nil }, set: { if !$0 { confirmKill = nil } }),
-                titleVisibility: .visible
-            ) {
+                titleVisibility: .visible,
+                presenting: confirmKill
+            ) { session in
                 Button("Close Session", role: .destructive) {
-                    if let session = confirmKill { Task { await store.kill(session) } }
+                    Task { await store.kill(session) }
                 }
-            } message: {
+            } message: { _ in
                 Text("This ends the session on the Mac and closes its window there.")
             }
             .task { await store.refresh() }

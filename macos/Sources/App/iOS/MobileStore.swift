@@ -23,12 +23,17 @@ final class MobileStore: ObservableObject {
     private var openIO: RemoteSurfaceIO?
     private let pathMonitor = NWPathMonitor()
     private var sawFirstPath = false
+    private var lastStatus: NWPath.Status?
+    private var lastInterfaceTypes: Set<NWInterface.InterfaceType> = []
+    private var wasBackgrounded = false
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         self.settings = RemoteHostSettings.load(from: defaults)
         pathMonitor.pathUpdateHandler = { [weak self] path in
-            Task { @MainActor in self?.networkChanged(path.status) }
+            let types = Set([NWInterface.InterfaceType.wifi, .cellular, .wiredEthernet].filter { path.usesInterfaceType($0) })
+            let status = path.status
+            Task { @MainActor in self?.networkChanged(status, types) }
         }
         pathMonitor.start(queue: .main)
     }
@@ -73,21 +78,30 @@ final class MobileStore: ObservableObject {
         }
     }
 
-    func kill(_ session: RemoteSession) async {
-        guard let host = settings.remoteHost else { return }
+    /// Ends the session on the Mac; false (with `message` set) when it failed.
+    @discardableResult
+    func kill(_ session: RemoteSession) async -> Bool {
+        guard let host = settings.remoteHost else { return false }
         do {
             let connection = try await RemoteConnection.connect(to: host, key: try remoteKey(), knownHosts: knownHosts)
-            try await connection.killSession(session.id)
+            do {
+                try await connection.killSession(session.id)
+            } catch {
+                await connection.close()
+                throw error
+            }
             await connection.close()
             sessions.removeAll { $0.id == session.id }
+            return true
         } catch {
             message = (error as? RemoteError)?.message ?? error.localizedDescription
+            return false
         }
     }
 
-    /// A terminal view attached to `session`; nil (with a message) when the
-    /// settings or key aren't ready.
-    func terminal(for session: RemoteSession, app: ghostty_app_t) -> Ghostty.SurfaceView? {
+    /// A terminal view attached to `session`, with its IO; nil (with a message)
+    /// when the settings or key aren't ready.
+    func terminal(for session: RemoteSession, app: ghostty_app_t) -> (view: Ghostty.SurfaceView, io: RemoteSurfaceIO)? {
         guard let host = settings.remoteHost else {
             message = settings.problem
             return nil
@@ -105,15 +119,17 @@ final class MobileStore: ObservableObject {
             var config = Ghostty.SurfaceConfiguration()
             config.remoteIO = io
             openIO = io
-            return Ghostty.SurfaceView(app, baseConfig: config)
+            return (Ghostty.SurfaceView(app, baseConfig: config), io)
         } catch {
             message = (error as? RemoteError)?.message ?? error.localizedDescription
             return nil
         }
     }
 
-    func terminalClosed() {
-        openIO = nil
+    /// Only clears the open IO if it is the one being closed, so a late
+    /// disappear of an old screen can't drop a newer terminal.
+    func terminalClosed(_ io: RemoteSurfaceIO?) {
+        if openIO === io { openIO = nil }
     }
 
     // MARK: Reconnect triggers
@@ -121,8 +137,14 @@ final class MobileStore: ObservableObject {
     func scenePhaseChanged(_ phase: ScenePhase) {
         switch phase {
         case .active:
-            openIO?.restart()
+            // .inactive -> .active also happens for the Face ID sheet and
+            // Control Center; only a real trip to the background restarts.
+            if wasBackgrounded {
+                wasBackgrounded = false
+                openIO?.restart()
+            }
         case .background:
+            wasBackgrounded = true
             // Face ID again after the app has been away.
             context.invalidate()
             context = LAContext()
@@ -134,10 +156,21 @@ final class MobileStore: ObservableObject {
 
     /// Any network update after the first (Wi-Fi ↔ cellular, a new
     /// address) may have killed the connection: attach again.
-    private func networkChanged(_ status: NWPath.Status) {
-        defer { sawFirstPath = true }
+    private func networkChanged(_ status: NWPath.Status, _ types: Set<NWInterface.InterfaceType>) {
+        let previousStatus = lastStatus
+        let previousTypes = lastInterfaceTypes
+        defer {
+            sawFirstPath = true
+            lastStatus = status
+            lastInterfaceTypes = types
+        }
         guard sawFirstPath, status == .satisfied else { return }
-        openIO?.restart()
+        // Only a path that became usable, or moved to other kinds of
+        // interface; flags (expensive, constrained) and VPN interfaces
+        // (Tailscale) changing don't drop the connection.
+        if previousStatus != .satisfied || previousTypes != types {
+            openIO?.restart()
+        }
     }
 }
 #endif

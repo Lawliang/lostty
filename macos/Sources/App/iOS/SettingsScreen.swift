@@ -6,6 +6,7 @@ struct SettingsScreen: View {
     @EnvironmentObject private var store: MobileStore
     @Environment(\.dismiss) private var dismiss
     @State private var publicKey: String?
+    @State private var keyError: String?
 
     var body: some View {
         Form {
@@ -29,7 +30,16 @@ struct SettingsScreen: View {
             }
             Section {
                 Button("Show This Phone's Key") {
-                    publicKey = (try? store.remoteKey())?.publicKeyLine
+                    do {
+                        publicKey = try store.remoteKey().publicKeyLine
+                        keyError = nil
+                    } catch {
+                        publicKey = nil
+                        keyError = (error as? RemoteError)?.message ?? error.localizedDescription
+                    }
+                }
+                if let keyError {
+                    Text(keyError).foregroundStyle(.red)
                 }
                 if let publicKey {
                     Text(publicKey).font(.footnote.monospaced()).textSelection(.enabled)

@@ -1,4 +1,5 @@
 #if os(iOS)
+import GhosttyKit
 import LosttyRemote
 import SwiftUI
 
@@ -7,9 +8,11 @@ import SwiftUI
 struct TerminalScreen: View {
     let session: RemoteSession
     let surfaceView: Ghostty.SurfaceView
+    let io: RemoteSurfaceIO
     @EnvironmentObject private var store: MobileStore
     @Environment(\.dismiss) private var dismiss
     @State private var confirmClose = false
+    @State private var closeError: String?
 
     var body: some View {
         GeometryReader { geo in
@@ -30,15 +33,23 @@ struct TerminalScreen: View {
         ) {
             Button("Close Session", role: .destructive) {
                 Task {
-                    await store.kill(session)
-                    dismiss()
+                    if await store.kill(session) {
+                        dismiss()
+                    } else {
+                        closeError = store.message ?? "Couldn't close the session."
+                    }
                 }
             }
         } message: {
             Text("This ends the session on the Mac and closes its window there.")
         }
+        .alert("Couldn't Close Session", isPresented: Binding(get: { closeError != nil }, set: { if !$0 { closeError = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(closeError ?? "")
+        }
         .onAppear { surfaceView.showKeyboard() }
-        .onDisappear { store.terminalClosed() }
+        .onDisappear { store.terminalClosed(io) }
         .onReceive(NotificationCenter.default.publisher(for: .losttySurfaceClosed)) { note in
             if (note.object as AnyObject?) === surfaceView { dismiss() }
         }
