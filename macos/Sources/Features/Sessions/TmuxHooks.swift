@@ -28,6 +28,9 @@ enum TmuxHooks {
 
     /// Wakes everything waiting on the channel. `-f /dev/null`: signalling
     /// must never start a server that reads the user's ~/.tmux.conf.
-    static let signalArgs = ["-f", "/dev/null", "wait-for", "-S", TmuxRemote.changedChannel]
+    static let signalArgs = ["-f", "/dev/null"] + signalCommand
+
+    /// The signal as a command, to chain after others with `;`.
+    static let signalCommand = ["wait-for", "-S", TmuxRemote.changedChannel]
 }
 #endif

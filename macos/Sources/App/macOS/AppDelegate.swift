@@ -359,6 +359,8 @@ class AppDelegate: NSObject,
         // Not in the test host: it would write to the user's live server.
         if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil {
             SessionWatcher.shared.start()
+            // Lostty Mobile: each pane's Claude state, for the phone's badges.
+            ClaudeTmuxSync.shared.start()
         }
 
         #if DEBUG

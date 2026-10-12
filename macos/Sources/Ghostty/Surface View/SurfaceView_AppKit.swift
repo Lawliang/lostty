@@ -465,6 +465,7 @@ extension Ghostty {
             Task { @MainActor in
                 ClaudeRuntime.shared.surfaceClosed(closedID)
                 ClaudeUsageRuntime.shared.surfaceClosed(closedID)
+                SessionTitleSignal.shared.surfaceClosed(closedID)
             }
 
             // Lostty Mobile: a remote pane closes its channel; the session
