@@ -11,12 +11,13 @@ enum RepoReader {
     static let maxCompared = 50
 
     /// The repo `pwd` is in, from any of its worktrees. nil outside a repo,
-    /// and for a home directory under git (dotfiles), as Skins does.
+    /// and for a home directory under git (dotfiles), as Skins does. A bare
+    /// repo's root is its git dir, and none of its worktrees is main.
     static func locate(pwd: String, home: String = NSHomeDirectory()) -> RepoLocation? {
         guard let common = trimmed(Git.run(["rev-parse", "--path-format=absolute", "--git-common-dir"], in: pwd)),
               let list = Git.run(["worktree", "list", "--porcelain"], in: pwd),
-              let main = RepoParse.worktrees(list).first(where: \.isMain) else { return nil }
-        let root = ProjectResolver.canonical(main.path)
+              let first = RepoParse.repoRoot(list) else { return nil }
+        let root = ProjectResolver.canonical(first)
         guard root.lowercased() != ProjectResolver.canonical(home).lowercased() else { return nil }
         return RepoLocation(root: root, commonDir: ProjectResolver.canonical(common))
     }

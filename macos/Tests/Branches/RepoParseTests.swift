@@ -77,6 +77,12 @@ struct RepoParseTests {
         #expect(trees[0].isMain == false)
     }
 
+    @Test func theRepoRootIsTheFirstEntryEvenWhenBare() {
+        #expect(RepoParse.repoRoot("worktree /r/main\nHEAD 1111\nbranch refs/heads/main\n\nworktree /r/wt\nHEAD 2222\ndetached\n") == "/r/main")
+        #expect(RepoParse.repoRoot("worktree /r/bare.git\nbare\n\nworktree /r/live\nHEAD 5555\nbranch refs/heads/live\n") == "/r/bare.git")
+        #expect(RepoParse.repoRoot("") == nil)
+    }
+
     @Test func parsesAheadBehindAsBehindThenAhead() {
         #expect(RepoParse.aheadBehind("3\t5\n") == AheadBehind(ahead: 5, behind: 3))
         #expect(RepoParse.aheadBehind("") == nil)

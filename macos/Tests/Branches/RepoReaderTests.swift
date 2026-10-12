@@ -39,6 +39,32 @@ struct RepoReaderTests {
         #expect(RepoReader.locate(pwd: repo.root) == location)
     }
 
+    @Test func aBareRepoWithLinkedWorktreesIsARepo() throws {
+        let source = try TempRepo.make()
+        try source.git("branch", "feat")
+        let parent = try TempRepo.makeDirectory()
+        let bare = TempRepo(root: parent + "/proj.git")
+        try FileManager.default.createDirectory(atPath: bare.root, withIntermediateDirectories: true)
+        try bare.git("init", "-q", "--bare", "-b", "main")
+        try bare.git("fetch", "-q", source.root, "main:main", "feat:feat")
+        try bare.git("worktree", "add", "-q", parent + "/main", "main")
+        try bare.git("worktree", "add", "-q", parent + "/feat", "feat")
+
+        let location = try #require(RepoReader.locate(pwd: parent + "/feat"))
+        #expect(location.root == bare.root)
+        #expect(location.commonDir == bare.root)
+        #expect(RepoReader.locate(pwd: parent + "/main") == location)
+
+        let snapshot = try #require(RepoReader.read(location, now: now))
+        #expect(snapshot.name == "proj.git")
+        #expect(snapshot.base == "main")
+        #expect(Set(snapshot.branches.map(\.name)) == ["main", "feat"])
+        #expect(snapshot.worktrees.map { ProjectResolver.canonical($0.path) }.sorted() == [parent + "/feat", parent + "/main"])
+        #expect(snapshot.worktrees.allSatisfy { !$0.isMain })
+        let sections = BranchSections.build(snapshot, placement: Placement(), now: now)
+        #expect(sections.recent.first { $0.id == "feat" }?.worktreePath.map(ProjectResolver.canonical) == parent + "/feat")
+    }
+
     @Test func outsideARepoIsNil() throws {
         #expect(RepoReader.locate(pwd: try TempRepo.makeDirectory()) == nil)
     }

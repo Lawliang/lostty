@@ -32,7 +32,8 @@ enum RepoParse {
         return .tracking(name: name, ahead: ahead, behind: behind)
     }
 
-    /// `worktree list --porcelain`. The first entry is the main worktree.
+    /// `worktree list --porcelain`. The first entry is the main worktree, or
+    /// in a bare repo the bare git dir, so there none is main.
     /// Bare entries and prunable ones (their folder is gone) are skipped.
     static func worktrees(_ porcelain: String) -> [Worktree] {
         var result: [Worktree] = []
@@ -56,6 +57,16 @@ enum RepoParse {
             result.append(Worktree(path: path, head: head, branch: branch, rebasing: nil, isMain: index == 0))
         }
         return result
+    }
+
+    /// The repo's own folder from `worktree list --porcelain`: the first
+    /// entry, which is the main worktree, or the git dir itself for a bare
+    /// repo (whose worktrees are all linked ones).
+    static func repoRoot(_ porcelain: String) -> String? {
+        for line in porcelain.split(separator: "\n") {
+            if line.hasPrefix("worktree ") { return String(line.dropFirst("worktree ".count)) }
+        }
+        return nil
     }
 
     static func shortBranch(_ ref: String) -> String {
