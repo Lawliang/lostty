@@ -44,7 +44,7 @@ final class SessionSync {
                 controller.applySessionLabel()
             }
         }
-        let newlyAttached = phoneAttached.subtracting(previouslyAttached)
+        let newlyAttached = Self.newlyAttached(previous: previouslyAttached, current: phoneAttached)
         previouslyAttached = phoneAttached
         for pane in Self.panesWithAPhone(sessions, phoneAttached: newlyAttached, pid: pid) {
             ClaudeRuntime.shared.seenElsewhere(pane)
@@ -68,6 +68,12 @@ final class SessionSync {
             result[pane] = label
         }
         return result
+    }
+
+    /// Sessions a phone attached to since the last refresh: only a new
+    /// attach counts as seeing a waiting Claude.
+    nonisolated static func newlyAttached(previous: Set<String>, current: Set<String>) -> Set<String> {
+        current.subtracting(previous)
     }
 
     nonisolated static func panesWithAPhone(_ sessions: [RemoteSession], phoneAttached: Set<String>, pid: Int32) -> [UUID] {

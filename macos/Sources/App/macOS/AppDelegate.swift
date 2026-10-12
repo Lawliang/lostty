@@ -358,6 +358,10 @@ class AppDelegate: NSObject,
         // attaching) and give a tmux server without them the change hooks.
         // Not in the test host: it would write to the user's live server.
         if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil {
+            // The server outlives its last session (the phone reads why it
+            // ended); stop one an earlier Lostty left empty, so new
+            // sessions get the current tmux.conf and environment.
+            DispatchQueue.global(qos: .utility).async { TmuxClient().stopServerIfEmpty() }
             SessionWatcher.shared.start()
             // Lostty Mobile: each pane's Claude state, for the phone's badges.
             ClaudeTmuxSync.shared.start()

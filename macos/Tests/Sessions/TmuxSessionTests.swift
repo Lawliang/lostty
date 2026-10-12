@@ -147,7 +147,8 @@ final class TmuxClientTests {
     }
 
     @Test func runReturnsStdoutOnSuccess() throws {
-        let client = TmuxClient(tmuxPath: try fakeTmux("echo \"$@\""))
+        // Room for macOS's first-run scan of the new script under load.
+        let client = TmuxClient(tmuxPath: try fakeTmux("echo \"$@\""), timeout: 10)
         #expect(client.run(["list-sessions"]) == "-u -L lostty list-sessions\n")
     }
 
@@ -197,6 +198,25 @@ final class TmuxClientTests {
         let client = try loggingTmux(sessions: "", log: log)
         client.signalChanged()
         #expect(try String(contentsOf: log, encoding: .utf8) == "-u -L lostty -f /dev/null wait-for -S lostty-changed\n")
+    }
+
+    @Test func launchStopsOnlyAnEmptyServerAndNeverStartsOne() throws {
+        let log = tempLog()
+        let client = try loggingTmux(sessions: "", log: log)
+        client.stopServerIfEmpty()
+        // One command, decided inside tmux: a session made meanwhile (a
+        // restored window) can't be caught between a check and the kill.
+        #expect(try String(contentsOf: log, encoding: .utf8)
+            == "-u -L lostty -f /dev/null if-shell -F #{==:#{server_sessions},0} kill-server\n")
+    }
+
+    @Test func disowningAlsoClearsTheClaudeStateThenSignals() throws {
+        let log = tempLog()
+        let client = try loggingTmux(sessions: "", log: log)
+        client.disown(TmuxSession(id: "$3", name: "api", surface: paneA.uuidString, owner: 300))
+        #expect(try String(contentsOf: log, encoding: .utf8)
+            == "-u -L lostty set-option -u -t $3 @lostty_surface ; set-option -u -t $3 @lostty_owner ; "
+            + "set-option -u -t $3 @lostty_claude ; wait-for -S lostty-changed\n")
     }
 
     @Test func remoteSessionsAskForThePhonesColumns() throws {

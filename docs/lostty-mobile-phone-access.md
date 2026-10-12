@@ -47,6 +47,10 @@ the shell exited) until you tap **Back to Sessions**. Typing `exit` yourself
 goes straight back to the list. A dropped connection shows **Connection
 lost — reconnecting…** and clears itself when the phone is back.
 
+So the phone can say why a session ended, Lostty's tmux server keeps
+running after its last session ends, even after you quit Lostty; the next
+time Lostty opens, it stops the server if no sessions are left.
+
 The Mac's menu bar icon lists the same sessions, with the same names and
 order.
 

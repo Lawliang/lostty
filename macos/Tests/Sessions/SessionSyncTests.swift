@@ -20,6 +20,15 @@ struct SessionSyncTests {
         #expect(SessionSync.labels(sessions, pid: 100) == [paneA: "Deploy"])
     }
 
+    @Test func onlyANewAttachCountsAsSeeing() {
+        #expect(SessionSync.newlyAttached(previous: [], current: ["$1"]) == ["$1"])
+        // A phone left attached hides nothing later.
+        #expect(SessionSync.newlyAttached(previous: ["$1"], current: ["$1", "$2"]) == ["$2"])
+        #expect(SessionSync.newlyAttached(previous: ["$1", "$2"], current: ["$1"]).isEmpty)
+        // Leaving and attaching again is a new attach.
+        #expect(SessionSync.newlyAttached(previous: ["$2"], current: ["$1"]) == ["$1"])
+    }
+
     @Test func aPhoneOnOneOfOurSessionsNamesItsPane() {
         #expect(SessionSync.panesWithAPhone(sessions, phoneAttached: ["$1", "$2", "$3"], pid: 100) == [paneA])
     }

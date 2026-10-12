@@ -119,10 +119,26 @@ struct TmuxClient {
 
     /// Lets go of a session: no Lostty shows it any more, so it is not
     /// offered after a crash again; it stays running for the phone and
-    /// for Open Session.
+    /// for Open Session. Its Claude state goes too (no Lostty keeps it
+    /// current), and the phone's list hears of it.
     func disown(_ session: TmuxSession) {
         run(["set-option", "-u", "-t", session.id, TmuxConstants.surfaceOption, ";",
-             "set-option", "-u", "-t", session.id, TmuxConstants.ownerOption])
+             "set-option", "-u", "-t", session.id, TmuxConstants.ownerOption, ";",
+             "set-option", "-u", "-t", session.id, TmuxRemote.claudeOption, ";"]
+            + TmuxHooks.signalCommand)
+    }
+
+    /// The server outlives its last session (`exit-empty off`), so a phone
+    /// can still read why a session ended. At launch one left empty is
+    /// stopped, so the next session starts a server with the current
+    /// tmux.conf and environment, and the old end reasons go with it.
+    /// tmux decides in one command, so a session made meanwhile (a restored
+    /// window) is never caught between a check and the kill. `-f
+    /// /dev/null`: never starts a server.
+    static let stopIfEmptyArgs = ["-f", "/dev/null", "if-shell", "-F", "#{==:#{server_sessions},0}", "kill-server"]
+
+    func stopServerIfEmpty() {
+        run(Self.stopIfEmptyArgs)
     }
 
     /// Names the session showing pane `surface` (nil: back to automatic),

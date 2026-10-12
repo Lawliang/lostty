@@ -30,6 +30,25 @@ struct ClaudeTmuxSyncTests {
         #expect(ClaudeTmuxSync.args(desired: [a.uuidString: .waiting], sessions: sessions, pid: 100).isEmpty)
     }
 
+    @Test func aGoneLosttysClaudeStateIsCleared() {
+        // 300 crashed; $2 was let go (or made on the phone); 200 still runs.
+        let sessions = [
+            session("$1", a, owner: 300, claude: .waiting),
+            session("$2", nil, owner: nil, claude: .working),
+            session("$3", b, owner: 200, claude: .working),
+        ]
+        #expect(ClaudeTmuxSync.args(desired: [:], sessions: sessions, pid: 100, isAlive: { $0 == 100 || $0 == 200 }) == [
+            "set-option", "-u", "-t", "$1", "@lostty_claude", ";",
+            "set-option", "-u", "-t", "$2", "@lostty_claude", ";",
+            "wait-for", "-S", "lostty-changed",
+        ])
+    }
+
+    @Test func aGoneLosttysSessionWithoutClaudeStateIsNotWritten() {
+        let sessions = [session("$1", a, owner: 300, claude: nil), session("$2", nil, owner: nil, claude: nil)]
+        #expect(ClaudeTmuxSync.args(desired: [:], sessions: sessions, pid: 100, isAlive: { $0 == 100 }).isEmpty)
+    }
+
     @Test func otherLosttysAndPaneLessSessionsAreLeftAlone() {
         let sessions = [session("$1", a, owner: 200, claude: nil), session("$2", nil, owner: 100, claude: .working)]
         #expect(ClaudeTmuxSync.args(desired: [a.uuidString: .working], sessions: sessions, pid: 100).isEmpty)

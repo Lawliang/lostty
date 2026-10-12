@@ -11,6 +11,7 @@ enum TmuxHooks {
 
     /// The server stays up when its last session ends: it keeps
     /// `@lostty_end_<n>`, which the phone reads after the session is gone.
+    /// Lostty stops an empty one at launch (`TmuxClient.stopServerIfEmpty`).
     static let keepServer = "set -s exit-empty off"
 
     /// As written in tmux.conf.

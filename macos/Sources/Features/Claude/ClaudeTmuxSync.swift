@@ -7,7 +7,8 @@ import LosttyRemote
 /// tmux (`@lostty_claude`: waiting, working, or unset) whenever
 /// `ClaudeRuntime` changes, then wakes watchers, so the phone shows
 /// "Waiting" and "Working". Only sessions this process owns: several Lostty
-/// processes share the server and must not fight.
+/// processes share the server and must not fight. The one exception is
+/// clearing the state of sessions whose Lostty is gone.
 @MainActor
 final class ClaudeTmuxSync {
     static let shared = ClaudeTmuxSync()
@@ -52,12 +53,24 @@ final class ClaudeTmuxSync {
     }
 
     /// One tmux call writing only what differs, then the signal; empty when
-    /// tmux already agrees (so a wake never causes another wake).
-    nonisolated static func args(desired: [String: ClaudeActivity], sessions: [RemoteSession], pid: Int32) -> [String] {
+    /// tmux already agrees (so a wake never causes another wake). A session
+    /// whose Lostty is gone (crashed, or let go) keeps no Claude state: no
+    /// one would ever clear a stale "Waiting" on the phone.
+    nonisolated static func args(
+        desired: [String: ClaudeActivity], sessions: [RemoteSession], pid: Int32,
+        isAlive: (Int32) -> Bool = ProcessLiveness.isAlive
+    ) -> [String] {
         var args: [String] = []
-        for session in sessions where session.owner == pid {
-            guard let pane = session.surface else { continue }
-            let want = desired[pane]
+        for session in sessions {
+            let want: ClaudeActivity?
+            if session.owner == pid {
+                guard let pane = session.surface else { continue }
+                want = desired[pane]
+            } else if session.owner.map(isAlive) ?? false {
+                continue  // another running Lostty's
+            } else {
+                want = nil
+            }
             guard want != session.claude else { continue }
             if !args.isEmpty { args.append(";") }
             if let want {
