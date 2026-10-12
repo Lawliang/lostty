@@ -39,19 +39,21 @@ public enum TmuxRemote {
     }
 
     /// The command the PTY's shell replaces itself with. `-u` and LANG keep
-    /// tmux in UTF-8 when the SSH session has no locale; TERMINFO lets tmux
-    /// find xterm-ghostty. `-f /dev/null`: attach-session starts a server when
+    /// tmux in UTF-8 when the SSH session has no locale. TERMINFO, when
+    /// given, lets tmux find xterm-ghostty; otherwise ncurses finds it in
+    /// ~/.terminfo. `-f /dev/null`: attach-session starts a server when
     /// none runs, and the viewer must never start one (it would read
     /// ~/.tmux.conf); a server started this way has no sessions and exits.
     ///
     /// Ids restart at $0 when the Mac's tmux server restarts, so an id alone
     /// can name a different session than the one listed: the command first
     /// checks the session's name and exits 1 if it differs.
-    public static func attachCommand(sessionID: String, name: String, terminfoDir: String) throws -> String {
+    public static func attachCommand(sessionID: String, name: String, terminfoDir: String?) throws -> String {
         guard isSessionID(sessionID) else { throw TmuxRemoteError.badSessionID(sessionID) }
         // TERMINFO goes first: the shell's TERM is xterm-ghostty, and the
         // guard's tmux fails on an unknown terminal without it.
-        return "export TERMINFO=\(shellQuote(terminfoDir)); " + nameGuard(sessionID: sessionID, name: name)
+        let export = terminfoDir.map { "export TERMINFO=\(shellQuote($0)); " } ?? ""
+        return export + nameGuard(sessionID: sessionID, name: name)
             + "exec env LANG=\"${LANG:-en_US.UTF-8}\" \(pathPrefix) tmux -u -L lostty -f /dev/null attach-session -t \(shellQuote(sessionID))"
     }
 

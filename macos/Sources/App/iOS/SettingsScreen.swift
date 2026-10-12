@@ -21,10 +21,6 @@ struct SettingsScreen: View {
                     .autocorrectionDisabled()
                 TextField("Port", value: $store.settings.port, format: .number.grouping(.never))
                     .keyboardType(.numberPad)
-                TextField("Lostty terminfo on the Mac", text: $store.settings.terminfoDir)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .font(.footnote.monospaced())
             }
             if let problem = store.settings.problem {
                 Section { Text(problem).foregroundStyle(.red) }

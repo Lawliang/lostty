@@ -60,4 +60,13 @@ struct KnownHostsTests {
         #expect(hosts.verdict(host: "mac", port: 22, key: "NEW") == .trusted)
         try hosts.forget(host: "nobody", port: 22)  // no pin: no error
     }
+
+    @Test func pinReplacesAnEarlierPin() throws {
+        defer { try? FileManager.default.removeItem(at: file) }
+        let hosts = KnownHosts(fileURL: file)
+        try hosts.trust(host: "mac", port: 22, key: "ssh-ed25519 OLD")
+        try hosts.pin(host: "mac", port: 22, key: "ssh-ed25519 NEW")
+        #expect(KnownHosts(fileURL: file).verdict(host: "mac", port: 22, key: "ssh-ed25519 NEW") == .trusted)
+        #expect(KnownHosts(fileURL: file).verdict(host: "mac", port: 22, key: "ssh-ed25519 OLD") == .changed(pinned: "ssh-ed25519 NEW"))
+    }
 }

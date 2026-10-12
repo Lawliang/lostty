@@ -13,32 +13,38 @@ public enum RemoteError: Error, Equatable {
     case authenticationCancelled
 
     case tmuxMissing
+    case notPaired
 
     public var message: String {
         switch self {
         case .secureEnclaveUnavailable:
             "This device has no Secure Enclave to keep the Lostty Mobile key in."
         case .hostKeyChanged(let host, let pinned, _):
-            "The SSH host key for \(host) changed since it was first trusted (pinned \(pinned.prefix(40))…). "
-                + "Lostty will not connect. "
-                + Self.hostKeyChangedAdvice
+            Self.hostKeyChangedMessage(host: host, pinned: pinned)
         case .keyRejected:
             Self.keyRejectedMessage
         case .authenticationCancelled:
             Self.authCancelledMessage
         case .tmuxMissing:
             "tmux isn't installed on the Mac (Lostty looks in /opt/homebrew/bin and /usr/local/bin)."
+        case .notPaired:
+            "Pair this iPhone with your Mac first."
         }
     }
 
     #if os(iOS)
-    private static let hostKeyChangedAdvice =
-        "If the Mac's key really changed, open Settings and choose \"Forget the Mac's Host Key\", then try again."
-    private static let keyRejectedMessage =
-        "The Mac refused Lostty's key. Add the line from \"Show This Phone's Key\" in Settings to ~/.ssh/authorized_keys."
+    private static func hostKeyChangedMessage(host: String, pinned: String) -> String {
+        "This Mac's identity changed. If you reinstalled macOS, pair again; otherwise, don't connect."
+    }
+    private static let keyRejectedMessage = "Your Mac doesn't accept this phone anymore."
     private static let authCancelledMessage =
         "Face ID was cancelled, so Lostty did not connect. Open the session again to retry."
     #else
+    private static func hostKeyChangedMessage(host: String, pinned: String) -> String {
+        "The SSH host key for \(host) changed since it was first trusted (pinned \(pinned.prefix(40))…). "
+            + "Lostty will not connect. "
+            + hostKeyChangedAdvice
+    }
     private static let hostKeyChangedAdvice =
         "If the Mac's key really changed, remove its line from known_hosts in Application Support/Lostty."
     private static let keyRejectedMessage =
@@ -72,8 +78,12 @@ extension RemoteError {
     public static func describe(_ error: Error, host: RemoteHost) -> String {
         if let remote = error as? RemoteError { return remote.message }
         if isUnreachable(error) {
+            #if os(iOS)
+            return "Can't reach your Mac. Is Tailscale on here and on the Mac, and is the Mac awake?"
+            #else
             return "Couldn't reach the Mac at \(host.host):\(host.port). "
                 + "Check the address, and that Tailscale and Remote Login are on."
+            #endif
         }
         return error.localizedDescription
     }
@@ -82,7 +92,7 @@ extension RemoteError {
         ECONNREFUSED, EHOSTUNREACH, ENETUNREACH, ENETDOWN, ETIMEDOUT, EHOSTDOWN, ECONNRESET, ECONNABORTED,
     ]
 
-    private static func isUnreachable(_ error: Error) -> Bool {
+    public static func isUnreachable(_ error: Error) -> Bool {
         if error is ChannelError { return true }
         // NIOConnectionError (all addresses failed, DNS included) is in
         // NIOPosix, which this package doesn't import directly.

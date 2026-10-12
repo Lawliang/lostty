@@ -74,4 +74,11 @@ struct TmuxRemoteTests {
         #expect(TmuxRemote.parse("no server running on /private/tmp/tmux-501/lostty\n").isEmpty)
         #expect(TmuxRemote.parse("1\tx\t\t\n").isEmpty)
     }
+
+    @Test func attachWithoutATerminfoPathExportsNothing() throws {
+        let cmd = try TmuxRemote.attachCommand(sessionID: "$3", name: "proj", terminfoDir: nil)
+        #expect(!cmd.contains("TERMINFO"))
+        #expect(cmd.hasPrefix("[ \"$("))
+        #expect(cmd.hasSuffix("attach-session -t '$3'"))
+    }
 }

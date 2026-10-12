@@ -33,9 +33,23 @@ public final class KnownHosts: @unchecked Sendable {
         let label = Self.label(host, port)
         guard pins[label] == nil else { return }
         pins[label] = key
+        try save(pins)
+    }
+
+    /// Pins `key` for the host, replacing any earlier pin: pairing hands the
+    /// phone the Mac's key, so there is nothing to trust on first use.
+    public func pin(host: String, port: Int, key: String) throws {
+        lock.lock()
+        defer { lock.unlock() }
+        var pins = load()
+        pins[Self.label(host, port)] = key
+        try save(pins)
+    }
+
+    private func save(_ pins: [String: String]) throws {
         try FileManager.default.createDirectory(
             at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-        let text = pins.keys.sorted().map { "\($0) \(pins[$0]!)" }.joined(separator: "\n") + "\n"
+        let text = pins.keys.sorted().map { "\($0) \(pins[$0]!)" }.joined(separator: "\n") + (pins.isEmpty ? "" : "\n")
         try text.write(to: fileURL, atomically: true, encoding: .utf8)
     }
 
@@ -46,8 +60,7 @@ public final class KnownHosts: @unchecked Sendable {
         defer { lock.unlock() }
         var pins = load()
         guard pins.removeValue(forKey: Self.label(host, port)) != nil else { return }
-        let text = pins.keys.sorted().map { "\($0) \(pins[$0]!)" }.joined(separator: "\n") + (pins.isEmpty ? "" : "\n")
-        try text.write(to: fileURL, atomically: true, encoding: .utf8)
+        try save(pins)
     }
 
     /// "host:port", with IPv6 hosts bracketed ("[fd7a::1]:22") so the port

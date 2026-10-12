@@ -9,10 +9,11 @@ public struct RemoteHost: Sendable, Equatable {
     public var host: String
     public var port: Int
     public var user: String
-    /// Lostty.app's Contents/Resources/terminfo on the Mac (xterm-ghostty).
-    public var terminfoDir: String
+    /// A terminfo directory with xterm-ghostty to export as TERMINFO; nil
+    /// when the Mac has it in ~/.terminfo (Phone Access copies it there).
+    public var terminfoDir: String?
 
-    public init(host: String, port: Int = 22, user: String, terminfoDir: String) {
+    public init(host: String, port: Int = 22, user: String, terminfoDir: String? = nil) {
         self.host = host
         self.port = port
         self.user = user
@@ -54,6 +55,13 @@ public final class RemoteConnection: @unchecked Sendable {
         } catch {
             throw RemoteError.mapConnectError(error)
         }
+    }
+
+    /// Connects to the first host that answers: the Mac's Tailscale name,
+    /// then its address. Only "couldn't reach" moves on; a refused key, a
+    /// changed host key or a cancelled Face ID stop at once.
+    public static func connect(toFirstReachable hosts: [RemoteHost], key: RemoteKey, knownHosts: KnownHosts) async throws -> RemoteConnection {
+        try await HostFallback.first(hosts) { try await connect(to: $0, key: key, knownHosts: knownHosts) }
     }
 
     /// The Mac's Lostty tmux sessions; none when no tmux server is running.
@@ -231,5 +239,19 @@ final class AttachOutcome: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return recorded ?? .lost
+    }
+}
+
+enum HostFallback {
+    static func first<T>(_ hosts: [RemoteHost], _ connect: (RemoteHost) async throws -> T) async throws -> T {
+        var last: Error = RemoteError.notPaired
+        for host in hosts {
+            do {
+                return try await connect(host)
+            } catch let error where RemoteError.isUnreachable(error) {
+                last = error
+            }
+        }
+        throw last
     }
 }

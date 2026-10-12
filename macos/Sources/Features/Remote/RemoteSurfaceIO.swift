@@ -266,7 +266,7 @@ final class RemoteSurfaceIO: Ghostty.RemoteIO, @unchecked Sendable {
 /// reconnects from scratch.
 @available(macOS 15, iOS 17, *)
 struct SSHAttacher: RemoteAttacher {
-    let host: RemoteHost
+    let hosts: [RemoteHost]
     /// The key, fetched for each attempt: the phone replaces its key (and
     /// Face ID context) after the app has been in the background.
     let key: @Sendable () async throws -> RemoteKey
@@ -280,7 +280,7 @@ struct SSHAttacher: RemoteAttacher {
         onOpen: @escaping @Sendable (RemoteTerminal) -> Void,
         onOutput: @escaping @Sendable (Data) -> Void
     ) async throws -> AttachEnd {
-        let connection = try await RemoteConnection.connect(to: host, key: try await key(), knownHosts: knownHosts)
+        let connection = try await RemoteConnection.connect(toFirstReachable: hosts, key: try await key(), knownHosts: knownHosts)
         // Each attach owns its connection, so a local close closes the whole
         // connection: closing just the PTY channel waits for the peer's
         // CHANNEL_CLOSE, which on a dead path takes the TCP timeout.

@@ -1,24 +1,35 @@
 import Foundation
 
-/// The Mac the phone connects to, as typed in Settings. Stored in
-/// UserDefaults as JSON under `defaultsKey`; a JSON string is accepted too,
-/// so a launch argument (`-LosttyRemoteHost '{"host":…}'`) can set it.
+/// The Mac the phone connects to: filled in by pairing, or typed under
+/// Advanced. Stored in UserDefaults as JSON under `defaultsKey`; a JSON
+/// string is accepted too, so a launch argument (`-LosttyRemoteHost
+/// '{"host":…}'`) can set it. Settings saved by older builds (with a
+/// terminfoDir) still load.
 public struct RemoteHostSettings: Codable, Equatable, Sendable {
     public static let defaultsKey = "LosttyRemoteHost"
-    public static let defaultTerminfoDir = "/Applications/Lostty.app/Contents/Resources/terminfo"
 
     public var host: String
     public var port: Int
     public var user: String
-    /// Lostty.app's terminfo directory on the Mac (xterm-ghostty).
-    public var terminfoDir: String
+    /// The Mac's Tailscale address, tried when `host` (its name) can't be reached.
+    public var fallbackHost: String?
+    /// When this phone was paired with the Mac; nil for typed settings.
+    public var pairedAt: Date?
 
-    public init(host: String = "", port: Int = 22, user: String = "", terminfoDir: String = RemoteHostSettings.defaultTerminfoDir) {
+    public init(host: String = "", port: Int = 22, user: String = "", fallbackHost: String? = nil, pairedAt: Date? = nil) {
         self.host = host
         self.port = port
         self.user = user
-        self.terminfoDir = terminfoDir
+        self.fallbackHost = fallbackHost
+        self.pairedAt = pairedAt
     }
+
+    /// The settings pairing with `payload` produces.
+    public static func paired(with payload: PairingPayload, at date: Date) -> RemoteHostSettings {
+        RemoteHostSettings(host: payload.name, port: 22, user: payload.user, fallbackHost: payload.ip, pairedAt: date)
+    }
+
+    public var paired: Bool { pairedAt != nil }
 
     /// What to fix before connecting, or nil.
     public var problem: String? {
@@ -30,15 +41,20 @@ public struct RemoteHostSettings: Codable, Equatable, Sendable {
         return nil
     }
 
-    public var remoteHost: RemoteHost? {
-        guard problem == nil else { return nil }
-        let dir = terminfoDir.trimmingCharacters(in: .whitespacesAndNewlines)
-        return RemoteHost(
-            host: host.trimmingCharacters(in: .whitespacesAndNewlines),
-            port: port,
-            user: user.trimmingCharacters(in: .whitespacesAndNewlines),
-            terminfoDir: dir.isEmpty ? Self.defaultTerminfoDir : dir)
+    /// The Mac's name, then its address; empty while `problem` is set.
+    public var remoteHosts: [RemoteHost] {
+        guard problem == nil else { return [] }
+        let user = user.trimmingCharacters(in: .whitespacesAndNewlines)
+        let primary = host.trimmingCharacters(in: .whitespacesAndNewlines)
+        var hosts = [RemoteHost(host: primary, port: port, user: user)]
+        if let fallback = fallbackHost?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !fallback.isEmpty, fallback != primary, !fallback.contains(where: \.isWhitespace) {
+            hosts.append(RemoteHost(host: fallback, port: port, user: user))
+        }
+        return hosts
     }
+
+    public var remoteHost: RemoteHost? { remoteHosts.first }
 
     public static func load(from defaults: UserDefaults) -> RemoteHostSettings {
         let data = defaults.data(forKey: defaultsKey) ?? defaults.string(forKey: defaultsKey).map { Data($0.utf8) }

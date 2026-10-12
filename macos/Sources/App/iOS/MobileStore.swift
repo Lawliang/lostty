@@ -54,13 +54,14 @@ final class MobileStore: ObservableObject {
     /// Drops the pinned host key for the Mac in the settings, so the next
     /// connect trusts whatever key it offers.
     func forgetHostKey() {
-        // The pin is written under the trimmed address, so forget it there.
-        guard let host = settings.remoteHost else {
+        // The pins are written under the trimmed addresses, so forget them there.
+        let hosts = settings.remoteHosts
+        guard !hosts.isEmpty else {
             message = settings.problem
             return
         }
         do {
-            try knownHosts.forget(host: host.host, port: host.port)
+            for host in hosts { try knownHosts.forget(host: host.host, port: host.port) }
             message = "Forgot the Mac's host key. The next connection will trust the key it offers."
         } catch {
             message = error.localizedDescription
@@ -72,7 +73,7 @@ final class MobileStore: ObservableObject {
     func terminalClosedItself(_ session: RemoteSession) async {
         await refresh()
         if sessions.contains(where: { $0.id == session.id && $0.name == session.name }) {
-            message = "Couldn't open \(session.name). Check that tmux runs on the Mac and the terminfo path in Settings."
+            message = "Couldn't open \(session.name). Check that tmux runs on the Mac."
         }
     }
 
@@ -100,14 +101,15 @@ final class MobileStore: ObservableObject {
     }
 
     func refresh() async {
-        guard let host = settings.remoteHost else {
+        let hosts = settings.remoteHosts
+        guard !hosts.isEmpty else {
             message = settings.problem
             return
         }
         loading = true
         defer { loading = false }
         do {
-            let connection = try await RemoteConnection.connect(to: host, key: try remoteKey(), knownHosts: knownHosts)
+            let connection = try await RemoteConnection.connect(toFirstReachable: hosts, key: try remoteKey(), knownHosts: knownHosts)
             defer { Task { await connection.close() } }
             sessions = RemoteSession.forPicking(try await connection.sessions())
             message = sessions.isEmpty ? "No Lostty sessions are running on the Mac." : nil
@@ -119,9 +121,10 @@ final class MobileStore: ObservableObject {
     /// Ends the session on the Mac; false (with `message` set) when it failed.
     @discardableResult
     func kill(_ session: RemoteSession) async -> Bool {
-        guard let host = settings.remoteHost else { return false }
+        let hosts = settings.remoteHosts
+        guard !hosts.isEmpty else { return false }
         do {
-            let connection = try await RemoteConnection.connect(to: host, key: try remoteKey(), knownHosts: knownHosts)
+            let connection = try await RemoteConnection.connect(toFirstReachable: hosts, key: try remoteKey(), knownHosts: knownHosts)
             do {
                 try await connection.killSession(session.id, name: session.name)
             } catch {
@@ -140,14 +143,15 @@ final class MobileStore: ObservableObject {
     /// A terminal view attached to `session`, with its IO; nil (with a message)
     /// when the settings or key aren't ready.
     func terminal(for session: RemoteSession, app: ghostty_app_t) -> (view: Ghostty.SurfaceView, io: RemoteSurfaceIO)? {
-        guard let host = settings.remoteHost else {
+        let hosts = settings.remoteHosts
+        guard !hosts.isEmpty else {
             message = settings.problem
             return nil
         }
         do {
             _ = try remoteKey()  // surface a key problem now, not after the screen opens
             let io = RemoteSurfaceIO(attacher: SSHAttacher(
-                host: host,
+                hosts: hosts,
                 key: { [weak self] in
                     guard let self else { throw CancellationError() }
                     return try await self.remoteKey()

@@ -72,7 +72,7 @@ enum RemoteDebugUI {
 
             var config = Ghostty.SurfaceConfiguration()
             config.remoteIO = RemoteSurfaceIO(attacher: SSHAttacher(
-                host: host, key: { key }, knownHosts: knownHosts, sessionID: session.id,
+                hosts: [host], key: { key }, knownHosts: knownHosts, sessionID: session.id,
                 sessionName: session.name))
             _ = TerminalController.newWindow(ghostty, withBaseConfig: config)
         } catch {
