@@ -2,7 +2,7 @@ import Foundation
 
 /// Host keys pinned on first connect ("trust on first use"). One line per
 /// host: "<host>:<port> <key in OpenSSH form>". A key that differs from the
-/// pin is reported, never re-pinned: the user removes the line by hand if
+/// pin is reported, never re-pinned: the user forgets the pin (`forget`) if
 /// the Mac's key really changed.
 public final class KnownHosts: @unchecked Sendable {
     public enum Verdict: Equatable {
@@ -36,6 +36,17 @@ public final class KnownHosts: @unchecked Sendable {
         try FileManager.default.createDirectory(
             at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         let text = pins.keys.sorted().map { "\($0) \(pins[$0]!)" }.joined(separator: "\n") + "\n"
+        try text.write(to: fileURL, atomically: true, encoding: .utf8)
+    }
+
+    /// Removes the pin for the host, so the next connect pins whatever key it
+    /// offers. For when the Mac's host key really changed.
+    public func forget(host: String, port: Int) throws {
+        lock.lock()
+        defer { lock.unlock() }
+        var pins = load()
+        guard pins.removeValue(forKey: Self.label(host, port)) != nil else { return }
+        let text = pins.keys.sorted().map { "\($0) \(pins[$0]!)" }.joined(separator: "\n") + (pins.isEmpty ? "" : "\n")
         try text.write(to: fileURL, atomically: true, encoding: .utf8)
     }
 

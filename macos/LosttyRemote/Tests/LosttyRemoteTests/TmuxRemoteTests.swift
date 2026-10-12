@@ -10,9 +10,12 @@ struct TmuxRemoteTests {
         #expect(TmuxRemote.listCommand.contains("tmux -u "))
     }
 
-    @Test func attachQuotesTheSessionIDAndNeverDetachesOthers() throws {
-        let cmd = try TmuxRemote.attachCommand(sessionID: "$3", terminfoDir: "/Applications/Lostty.app/Contents/Resources/terminfo")
-        #expect(cmd == "exec env LANG=\"${LANG:-en_US.UTF-8}\" TERMINFO='/Applications/Lostty.app/Contents/Resources/terminfo' "
+    private static let guardPrefix = "PATH=/opt/homebrew/bin:/usr/local/bin:$PATH tmux -u -L lostty -f /dev/null display-message -p -t"
+
+    @Test func attachChecksTheNameThenQuotesTheSessionIDAndNeverDetachesOthers() throws {
+        let cmd = try TmuxRemote.attachCommand(sessionID: "$3", name: "proj", terminfoDir: "/Applications/Lostty.app/Contents/Resources/terminfo")
+        #expect(cmd == "[ \"$(\(Self.guardPrefix) '$3' '#{session_name}' 2>/dev/null)\" = 'proj' ] || exit 1; "
+            + "exec env LANG=\"${LANG:-en_US.UTF-8}\" TERMINFO='/Applications/Lostty.app/Contents/Resources/terminfo' "
             + "PATH=/opt/homebrew/bin:/usr/local/bin:$PATH tmux -u -L lostty -f /dev/null attach-session -t '$3'")
         #expect(!cmd.contains(" -d"))
     }
@@ -20,20 +23,28 @@ struct TmuxRemoteTests {
     @Test func attachRefusesAnythingButASessionID() {
         for bad in ["3", "$", "$3;kill-server", "main", "$3 -d", "'$3'"] {
             #expect(throws: TmuxRemoteError.badSessionID(bad)) {
-                try TmuxRemote.attachCommand(sessionID: bad, terminfoDir: "/t")
+                try TmuxRemote.attachCommand(sessionID: bad, name: "n", terminfoDir: "/t")
             }
         }
     }
 
     @Test func attachQuotesATerminfoPathWithAQuote() throws {
-        let cmd = try TmuxRemote.attachCommand(sessionID: "$1", terminfoDir: "/Users/o'brien/Lostty.app/Contents/Resources/terminfo")
+        let cmd = try TmuxRemote.attachCommand(sessionID: "$1", name: "n", terminfoDir: "/Users/o'brien/Lostty.app/Contents/Resources/terminfo")
         #expect(cmd.contains("TERMINFO='/Users/o'\\''brien/Lostty.app/Contents/Resources/terminfo'"))
     }
 
-    @Test func killQuotesTheSessionID() throws {
-        #expect(try TmuxRemote.killCommand(sessionID: "$4") ==
-            "PATH=/opt/homebrew/bin:/usr/local/bin:$PATH tmux -u -L lostty kill-session -t '$4'")
-        #expect(throws: TmuxRemoteError.badSessionID("main")) { try TmuxRemote.killCommand(sessionID: "main") }
+    @Test func aNameWithAQuoteIsShellQuotedInTheGuard() throws {
+        let cmd = try TmuxRemote.attachCommand(sessionID: "$1", name: "it's; rm -rf ~", terminfoDir: "/t")
+        #expect(cmd.contains("= 'it'\\''s; rm -rf ~' ] || exit 1; exec "))
+        let kill = try TmuxRemote.killCommand(sessionID: "$1", name: "it's")
+        #expect(kill.contains("= 'it'\\''s' ] || exit 1; "))
+    }
+
+    @Test func killChecksTheNameThenQuotesTheSessionID() throws {
+        #expect(try TmuxRemote.killCommand(sessionID: "$4", name: "proj") ==
+            "[ \"$(\(Self.guardPrefix) '$4' '#{session_name}' 2>/dev/null)\" = 'proj' ] || exit 1; "
+            + "PATH=/opt/homebrew/bin:/usr/local/bin:$PATH tmux -u -L lostty kill-session -t '$4'")
+        #expect(throws: TmuxRemoteError.badSessionID("main")) { try TmuxRemote.killCommand(sessionID: "main", name: "n") }
     }
 
     @Test func sessionsArePickedByProjectName() {

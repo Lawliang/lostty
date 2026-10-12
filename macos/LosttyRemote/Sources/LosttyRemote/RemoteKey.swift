@@ -12,20 +12,40 @@ public enum RemoteError: Error, Equatable {
     case keyRejected
     case authenticationCancelled
 
+    case tmuxMissing
+
     public var message: String {
         switch self {
         case .secureEnclaveUnavailable:
-            "This Mac has no Secure Enclave to keep the Lostty Mobile key in."
+            "This device has no Secure Enclave to keep the Lostty Mobile key in."
         case .hostKeyChanged(let host, let pinned, _):
             "The SSH host key for \(host) changed since it was first trusted (pinned \(pinned.prefix(40))…). "
-                + "Lostty will not connect. If the Mac's key really changed, remove its line from known_hosts in "
-                + "Application Support/Lostty."
+                + "Lostty will not connect. "
+                + Self.hostKeyChangedAdvice
         case .keyRejected:
-            "The Mac refused Lostty's key. Add the line from \"Copy Remote Key\" to ~/.ssh/authorized_keys."
+            Self.keyRejectedMessage
         case .authenticationCancelled:
-            "Touch ID was cancelled, so Lostty did not connect. Open the session again to retry."
+            Self.authCancelledMessage
+        case .tmuxMissing:
+            "tmux isn't installed on the Mac (Lostty looks in /opt/homebrew/bin and /usr/local/bin)."
         }
     }
+
+    #if os(iOS)
+    private static let hostKeyChangedAdvice =
+        "If the Mac's key really changed, open Settings and choose \"Forget the Mac's Host Key\", then try again."
+    private static let keyRejectedMessage =
+        "The Mac refused Lostty's key. Add the line from \"Show This Phone's Key\" in Settings to ~/.ssh/authorized_keys."
+    private static let authCancelledMessage =
+        "Face ID was cancelled, so Lostty did not connect. Open the session again to retry."
+    #else
+    private static let hostKeyChangedAdvice =
+        "If the Mac's key really changed, remove its line from known_hosts in Application Support/Lostty."
+    private static let keyRejectedMessage =
+        "The Mac refused Lostty's key. Add the line from \"Copy Remote Key\" to ~/.ssh/authorized_keys."
+    private static let authCancelledMessage =
+        "Touch ID was cancelled, so Lostty did not connect. Open the session again to retry."
+    #endif
 }
 
 extension RemoteError {
@@ -44,6 +64,37 @@ extension RemoteError {
             return RemoteError.keyRejected
         }
         return error
+    }
+
+    /// What to show for any error from connecting or listing: Lostty's own
+    /// messages, a plain "couldn't reach" for network failures (otherwise
+    /// the user sees "NIOCore.ChannelError error 0"), else the system text.
+    public static func describe(_ error: Error, host: RemoteHost) -> String {
+        if let remote = error as? RemoteError { return remote.message }
+        if isUnreachable(error) {
+            return "Couldn't reach the Mac at \(host.host):\(host.port). "
+                + "Check the address, and that Tailscale and Remote Login are on."
+        }
+        return error.localizedDescription
+    }
+
+    private static let unreachableErrnos: Set<Int32> = [
+        ECONNREFUSED, EHOSTUNREACH, ENETUNREACH, ENETDOWN, ETIMEDOUT, EHOSTDOWN, ECONNRESET, ECONNABORTED,
+    ]
+
+    private static func isUnreachable(_ error: Error) -> Bool {
+        if error is ChannelError { return true }
+        // NIOConnectionError (all addresses failed, DNS included) is in
+        // NIOPosix, which this package doesn't import directly.
+        if String(describing: type(of: error)) == "NIOConnectionError" { return true }
+        if let io = error as? IOError { return unreachableErrnos.contains(io.errnoCode) }
+        let ns = error as NSError
+        if ns.domain == NSPOSIXErrorDomain { return unreachableErrnos.contains(Int32(ns.code)) }
+        if ns.domain == NSURLErrorDomain {
+            return [NSURLErrorCannotFindHost, NSURLErrorCannotConnectToHost, NSURLErrorTimedOut,
+                    NSURLErrorDNSLookupFailed, NSURLErrorNotConnectedToInternet].contains(ns.code)
+        }
+        return false
     }
 
     private static func isUserPresenceFailure(_ error: Error) -> Bool {

@@ -7,6 +7,7 @@ struct SettingsScreen: View {
     @Environment(\.dismiss) private var dismiss
     @State private var publicKey: String?
     @State private var keyError: String?
+    @State private var confirmForget = false
 
     var body: some View {
         Form {
@@ -45,6 +46,7 @@ struct SettingsScreen: View {
                     Text(publicKey).font(.footnote.monospaced()).textSelection(.enabled)
                     ShareLink(item: publicKey)
                 }
+                Button("Forget the Mac's Host Key", role: .destructive) { confirmForget = true }
             } header: {
                 Text("Key")
             } footer: {
@@ -52,6 +54,14 @@ struct SettingsScreen: View {
             }
         }
         .navigationTitle("Settings")
+        .confirmationDialog(
+            "Forget the Mac's host key?", isPresented: $confirmForget, titleVisibility: .visible
+        ) {
+            Button("Forget Host Key", role: .destructive) { store.forgetHostKey() }
+        } message: {
+            Text("Only do this if the Mac's SSH host key really changed. The next connection trusts whatever key the address offers.")
+        }
+        .onDisappear { store.saveSettings() }
         .toolbar {
             Button("Done") {
                 store.saveSettings()

@@ -62,17 +62,20 @@ public final class RemoteConnection: @unchecked Sendable {
             let out = try await client.executeCommand(TmuxRemote.listCommand)
             return TmuxRemote.parse(String(buffer: out))
         } catch let failed as SSHClient.CommandFailed where failed.exitCode == 1 {
-            // tmux exits 1 when no server is running; anything else
-            // (127: tmux missing, …) is a real failure.
+            // tmux exits 1 when no server is running; anything else is a
+            // real failure.
             return []
+        } catch let failed as SSHClient.CommandFailed where failed.exitCode == 127 {
+            throw RemoteError.tmuxMissing
         }
     }
 
-    /// Ends session `sessionID` on the Mac. A session that already ended
-    /// (tmux exits 1) is not an error.
-    public func killSession(_ sessionID: String) async throws {
+    /// Ends session `sessionID` (named `name`) on the Mac. A session that
+    /// already ended, or whose id now names another session (tmux exits 1),
+    /// is not an error and is left alone.
+    public func killSession(_ sessionID: String, name: String) async throws {
         do {
-            _ = try await client.executeCommand(try TmuxRemote.killCommand(sessionID: sessionID))
+            _ = try await client.executeCommand(try TmuxRemote.killCommand(sessionID: sessionID, name: name))
         } catch let failed as SSHClient.CommandFailed where failed.exitCode == 1 {
             return
         }
@@ -83,6 +86,7 @@ public final class RemoteConnection: @unchecked Sendable {
     /// `onOutput` gets every received byte, from a task-group child task.
     public func attach(
         sessionID: String,
+        name: String,
         cols: Int,
         rows: Int,
         onOpen: @escaping @Sendable (RemoteTerminal) -> Void,
@@ -90,7 +94,7 @@ public final class RemoteConnection: @unchecked Sendable {
     ) async -> AttachEnd {
         let command: String
         do {
-            command = try TmuxRemote.attachCommand(sessionID: sessionID, terminfoDir: host.terminfoDir)
+            command = try TmuxRemote.attachCommand(sessionID: sessionID, name: name, terminfoDir: host.terminfoDir)
         } catch {
             return .exited(1)
         }
@@ -164,6 +168,26 @@ enum PTYInput: Sendable {
     case data(Data)
     case resize(cols: Int, rows: Int)
     case close
+}
+
+/// A terminal whose `close()` also runs `onClose` (the owner closing the whole
+/// connection). Closing only the PTY channel waits for the peer's
+/// CHANNEL_CLOSE, which on a dead path takes the TCP timeout.
+public final class ClosingTerminal: RemoteTerminal, @unchecked Sendable {
+    private let base: RemoteTerminal
+    private let onClose: @Sendable () -> Void
+
+    public init(_ base: RemoteTerminal, onClose: @escaping @Sendable () -> Void) {
+        self.base = base
+        self.onClose = onClose
+    }
+
+    public func write(_ data: Data) { base.write(data) }
+    public func resize(cols: Int, rows: Int) { base.resize(cols: cols, rows: rows) }
+    public func close() {
+        base.close()
+        onClose()
+    }
 }
 
 /// Hands writes, resizes and close to the PTY task; never blocks the caller.

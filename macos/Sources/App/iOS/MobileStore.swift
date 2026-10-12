@@ -45,6 +45,32 @@ final class MobileStore: ObservableObject {
 
     var knownHosts: KnownHosts { KnownHosts(fileURL: Self.supportDir.appendingPathComponent("known_hosts")) }
 
+    /// What to show for an error: network failures read as "couldn't reach".
+    private func describe(_ error: Error) -> String {
+        guard let host = settings.remoteHost else { return (error as? RemoteError)?.message ?? error.localizedDescription }
+        return RemoteError.describe(error, host: host)
+    }
+
+    /// Drops the pinned host key for the Mac in the settings, so the next
+    /// connect trusts whatever key it offers.
+    func forgetHostKey() {
+        do {
+            try knownHosts.forget(host: settings.host, port: settings.port)
+            message = "Forgot the Mac's host key. The next connection will trust the key it offers."
+        } catch {
+            message = error.localizedDescription
+        }
+    }
+
+    /// A terminal closed by itself. If the session is still on the Mac, the
+    /// attach failed rather than the session ending.
+    func terminalClosedItself(_ session: RemoteSession) async {
+        await refresh()
+        if sessions.contains(where: { $0.id == session.id && $0.name == session.name }) {
+            message = "Couldn't open \(session.name). Check that tmux runs on the Mac and the terminfo path in Settings."
+        }
+    }
+
     func saveSettings() {
         settings.save(to: defaults)
     }
@@ -58,6 +84,13 @@ final class MobileStore: ObservableObject {
         let loaded = try RemoteKey.secureEnclave(storedAt: Self.supportDir.appendingPathComponent("remote-key"), context: context)
         #endif
         key = loaded
+        #if !targetEnvironment(simulator)
+        // A restored handle on a new phone is a dead end: keep it out of backups.
+        var handle = Self.supportDir.appendingPathComponent("remote-key")
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        try? handle.setResourceValues(values)
+        #endif
         return loaded
     }
 
@@ -74,7 +107,7 @@ final class MobileStore: ObservableObject {
             sessions = RemoteSession.forPicking(try await connection.sessions())
             message = sessions.isEmpty ? "No Lostty sessions are running on the Mac." : nil
         } catch {
-            message = (error as? RemoteError)?.message ?? error.localizedDescription
+            message = describe(error)
         }
     }
 
@@ -85,7 +118,7 @@ final class MobileStore: ObservableObject {
         do {
             let connection = try await RemoteConnection.connect(to: host, key: try remoteKey(), knownHosts: knownHosts)
             do {
-                try await connection.killSession(session.id)
+                try await connection.killSession(session.id, name: session.name)
             } catch {
                 await connection.close()
                 throw error
@@ -94,7 +127,7 @@ final class MobileStore: ObservableObject {
             sessions.removeAll { $0.id == session.id }
             return true
         } catch {
-            message = (error as? RemoteError)?.message ?? error.localizedDescription
+            message = describe(error)
             return false
         }
     }
@@ -115,13 +148,14 @@ final class MobileStore: ObservableObject {
                     return try await self.remoteKey()
                 },
                 knownHosts: knownHosts,
-                sessionID: session.id))
+                sessionID: session.id,
+                sessionName: session.name))
             var config = Ghostty.SurfaceConfiguration()
             config.remoteIO = io
             openIO = io
             return (Ghostty.SurfaceView(app, baseConfig: config), io)
         } catch {
-            message = (error as? RemoteError)?.message ?? error.localizedDescription
+            message = describe(error)
             return nil
         }
     }

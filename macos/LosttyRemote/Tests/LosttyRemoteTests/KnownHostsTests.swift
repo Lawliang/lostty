@@ -47,4 +47,17 @@ struct KnownHostsTests {
         try hosts.trust(host: "mac", port: 22, key: "K2")
         #expect(hosts.verdict(host: "mac", port: 22, key: "K1") == .trusted)
     }
+
+    @Test func forgettingAPinLetsTheNextKeyBePinnedAndKeepsOthers() throws {
+        defer { try? FileManager.default.removeItem(at: file) }
+        let hosts = KnownHosts(fileURL: file)
+        try hosts.trust(host: "mac", port: 22, key: "OLD")
+        try hosts.trust(host: "other", port: 22, key: "K2")
+        try hosts.forget(host: "mac", port: 22)
+        #expect(hosts.verdict(host: "mac", port: 22, key: "NEW") == .unknown)
+        #expect(hosts.verdict(host: "other", port: 22, key: "K2") == .trusted)
+        try hosts.trust(host: "mac", port: 22, key: "NEW")
+        #expect(hosts.verdict(host: "mac", port: 22, key: "NEW") == .trusted)
+        try hosts.forget(host: "nobody", port: 22)  // no pin: no error
+    }
 }

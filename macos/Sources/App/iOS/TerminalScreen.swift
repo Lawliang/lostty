@@ -51,7 +51,10 @@ struct TerminalScreen: View {
         .onAppear { surfaceView.showKeyboard() }
         .onDisappear { store.terminalClosed(io) }
         .onReceive(NotificationCenter.default.publisher(for: .losttySurfaceClosed)) { note in
-            if (note.object as AnyObject?) === surfaceView { dismiss() }
+            if (note.object as AnyObject?) === surfaceView {
+                dismiss()
+                Task { await store.terminalClosedItself(session) }
+            }
         }
     }
 }

@@ -272,6 +272,7 @@ struct SSHAttacher: RemoteAttacher {
     let key: @Sendable () async throws -> RemoteKey
     let knownHosts: KnownHosts
     let sessionID: String
+    let sessionName: String
 
     func attach(
         cols: Int,
@@ -280,8 +281,15 @@ struct SSHAttacher: RemoteAttacher {
         onOutput: @escaping @Sendable (Data) -> Void
     ) async throws -> AttachEnd {
         let connection = try await RemoteConnection.connect(to: host, key: try await key(), knownHosts: knownHosts)
+        // Each attach owns its connection, so a local close closes the whole
+        // connection: closing just the PTY channel waits for the peer's
+        // CHANNEL_CLOSE, which on a dead path takes the TCP timeout.
         let end = await connection.attach(
-            sessionID: sessionID, cols: cols, rows: rows, onOpen: onOpen, onOutput: onOutput)
+            sessionID: sessionID, name: sessionName, cols: cols, rows: rows,
+            onOpen: { terminal in
+                onOpen(ClosingTerminal(terminal) { Task { await connection.close() } })
+            },
+            onOutput: onOutput)
         await connection.close()
         return end
     }

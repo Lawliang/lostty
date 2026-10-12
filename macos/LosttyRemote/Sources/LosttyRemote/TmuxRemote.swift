@@ -43,16 +43,27 @@ public enum TmuxRemote {
     /// find xterm-ghostty. `-f /dev/null`: attach-session starts a server when
     /// none runs, and the viewer must never start one (it would read
     /// ~/.tmux.conf); a server started this way has no sessions and exits.
-    public static func attachCommand(sessionID: String, terminfoDir: String) throws -> String {
+    ///
+    /// Ids restart at $0 when the Mac's tmux server restarts, so an id alone
+    /// can name a different session than the one listed: the command first
+    /// checks the session's name and exits 1 if it differs.
+    public static func attachCommand(sessionID: String, name: String, terminfoDir: String) throws -> String {
         guard isSessionID(sessionID) else { throw TmuxRemoteError.badSessionID(sessionID) }
-        return "exec env LANG=\"${LANG:-en_US.UTF-8}\" TERMINFO=\(shellQuote(terminfoDir)) "
+        return nameGuard(sessionID: sessionID, name: name) + "exec env LANG=\"${LANG:-en_US.UTF-8}\" TERMINFO=\(shellQuote(terminfoDir)) "
             + "\(pathPrefix) tmux -u -L lostty -f /dev/null attach-session -t \(shellQuote(sessionID))"
     }
 
     /// Ends session `sessionID` (and with it the Mac window showing it).
-    public static func killCommand(sessionID: String) throws -> String {
+    /// Exits 1 (without killing) if the id now names a different session.
+    public static func killCommand(sessionID: String, name: String) throws -> String {
         guard isSessionID(sessionID) else { throw TmuxRemoteError.badSessionID(sessionID) }
-        return "\(pathPrefix) tmux -u -L lostty kill-session -t \(shellQuote(sessionID))"
+        return nameGuard(sessionID: sessionID, name: name) + "\(pathPrefix) tmux -u -L lostty kill-session -t \(shellQuote(sessionID))"
+    }
+
+    /// `-f /dev/null`: display-message must not start a server either.
+    private static func nameGuard(sessionID: String, name: String) -> String {
+        "[ \"$(\(pathPrefix) tmux -u -L lostty -f /dev/null display-message -p -t \(shellQuote(sessionID)) "
+            + "'#{session_name}' 2>/dev/null)\" = \(shellQuote(name)) ] || exit 1; "
     }
 
     public static func parse(_ output: String) -> [RemoteSession] {
