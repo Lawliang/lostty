@@ -137,7 +137,7 @@ final class MobileStore: ObservableObject {
         do {
             let connection = try await RemoteConnection.connect(toFirstReachable: hosts, key: try remoteKey(), knownHosts: knownHosts)
             do {
-                try await connection.killSession(session.id, name: session.name)
+                try await connection.killSession(session.id, name: session.name, device: DeviceModel.current)
             } catch {
                 await connection.close()
                 throw error

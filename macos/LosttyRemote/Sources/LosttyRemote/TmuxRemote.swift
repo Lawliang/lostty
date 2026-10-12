@@ -71,10 +71,39 @@ public enum TmuxRemote {
         "#{pane_current_command}", "#{pane_current_path}", "#{pane_title}",
     ].joined(separator: "\t")
 
+    /// The wait-for channel tmux hooks, the Mac and the phone signal when
+    /// sessions change.
+    public static let changedChannel = "lostty-changed"
+
+    /// Who ended a session, kept in `@lostty_end_<n>` after it is gone.
+    public enum EndTag {
+        public static let macClose = "mac-close"
+        public static let macQuit = "mac-quit"
+        public static let phonePrefix = "phone:"
+
+        public static func phone(_ device: String) -> String { phonePrefix + device }
+    }
+
+    /// The global option that keeps why session `sessionID` ended
+    /// ("$3" → "@lostty_end_3"). Ids restart only with the server, which
+    /// drops the options too.
+    public static func endOption(sessionID: String) throws -> String {
+        guard isSessionID(sessionID) else { throw TmuxRemoteError.badSessionID(sessionID) }
+        return "@lostty_end_\(sessionID.dropFirst())"
+    }
+
+    private static var tmux: String { "\(pathPrefix) tmux -u -L lostty" }
+
+    /// Prints a line each time sessions change, until the Mac has no tmux
+    /// server (wait-for exits 1). `-f /dev/null`: never starts a server.
+    public static var watchCommand: String {
+        "while \(tmux) -f /dev/null wait-for \(changedChannel); do echo; done"
+    }
+
     /// SSH commands have no locale, and without UTF-8 tmux turns the tab
     /// separators into `_`, so `-u` keeps them.
     public static var listCommand: String {
-        "\(pathPrefix) tmux -u -L lostty list-sessions -F \(shellQuote(listFormat))"
+        "\(tmux) list-sessions -F \(shellQuote(listFormat))"
     }
 
     /// The command the PTY's shell replaces itself with. `-u` and LANG keep
@@ -93,19 +122,48 @@ public enum TmuxRemote {
         // guard's tmux fails on an unknown terminal without it.
         let export = terminfoDir.map { "export TERMINFO=\(shellQuote($0)); " } ?? ""
         return export + nameGuard(sessionID: sessionID, name: name)
-            + "exec env LANG=\"${LANG:-en_US.UTF-8}\" \(pathPrefix) tmux -u -L lostty -f /dev/null attach-session -t \(shellQuote(sessionID))"
+            + "exec env LANG=\"${LANG:-en_US.UTF-8}\" \(tmux) -f /dev/null attach-session -t \(shellQuote(sessionID))"
     }
 
-    /// Ends session `sessionID` (and with it the Mac window showing it).
-    /// Exits 1 (without killing) if the id now names a different session.
-    public static func killCommand(sessionID: String, name: String) throws -> String {
+    /// Ends session `sessionID` (and with it the Mac window showing it),
+    /// first noting that this phone (`device`) closed it. Exits 1 (without
+    /// killing) if the id now names a different session.
+    public static func killCommand(sessionID: String, name: String, device: String) throws -> String {
+        let option = try endOption(sessionID: sessionID)
+        return nameGuard(sessionID: sessionID, name: name)
+            + "\(tmux) set-option -g \(option) \(shellQuote(EndTag.phone(device))) \\; kill-session -t \(shellQuote(sessionID))"
+    }
+
+    /// Names session `sessionID` (nil: back to the automatic name), then
+    /// wakes every watcher. The label is cleaned here too (a trailing ";"
+    /// would read as a tmux command separator). Exits 1 if the id now names
+    /// a different session.
+    public static func renameCommand(sessionID: String, name: String, label: String?) throws -> String {
         guard isSessionID(sessionID) else { throw TmuxRemoteError.badSessionID(sessionID) }
-        return nameGuard(sessionID: sessionID, name: name) + "\(pathPrefix) tmux -u -L lostty kill-session -t \(shellQuote(sessionID))"
+        let set = label.flatMap(SessionLabel.cleanLabel).map {
+            "set-option -t \(shellQuote(sessionID)) \(labelOption) \(shellQuote($0))"
+        } ?? "set-option -u -t \(shellQuote(sessionID)) \(labelOption)"
+        return nameGuard(sessionID: sessionID, name: name) + "\(tmux) \(set) \\; wait-for -S \(changedChannel)"
+    }
+
+    /// Line 1: `present` or `gone`; line 2: the end tag, if any.
+    public static func endProbeCommand(sessionID: String) throws -> String {
+        let option = try endOption(sessionID: sessionID)
+        return "T=$(\(tmux) -f /dev/null show-options -gqv \(shellQuote(option)) 2>/dev/null); "
+            + "if \(tmux) -f /dev/null has-session -t \(shellQuote(sessionID)) 2>/dev/null; then echo present; else echo gone; fi; "
+            + "printf '%s\\n' \"$T\""
+    }
+
+    public static func parseEndProbe(_ output: String) -> EndProbe? {
+        let lines = output.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        guard let first = lines.first, first == "present" || first == "gone" else { return nil }
+        let tag = lines.count > 1 ? lines[1].trimmingCharacters(in: .whitespaces) : ""
+        return EndProbe(exists: first == "present", tag: tag.isEmpty ? nil : tag)
     }
 
     /// `-f /dev/null`: display-message must not start a server either.
     private static func nameGuard(sessionID: String, name: String) -> String {
-        "[ \"$(\(pathPrefix) tmux -u -L lostty -f /dev/null display-message -p -t \(shellQuote(sessionID)) "
+        "[ \"$(\(tmux) -f /dev/null display-message -p -t \(shellQuote(sessionID)) "
             + "'#{session_name}' 2>/dev/null)\" = \(shellQuote(name)) ] || exit 1; "
     }
 
@@ -143,5 +201,14 @@ extension RemoteSession {
             let order = $0.name.localizedStandardCompare($1.name)
             return order == .orderedSame ? $0.id < $1.id : order == .orderedAscending
         }
+    }
+}
+
+/// The phone re-lists at most this often while changes stream in.
+public enum ListPacing {
+    public static let interval: TimeInterval = 0.3
+
+    public static func delay(sinceLastList last: Date, now: Date) -> TimeInterval {
+        max(0, interval - now.timeIntervalSince(last))
     }
 }

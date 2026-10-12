@@ -78,14 +78,54 @@ public final class RemoteConnection: @unchecked Sendable {
         }
     }
 
-    /// Ends session `sessionID` (named `name`) on the Mac. A session that
-    /// already ended, or whose id now names another session (tmux exits 1),
-    /// is not an error and is left alone.
-    public func killSession(_ sessionID: String, name: String) async throws {
+    /// Ends session `sessionID` (named `name`) on the Mac, noting that this
+    /// phone (`device`) closed it. A session that already ended, or whose id
+    /// now names another session (tmux exits 1), is left alone.
+    public func killSession(_ sessionID: String, name: String, device: String) async throws {
         do {
-            _ = try await client.executeCommand(try TmuxRemote.killCommand(sessionID: sessionID, name: name))
+            _ = try await client.executeCommand(try TmuxRemote.killCommand(sessionID: sessionID, name: name, device: device))
         } catch let failed as SSHClient.CommandFailed where failed.exitCode == 1 {
             return
+        }
+    }
+
+    /// Names session `sessionID` (nil: back to automatic). False when it
+    /// ended or its id now names another session.
+    public func setLabel(_ label: String?, sessionID: String, name: String) async throws -> Bool {
+        do {
+            _ = try await client.executeCommand(try TmuxRemote.renameCommand(sessionID: sessionID, name: name, label: label))
+            return true
+        } catch let failed as SSHClient.CommandFailed where failed.exitCode == 1 {
+            return false
+        }
+    }
+
+    /// Why session `sessionID` ended: its end tag, and whether it is in
+    /// fact still there. nil when the answer is unreadable.
+    public func endProbe(_ sessionID: String) async throws -> EndProbe? {
+        let out = try await client.executeCommand(try TmuxRemote.endProbeCommand(sessionID: sessionID))
+        return TmuxRemote.parseEndProbe(String(buffer: out))
+    }
+
+    /// One event per change to the Mac's sessions (tmux's `lostty-changed`
+    /// channel), on its own channel of this connection. Changes that arrive
+    /// while one is unread fold into it. Ends when the Mac has no tmux
+    /// server or the connection drops; closing the connection is the only
+    /// way to stop it early (Citadel's stream doesn't close its channel).
+    public func watchChanges() async throws -> AsyncStream<Void> {
+        let output = try await client.executeCommandStream(TmuxRemote.watchCommand)
+        return AsyncStream(Void.self, bufferingPolicy: .bufferingNewest(1)) { continuation in
+            let reader = Task {
+                do {
+                    for try await chunk in output {
+                        if case .stdout(let buffer) = chunk, buffer.readableBytes > 0 { continuation.yield(()) }
+                    }
+                } catch {
+                    // Exit 1 (no server) or a dropped connection: the watch ends.
+                }
+                continuation.finish()
+            }
+            continuation.onTermination = { _ in reader.cancel() }
         }
     }
 
