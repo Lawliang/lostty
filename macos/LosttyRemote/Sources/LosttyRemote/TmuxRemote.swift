@@ -1,5 +1,11 @@
 import Foundation
 
+/// What the Mac says a session's Claude is doing (`@lostty_claude`).
+public enum ClaudeActivity: String, Sendable {
+    case waiting
+    case working
+}
+
 /// A session on the Mac's Lostty tmux (`tmux -L lostty`).
 public struct RemoteSession: Equatable, Sendable {
     public var id: String
@@ -8,12 +14,34 @@ public struct RemoteSession: Equatable, Sendable {
     public var surface: String?
     /// The Mac Lostty's pid, if a Mac window shows it.
     public var owner: Int32?
+    /// The name typed on the Mac (Rename Tab…) or the phone (Rename).
+    public var label: String?
+    /// Set by the Mac for sessions it shows; nil otherwise.
+    public var claude: ClaudeActivity?
+    /// `#{pane_title}`: Claude Code's task, or a shell's folder.
+    public var title: String
+    /// `#{pane_current_path}`: the running program's folder.
+    public var path: String
+    /// `#{pane_current_command}`; Claude Code reports its version ("2.1.296").
+    public var command: String
+    /// `#{session_activity}`: last use.
+    public var activity: Date?
 
-    public init(id: String, name: String, surface: String?, owner: Int32?) {
+    public init(
+        id: String, name: String, surface: String?, owner: Int32?, label: String? = nil,
+        claude: ClaudeActivity? = nil, title: String = "", path: String = "", command: String = "",
+        activity: Date? = nil
+    ) {
         self.id = id
         self.name = name
         self.surface = surface
         self.owner = owner
+        self.label = label
+        self.claude = claude
+        self.title = title
+        self.path = path
+        self.command = command
+        self.activity = activity
     }
 }
 
@@ -29,8 +57,19 @@ public enum TmuxRemote {
     /// SSH commands get a minimal PATH; tmux is usually in Homebrew's.
     public static let pathPrefix = "PATH=/opt/homebrew/bin:/usr/local/bin:$PATH"
 
-    /// id, name, Mac pane, Mac Lostty pid — tab separated.
-    public static let listFormat = "#{session_id}\t#{session_name}\t#{@lostty_surface}\t#{@lostty_owner}"
+    /// The name typed on the Mac or the phone.
+    public static let labelOption = "@lostty_label"
+    /// "waiting" or "working", written by the Mac.
+    public static let claudeOption = "@lostty_claude"
+
+    /// id, name, Mac pane, Mac Lostty pid, label, Claude state, last use,
+    /// command, folder, title — tab separated. The title goes last: any
+    /// program sets it, so a tab inside it stays inside it.
+    public static let listFormat = [
+        "#{session_id}", "#{session_name}", "#{@lostty_surface}", "#{@lostty_owner}",
+        "#{\(labelOption)}", "#{\(claudeOption)}", "#{session_activity}",
+        "#{pane_current_command}", "#{pane_current_path}", "#{pane_title}",
+    ].joined(separator: "\t")
 
     /// SSH commands have no locale, and without UTF-8 tmux turns the tab
     /// separators into `_`, so `-u` keeps them.
@@ -72,13 +111,19 @@ public enum TmuxRemote {
 
     public static func parse(_ output: String) -> [RemoteSession] {
         output.split(separator: "\n").compactMap { line in
-            let fields = line.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
-            guard fields.count == 4, isSessionID(fields[0]) else { return nil }
+            let f = line.split(separator: "\t", maxSplits: 9, omittingEmptySubsequences: false).map(String.init)
+            guard f.count == 10, isSessionID(f[0]) else { return nil }
             return RemoteSession(
-                id: fields[0],
-                name: fields[1],
-                surface: fields[2].isEmpty ? nil : fields[2],
-                owner: Int32(fields[3]))
+                id: f[0],
+                name: f[1],
+                surface: f[2].isEmpty ? nil : f[2],
+                owner: Int32(f[3]),
+                label: f[4].isEmpty ? nil : f[4],
+                claude: ClaudeActivity(rawValue: f[5]),
+                title: f[9],
+                path: f[8],
+                command: f[7],
+                activity: TimeInterval(f[6]).map { Date(timeIntervalSince1970: $0) })
         }
     }
 

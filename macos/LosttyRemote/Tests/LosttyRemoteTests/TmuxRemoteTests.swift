@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import LosttyRemote
 
@@ -61,12 +62,32 @@ struct TmuxRemoteTests {
     }
 
     @Test func parsesTheSessionList() {
-        let out = "$1\tlostty\tABCD-1\t4242\n$2\tnotes\t\t\n$3\tmy proj\t\t\n"
+        let out = "$1\tlostty\tABCD-1\t4242\tDeploy\twaiting\t1700000000\t2.1.296\t/Users/me/lostty\t✳ Fix login\n"
+            + "$2\tnotes\t\t\t\t\t\tzsh\t/Users/me/notes\t~/notes\n"
         #expect(TmuxRemote.parse(out) == [
-            RemoteSession(id: "$1", name: "lostty", surface: "ABCD-1", owner: 4242),
-            RemoteSession(id: "$2", name: "notes", surface: nil, owner: nil),
-            RemoteSession(id: "$3", name: "my proj", surface: nil, owner: nil),
+            RemoteSession(
+                id: "$1", name: "lostty", surface: "ABCD-1", owner: 4242, label: "Deploy", claude: .waiting,
+                title: "✳ Fix login", path: "/Users/me/lostty", command: "2.1.296",
+                activity: Date(timeIntervalSince1970: 1_700_000_000)),
+            RemoteSession(
+                id: "$2", name: "notes", surface: nil, owner: nil, label: nil, claude: nil,
+                title: "~/notes", path: "/Users/me/notes", command: "zsh", activity: nil),
         ])
+    }
+
+    @Test func aTabInTheTitleStaysInTheTitle() {
+        let out = "$1\tx\t\t\t\t\t1\tzsh\t/x\tleft\tright 🚀\n"
+        #expect(TmuxRemote.parse(out).first?.title == "left\tright 🚀")
+    }
+
+    @Test func theListAsksForEveryColumnTitleLast() {
+        #expect(TmuxRemote.listFormat == "#{session_id}\t#{session_name}\t#{@lostty_surface}\t#{@lostty_owner}\t"
+            + "#{@lostty_label}\t#{@lostty_claude}\t#{session_activity}\t#{pane_current_command}\t"
+            + "#{pane_current_path}\t#{pane_title}")
+    }
+
+    @Test func anUnknownClaudeValueIsNone() {
+        #expect(TmuxRemote.parse("$1\tx\t\t\t\tthinking\t1\tzsh\t/x\tt\n").first?.claude == nil)
     }
 
     @Test func emptyOrGarbageListIsNoSessions() {
