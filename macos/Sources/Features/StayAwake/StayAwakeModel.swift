@@ -100,6 +100,8 @@ struct StayAwakeModel {
     private(set) var state: State = .off(reason: nil, at: nil)
     private(set) var power: PowerState?
     var batteryFloor = 15
+    /// Not persisted: stops the 5 s power poll from retrying a failed lid-open restore.
+    private var lidOpenRestoreFailed = false
 
     var isOn: Bool { if case .on = state { true } else { false } }
 
@@ -120,6 +122,7 @@ struct StayAwakeModel {
                 record.lowPowerApplied = true
                 actions += [.saveRecord(record), .run(.lowPowerEverywhere)]
             }
+            lidOpenRestoreFailed = false
             state = .on(until: until, record: record)
             return actions
 
@@ -133,12 +136,13 @@ struct StayAwakeModel {
             power = next
             guard case .on(let until, var record) = state else { return [] }
             if let reason = cutOff(next) { return finish(reason, now: now) }
+            if next.lidClosed { lidOpenRestoreFailed = false }
             if next.lidClosed && !record.lowPowerApplied {
                 record.lowPowerApplied = true
                 state = .on(until: until, record: record)
                 return [.saveRecord(record), .run(.lowPowerEverywhere)]
             }
-            if !next.lidClosed && record.lowPowerApplied {
+            if !next.lidClosed && record.lowPowerApplied && !lidOpenRestoreFailed {
                 record.lowPowerApplied = false
                 state = .on(until: until, record: record)
                 return restoreLowPower(record.settings) + [.saveRecord(record)]
@@ -163,6 +167,7 @@ struct StayAwakeModel {
                 // A half-done change: keep remembering it so turn off retries the restore.
                 guard case .on(let until, var record) = state else { return [] }
                 record.lowPowerApplied = true
+                if power?.lidClosed == false { lidOpenRestoreFailed = true }
                 state = .on(until: until, record: record)
                 return [.saveRecord(record), .notifyMac(StayAwakeCopy.lowPowerFailed)]
             }
@@ -179,6 +184,7 @@ struct StayAwakeModel {
 
     private mutating func finish(_ reason: StayAwakeReason, now: Date) -> [StayAwakeAction] {
         guard case .on(_, let record) = state else { return [] }
+        lidOpenRestoreFailed = false
         state = .off(reason: reason, at: now)
         let notices = StayAwakeCopy.goingToSleep(reason).map { [StayAwakeAction.notifyMac($0), .notifyPhone($0)] } ?? []
         return notices + restore(record) + [.clearRecord]

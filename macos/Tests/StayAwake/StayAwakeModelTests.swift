@@ -187,6 +187,18 @@ struct StayAwakeModelTests {
         ])
     }
 
+    @Test func failedLidOpenRestoreIsNotRetriedEveryPoll() {
+        var m = onModel()
+        _ = m.handle(.power(closed), now: t0)
+        _ = m.handle(.power(open), now: t0)
+        _ = m.handle(.controlFailed(.failed("x"), command: .lowPower(.battery, true)), now: t0)
+        #expect(m.handle(.power(open), now: t0) == [])
+        #expect(m.handle(.turnOff, now: t0) == [
+            .run(.disableSleep(false)),
+            .run(.lowPower(.battery, true)), .run(.lowPower(.ac, false)), .clearRecord,
+        ])
+    }
+
     @Test func durations() {
         #expect(StayAwakeDuration.allCases.map(\.title) == ["Until I Turn It Off", "1 Hour", "4 Hours", "8 Hours"])
         #expect(StayAwakeDuration.untilOff.seconds == nil)
