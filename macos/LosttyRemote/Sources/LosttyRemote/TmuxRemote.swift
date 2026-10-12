@@ -212,3 +212,32 @@ public enum ListPacing {
         max(0, interval - now.timeIntervalSince(last))
     }
 }
+
+extension RemoteSession {
+    /// `session` as `listed` has it now, found by id: the Mac renames a
+    /// session when its shell changes project. Only for a session the
+    /// caller is attached to, which proves the id still names it (ids
+    /// restart with the tmux server).
+    public static func current(of session: RemoteSession, in listed: [RemoteSession]) -> RemoteSession? {
+        listed.first { $0.id == session.id }
+    }
+}
+
+/// Why Rename didn't take: the Mac's tmux refused it because the session
+/// is gone, or because its name no longer matches (the Mac renamed it).
+public enum RenameFailure: Equatable, Sendable {
+    case ended
+    case changed
+
+    /// Decided from a list taken after the refusal.
+    public static func after(sessionID: String, listed: [RemoteSession]) -> RenameFailure {
+        listed.contains { $0.id == sessionID } ? .changed : .ended
+    }
+
+    public var message: String {
+        switch self {
+        case .ended: "Couldn't rename: that session has ended."
+        case .changed: "Couldn't rename: the session changed on your Mac. Try again."
+        }
+    }
+}

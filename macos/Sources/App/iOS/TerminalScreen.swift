@@ -5,10 +5,21 @@ import LosttyRemote
 import SwiftUI
 
 /// The open terminal's connection events, from its `RemoteSurfaceIO`
-/// (delivered on the main thread).
+/// (delivered on the main thread). The last one is replayed to a late
+/// subscriber: the attach can end before the screen starts listening.
 @MainActor
 final class TerminalLink {
-    let events = PassthroughSubject<RemoteLinkStatus, Never>()
+    private let latest = CurrentValueSubject<RemoteLinkStatus?, Never>(nil)
+    /// Made once, so the screen's `onReceive` sees the same publisher.
+    let events: AnyPublisher<RemoteLinkStatus, Never>
+
+    init() {
+        events = latest.compactMap { $0 }.eraseToAnyPublisher()
+    }
+
+    func send(_ status: RemoteLinkStatus) {
+        latest.send(status)
+    }
 }
 
 /// One remote session. Back closes only the connection; "Close Session"
@@ -32,6 +43,10 @@ struct TerminalScreen: View {
     /// The value is whether input had just been sent.
     @State private var endWhileAway: Bool?
     @State private var renaming: RemoteSession?
+    @State private var renameError: String?
+    /// The attach's end is being (or was) explained: a replayed `.exited`
+    /// must not ask the Mac again.
+    @State private var endHandled = false
 
     init(session: RemoteSession, surfaceView: Ghostty.SurfaceView, io: RemoteSurfaceIO, link: TerminalLink) {
         _session = State(initialValue: session)
@@ -40,7 +55,13 @@ struct TerminalScreen: View {
         self.link = link
     }
 
-    private var title: String { SessionLabel.row(for: session, now: Date()).title }
+    /// This session as last listed: the Mac renames a session when its
+    /// shell changes project, so the name it opened with can be stale.
+    private var current: RemoteSession {
+        RemoteSession.current(of: session, in: store.sessions) ?? session
+    }
+
+    private var title: String { SessionLabel.row(for: current, now: Date()).title }
 
     var body: some View {
         GeometryReader { geo in
@@ -63,11 +84,14 @@ struct TerminalScreen: View {
             ToolbarItem(placement: .principal) { TerminalTitle(name: title) }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
-                    Button("Rename") { renaming = session }
+                    Button("Rename") { renaming = current }
                     Button("Close Session", role: .destructive) { confirmClose = true }
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
+                // Under an overlay the attach is down or the session gone:
+                // the id may no longer name this session.
+                .disabled(overlay != .none)
             }
         }
         .confirmationDialog(
@@ -76,7 +100,7 @@ struct TerminalScreen: View {
             Button("Close Session", role: .destructive) {
                 closingHere = true
                 Task {
-                    if await store.kill(session) {
+                    if await store.kill(current, attached: true) {
                         dismiss()
                     } else {
                         closingHere = false
@@ -92,7 +116,12 @@ struct TerminalScreen: View {
         } message: {
             Text(closeError ?? "")
         }
-        .renameSession($renaming) { label in session.label = label }
+        .renameSession($renaming, attached: true, renamed: { session = $0 }, failed: { renameError = $0 })
+        .alert("Couldn't Rename", isPresented: Binding(get: { renameError != nil }, set: { if !$0 { renameError = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(renameError ?? "")
+        }
         .onAppear { surfaceView.showKeyboard() }
         .onDisappear { store.terminalClosed(io) }
         .onReceive(link.events) { handle($0) }
@@ -112,7 +141,8 @@ struct TerminalScreen: View {
 
     private func handle(_ status: RemoteLinkStatus) {
         if case .exited = status {
-            guard !closingHere else { return }
+            guard !closingHere, !endHandled else { return }
+            endHandled = true
             let typed = io.wroteRecently(within: SessionEnd.typedWindow)
             if scenePhase == .active {
                 explainEnd(typedRecently: typed)
@@ -126,7 +156,9 @@ struct TerminalScreen: View {
         let wasShowing = overlay != .none
         overlay = next
         if next == .none, wasShowing {
-            surfaceView.showKeyboard()
+            // Only when attached again; after `.stopped` the terminal shows
+            // why it gave up, and there is nothing to type into.
+            if status == .attached { surfaceView.showKeyboard() }
         } else if next != .none {
             _ = surfaceView.resignFirstResponder()
         }

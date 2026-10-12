@@ -180,10 +180,13 @@ private struct SessionRowView: View {
 }
 
 /// Rename: one name everywhere (the Mac tab shows it too); blank goes back
-/// to the automatic name.
+/// to the automatic name. A failure goes to `failed`, or the list's message.
 struct RenameSessionAlert: ViewModifier {
     @Binding var session: RemoteSession?
-    var renamed: (String?) -> Void
+    /// The caller is attached to the session (see `MobileStore.rename`).
+    var attached: Bool
+    var renamed: (RemoteSession) -> Void
+    var failed: ((String) -> Void)?
     @EnvironmentObject private var store: MobileStore
     @State private var text = ""
 
@@ -198,7 +201,12 @@ struct RenameSessionAlert: ViewModifier {
                 Button("Save") {
                     let typed = text
                     Task {
-                        if await store.rename(target, to: typed) { renamed(SessionLabel.cleanLabel(typed)) }
+                        switch await store.rename(target, to: typed, attached: attached) {
+                        case .renamed(let session): renamed(session)
+                        case .failed(let text):
+                            if let failed { failed(text) } else { store.message = text }
+                        case .skipped: break
+                        }
                     }
                 }
                 Button("Cancel", role: .cancel) {}
@@ -212,8 +220,11 @@ struct RenameSessionAlert: ViewModifier {
 }
 
 extension View {
-    func renameSession(_ session: Binding<RemoteSession?>, renamed: @escaping (String?) -> Void = { _ in }) -> some View {
-        modifier(RenameSessionAlert(session: session, renamed: renamed))
+    func renameSession(
+        _ session: Binding<RemoteSession?>, attached: Bool = false,
+        renamed: @escaping (RemoteSession) -> Void = { _ in }, failed: ((String) -> Void)? = nil
+    ) -> some View {
+        modifier(RenameSessionAlert(session: session, attached: attached, renamed: renamed, failed: failed))
     }
 }
 

@@ -142,16 +142,29 @@ final class MobileStore: ObservableObject {
     }
 
     /// Ends the session on the Mac; false (with `message` set) when it failed.
+    /// `attached`: the caller is attached to this very session (the
+    /// terminal screen), so its current name is read by id first; the name
+    /// the screen opened with goes stale when the Mac renames the session.
     @discardableResult
-    func kill(_ session: RemoteSession) async -> Bool {
+    func kill(_ session: RemoteSession, attached: Bool = false) async -> Bool {
         #if DEBUG
         if isGallery { return false }
         #endif
         guard !settings.remoteHosts.isEmpty else { return false }
         do {
-            try await withConnection { connection in
-                try await connection.killSession(session.id, name: session.name, device: DeviceModel.current)
+            let listed: [RemoteSession]? = try await withConnection { connection in
+                guard attached else {
+                    try await connection.killSession(session.id, name: session.name, device: DeviceModel.current)
+                    return nil
+                }
+                let listed = try await connection.sessions()
+                // Not listed: it already ended.
+                if let current = RemoteSession.current(of: session, in: listed) {
+                    try await connection.killSession(current.id, name: current.name, device: DeviceModel.current)
+                }
+                return listed
             }
+            if let listed { sessions = listed }
             sessions.removeAll { $0.id == session.id }
             return true
         } catch {
@@ -161,31 +174,52 @@ final class MobileStore: ObservableObject {
         }
     }
 
-    static let renameGoneMessage = "Couldn't rename: that session has ended."
+    enum RenameResult: Equatable {
+        /// The session as renamed, under its current name.
+        case renamed(RemoteSession)
+        /// Why not, for the user.
+        case failed(String)
+        /// Nothing to talk to (no Mac set up, or the Design Gallery).
+        case skipped
+    }
 
     /// Names `session` on the Mac (blank: back to the automatic name); the
-    /// Mac tab shows it too. False (with `message` set) when it failed.
-    @discardableResult
-    func rename(_ session: RemoteSession, to typed: String) async -> Bool {
+    /// Mac tab shows it too. `attached`: as for `kill`, the current name is
+    /// read by id first. The caller shows a failure.
+    func rename(_ session: RemoteSession, to typed: String, attached: Bool = false) async -> RenameResult {
         #if DEBUG
-        if isGallery { return false }
+        if isGallery { return .skipped }
         #endif
-        guard !settings.remoteHosts.isEmpty else { return false }
+        guard !settings.remoteHosts.isEmpty else { return .skipped }
         let label = SessionLabel.cleanLabel(typed)
         do {
-            let renamed = try await withConnection { connection in
-                try await connection.setLabel(label, sessionID: session.id, name: session.name)
+            let (result, listed) = try await withConnection { connection -> (RenameResult, [RemoteSession]?) in
+                var target = session
+                var listed: [RemoteSession]?
+                if attached {
+                    let found = try await connection.sessions()
+                    listed = found
+                    guard let current = RemoteSession.current(of: session, in: found) else {
+                        return (.failed(RenameFailure.ended.message), found)
+                    }
+                    target = current
+                }
+                if try await connection.setLabel(label, sessionID: target.id, name: target.name) {
+                    target.label = label
+                    return (.renamed(target), listed)
+                }
+                // Refused: gone, or renamed on the Mac since it was listed.
+                let after = try await connection.sessions()
+                return (.failed(RenameFailure.after(sessionID: session.id, listed: after).message), after)
             }
-            guard renamed else {
-                message = Self.renameGoneMessage
-                return false
+            if let listed { sessions = listed }
+            if case .renamed(let renamed) = result, let index = sessions.firstIndex(where: { $0.id == renamed.id }) {
+                sessions[index] = renamed
             }
-            if let index = sessions.firstIndex(where: { $0.id == session.id }) { sessions[index].label = label }
-            return true
+            return result
         } catch {
-            message = describe(error)
             noteNeedsPairing(error)
-            return false
+            return .failed(describe(error))
         }
     }
 
@@ -214,7 +248,7 @@ final class MobileStore: ObservableObject {
                     sessionID: session.id,
                     sessionName: session.name),
                 surfaceCalls: .overlaid { status in
-                    MainActor.assumeIsolated { link.events.send(status) }
+                    MainActor.assumeIsolated { link.send(status) }
                 })
             var config = Ghostty.SurfaceConfiguration()
             config.remoteIO = io
@@ -247,23 +281,29 @@ final class MobileStore: ObservableObject {
     // MARK: Live list
 
     /// The list is on screen; with the app active, one connection watches
-    /// tmux and re-lists on every change.
-    private var listVisible = false
-    private var appActive = true
+    /// tmux and re-lists on every change. A watch stopped on an error the
+    /// user must resolve stays stopped until they ask (`ListWatchGate`).
+    private var gate = ListWatchGate()
     private var watchTask: Task<Void, Never>?
 
+    /// The list came on screen, or pull to refresh: also resumes a watch
+    /// that stopped on an error.
     func listAppeared() {
-        listVisible = true
+        gate.listVisible = true
+        gate.userAsked()
         updateWatch()
     }
 
     func listDisappeared() {
-        listVisible = false
+        gate.listVisible = false
         updateWatch()
     }
 
     /// Settings or pairing may have changed the Mac: watch the current one.
-    func restartWatch() {
+    /// `userAsked`: false for a network change, which must not re-prompt
+    /// for a Face ID the user cancelled.
+    func restartWatch(userAsked: Bool = true) {
+        if userAsked { gate.userAsked() }
         watchTask?.cancel()
         watchTask = nil
         updateWatch()
@@ -273,7 +313,7 @@ final class MobileStore: ObservableObject {
         #if DEBUG
         if isGallery { return }
         #endif
-        let wanted = listVisible && appActive && !settings.remoteHosts.isEmpty
+        let wanted = gate.wanted(hasHosts: !settings.remoteHosts.isEmpty)
         if wanted, watchTask == nil {
             watchTask = Task { [weak self] in await self?.watchLoop() }
         } else if !wanted, let task = watchTask {
@@ -306,8 +346,9 @@ final class MobileStore: ObservableObject {
                 noteNeedsPairing(error)
                 // Pairing again, or the user, resolves these; don't keep
                 // knocking (or re-prompting for Face ID). Pull to refresh,
-                // coming back to the list or the foreground starts it again.
-                if ReconnectPolicy.stopsWatch(for: error) { break }
+                // coming back to the list or from the background starts it
+                // again; the Face ID sheet's own inactive → active doesn't.
+                if gate.watchFailed(error) { break }
             }
             if Task.isCancelled { break }
             try? await Task.sleep(for: .seconds(policy.nextDelay()))
@@ -546,17 +587,16 @@ final class MobileStore: ObservableObject {
     func scenePhaseChanged(_ phase: ScenePhase) {
         switch phase {
         case .active:
-            appActive = true
-            updateWatch()
             // .inactive -> .active also happens for the Face ID sheet and
             // Control Center; only a real trip to the background restarts.
-            if wasBackgrounded {
-                wasBackgrounded = false
-                openIO?.restart()
-            }
+            let returning = wasBackgrounded
+            wasBackgrounded = false
+            gate.becameActive(afterBackground: returning)
+            updateWatch()
+            if returning { openIO?.restart() }
         case .background:
             wasBackgrounded = true
-            appActive = false
+            gate.wentToBackground()
             updateWatch()
             // Face ID again after the app has been away.
             context.invalidate()
@@ -583,6 +623,7 @@ final class MobileStore: ObservableObject {
         // (Tailscale) changing don't drop the connection.
         if previousStatus != .satisfied || previousTypes != types {
             openIO?.restart()
+            restartWatch(userAsked: false)
         }
     }
 }

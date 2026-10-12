@@ -61,3 +61,46 @@ public struct ReconnectPolicy: Sendable {
         if deliveredChange { reset() }
     }
 }
+
+/// Whether the phone's live session list should be watching. A watch that
+/// stopped on an error the user must resolve (`ReconnectPolicy.stopsWatch`)
+/// stays stopped until they ask: the Face ID sheet itself makes the app
+/// inactive and then active again, so restarting on every `.active` would
+/// prompt in a loop.
+public struct ListWatchGate: Equatable, Sendable {
+    /// The list is on screen.
+    public var listVisible = false
+    public private(set) var appActive = true
+    /// Stopped for an error the user must resolve.
+    public private(set) var held = false
+
+    public init() {}
+
+    public func wanted(hasHosts: Bool) -> Bool {
+        listVisible && appActive && hasHosts && !held
+    }
+
+    /// The watch failed with `error`. True when it must stop (and stays
+    /// stopped until `userAsked` or a trip to the background).
+    public mutating func watchFailed(_ error: Error) -> Bool {
+        let stops = ReconnectPolicy.stopsWatch(for: error)
+        if stops { held = true }
+        return stops
+    }
+
+    /// Pull to refresh, coming back to the list, new settings or pairing.
+    public mutating func userAsked() {
+        held = false
+    }
+
+    /// `.active`. Only a return from the background (not the Face ID
+    /// sheet or Control Center going away) tries again by itself.
+    public mutating func becameActive(afterBackground: Bool) {
+        appActive = true
+        if afterBackground { held = false }
+    }
+
+    public mutating func wentToBackground() {
+        appActive = false
+    }
+}
