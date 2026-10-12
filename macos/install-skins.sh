@@ -5,9 +5,12 @@ cd "$(dirname "$0")/.."
 export PATH="$(brew --prefix zig@0.15)/bin:$PATH"
 zig build -Demit-macos-app=false -Doptimize=ReleaseFast
 mkdir -p macos/build
+# The scheme turns code coverage on for every build. An instrumented Lostty
+# drops a default.profraw wherever its Claude hooks run, so switch it off.
 env -i HOME="$HOME" PATH=/usr/bin:/bin:/usr/sbin:/sbin \
   xcodebuild -project macos/Ghostty.xcodeproj -scheme Ghostty -configuration ReleaseLocal \
-  SYMROOT="$PWD/macos/build" build > macos/build/last-install.log 2>&1 || true
+  SYMROOT="$PWD/macos/build" ENABLE_CODE_COVERAGE=NO CLANG_COVERAGE_MAPPING=NO \
+  build > macos/build/last-install.log 2>&1 || true
 grep -q "\*\* BUILD SUCCEEDED \*\*" macos/build/last-install.log || {
   tail -20 macos/build/last-install.log
   echo "Build failed; see macos/build/last-install.log" >&2

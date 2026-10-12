@@ -7,47 +7,49 @@ enum TraceTiming {
 }
 
 /// One pane's trace: racing while Claude works, gone the moment it stops.
+/// `subagents`: Claude finished its turn but its subagents are still
+/// working, so the head keeps to the bottom edge.
 enum TracePhase: Equatable {
     case off
-    case racing(since: Date)
+    case racing(since: Date, subagents: Bool = false)
 
     var isOff: Bool { self == .off }
 
     func applying(_ state: ClaudeState, now: Date) -> TracePhase {
         switch (state, self) {
         case (.busy, .off): .racing(since: now)
-        case (.busy, .racing): self
+        case (.busy, .racing(let since, _)): .racing(since: since)
+        case (.agents, .off): .racing(since: now, subagents: true)
+        case (.agents, .racing(let since, _)): .racing(since: since, subagents: true)
+        case (.resumed, .racing(let since, _)): .racing(since: since)
+        case (.resumed, .off): .off
         case (.idle, _), (.exit, _): .off
         }
     }
 }
 
-/// What to draw at one instant. Positions are fractions of the perimeter,
-/// clockwise from the top-left corner.
+/// What to draw at one instant, along the `EdgePath` the head has
+/// travelled. Positions are fractions of that path; the head is at its end.
 struct TraceFrame: Equatable {
-    /// Head position, 0..<1.
+    /// Head position, 0...1.
     var head: Double
     /// Tail length, 0...1.
     var length: Double
     /// Overall opacity, 0...1.
     var intensity: Double
 
-    static func make(_ phase: TracePhase, now: Date, lapSeconds: Double, length: Double) -> TraceFrame? {
-        guard case .racing(let since) = phase else { return nil }
-        let elapsed = max(0, now.timeIntervalSince(since))
-        return TraceFrame(
-            head: (elapsed / lapSeconds).truncatingRemainder(dividingBy: 1),
-            length: length,
-            intensity: min(1, elapsed / TraceTiming.fadeIn))
+    /// Fades in over `TraceTiming.fadeIn` from the trace's start.
+    static func intensity(elapsed: TimeInterval) -> Double {
+        min(1, max(0, elapsed) / TraceTiming.fadeIn)
     }
 
-    /// Seconds the head spends on each side at `speed = 1`. Every side gets
-    /// the same time, whatever its length, so the ease into and out of each
-    /// corner is always long enough to see.
-    static let secondsPerSide: Double = 0.6
+    /// Seconds the head spends on each leg (one side of the pane, corner to
+    /// corner) at `speed = 1`, whatever its length, so the ease into and out
+    /// of each corner is always long enough to see.
+    static let secondsPerLeg: Double = 0.6
 
-    static func lapSeconds(speed: Double) -> Double {
-        4 * secondsPerSide / speed
+    static func legSeconds(speed: Double) -> Double {
+        secondsPerLeg / speed
     }
 }
 #endif

@@ -19,7 +19,7 @@ struct SkinTrace: Hashable {
     var color2: RGB? = nil
     /// Multiplier, 0.25...4.
     var speed: Double = 1
-    /// Tail length as a share of the perimeter, 0.05...0.5.
+    /// Tail length as a share of one lap of the trace's route, 0.05...0.5.
     var length: Double = 0.18
 
     static let speedRange: ClosedRange<Double> = 0.25...4
