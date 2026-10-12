@@ -100,6 +100,8 @@ struct PhoneAccessView: View {
         case .skipLockdown: "Skip"
         case .openFirewall: "Open Network Settings"
         case .installTerminfo: "Install"
+        case .grantFolders: "Grant Now…"
+        case .openFilesAndFolders: "Open Privacy Settings"
         }
     }
 }

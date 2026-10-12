@@ -4,9 +4,9 @@ import LosttyRemote
 
 /// One checklist row: what it checks, how it stands, and what can fix it.
 struct PhoneAccessRow: Identifiable, Equatable {
-    enum Kind: String { case tailscale, tmux, remoteLogin, passwords, firewall, terminfo }
+    enum Kind: String { case tailscale, tmux, remoteLogin, passwords, firewall, terminfo, folders }
     enum State: Equatable { case ok, warning, missing }
-    enum Fix: Equatable { case installTailscale, openTailscale, copyBrew, adminSetup, lockPasswords, skipLockdown, openFirewall, installTerminfo }
+    enum Fix: Equatable { case installTailscale, openTailscale, copyBrew, adminSetup, lockPasswords, skipLockdown, openFirewall, installTerminfo, grantFolders, openFilesAndFolders }
 
     var id: Kind
     var title: String
@@ -66,6 +66,21 @@ struct PhoneAccessRow: Identifiable, Equatable {
         rows.append(s.terminfoInstalled
             ? .init(id: .terminfo, title: "Terminal definition", detail: "In ~/.terminfo.", state: .ok, fixes: [])
             : .init(id: .terminfo, title: "Terminal definition", detail: "Lets tmux draw Lostty's terminal correctly for your phone.", state: .missing, fixes: [.installTerminfo]))
+
+        // Optional: never blocks pairing.
+        switch s.folders {
+        case nil:
+            rows.append(.init(id: .folders, title: "Folder access",
+                              detail: "Optional. Lets your phone open Desktop, Documents and Downloads. macOS asks once, here at the Mac; from the phone a command would just wait.",
+                              state: .warning, fixes: [.grantFolders]))
+        case let folders? where folders.values.allSatisfy { $0 }:
+            rows.append(.init(id: .folders, title: "Folder access", detail: "Desktop, Documents and Downloads.", state: .ok, fixes: []))
+        case let folders?:
+            let blocked = PhoneAccessFolders.names.filter { folders[$0] == false }.joined(separator: ", ")
+            rows.append(.init(id: .folders, title: "Folder access",
+                              detail: "No access to \(blocked). Allow Lostty in System Settings → Privacy & Security → Files and Folders.",
+                              state: .warning, fixes: [.openFilesAndFolders]))
+        }
         return rows
     }
 }

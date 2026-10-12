@@ -41,8 +41,9 @@ final class PhoneAccessStore: ObservableObject {
 
     func refresh() {
         checking = true
+        let requested = defaults.bool(forKey: PhoneAccessFolders.requestedDefaultsKey)
         Task.detached(priority: .userInitiated) {
-            let status = PhoneAccessProbe.run()
+            let status = PhoneAccessProbe.run(foldersRequested: requested)
             await MainActor.run {
                 self.status = status
                 self.checking = false
@@ -88,6 +89,18 @@ final class PhoneAccessStore: ObservableObject {
                 message = "Couldn't copy the terminal definition: \(error.localizedDescription)"
             }
             refresh()
+        case .grantFolders:
+            // macOS asks once per folder and the read waits for each answer.
+            checking = true
+            Task.detached(priority: .userInitiated) {
+                _ = PhoneAccessFolders.check()
+                await MainActor.run {
+                    self.defaults.set(true, forKey: PhoneAccessFolders.requestedDefaultsKey)
+                    self.refresh()
+                }
+            }
+        case .openFilesAndFolders:
+            NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders")!)
         }
     }
 

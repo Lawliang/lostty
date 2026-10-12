@@ -20,6 +20,9 @@ struct PhoneAccessStatus: Equatable {
     var lockdownFileExists: Bool
     var blockAllIncoming: Bool
     var terminfoInstalled: Bool
+    /// Which of `PhoneAccessFolders.names` Lostty can read; nil until the
+    /// customer has clicked Grant Now (checking earlier would make macOS ask).
+    var folders: [String: Bool]? = nil
 
     var tailscaleReady: Bool {
         tailscale?.running == true && tailscale?.name != nil && tailscale?.ipv4 != nil
@@ -145,12 +148,30 @@ enum PhoneAccessTerminfo {
     }
 }
 
+/// macOS asks before an app reads Desktop, Documents or Downloads, and asks
+/// on the Mac's screen: a phone session that touches one first just hangs.
+/// Reading them once at the Mac gets the questions answered there.
+enum PhoneAccessFolders {
+    static let names = ["Desktop", "Documents", "Downloads"]
+    static let requestedDefaultsKey = "LosttyPhoneAccessFoldersRequested"
+
+    /// Whether each folder can be listed. The first time, macOS asks and
+    /// this waits for the answer; after that it answers without asking.
+    static func check(home: URL = FileManager.default.homeDirectoryForCurrentUser) -> [String: Bool] {
+        Dictionary(uniqueKeysWithValues: names.map { name in
+            (name, (try? FileManager.default.contentsOfDirectory(atPath: home.appendingPathComponent(name).path)) != nil)
+        })
+    }
+}
+
 enum PhoneAccessProbe {
     static let tailscaleCLI = "/Applications/Tailscale.app/Contents/MacOS/Tailscale"
     static let lockdownPath = "/etc/ssh/sshd_config.d/000-lostty.conf"
 
     /// Runs every check. Takes up to a few seconds: call it off the main thread.
-    static func run() -> PhoneAccessStatus {
+    /// Folders are checked only once the customer has asked for access
+    /// (`foldersRequested`), so opening the window never makes macOS ask.
+    static func run(foldersRequested: Bool) -> PhoneAccessStatus {
         var tailscale: PhoneAccessStatus.Tailscale?
         if FileManager.default.isExecutableFile(atPath: tailscaleCLI) {
             let out = Command.run(tailscaleCLI, ["status", "--json"])?.output ?? ""
@@ -176,7 +197,8 @@ enum PhoneAccessProbe {
             lockdownFileExists: FileManager.default.fileExists(atPath: lockdownPath),
             blockAllIncoming: PhoneAccessParse.blockAll(firewallOutput: firewall),
             terminfoInstalled: PhoneAccessTerminfo.installed(
-                bundle: PhoneAccessTerminfo.bundleDirectory, home: PhoneAccessTerminfo.homeDirectory))
+                bundle: PhoneAccessTerminfo.bundleDirectory, home: PhoneAccessTerminfo.homeDirectory),
+            folders: foldersRequested ? PhoneAccessFolders.check() : nil)
     }
 }
 #endif

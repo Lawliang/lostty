@@ -83,6 +83,14 @@ struct PhoneAccessChecksTests {
         #expect(PhoneAccessTerminfo.installed(bundle: bundle, home: home))
     }
 
+    @Test func folderCheckReportsWhichFoldersCanBeRead() throws {
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent("lostty-home-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: home) }
+        try FileManager.default.createDirectory(at: home.appendingPathComponent("Desktop"), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: home.appendingPathComponent("Documents"), withIntermediateDirectories: true)
+        #expect(PhoneAccessFolders.check(home: home) == ["Desktop": true, "Documents": true, "Downloads": false])
+    }
+
     /// The app bundle ships 67/ghostty as a symlink to 78/xterm-ghostty;
     /// the copy in ~/.terminfo is a plain file with the same bytes.
     @Test func aSymlinkedBundleEntryStillCountsAsInstalled() throws {

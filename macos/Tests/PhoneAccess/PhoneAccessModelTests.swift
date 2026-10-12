@@ -8,7 +8,8 @@ struct PhoneAccessRowsTests {
     let ready = PhoneAccessStatus(
         tailscale: .init(running: true, name: "mac.ts.net", ipv4: "100.1.2.3"),
         tmuxPath: "/opt/homebrew/bin/tmux", remoteLogin: true, authMethods: ["publickey"],
-        lockdownFileExists: true, blockAllIncoming: false, terminfoInstalled: true)
+        lockdownFileExists: true, blockAllIncoming: false, terminfoInstalled: true,
+        folders: ["Desktop": true, "Documents": true, "Downloads": true])
 
     func row(_ kind: PhoneAccessRow.Kind, _ status: PhoneAccessStatus, skipped: Bool = false) -> PhoneAccessRow {
         PhoneAccessRow.rows(for: status, lockdownSkipped: skipped).first { $0.id == kind }!
@@ -16,8 +17,23 @@ struct PhoneAccessRowsTests {
 
     @Test func allDoneIsAllOK() {
         let rows = PhoneAccessRow.rows(for: ready, lockdownSkipped: false)
-        #expect(rows.map(\.id) == [.tailscale, .tmux, .remoteLogin, .passwords, .firewall, .terminfo])
+        #expect(rows.map(\.id) == [.tailscale, .tmux, .remoteLogin, .passwords, .firewall, .terminfo, .folders])
         #expect(rows.allSatisfy { $0.state == .ok })
+    }
+
+    @Test func folderAccessIsOfferedUntilGrantedAndNeverBlocksPairing() {
+        var s = ready
+        s.folders = nil
+        #expect(row(.folders, s).state == .warning)
+        #expect(row(.folders, s).fixes == [.grantFolders])
+        #expect(s.readyToPair(lockdownSkipped: false))
+        s.folders = ["Desktop": true, "Documents": false, "Downloads": false]
+        let denied = row(.folders, s)
+        #expect(denied.state == .warning)
+        #expect(denied.fixes == [.openFilesAndFolders])
+        #expect(denied.detail.contains("Documents, Downloads"))
+        #expect(!denied.detail.contains("Desktop"))
+        #expect(s.readyToPair(lockdownSkipped: false))
     }
 
     @Test func tailscaleMissingOrSignedOut() {
