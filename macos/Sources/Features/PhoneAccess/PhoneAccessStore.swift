@@ -149,8 +149,7 @@ final class PhoneAccessStore: ObservableObject {
     private func runAdmin(enableRemoteLogin: Bool, lockPasswords: Bool) {
         let setup = PhoneAccessAdmin.setupScript(enableRemoteLogin: enableRemoteLogin, lockPasswords: lockPasswords)
         let stayAwake = status?.stayAwakePermission == false ? StayAwakeSudoers.installScript(user: NSUserName()) : nil
-        let script = [setup, stayAwake].compactMap { $0 }.joined(separator: "\n")
-        guard !script.isEmpty else {
+        guard let script = PhoneAccessAdmin.combinedScript(setup: setup, stayAwake: stayAwake) else {
             refresh()
             return
         }
@@ -327,8 +326,13 @@ final class PhoneAccessStore: ObservableObject {
         var adminScripts: [String] = []
         var prompts: [String] = []
         if FileManager.default.fileExists(atPath: StayAwakeSudoers.path) {
-            adminScripts.append(StayAwakeSudoers.removeScript)
-            prompts.append("remove its permission to keep this Mac awake")
+            if StayAwakeRecordStore(defaults: .ghostty).load() != nil {
+                // A restore is still pending and needs the rule.
+                message = "Lostty kept its permission to keep this Mac awake because your sleep settings aren't restored yet. Quit and reopen Lostty, then turn Phone Access off again."
+            } else {
+                adminScripts.append(StayAwakeSudoers.removeScript)
+                prompts.append("remove its permission to keep this Mac awake")
+            }
         }
         if FileManager.default.fileExists(atPath: PhoneAccessProbe.lockdownPath) {
             let unlock = NSAlert()

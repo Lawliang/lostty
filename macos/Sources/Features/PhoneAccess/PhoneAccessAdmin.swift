@@ -22,6 +22,19 @@ enum PhoneAccessAdmin {
         return lines.isEmpty ? nil : lines.joined(separator: "\n")
     }
 
+    /// One script for the prompt. `do shell script` reports only the last
+    /// command's status, so the optional stay-awake install goes first and
+    /// can't fail the script; the setup lines keep deciding the outcome.
+    /// Alone, the install is unwrapped so its failure is reported.
+    static func combinedScript(setup: String?, stayAwake: String?) -> String? {
+        switch (setup, stayAwake) {
+        case let (setup?, stayAwake?): "( \(stayAwake) ) || true\n" + setup
+        case let (setup?, nil): setup
+        case let (nil, stayAwake?): stayAwake
+        case (nil, nil): nil
+        }
+    }
+
     /// Turns password logins back on (Turn Off Phone Access).
     /// What the admin prompt says the script does.
     static func prompt(enableRemoteLogin: Bool, lockPasswords: Bool) -> String {

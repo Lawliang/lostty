@@ -3,6 +3,13 @@ import Testing
 @testable import Ghostty
 
 struct PhoneAccessAdminTests {
+    @Test func combinedScriptKeepsSetupStatusAndWrapsOptionalStayAwake() {
+        #expect(PhoneAccessAdmin.combinedScript(setup: "S1\nS2", stayAwake: "INSTALL") == "( INSTALL ) || true\nS1\nS2")
+        #expect(PhoneAccessAdmin.combinedScript(setup: "S1", stayAwake: nil) == "S1")
+        #expect(PhoneAccessAdmin.combinedScript(setup: nil, stayAwake: "INSTALL") == "INSTALL")
+        #expect(PhoneAccessAdmin.combinedScript(setup: nil, stayAwake: nil) == nil)
+    }
+
     @Test func thePromptSaysWhatTheScriptDoes() {
         #expect(PhoneAccessAdmin.prompt(enableRemoteLogin: true, lockPasswords: false) == "Lostty wants to turn on Remote Login for your phone.")
         #expect(PhoneAccessAdmin.prompt(enableRemoteLogin: false, lockPasswords: true) == "Lostty wants to turn off SSH password logins for every account on this Mac.")
