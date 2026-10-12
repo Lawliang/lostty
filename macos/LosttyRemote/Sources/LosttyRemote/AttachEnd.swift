@@ -44,6 +44,16 @@ public struct ReconnectPolicy: Sendable {
         attempt = 0
     }
 
+    /// Errors the user or pairing must resolve: a cancelled Face ID
+    /// prompt, a refused key, a changed host key. Retrying only knocks
+    /// (or re-prompts) again.
+    public static func stopsWatch(for error: Error) -> Bool {
+        switch error as? RemoteError {
+        case .authenticationCancelled?, .keyRejected?, .hostKeyChanged?: true
+        default: false
+        }
+    }
+
     /// A watch that ended: only one that heard a change was a healthy
     /// connection. With no tmux server it ends at once, and the delay must
     /// keep growing rather than reconnect every 0.5 s.

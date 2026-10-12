@@ -114,7 +114,10 @@ struct SessionsScreen: View {
                     ProgressView().tint(LosttyTheme.accent)
                 }
             }
-            .refreshable { await store.refresh() }
+            .refreshable {
+                await store.refresh()
+                store.listAppeared()  // resumes a watch that stopped on an error
+            }
         }
     }
 

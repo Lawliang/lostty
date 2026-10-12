@@ -287,12 +287,15 @@ final class MobileStore: ObservableObject {
                 if Task.isCancelled { break }
                 message = describe(error)
                 noteNeedsPairing(error)
-                // Only pairing again fixes these; don't keep knocking.
-                if needsPairing { break }
+                // Pairing again, or the user, resolves these; don't keep
+                // knocking (or re-prompting for Face ID). Pull to refresh,
+                // coming back to the list or the foreground starts it again.
+                if ReconnectPolicy.stopsWatch(for: error) { break }
             }
             if Task.isCancelled { break }
             try? await Task.sleep(for: .seconds(policy.nextDelay()))
         }
+        // A cancelled task was already replaced or cleared by updateWatch.
         if !Task.isCancelled { watchTask = nil }
     }
 

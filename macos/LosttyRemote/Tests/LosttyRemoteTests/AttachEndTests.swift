@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import LosttyRemote
 
@@ -29,5 +30,13 @@ struct AttachEndTests {
         // A watch that heard changes was a healthy connection.
         policy.watchEnded(deliveredChange: true)
         #expect(policy.nextDelay() == 0.5)
+    }
+
+    @Test func onlyErrorsTheUserMustResolveStopTheWatch() {
+        #expect(ReconnectPolicy.stopsWatch(for: RemoteError.authenticationCancelled))
+        #expect(ReconnectPolicy.stopsWatch(for: RemoteError.keyRejected))
+        #expect(ReconnectPolicy.stopsWatch(for: RemoteError.hostKeyChanged(host: "h", pinned: "a", offered: "b")))
+        #expect(!ReconnectPolicy.stopsWatch(for: RemoteError.tmuxMissing))
+        #expect(!ReconnectPolicy.stopsWatch(for: URLError(.notConnectedToInternet)))
     }
 }
