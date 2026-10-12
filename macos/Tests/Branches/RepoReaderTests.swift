@@ -100,6 +100,14 @@ struct RepoReaderTests {
         #expect(snapshot.base == "feat")
     }
 
+    @Test func aBranchNamedLikeATagKeepsItsName() throws {
+        let repo = try TempRepo.make()
+        try repo.git("tag", "release")
+        try repo.git("branch", "release")
+        let snapshot = try readSnapshot(repo.root)
+        #expect(Set(snapshot.branches.map(\.name)) == ["main", "release"])
+    }
+
     @Test func noMainOrMasterMeansNoBase() throws {
         let repo = try TempRepo.make()
         try repo.git("branch", "-m", "trunk")

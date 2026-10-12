@@ -6,7 +6,7 @@ enum RepoParse {
     /// `for-each-ref --format`: name, sha, committer time, upstream, track,
     /// subject — tab separated, subject last because it may contain tabs.
     static let branchFormat =
-        "%(refname:short)%09%(objectname)%09%(committerdate:unix)%09%(upstream:short)%09%(upstream:track)%09%(subject)"
+        "%(refname:lstrip=2)%09%(objectname)%09%(committerdate:unix)%09%(upstream:short)%09%(upstream:track)%09%(subject)"
 
     static func branches(_ output: String) -> [BranchInfo] {
         output.split(whereSeparator: \.isNewline).compactMap { line in
