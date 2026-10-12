@@ -4,15 +4,29 @@ import Combine
 
 /// An extension reachable from the window's sidebar. Order is sidebar order.
 enum LosttyExtension: String, CaseIterable, Identifiable {
-    case codebaseVisualizer
+    case branches
     case skins
+
+    /// How an open extension shows: over the terminal, or inside the
+    /// sidebar, which widens to `width` over the terminal's edge.
+    enum Presentation: Equatable {
+        case overlay
+        case sidebar(width: CGFloat)
+    }
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .codebaseVisualizer: "Codebase visualizer"
+        case .branches: "Branches"
         case .skins: "Skins"
+        }
+    }
+
+    var presentation: Presentation {
+        switch self {
+        case .branches: .sidebar(width: 340)
+        case .skins: .overlay
         }
     }
 }
@@ -22,15 +36,50 @@ enum LosttyExtension: String, CaseIterable, Identifiable {
 /// color, which the sidebar matches.
 @MainActor
 final class ExtensionSidebarModel: ObservableObject {
-    @Published private(set) var active: LosttyExtension?
+    @Published private(set) var active: LosttyExtension? {
+        didSet {
+            guard active != oldValue else { return }
+            if active == .branches {
+                branches.open(focused: focusedSurfaceID)
+            } else if oldValue == .branches {
+                branches.close()
+            }
+            // A closing app may hold keyboard focus (the Branches panel takes
+            // it, for Esc); hand it back to the pane. Branches giving way to
+            // another app does the same, since that app doesn't take focus.
+            if oldValue != nil, active == nil || oldValue == .branches {
+                focusTerminal()
+            }
+        }
+    }
     /// The window's focused (or last focused) pane, set by the controller.
-    @Published var focusedSurfaceID: UUID?
+    @Published var focusedSurfaceID: UUID? {
+        didSet {
+            if active == .branches, focusedSurfaceID != oldValue { branches.focusChanged(focusedSurfaceID) }
+        }
+    }
     /// The title bar's color (the top pane's background), set by the window.
     @Published var chromeColor: NSColor?
+
+    /// Gives keyboard focus back to the window's focused pane. Set by the
+    /// window's controller.
+    var focusTerminal: @MainActor () -> Void = {}
+
+    /// The Branches panel's state; idle until Branches opens.
+    let branches: BranchesModel
+
+    init(branches: BranchesModel? = nil) {
+        self.branches = branches ?? BranchesModel()
+    }
 
     /// Clicking an icon opens its extension; clicking the open one closes it.
     func select(_ ext: LosttyExtension) {
         active = active == ext ? nil : ext
+    }
+
+    /// A panel's back button and Esc.
+    func close() {
+        active = nil
     }
 }
 #endif

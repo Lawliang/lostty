@@ -164,13 +164,8 @@ final class LosttyStatusItem: NSObject, NSMenuDelegate {
     }
 
     @objc private func focusPane(_ sender: NSMenuItem) {
-        guard let id = sender.representedObject as? UUID,
-              let surface = (NSApp.delegate as? AppDelegate)?.findSurface(forUUID: id),
-              let controller = surface.window?.windowController as? BaseTerminalController
-        else { return }
-        NSApp.activate(ignoringOtherApps: true)
-        surface.window?.makeKeyAndOrderFront(nil)
-        controller.focusSurface(surface)
+        guard let id = sender.representedObject as? UUID else { return }
+        PaneFocus.focus(id)
     }
 }
 

@@ -109,10 +109,12 @@ enum Command {
         process.terminationHandler = { _ in exited.signal() }
         do { try process.run() } catch { return nil }
 
-        // Read while it runs: a full pipe would block the child.
+        // Read while it runs: a full pipe would block the child. A private
+        // queue, not the global one, which can starve while callers block
+        // every cooperative thread (see ProcessRunner).
         let collected = Collected()
         let drained = DispatchSemaphore(value: 0)
-        DispatchQueue.global(qos: .utility).async {
+        DispatchQueue(label: "lostty.command.read", qos: .utility).async {
             collected.data = pipe.fileHandleForReading.readDataToEndOfFile()
             drained.signal()
         }
