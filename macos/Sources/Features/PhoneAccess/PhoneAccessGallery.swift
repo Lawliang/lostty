@@ -9,6 +9,25 @@ enum PhoneAccessGallery {
     private static var window: NSWindow?
 
     static func show() {
+        let all = variants()
+        let content = TabView {
+            ForEach(all.indices, id: \.self) { index in
+                PhoneAccessView().environmentObject(all[index].1)
+                    .tabItem { Text(all[index].0) }
+            }
+        }
+        let window = NSWindow(contentViewController: NSHostingController(rootView: content))
+        window.title = "Phone Access Design Gallery"
+        window.appearance = NSAppearance(named: .darkAqua)
+        window.setContentSize(NSSize(width: 600, height: 760))
+        window.isReleasedWhenClosed = false
+        window.center()
+        self.window = window
+        window.makeKeyAndOrderFront(nil)
+    }
+
+    /// Each state, titled; also rendered to PNGs by `LosttyRenderTests`.
+    static func variants() -> [(String, PhoneAccessStore)] {
         let ready = PhoneAccessStatus(
             tailscale: .init(running: true, name: "studio-mac.example.ts.net", ipv4: "100.64.0.10"),
             tmuxPath: "/opt/homebrew/bin/tmux", remoteLogin: true, authMethods: ["publickey"],
@@ -27,27 +46,13 @@ enum PhoneAccessGallery {
             name: "studio-mac.example.ts.net", ip: "100.64.0.10", user: "alex",
             hostKey: "AAAAC3NzaC1lZDI1NTE5AAAAIO2ib6szt8DC6VJejVmS+ZXbDzWg/68qdlqbp2uhPYfl",
             secret: Data(repeating: 7, count: 32))
-        let variants: [(String, PhoneAccessStore)] = [
+        return [
             ("All ready, two phones", .gallery(status: ready, phones: phones)),
             ("Mixed checklist, no phones", .gallery(status: mixed)),
             ("Password logins skipped", .gallery(status: mixed, lockdownSkipped: true)),
             ("Pairing sheet", .gallery(status: ready, pairing: payload.map { .showing($0, expires: Date().addingTimeInterval(75)) })),
             ("Expired code", .gallery(status: ready, pairing: .expired)),
         ]
-        let content = TabView {
-            ForEach(variants.indices, id: \.self) { index in
-                PhoneAccessView().environmentObject(variants[index].1)
-                    .tabItem { Text(variants[index].0) }
-            }
-        }
-        let window = NSWindow(contentViewController: NSHostingController(rootView: content))
-        window.title = "Phone Access Design Gallery"
-        window.appearance = NSAppearance(named: .darkAqua)
-        window.setContentSize(NSSize(width: 600, height: 760))
-        window.isReleasedWhenClosed = false
-        window.center()
-        self.window = window
-        window.makeKeyAndOrderFront(nil)
     }
 }
 #endif
