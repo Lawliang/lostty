@@ -243,6 +243,43 @@ struct BranchesModelTests {
         #expect(model.snapshot?.root == "/b")
     }
 
+    @Test func aClosedPaneLeavesWhenPanesChange() async throws {
+        let pane = UUID()
+        let other = UUID()
+        let world = try world(pane: pane)
+        world.panes = [
+            BranchSession(origin: .pane(pane), title: "zsh", pwd: "/a/src", agent: nil),
+            BranchSession(origin: .pane(other), title: "claude", pwd: "/a/src", agent: .working),
+        ]
+        let model = BranchesModel(env: world.environment())
+        await model.open(focused: pane).value
+        #expect(model.sections.active.first?.sessions.count == 2)
+        world.panes.removeLast()
+        world.changes.send()
+        for _ in 0..<100 where model.sections.active.first?.sessions.count != 1 {
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        #expect(model.sections.active.first?.sessions.map(\.title) == ["zsh"])
+    }
+
+    @Test func eachPhoneTickCatchesUpOnPanes() async throws {
+        let pane = UUID()
+        let world = try world(pane: pane)
+        world.panes = [BranchSession(origin: .pane(pane), title: "zsh", pwd: "/a/src", agent: nil)]
+        var env = world.environment()
+        env.phoneInterval = 0.05
+        let model = BranchesModel(env: env)
+        await model.open(focused: pane).value
+        #expect(model.sections.active.first?.sessions.first?.title == "zsh")
+        // A retitled pane publishes nothing; the next tick picks it up.
+        world.panes = [BranchSession(origin: .pane(pane), title: "vim", pwd: "/a/src", agent: nil)]
+        for _ in 0..<200 where model.sections.active.first?.sessions.first?.title != "vim" {
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        #expect(model.sections.active.first?.sessions.first?.title == "vim")
+        model.close()
+    }
+
     @Test func noClaudeMeansNoSummaries() async throws {
         let pane = UUID()
         let world = try world(pane: pane)

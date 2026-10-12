@@ -296,6 +296,9 @@ class BaseTerminalController: NSWindowController,
         if to.isEmpty {
             focusedSurface = nil
         }
+
+        // Lostty: the Branches panel drops closed panes from its list.
+        NotificationCenter.default.post(name: .losttySurfaceTreeDidChange, object: self)
     }
 
     /// Update all surfaces with the focus state. This ensures that libghostty has an accurate view about
@@ -1551,4 +1554,6 @@ extension Notification.Name {
     /// Terminal window aggregate bell state changed.
     static let terminalWindowBellDidChangeNotification = Notification.Name("com.mitchellh.ghostty.terminalWindowBellDidChange")
     static let terminalWindowHasBellKey = terminalWindowBellDidChangeNotification.rawValue + ".hasBell"
+    /// Lostty: a terminal window's panes were added, removed or rearranged.
+    static let losttySurfaceTreeDidChange = Notification.Name("LosttySurfaceTreeDidChange")
 }

@@ -40,7 +40,7 @@ final class BranchesModel: ObservableObject {
         var locateClaude: @Sendable () -> String?
         var summarize: @Sendable (String, String, String, String, RunHandle) -> Result<String, SummaryError>
         var watch: @MainActor (String, @escaping @MainActor (Set<RepoWatcher.Change>) -> Void) -> AnyObject?
-        /// Fires when panes, their folders or agent states change.
+        /// Fires when panes come or go, or their folders or agent states change.
         var changes: @MainActor () -> AnyPublisher<Void, Never>
         var phoneInterval: TimeInterval
         var now: () -> Date
@@ -58,11 +58,12 @@ final class BranchesModel: ObservableObject {
                 summarize: { BranchSummarizer.run(branch: $0, base: $1, root: $2, claude: $3, handle: $4) },
                 watch: { RepoWatcher(gitDir: $0, onChange: $1) },
                 changes: {
-                    Publishers.Merge4(
+                    Publishers.Merge5(
                         ClaudeRuntime.shared.$phases.map { _ in () },
                         ClaudeRuntime.shared.$awaiting.map { _ in () },
                         ClaudeUsageRuntime.shared.$sessions.map { _ in () },
-                        SkinsRuntime.shared.manager.$panes.map { _ in () })
+                        SkinsRuntime.shared.manager.$panes.map { _ in () },
+                        NotificationCenter.default.publisher(for: .losttySurfaceTreeDidChange).map { _ in () })
                     .throttle(for: .milliseconds(500), scheduler: RunLoop.main, latest: true)
                     .eraseToAnyPublisher()
                 },
@@ -248,11 +249,13 @@ final class BranchesModel: ObservableObject {
         rebuildSections()
     }
 
+    /// Also rebuilds the sections on every tick, so pane titles and anything
+    /// the change publisher missed catch up within one interval.
     private func refreshPhoneSessions() {
         let fetch = env.phoneSessions
         Task {
             let sessions = await Task.detached { fetch() }.value
-            guard isOpen, sessions != phone else { return }
+            guard isOpen else { return }
             phone = sessions
             rebuildSections()
         }
@@ -260,11 +263,13 @@ final class BranchesModel: ObservableObject {
 
     private func rebuildSections() {
         guard let snapshot else {
-            sections = .empty
+            if sections != .empty { sections = .empty }
             return
         }
         let placement = SessionPlacement.assign(env.panes() + phone, worktrees: snapshot.worktrees)
-        sections = BranchSections.build(snapshot, placement: placement, now: env.now())
+        let built = BranchSections.build(snapshot, placement: placement, now: env.now())
+        // Unchanged sections don't republish, so a tick doesn't redraw the panel.
+        if built != sections { sections = built }
     }
 
     // MARK: Rows
