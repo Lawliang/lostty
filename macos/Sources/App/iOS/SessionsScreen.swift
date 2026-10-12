@@ -9,7 +9,7 @@ struct SessionsScreen: View {
     @EnvironmentObject private var store: MobileStore
     @EnvironmentObject private var ghostty: Ghostty.App
     @State private var path: [String] = []
-    @State private var open: (session: RemoteSession, view: Ghostty.SurfaceView, io: RemoteSurfaceIO)?
+    @State private var open: (session: RemoteSession, view: Ghostty.SurfaceView, io: RemoteSurfaceIO, link: TerminalLink)?
     @State private var showSettings = false
     @State private var showPairing = false
     @State private var confirmKill: RemoteSession?
@@ -33,7 +33,7 @@ struct SessionsScreen: View {
             }
             .navigationDestination(for: String.self) { _ in
                 if let open {
-                    TerminalScreen(session: open.session, surfaceView: open.view, io: open.io)
+                    TerminalScreen(session: open.session, surfaceView: open.view, io: open.io, link: open.link)
                 }
             }
             .sheet(isPresented: $showSettings, onDismiss: { store.restartWatch() }) {
@@ -124,7 +124,7 @@ struct SessionsScreen: View {
     private func row(_ session: RemoteSession, now: Date) -> some View {
         Button {
             guard let app = ghostty.app, let terminal = store.terminal(for: session, app: app) else { return }
-            open = (session, terminal.view, terminal.io)
+            open = (session, terminal.view, terminal.io, terminal.link)
             path = ["terminal"]
         } label: {
             SessionRowView(row: SessionLabel.row(for: session, now: now))

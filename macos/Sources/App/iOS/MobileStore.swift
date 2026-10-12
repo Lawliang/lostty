@@ -76,7 +76,7 @@ final class MobileStore: ObservableObject {
     func terminalClosedItself(_ session: RemoteSession) async {
         await refresh()
         if sessions.contains(where: { $0.id == session.id && $0.name == session.name }) {
-            message = "Couldn't open \(session.name). Check that tmux runs on the Mac and that Phone Access shows Terminal definition ✓."
+            message = "Couldn't open \(SessionLabel.row(for: session, now: Date()).title). Check that tmux runs on the Mac and that Phone Access shows Terminal definition ✓."
         }
     }
 
@@ -189,9 +189,9 @@ final class MobileStore: ObservableObject {
         }
     }
 
-    /// A terminal view attached to `session`, with its IO; nil (with a message)
-    /// when the settings or key aren't ready.
-    func terminal(for session: RemoteSession, app: ghostty_app_t) -> (view: Ghostty.SurfaceView, io: RemoteSurfaceIO)? {
+    /// A terminal view attached to `session`, with its IO and its link
+    /// events; nil (with a message) when the settings or key aren't ready.
+    func terminal(for session: RemoteSession, app: ghostty_app_t) -> (view: Ghostty.SurfaceView, io: RemoteSurfaceIO, link: TerminalLink)? {
         #if DEBUG
         if isGallery { return nil }
         #endif
@@ -202,22 +202,39 @@ final class MobileStore: ObservableObject {
         }
         do {
             _ = try remoteKey()  // surface a key problem now, not after the screen opens
-            let io = RemoteSurfaceIO(attacher: SSHAttacher(
-                hosts: hosts,
-                key: { [weak self] in
-                    guard let self else { throw CancellationError() }
-                    return try await self.remoteKey()
-                },
-                knownHosts: knownHosts,
-                sessionID: session.id,
-                sessionName: session.name))
+            let link = TerminalLink()
+            let io = RemoteSurfaceIO(
+                attacher: SSHAttacher(
+                    hosts: hosts,
+                    key: { [weak self] in
+                        guard let self else { throw CancellationError() }
+                        return try await self.remoteKey()
+                    },
+                    knownHosts: knownHosts,
+                    sessionID: session.id,
+                    sessionName: session.name),
+                surfaceCalls: .overlaid { status in
+                    MainActor.assumeIsolated { link.events.send(status) }
+                })
             var config = Ghostty.SurfaceConfiguration()
             config.remoteIO = io
             openIO = io
-            return (Ghostty.SurfaceView(app, baseConfig: config), io)
+            return (Ghostty.SurfaceView(app, baseConfig: config), io, link)
         } catch {
             message = describe(error)
             return nil
+        }
+    }
+
+    /// Why `session` ended, read from the Mac: its end tag and whether it
+    /// is still there. nil when that can't be read.
+    func endProbe(_ session: RemoteSession) async -> EndProbe? {
+        #if DEBUG
+        if isGallery { return nil }
+        #endif
+        guard !settings.remoteHosts.isEmpty else { return nil }
+        return try? await withConnection { connection in
+            try await connection.endProbe(session.id)
         }
     }
 
