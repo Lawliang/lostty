@@ -30,6 +30,16 @@ struct KnownHostsTests {
         #expect(hosts.verdict(host: "other", port: 22, key: "K1") == .unknown)
     }
 
+    @Test func ipv6HostsDoNotCollide() throws {
+        defer { try? FileManager.default.removeItem(at: file) }
+        let hosts = KnownHosts(fileURL: file)
+        try hosts.trust(host: "fd7a:115c:a1e0::1", port: 22, key: "K1")
+        // "fd7a:115c:a1e0::1:22" on port 22 must not read as the host above on another port.
+        #expect(hosts.verdict(host: "fd7a:115c:a1e0::1:22", port: 22, key: "K1") == .unknown)
+        #expect(hosts.verdict(host: "fd7a:115c:a1e0::1", port: 22, key: "K1") == .trusted)
+        #expect(try String(contentsOf: file, encoding: .utf8).hasPrefix("[fd7a:115c:a1e0::1]:22 "))
+    }
+
     @Test func trustingAgainDoesNotOverwriteAPin() throws {
         defer { try? FileManager.default.removeItem(at: file) }
         let hosts = KnownHosts(fileURL: file)

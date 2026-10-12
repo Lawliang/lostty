@@ -49,6 +49,12 @@ public enum TmuxRemote {
             + "\(pathPrefix) tmux -u -L lostty -f /dev/null attach-session -t \(shellQuote(sessionID))"
     }
 
+    /// Ends session `sessionID` (and with it the Mac window showing it).
+    public static func killCommand(sessionID: String) throws -> String {
+        guard isSessionID(sessionID) else { throw TmuxRemoteError.badSessionID(sessionID) }
+        return "\(pathPrefix) tmux -u -L lostty kill-session -t \(shellQuote(sessionID))"
+    }
+
     public static func parse(_ output: String) -> [RemoteSession] {
         output.split(separator: "\n").compactMap { line in
             let fields = line.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
@@ -67,5 +73,15 @@ public enum TmuxRemote {
 
     static func isSessionID(_ s: String) -> Bool {
         s.count >= 2 && s.first == "$" && s.dropFirst().allSatisfy(\.isASCII) && s.dropFirst().allSatisfy(\.isNumber)
+    }
+}
+
+extension RemoteSession {
+    /// The order the session list shows: by project name, as Finder sorts.
+    public static func forPicking(_ sessions: [RemoteSession]) -> [RemoteSession] {
+        sessions.sorted {
+            let order = $0.name.localizedStandardCompare($1.name)
+            return order == .orderedSame ? $0.id < $1.id : order == .orderedAscending
+        }
     }
 }

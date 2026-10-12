@@ -39,7 +39,11 @@ public final class KnownHosts: @unchecked Sendable {
         try text.write(to: fileURL, atomically: true, encoding: .utf8)
     }
 
-    private static func label(_ host: String, _ port: Int) -> String { "\(host):\(port)" }
+    /// "host:port", with IPv6 hosts bracketed ("[fd7a::1]:22") so the port
+    /// can't be read as part of the address.
+    private static func label(_ host: String, _ port: Int) -> String {
+        host.contains(":") ? "[\(host)]:\(port)" : "\(host):\(port)"
+    }
 
     private func load() -> [String: String] {
         guard let text = try? String(contentsOf: fileURL, encoding: .utf8) else { return [:] }

@@ -15,6 +15,24 @@ struct RemoteKeyTests {
         #expect(parts[2] == "lostty-mobile")
         #expect((try? NIOSSHPublicKey(openSSHPublicKey: "\(parts[0]) \(parts[1])")) != nil)
     }
+
+    @Test func softwareKeyIsCreatedOnceAndKept() throws {
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("lostty-swkey-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: file) }
+        let first = try RemoteKey.software(storedAt: file)
+        let again = try RemoteKey.software(storedAt: file)
+        #expect(first.publicKeyLine == again.publicKeyLine)
+        let perms = try FileManager.default.attributesOfItem(atPath: file.path)[.posixPermissions] as? Int
+        #expect(perms == 0o600)
+    }
+
+    @Test func aCorruptSoftwareKeyFileIsNotReplaced() throws {
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("lostty-swkey-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: file) }
+        try Data("junk".utf8).write(to: file)
+        #expect(throws: (any Error).self) { try RemoteKey.software(storedAt: file) }
+        #expect(try Data(contentsOf: file) == Data("junk".utf8))
+    }
 }
 
 struct PinnedHostKeysTests {

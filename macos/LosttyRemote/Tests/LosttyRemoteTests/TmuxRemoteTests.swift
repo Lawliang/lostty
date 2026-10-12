@@ -30,6 +30,21 @@ struct TmuxRemoteTests {
         #expect(cmd.contains("TERMINFO='/Users/o'\\''brien/Lostty.app/Contents/Resources/terminfo'"))
     }
 
+    @Test func killQuotesTheSessionID() throws {
+        #expect(try TmuxRemote.killCommand(sessionID: "$4") ==
+            "PATH=/opt/homebrew/bin:/usr/local/bin:$PATH tmux -u -L lostty kill-session -t '$4'")
+        #expect(throws: TmuxRemoteError.badSessionID("main")) { try TmuxRemote.killCommand(sessionID: "main") }
+    }
+
+    @Test func sessionsArePickedByProjectName() {
+        let s = [
+            RemoteSession(id: "$3", name: "zeta", surface: nil, owner: nil),
+            RemoteSession(id: "$1", name: "Alpha", surface: nil, owner: nil),
+            RemoteSession(id: "$2", name: "beta", surface: "X", owner: 42),
+        ]
+        #expect(RemoteSession.forPicking(s).map(\.id) == ["$1", "$2", "$3"])
+    }
+
     @Test func parsesTheSessionList() {
         let out = "$1\tlostty\tABCD-1\t4242\n$2\tnotes\t\t\n$3\tmy proj\t\t\n"
         #expect(TmuxRemote.parse(out) == [

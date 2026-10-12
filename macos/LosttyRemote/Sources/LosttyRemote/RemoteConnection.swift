@@ -68,6 +68,16 @@ public final class RemoteConnection: @unchecked Sendable {
         }
     }
 
+    /// Ends session `sessionID` on the Mac. A session that already ended
+    /// (tmux exits 1) is not an error.
+    public func killSession(_ sessionID: String) async throws {
+        do {
+            _ = try await client.executeCommand(try TmuxRemote.killCommand(sessionID: sessionID))
+        } catch let failed as SSHClient.CommandFailed where failed.exitCode == 1 {
+            return
+        }
+    }
+
     /// Attaches to session `sessionID` on a PTY and runs until the client
     /// ends. `onOpen` hands over the input side once the PTY is up;
     /// `onOutput` gets every received byte, from a task-group child task.

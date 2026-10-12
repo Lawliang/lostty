@@ -74,24 +74,41 @@ public struct RemoteKey: @unchecked Sendable {
     }
 
     /// Loads the key whose handle is at `url`, creating it on first use.
-    public static func secureEnclave(storedAt url: URL) throws -> RemoteKey {
+    /// Signing asks for Face ID / Touch ID through `context`: pass the same
+    /// `LAContext` for every connection and it asks once, until the context
+    /// is invalidated (the app invalidates it when it goes to the background).
+    public static func secureEnclave(storedAt url: URL, context: LAContext? = nil) throws -> RemoteKey {
         guard SecureEnclave.isAvailable else { throw RemoteError.secureEnclaveUnavailable }
         // Never replace an existing handle: that would silently invalidate the
         // authorized_keys line. If it exists but can't be used, throw.
         if FileManager.default.fileExists(atPath: url.path) {
             return RemoteKey(NIOSSHPrivateKey(secureEnclaveP256Key:
-                try SecureEnclave.P256.Signing.PrivateKey(dataRepresentation: Data(contentsOf: url))))
+                try SecureEnclave.P256.Signing.PrivateKey(
+                    dataRepresentation: Data(contentsOf: url), authenticationContext: context)))
         }
         var error: Unmanaged<CFError>?
         guard let access = SecAccessControlCreateWithFlags(
             nil, kSecAttrAccessibleWhenUnlockedThisDeviceOnly, [.privateKeyUsage, .userPresence], &error)
         else { throw error?.takeRetainedValue() ?? RemoteError.secureEnclaveUnavailable }
-        let key = try SecureEnclave.P256.Signing.PrivateKey(accessControl: access)
+        let key = try SecureEnclave.P256.Signing.PrivateKey(accessControl: access, authenticationContext: context)
         try FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try key.dataRepresentation.write(to: url, options: [.atomic])
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
         return RemoteKey(NIOSSHPrivateKey(secureEnclaveP256Key: key))
+    }
+
+    /// A software key for the iOS simulator, which has no Secure Enclave.
+    /// Stored raw with 0600 permissions; never used on a device.
+    public static func software(storedAt url: URL) throws -> RemoteKey {
+        if FileManager.default.fileExists(atPath: url.path) {
+            return RemoteKey(software: try P256.Signing.PrivateKey(rawRepresentation: Data(contentsOf: url)))
+        }
+        let key = P256.Signing.PrivateKey()
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try key.rawRepresentation.write(to: url, options: [.atomic])
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+        return RemoteKey(software: key)
     }
 }
 
