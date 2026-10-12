@@ -98,6 +98,43 @@ struct TraceCourseTests {
         #expect(corners(motion) == [.bottomRight, .bottomLeft, .bottomRight, .topRight, .bottomRight])
     }
 
+    // The bottom glow lights when the head, sent by subagents, reaches the
+    // bottom edge (not while it is on its way down), and fades once it
+    // leaves for the route.
+    @Test func bottomGlowLightsWhenTheHeadReachesTheBottom() {
+        var motion = TraceMotion()
+        let fade = TraceMotion.glowFade
+        motion.advance(to: 1.5, course: .route(.right), legSeconds: 1)  // going up
+        #expect(motion.bottomGlow(at: 1.5) == 0)
+        motion.advance(to: 2.5, course: .subagents, legSeconds: 1)      // back down the right side
+        #expect(motion.bottomGlow(at: 2.5) == 0)
+        motion.advance(to: 3 + fade / 2, course: .subagents, legSeconds: 1)  // on the bottom since 3
+        #expect(abs(motion.bottomGlow(at: 3 + fade / 2) - 0.5) < 1e-9)
+        motion.advance(to: 4.5, course: .subagents, legSeconds: 1)
+        #expect(motion.bottomGlow(at: 4.5) == 1)
+
+        // Claude takes over: the head finishes the bottom leg, then leaves.
+        motion.advance(to: 4.9, course: .route(.right), legSeconds: 1)
+        #expect(motion.bottomGlow(at: 4.9) == 1)
+        motion.advance(to: 5 + fade / 2, course: .route(.right), legSeconds: 1)
+        #expect(abs(motion.bottomGlow(at: 5 + fade / 2) - 0.5) < 1e-9)
+        motion.advance(to: 6, course: .route(.right), legSeconds: 1)
+        #expect(motion.bottomGlow(at: 6) == 0)
+    }
+
+    @Test func allAroundCrossingTheBottomWhileClaudeWorksHasNoGlow() {
+        var motion = TraceMotion()
+        motion.advance(to: 2.5, course: .route(.all), legSeconds: 1)  // bottomRight → bottomLeft
+        #expect(motion.legs.last?.from == .bottomRight)
+        #expect(motion.bottomGlow(at: 2.5) == 0)
+    }
+
+    @Test func aTraceStartingWithSubagentsGlowsFromTheStart() {
+        var motion = TraceMotion()
+        motion.advance(to: 0.2, course: .subagents, legSeconds: 1)
+        #expect(motion.bottomGlow(at: 0.2) > 0)
+    }
+
     @Test func historyIsTrimmed() {
         var motion = TraceMotion()
         motion.advance(to: 1000, course: .route(.all), legSeconds: 0.6)

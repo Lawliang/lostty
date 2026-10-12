@@ -47,8 +47,9 @@ struct TraceOverlay: View {
                 let time = timeline.date.timeIntervalSinceReferenceDate
                 ctx.blendMode = .plusLighter
                 if reduceMotion {
-                    Self.drawCalmGlow(in: &ctx, outline: course.outline(in: rect),
-                                      intensity: TraceFrame.intensity(elapsed: elapsed), time: time, colors: colors)
+                    let intensity = TraceFrame.intensity(elapsed: elapsed)
+                    if subagents { Self.drawBottomGlow(in: &ctx, rect: rect, level: intensity, colors: colors) }
+                    Self.drawCalmGlow(in: &ctx, outline: course.outline(in: rect), intensity: intensity, time: time, colors: colors)
                     return
                 }
 
@@ -65,6 +66,8 @@ struct TraceOverlay: View {
                 // the way travelled.
                 let tail = min(path.length, trace.length * TraceCourse.route(route).lapLength(in: rect))
                 let frame = TraceFrame(head: 1, length: tail / path.length, intensity: TraceFrame.intensity(elapsed: elapsed))
+                Self.drawBottomGlow(in: &ctx, rect: rect, level: journey.motion.bottomGlow(at: elapsed) * frame.intensity,
+                                    colors: colors)
                 TraceRenderers.renderer(for: trace.style)
                     .draw(in: &ctx, along: path, frame: frame, time: time, colors: colors)
             }
@@ -79,6 +82,29 @@ struct TraceOverlay: View {
         let height = max(0, size.height - 2 * inset)
         guard width > 0, height > 0 else { return CGRect(x: inset, y: inset, width: 0, height: 0) }
         return CGRect(x: inset, y: inset, width: width, height: height)
+    }
+
+    /// While only subagents work: light rising into the pane from the bottom
+    /// edge, under the trace. A soft band in the trace's colors, brightest
+    /// at the edge, with a blurred line along the edge itself.
+    static func drawBottomGlow(in ctx: inout GraphicsContext, rect: CGRect, level: Double, colors: TraceColors) {
+        guard level > 0, rect.width > 0 else { return }
+        let depth = min(56, rect.height * 0.3)
+        let band = CGRect(x: rect.minX, y: rect.maxY - depth, width: rect.width, height: depth + inset)
+        let rise = Gradient(stops: [
+            .init(color: colors.tail.opacity(0), location: 0),
+            .init(color: colors.tail.opacity(0.12 * level), location: 0.55),
+            .init(color: colors.head.opacity(0.32 * level), location: 1),
+        ])
+        ctx.fill(Path(band), with: .linearGradient(
+            rise, startPoint: CGPoint(x: rect.midX, y: band.minY), endPoint: CGPoint(x: rect.midX, y: rect.maxY)))
+
+        var edge = Path()
+        edge.move(to: CGPoint(x: rect.minX, y: rect.maxY))
+        edge.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        var bloom = ctx
+        bloom.addFilter(.blur(radius: 8))
+        bloom.stroke(edge, with: .color(colors.head.opacity(0.5 * level)), lineWidth: 10)
     }
 
     /// Reduce Motion: no racing; the course's edge breathes with a 2s period.

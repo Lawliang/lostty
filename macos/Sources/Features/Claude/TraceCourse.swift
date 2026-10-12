@@ -104,18 +104,45 @@ struct TraceMotion: Equatable {
 
     /// Enough history for the longest tail (half the border) to follow.
     static let keptLegs = 6
+    /// Seconds the bottom glow takes to fade in or out.
+    static let glowFade: Double = 0.4
 
     private(set) var legs: [Leg] = []
+    /// The head's latest stay on the bottom edge for subagents: when it
+    /// reached the edge, and once it left, when it left.
+    private(set) var stayStart: Double?
+    private(set) var stayEnd: Double?
 
     mutating func advance(to elapsed: Double, course: TraceCourse, legSeconds: Double) {
         if legs.isEmpty {
             let first = course.corners[0]
-            legs = [Leg(from: first, to: course.next(after: first), start: 0)]
+            begin(Leg(from: first, to: course.next(after: first), start: 0), course: course)
         }
         while let last = legs.last, elapsed >= last.start + legSeconds {
-            legs.append(Leg(from: last.to, to: course.next(after: last.to), start: last.start + legSeconds))
+            begin(Leg(from: last.to, to: course.next(after: last.to), start: last.start + legSeconds), course: course)
             if legs.count > Self.keptLegs { legs.removeFirst() }
         }
+    }
+
+    private mutating func begin(_ leg: Leg, course: TraceCourse) {
+        legs.append(leg)
+        let onBottom = course == .subagents && Set([leg.from, leg.to]) == [.bottomLeft, .bottomRight]
+        if onBottom, stayStart == nil || stayEnd != nil {
+            stayStart = leg.start
+            stayEnd = nil
+        } else if !onBottom, stayStart != nil, stayEnd == nil {
+            stayEnd = leg.start
+        }
+    }
+
+    /// How lit the inset glow along the bottom edge is, 0...1: it fades in
+    /// when the head, sent by subagents, reaches the bottom edge, and out
+    /// once the head leaves it.
+    func bottomGlow(at elapsed: Double) -> Double {
+        guard let start = stayStart, elapsed >= start else { return 0 }
+        let rise = min(1, (min(elapsed, stayEnd ?? elapsed) - start) / Self.glowFade)
+        guard let end = stayEnd else { return rise }
+        return rise * max(0, 1 - (elapsed - end) / Self.glowFade)
     }
 
     /// The edge the head has travelled, ending at the head. Along a leg the
