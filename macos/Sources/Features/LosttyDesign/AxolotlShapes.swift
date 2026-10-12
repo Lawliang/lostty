@@ -1,128 +1,147 @@
 import SwiftUI
 
-/// The approved axolotl, drawn in a 100×100 box with y down. White
-/// line-art; the gill feathers are the only magenta.
+/// The approved chibi axolotl (docs/superpowers/specs/assets/lostty-chibi-axolotl.svg),
+/// drawn in a 100×100 box with y down.
 enum AxolotlGeometry {
-    /// Gill stalks on the left side: (start, control, end). The right side
-    /// mirrors them.
-    static let leftStalks: [(CGPoint, CGPoint, CGPoint)] = [
-        (CGPoint(x: 24, y: 38), CGPoint(x: 16, y: 30), CGPoint(x: 9, y: 26)),
-        (CGPoint(x: 19, y: 47), CGPoint(x: 11, y: 45), CGPoint(x: 4, y: 46)),
-        (CGPoint(x: 21, y: 57), CGPoint(x: 13, y: 61), CGPoint(x: 8, y: 66)),
+    /// One gill petal: an ellipse centred at (x, y), turned by `rotation` degrees.
+    struct Petal: Equatable {
+        var x: CGFloat
+        var y: CGFloat
+        var rx: CGFloat
+        var ry: CGFloat
+        var rotation: CGFloat
+    }
+
+    static let leftGills: [Petal] = [
+        Petal(x: 14, y: 21, rx: 9, ry: 4.6, rotation: -42),
+        Petal(x: 9, y: 34, rx: 9, ry: 4.6, rotation: -12),
+        Petal(x: 11, y: 47, rx: 8.5, ry: 4.3, rotation: 18),
     ]
 
-    static func stalks(_ side: AxolotlSide) -> [(CGPoint, CGPoint, CGPoint)] {
+    /// The right side mirrors the left.
+    static func gills(_ side: AxolotlSide) -> [Petal] {
         switch side {
-        case .left: leftStalks
-        case .right: leftStalks.map { a, b, c in
-            (CGPoint(x: 100 - a.x, y: a.y), CGPoint(x: 100 - b.x, y: b.y), CGPoint(x: 100 - c.x, y: c.y))
-        }
+        case .left: leftGills
+        case .right: leftGills.map { Petal(x: 100 - $0.x, y: $0.y, rx: $0.rx, ry: $0.ry, rotation: -$0.rotation) }
         }
     }
 
-    /// Where each side's gills meet the head, as a unit point for rotating them.
+    /// Where each side's gills meet the head, as a unit point for swaying them.
     static func gillAnchor(_ side: AxolotlSide) -> UnitPoint {
-        side == .left ? UnitPoint(x: 0.21, y: 0.48) : UnitPoint(x: 0.79, y: 0.48)
+        side == .left ? UnitPoint(x: 0.20, y: 0.34) : UnitPoint(x: 0.80, y: 0.34)
     }
+
+    static let skin = Color(losttyHex: 0xF7B2D8)
+    static let shade = Color(losttyHex: 0xEC97C6)
+    static let ink = Color(losttyHex: 0x3A1530)
 }
 
 enum AxolotlSide { case left, right }
 
-/// Maps the 100×100 drawing box into `rect`.
-private struct Box {
-    let rect: CGRect
-    var scale: CGFloat { min(rect.width, rect.height) / 100 }
-    func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: rect.minX + x * scale, y: rect.minY + y * scale) }
-}
+private extension Path {
+    /// Scales a path drawn in the 100-unit box into `rect`.
+    func fitted(to rect: CGRect) -> Path {
+        let scale = min(rect.width, rect.height) / 100
+        return applying(CGAffineTransform(translationX: rect.minX, y: rect.minY).scaledBy(x: scale, y: scale))
+    }
 
-/// Head, body, legs, tail and mouth.
-struct AxolotlBody: Shape {
-    func path(in rect: CGRect) -> Path {
-        let b = Box(rect: rect)
-        var path = Path()
-        // Head: wide, soft, slightly flat on top.
-        path.move(to: b.p(50, 27))
-        path.addCurve(to: b.p(82, 50), control1: b.p(70, 27), control2: b.p(82, 36))
-        path.addCurve(to: b.p(50, 71), control1: b.p(82, 64), control2: b.p(68, 71))
-        path.addCurve(to: b.p(18, 50), control1: b.p(32, 71), control2: b.p(18, 64))
-        path.addCurve(to: b.p(50, 27), control1: b.p(18, 36), control2: b.p(30, 27))
-        // Body: a soft bean under the head, with stubby front legs.
-        path.move(to: b.p(39, 69))
-        path.addCurve(to: b.p(50, 88), control1: b.p(34, 78), control2: b.p(40, 88))
-        path.addCurve(to: b.p(61, 69), control1: b.p(60, 88), control2: b.p(66, 78))
-        path.move(to: b.p(41, 82)); path.addQuadCurve(to: b.p(35, 89), control: b.p(37, 84))
-        path.move(to: b.p(59, 82)); path.addQuadCurve(to: b.p(65, 89), control: b.p(63, 84))
-        // Tail curling right.
-        path.move(to: b.p(60, 82))
-        path.addCurve(to: b.p(84, 84), control1: b.p(68, 90), control2: b.p(80, 90))
-        path.addCurve(to: b.p(80, 74), control1: b.p(87, 80), control2: b.p(85, 74))
-        // Mouth: a wide, small smile.
-        path.move(to: b.p(43, 60))
-        path.addQuadCurve(to: b.p(57, 60), control: b.p(50, 64))
-        return path
+    static func unitEllipse(_ x: CGFloat, _ y: CGFloat, _ rx: CGFloat, _ ry: CGFloat, rotation: CGFloat = 0) -> Path {
+        Path(ellipseIn: CGRect(x: -rx, y: -ry, width: rx * 2, height: ry * 2))
+            .applying(CGAffineTransform(rotationAngle: rotation * .pi / 180)
+                .concatenating(CGAffineTransform(translationX: x, y: y)))
     }
 }
 
-/// One side's three gill stalks (white).
-struct AxolotlStalks: Shape {
-    var side: AxolotlSide
-    func path(in rect: CGRect) -> Path {
-        let b = Box(rect: rect)
-        var path = Path()
-        for (a, c1, c) in AxolotlGeometry.stalks(side) {
-            path.move(to: b.p(a.x, a.y))
-            path.addQuadCurve(to: b.p(c.x, c.y), control: b.p(c1.x, c1.y))
-        }
-        return path
-    }
-}
+/// One filled part of the chibi; each part is a single colour.
+struct AxolotlPart: Shape {
+    enum Kind { case tail, body, belly, limbs, gills(AxolotlSide), head, highlight, blush }
 
-/// One side's gill feathers: short strokes angled back toward the head,
-/// like fletching (magenta).
-struct AxolotlFronds: Shape {
-    var side: AxolotlSide
-    func path(in rect: CGRect) -> Path {
-        let b = Box(rect: rect)
-        var path = Path()
-        for (a, c1, c) in AxolotlGeometry.stalks(side) {
-            for t in [0.38, 0.62, 0.86] as [CGFloat] {
-                let x = (1 - t) * (1 - t) * a.x + 2 * (1 - t) * t * c1.x + t * t * c.x
-                let y = (1 - t) * (1 - t) * a.y + 2 * (1 - t) * t * c1.y + t * t * c.y
-                let dx = 2 * (1 - t) * (c1.x - a.x) + 2 * t * (c.x - c1.x)
-                let dy = 2 * (1 - t) * (c1.y - a.y) + 2 * t * (c.y - c1.y)
-                let length = max(0.001, (dx * dx + dy * dy).squareRoot())
-                let tx = dx / length, ty = dy / length, nx = -ty, ny = tx
-                for sign in [1.0, -1.0] as [CGFloat] {
-                    path.move(to: b.p(x, y))
-                    path.addLine(to: b.p(x + (-tx * 0.45 + nx * sign * 0.9) * 4.2,
-                                         y + (-ty * 0.45 + ny * sign * 0.9) * 4.2))
-                }
+    var kind: Kind
+
+    func path(in rect: CGRect) -> Path { Self.unitPath(kind).fitted(to: rect) }
+
+    static func unitPath(_ kind: Kind) -> Path {
+        switch kind {
+        case .tail:
+            var path = Path()
+            path.move(to: CGPoint(x: 60, y: 82))
+            path.addCurve(to: CGPoint(x: 84, y: 76), control1: CGPoint(x: 70, y: 86), control2: CGPoint(x: 80, y: 84))
+            path.addCurve(to: CGPoint(x: 80, y: 73), control1: CGPoint(x: 86, y: 72), control2: CGPoint(x: 82, y: 70))
+            path.addCurve(to: CGPoint(x: 63, y: 76), control1: CGPoint(x: 77, y: 78), control2: CGPoint(x: 70, y: 79))
+            path.closeSubpath()
+            return path
+        case .body:
+            return .unitEllipse(50, 76, 15, 12)
+        case .belly:
+            return .unitEllipse(50, 79, 8, 6)
+        case .limbs:
+            var path = Path()
+            let limbs: [(CGFloat, CGFloat, CGFloat, CGFloat)] = [(39, 80, 4.2, 3.2), (61, 80, 4.2, 3.2), (43, 88, 5, 3), (57, 88, 5, 3)]
+            for (x, y, rx, ry) in limbs { path.addPath(.unitEllipse(x, y, rx, ry)) }
+            return path
+        case .gills(let side):
+            var path = Path()
+            for petal in AxolotlGeometry.gills(side) {
+                path.addPath(.unitEllipse(petal.x, petal.y, petal.rx, petal.ry, rotation: petal.rotation))
             }
+            return path
+        case .head:
+            // A soft rounded square: flatter on top than an ellipse.
+            var path = Path()
+            path.move(to: CGPoint(x: 50, y: 15))
+            path.addCurve(to: CGPoint(x: 83, y: 42.3), control1: CGPoint(x: 76.4, y: 15), control2: CGPoint(x: 83, y: 26.7))
+            path.addCurve(to: CGPoint(x: 50, y: 67), control1: CGPoint(x: 83, y: 60.5), control2: CGPoint(x: 69.8, y: 67))
+            path.addCurve(to: CGPoint(x: 17, y: 42.3), control1: CGPoint(x: 30.2, y: 67), control2: CGPoint(x: 17, y: 60.5))
+            path.addCurve(to: CGPoint(x: 50, y: 15), control1: CGPoint(x: 17, y: 26.7), control2: CGPoint(x: 23.6, y: 15))
+            path.closeSubpath()
+            return path
+        case .highlight:
+            return .unitEllipse(34, 24, 7, 3.2, rotation: -18)
+        case .blush:
+            var path = Path()
+            path.addPath(.unitEllipse(26, 55, 5, 3))
+            path.addPath(.unitEllipse(75, 55, 5, 3))
+            return path
         }
-        return path
     }
 }
 
 /// The icon's prompt eyes: ">" and a "—" that blinks like a cursor.
 struct AxolotlEyes: Shape {
     var cursorVisible = true
+
     func path(in rect: CGRect) -> Path {
-        let b = Box(rect: rect)
         var path = Path()
-        path.move(to: b.p(33, 43)); path.addLine(to: b.p(40, 48)); path.addLine(to: b.p(33, 53))
+        path.move(to: CGPoint(x: 33, y: 36))
+        path.addLine(to: CGPoint(x: 42, y: 43))
+        path.addLine(to: CGPoint(x: 33, y: 50))
         if cursorVisible {
-            path.move(to: b.p(58, 48)); path.addLine(to: b.p(67, 48))
+            path.move(to: CGPoint(x: 56, y: 43))
+            path.addLine(to: CGPoint(x: 68, y: 43))
         }
-        return path
+        return path.fitted(to: rect)
     }
 }
 
-/// The small check the happy pose holds up, top right.
+/// A small "w" mouth.
+struct AxolotlMouth: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: 46, y: 53))
+        path.addQuadCurve(to: CGPoint(x: 50, y: 53.5), control: CGPoint(x: 48, y: 56))
+        path.addQuadCurve(to: CGPoint(x: 54, y: 53), control: CGPoint(x: 52, y: 56))
+        return path.fitted(to: rect)
+    }
+}
+
+/// The check the happy pose shows above its head (top right would sit on
+/// the gills).
 struct AxolotlCheck: Shape {
     func path(in rect: CGRect) -> Path {
-        let b = Box(rect: rect)
         var path = Path()
-        path.move(to: b.p(80, 14)); path.addLine(to: b.p(85, 19)); path.addLine(to: b.p(95, 7))
-        return path
+        path.move(to: CGPoint(x: 44, y: 7))
+        path.addLine(to: CGPoint(x: 49, y: 12))
+        path.addLine(to: CGPoint(x: 58, y: 2.5))
+        return path.fitted(to: rect)
     }
 }
