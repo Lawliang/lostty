@@ -176,10 +176,11 @@ private struct PairingSheet: View {
     /// that empties as the code's two minutes run out.
     private func qrTile(_ payload: PairingPayload, fraction: Double) -> some View {
         ZStack {
-            RoundedRectangle(cornerRadius: LosttyTheme.radius + 8, style: .continuous)
+            CountdownRing(cornerRadius: LosttyTheme.radius + 8)
                 .stroke(LosttyTheme.hairline, lineWidth: 4)
-            RoundedRectangle(cornerRadius: LosttyTheme.radius + 8, style: .continuous)
-                .trim(from: 0, to: fraction)
+            // The empty part grows clockwise from 12 o'clock.
+            CountdownRing(cornerRadius: LosttyTheme.radius + 8)
+                .trim(from: 1 - fraction, to: 1)
                 .stroke(LosttyTheme.accent, style: StrokeStyle(lineWidth: 4, lineCap: .round))
                 .animation(LosttyTheme.motion, value: fraction)
             if let image = Self.qrImage(payload.url.absoluteString) {

@@ -81,3 +81,26 @@ enum PairingCountdown {
         return min(1, max(0, expires.timeIntervalSince(now) / total))
     }
 }
+
+/// A rounded square traced clockwise from top centre, so a trimmed ring
+/// counts down from 12 o'clock.
+struct CountdownRing: Shape {
+    var cornerRadius: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        let radius = min(cornerRadius, rect.width / 2, rect.height / 2)
+        let top = CGPoint(x: rect.midX, y: rect.minY)
+        var path = Path()
+        path.move(to: top)
+        path.addArc(tangent1End: CGPoint(x: rect.maxX, y: rect.minY),
+                    tangent2End: CGPoint(x: rect.maxX, y: rect.maxY), radius: radius)
+        path.addArc(tangent1End: CGPoint(x: rect.maxX, y: rect.maxY),
+                    tangent2End: CGPoint(x: rect.minX, y: rect.maxY), radius: radius)
+        path.addArc(tangent1End: CGPoint(x: rect.minX, y: rect.maxY),
+                    tangent2End: CGPoint(x: rect.minX, y: rect.minY), radius: radius)
+        path.addArc(tangent1End: CGPoint(x: rect.minX, y: rect.minY),
+                    tangent2End: top, radius: radius)
+        path.addLine(to: top)
+        return path
+    }
+}
