@@ -97,6 +97,7 @@ struct SessionsScreen: View {
                             Spacer(minLength: 8)
                             if session.owner != nil {
                                 Circle().fill(LosttyTheme.accent).frame(width: 8, height: 8)
+                                    .shadow(color: LosttyTheme.accent.opacity(0.7), radius: 4)
                                     .accessibilityLabel("Open on the Mac")
                             }
                             Image(systemName: "chevron.right")
@@ -138,17 +139,18 @@ struct SessionsScreen: View {
 
 private struct EmptySessions: View {
     var body: some View {
-        ZStack {
-            BlueprintBackground()
-            VStack(spacing: 16) {
-                Axolotl(pose: .resting).frame(width: 120, height: 120)
-                Text("Nothing running yet. Open Lostty on your Mac.")
-                    .font(LosttyFont.body)
-                    .foregroundStyle(LosttyTheme.textSecondary)
-                    .multilineTextAlignment(.center)
-            }
-            .padding(LosttyTheme.margin)
+        VStack(spacing: 10) {
+            Axolotl(pose: .resting).frame(width: 104, height: 104).losttyGlow(diameter: 260)
+                .padding(.bottom, 6)
+            Text("Nothing running yet")
+                .font(LosttyFont.bodyEmphasis)
+                .foregroundStyle(LosttyTheme.textPrimary)
+            Text("Open Lostty on your Mac.")
+                .font(LosttyFont.detail)
+                .foregroundStyle(LosttyTheme.textSecondary)
         }
+        .multilineTextAlignment(.center)
+        .padding(LosttyTheme.margin)
     }
 }
 #endif

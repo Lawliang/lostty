@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// Lostty's mascot. `.waiting` blinks its cursor eye and sways its gills;
-/// `.happy` perks its gills up and holds a check. Decorative: hidden from
-/// VoiceOver.
+/// Lostty's mascot, a chibi axolotl. `.waiting` blinks its cursor eye and
+/// sways its gills; `.happy` lifts its gills and holds a check. Decorative:
+/// hidden from VoiceOver.
 struct Axolotl: View {
     enum Pose: Equatable { case resting, waiting, happy }
 
@@ -28,26 +28,31 @@ struct Axolotl: View {
 
     private func drawing(cursor: Bool, gills: Double) -> some View {
         GeometryReader { geometry in
-            let side = min(geometry.size.width, geometry.size.height)
-            let line = side / 100 * AxolotlMotion.lineWidth(forSide: side)
-            let stroke = StrokeStyle(lineWidth: line, lineCap: .round, lineJoin: .round)
+            let unit = min(geometry.size.width, geometry.size.height) / 100
             ZStack {
-                AxolotlBody().stroke(LosttyTheme.textPrimary, style: stroke)
+                AxolotlPart(kind: .tail).fill(AxolotlGeometry.shade)
+                AxolotlPart(kind: .body).fill(AxolotlGeometry.shade)
+                AxolotlPart(kind: .belly).fill(AxolotlGeometry.skin)
+                AxolotlPart(kind: .limbs).fill(AxolotlGeometry.skin)
                 ForEach([AxolotlSide.left, .right], id: \.self) { side in
-                    ZStack {
-                        AxolotlStalks(side: side).stroke(LosttyTheme.textPrimary, style: stroke)
-                        AxolotlFronds(side: side)
-                            .stroke(LosttyTheme.accent, style: StrokeStyle(lineWidth: line * 0.7, lineCap: .round))
-                    }
-                    // Left gills turn one way, right the other: a mirrored sway.
-                    .rotationEffect(.degrees(side == .left ? gills : -gills),
-                                    anchor: AxolotlGeometry.gillAnchor(side))
+                    AxolotlPart(kind: .gills(side)).fill(LosttyTheme.accent)
+                        // Left gills turn one way, right the other: a mirrored sway.
+                        .rotationEffect(.degrees(side == .left ? gills : -gills),
+                                        anchor: AxolotlGeometry.gillAnchor(side))
                 }
+                AxolotlPart(kind: .head).fill(AxolotlGeometry.skin)
+                AxolotlPart(kind: .highlight).fill(Color.white.opacity(0.35))
+                AxolotlPart(kind: .blush).fill(LosttyTheme.accent.opacity(0.45))
                 AxolotlEyes(cursorVisible: cursor)
-                    .stroke(LosttyTheme.textPrimary,
-                            style: StrokeStyle(lineWidth: line * 1.15, lineCap: .round, lineJoin: .round))
+                    .stroke(AxolotlGeometry.ink,
+                            style: StrokeStyle(lineWidth: 4.4 * unit, lineCap: .round, lineJoin: .round))
+                AxolotlMouth()
+                    .stroke(AxolotlGeometry.ink,
+                            style: StrokeStyle(lineWidth: 2.4 * unit, lineCap: .round, lineJoin: .round))
                 if pose == .happy {
-                    AxolotlCheck().stroke(LosttyTheme.accent, style: stroke)
+                    AxolotlCheck()
+                        .stroke(LosttyTheme.accent,
+                                style: StrokeStyle(lineWidth: 4 * unit, lineCap: .round, lineJoin: .round))
                 }
             }
         }
@@ -75,11 +80,5 @@ enum AxolotlMotion {
         case .happy: (true, happyLift)
         case .waiting: reduceMotion ? (true, 0) : (cursorVisible(at: time), gillSway(at: time))
         }
-    }
-
-    /// Thicker lines when small, as approved: 2.2 large, 2.8 medium, 3.6 small
-    /// (in drawing units).
-    static func lineWidth(forSide side: CGFloat) -> CGFloat {
-        side >= 200 ? 2.2 : side >= 80 ? 2.8 : 3.6
     }
 }

@@ -8,11 +8,11 @@ struct WelcomeScreen: View {
 
     var body: some View {
         ZStack {
-            BlueprintBackground()
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     Axolotl(pose: .resting)
                         .frame(width: 160, height: 160)
+                        .losttyGlow(diameter: 360)
                         .frame(maxWidth: .infinity)
                         .padding(.top, 24)
                     Text("Open your Mac's Lostty sessions from here.")
@@ -35,6 +35,7 @@ struct WelcomeScreen: View {
                 .background(LosttyTheme.background.opacity(0.9))
             }
         }
+        .background(LosttyTheme.background.ignoresSafeArea())
     }
 
     private func step(_ number: Int, _ text: String) -> some View {

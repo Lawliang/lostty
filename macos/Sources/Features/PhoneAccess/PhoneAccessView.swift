@@ -92,9 +92,9 @@ struct PhoneAccessView: View {
 
     private var header: some View {
         HStack(spacing: 14) {
-            Axolotl(pose: .resting).frame(width: 52, height: 52)
+            Axolotl(pose: .resting).frame(width: 58, height: 58)
             VStack(alignment: .leading, spacing: 2) {
-                Text("Phone Access").font(LosttyFont.largeTitle).foregroundStyle(LosttyTheme.textPrimary)
+                Text("Phone Access").font(.system(size: 24, weight: .bold)).foregroundStyle(LosttyTheme.textPrimary)
                 let readiness = PhoneAccessRow.readiness(store.rows)
                 if readiness.total > 0 {
                     Text("\(readiness.ready) of \(readiness.total) ready")
@@ -145,11 +145,11 @@ private struct PairingSheet: View {
 
     var body: some View {
         ZStack {
-            BlueprintBackground()
+            LosttyTheme.background.ignoresSafeArea()
             VStack(spacing: 18) {
                 switch pairing {
                 case .showing(let payload, let expires):
-                    Axolotl(pose: .waiting).frame(width: 56, height: 56)
+                    Axolotl(pose: .waiting).frame(width: 64, height: 64).losttyGlow(diameter: 220)
                     Text("Scan this with Lostty on your iPhone.")
                         .font(LosttyFont.title).foregroundStyle(LosttyTheme.textPrimary)
                         .multilineTextAlignment(.center)
@@ -164,7 +164,7 @@ private struct PairingSheet: View {
                     }
                     .buttonStyle(.lostty(.secondary))
                 case .expired:
-                    Axolotl(pose: .resting).frame(width: 56, height: 56)
+                    Axolotl(pose: .resting).frame(width: 64, height: 64).losttyGlow(diameter: 220)
                     Text("This code expired.").font(LosttyFont.title).foregroundStyle(LosttyTheme.textPrimary)
                     Button("Show a New Code") { store.startPairing() }.buttonStyle(.lostty(.primary))
                 }
@@ -181,10 +181,10 @@ private struct PairingSheet: View {
     /// that empties as the code's two minutes run out.
     private func qrTile(_ payload: PairingPayload, fraction: Double) -> some View {
         ZStack {
-            RoundedRectangle(cornerRadius: LosttyTheme.radius + 8, style: .continuous)
+            CountdownRing(cornerRadius: LosttyTheme.radius + 8)
                 .stroke(LosttyTheme.hairline, lineWidth: 4)
-            RoundedRectangle(cornerRadius: LosttyTheme.radius + 8, style: .continuous)
-                .trim(from: 0, to: fraction)
+            CountdownRing(cornerRadius: LosttyTheme.radius + 8)
+                .trim(from: CountdownRing.visible(fraction).lowerBound, to: CountdownRing.visible(fraction).upperBound)
                 .stroke(LosttyTheme.accent, style: StrokeStyle(lineWidth: 4, lineCap: .round))
                 .animation(LosttyTheme.motion, value: fraction)
             if let image = Self.qrImage(payload.url.absoluteString) {

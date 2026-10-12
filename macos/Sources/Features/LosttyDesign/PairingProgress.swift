@@ -36,56 +36,41 @@ struct PairingProgress: Equatable {
     }
 }
 
-/// Numbered steps: done ✓, the current one pulsing, the rest dim.
+/// The pairing steps as rows: done ✓, the current one with a spinner, the
+/// rest waiting.
 struct StepIndicator: View {
     var progress: PairingProgress
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(spacing: 0) {
             ForEach(PairingStep.allCases) { step in
                 let state = progress.state(of: step)
+                if step != .find { Rectangle().fill(LosttyTheme.hairline).frame(height: 1) }
                 HStack(spacing: 12) {
-                    ZStack {
-                        Circle().fill(state == .pending ? LosttyTheme.surfaceRaised : LosttyTheme.accentSoft)
-                        switch state {
-                        case .done:
-                            Image(systemName: "checkmark").font(.caption.weight(.bold)).foregroundStyle(LosttyTheme.accent)
-                        case .current:
-                            PulsingDot()
-                        case .pending:
-                            Text("\(step.rawValue + 1)").font(LosttyFont.mono(.footnote, size: 13, weight: .semibold))
-                                .foregroundStyle(LosttyTheme.textSecondary)
-                        }
-                    }
-                    .frame(width: 24, height: 24)
+                    marker(state).frame(width: 20, height: 20)
                     Text(step.title)
                         .font(state == .current ? LosttyFont.bodyEmphasis : LosttyFont.body)
                         .foregroundStyle(state == .pending ? LosttyTheme.textSecondary : LosttyTheme.textPrimary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("\(step.title), \(state == .done ? "done" : state == .current ? "in progress" : "not started")")
             }
         }
     }
-}
 
-/// The current step's dot. (`.symbolEffect` doesn't animate a shape.)
-private struct PulsingDot: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion)) { context in
-            Circle().fill(LosttyTheme.accent).frame(width: 8, height: 8)
-                .opacity(StepPulse.opacity(at: context.date.timeIntervalSinceReferenceDate, reduceMotion: reduceMotion))
+    @ViewBuilder private func marker(_ state: PairingStepState) -> some View {
+        switch state {
+        case .done:
+            Circle().fill(LosttyTheme.accent)
+                .overlay(Image(systemName: "checkmark").font(.system(size: 10, weight: .bold)).foregroundStyle(.white))
+        case .current:
+            ProgressView().controlSize(.small).tint(LosttyTheme.textPrimary)
+        case .pending:
+            Circle().strokeBorder(LosttyTheme.hairline, lineWidth: 1.5)
         }
-    }
-}
-
-/// The current step's pulse, kept pure so it can be tested.
-enum StepPulse {
-    /// 0…1 over 1.2 s; steady under Reduce Motion.
-    static func opacity(at time: TimeInterval, reduceMotion: Bool) -> Double {
-        reduceMotion ? 1 : 0.5 + 0.5 * sin(time * 2 * .pi / 1.2)
     }
 }
 
@@ -94,5 +79,34 @@ enum PairingCountdown {
     static func fraction(now: Date, expires: Date, total: TimeInterval = 120) -> Double {
         guard total > 0 else { return 0 }
         return min(1, max(0, expires.timeIntervalSince(now) / total))
+    }
+}
+
+/// A rounded square traced clockwise from top centre, so a trimmed ring
+/// counts down from 12 o'clock.
+struct CountdownRing: Shape {
+    var cornerRadius: CGFloat
+
+    /// The part of the ring to draw for the time left: from 12 o'clock
+    /// clockwise, receding toward 12 as the code runs out.
+    static func visible(_ fraction: Double) -> ClosedRange<Double> {
+        0...min(1, max(0, fraction))
+    }
+
+    func path(in rect: CGRect) -> Path {
+        let radius = min(cornerRadius, rect.width / 2, rect.height / 2)
+        let top = CGPoint(x: rect.midX, y: rect.minY)
+        var path = Path()
+        path.move(to: top)
+        path.addArc(tangent1End: CGPoint(x: rect.maxX, y: rect.minY),
+                    tangent2End: CGPoint(x: rect.maxX, y: rect.maxY), radius: radius)
+        path.addArc(tangent1End: CGPoint(x: rect.maxX, y: rect.maxY),
+                    tangent2End: CGPoint(x: rect.minX, y: rect.maxY), radius: radius)
+        path.addArc(tangent1End: CGPoint(x: rect.minX, y: rect.maxY),
+                    tangent2End: CGPoint(x: rect.minX, y: rect.minY), radius: radius)
+        path.addArc(tangent1End: CGPoint(x: rect.minX, y: rect.minY),
+                    tangent2End: top, radius: radius)
+        path.addLine(to: top)
+        return path
     }
 }
