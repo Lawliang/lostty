@@ -38,6 +38,11 @@ extension RemoteError {
     /// timeout (retried by the caller).
     static func mapConnectError(_ error: Error) -> Error {
         if isUserPresenceFailure(error) { return RemoteError.authenticationCancelled }
+        // Citadel replaces our KeyAuth's own error with this one when the
+        // server refuses the key.
+        if let ssh = error as? SSHClientError, case .allAuthenticationOptionsFailed = ssh {
+            return RemoteError.keyRejected
+        }
         return error
     }
 

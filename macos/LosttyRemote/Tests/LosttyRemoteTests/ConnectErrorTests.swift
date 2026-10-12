@@ -1,3 +1,4 @@
+import Citadel
 import Foundation
 import LocalAuthentication
 import Testing
@@ -30,5 +31,11 @@ struct ConnectErrorTests {
     @Test func otherErrorsPassThrough() {
         #expect(RemoteError.mapConnectError(RemoteError.keyRejected) as? RemoteError == .keyRejected)
         #expect(RemoteError.mapConnectError(Boom()) is Boom)
+    }
+
+    @Test func refusedKeyReadsAsKeyRejected() {
+        #expect(RemoteError.mapConnectError(SSHClientError.allAuthenticationOptionsFailed) as? RemoteError == .keyRejected)
+        let other = RemoteError.mapConnectError(SSHClientError.channelCreationFailed)
+        #expect((other as? SSHClientError).map { if case .channelCreationFailed = $0 { true } else { false } } == true)
     }
 }
