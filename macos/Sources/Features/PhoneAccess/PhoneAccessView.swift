@@ -178,9 +178,8 @@ private struct PairingSheet: View {
         ZStack {
             CountdownRing(cornerRadius: LosttyTheme.radius + 8)
                 .stroke(LosttyTheme.hairline, lineWidth: 4)
-            // The empty part grows clockwise from 12 o'clock.
             CountdownRing(cornerRadius: LosttyTheme.radius + 8)
-                .trim(from: 1 - fraction, to: 1)
+                .trim(from: CountdownRing.visible(fraction).lowerBound, to: CountdownRing.visible(fraction).upperBound)
                 .stroke(LosttyTheme.accent, style: StrokeStyle(lineWidth: 4, lineCap: .round))
                 .animation(LosttyTheme.motion, value: fraction)
             if let image = Self.qrImage(payload.url.absoluteString) {

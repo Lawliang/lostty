@@ -87,6 +87,12 @@ enum PairingCountdown {
 struct CountdownRing: Shape {
     var cornerRadius: CGFloat
 
+    /// The part of the ring to draw for the time left: from 12 o'clock
+    /// clockwise, receding toward 12 as the code runs out.
+    static func visible(_ fraction: Double) -> ClosedRange<Double> {
+        0...min(1, max(0, fraction))
+    }
+
     func path(in rect: CGRect) -> Path {
         let radius = min(cornerRadius, rect.width / 2, rect.height / 2)
         let top = CGPoint(x: rect.midX, y: rect.minY)

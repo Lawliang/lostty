@@ -32,4 +32,13 @@ struct CountdownRingTests {
     @Test func staysInsideItsRect() {
         #expect(rect.insetBy(dx: -0.5, dy: -0.5).contains(CountdownRing(cornerRadius: 24).path(in: rect).boundingRect))
     }
+
+    @Test func theArcRunsFromTwelveClockwiseAndRecedesTowardIt() {
+        // As in the approved mock: the gap opens just left of 12 o'clock.
+        #expect(CountdownRing.visible(1) == 0...1)
+        #expect(CountdownRing.visible(0.75) == 0...0.75)
+        #expect(CountdownRing.visible(0) == 0...0)
+        #expect(CountdownRing.visible(1.5) == 0...1)
+        #expect(CountdownRing.visible(-0.2) == 0...0)
+    }
 }
