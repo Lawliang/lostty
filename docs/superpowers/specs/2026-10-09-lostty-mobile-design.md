@@ -167,6 +167,57 @@ Shared by a Mac debug window and the iPhone app.
 A debug-only Mac menu item opens a remote surface through this package against
 `localhost`, proving the core backend and the SSH layer before iOS work.
 
+As built (phase 2):
+
+- **Core.** `src/termio/Remote.zig` plus switch arms. Surface config gains
+  `io_mode` (`GHOSTTY_SURFACE_IO_LOCAL`/`_REMOTE`), `io_userdata`, `io_write`,
+  `io_resize`; the C API is `ghostty_surface_io_feed` (any thread),
+  `ghostty_surface_io_disconnected` (a dim "reconnecting…" line, replaced when
+  tmux redraws) and `ghostty_surface_io_exited` (main thread; not in the
+  original design — a remote session ending closes the pane like a local
+  exit). The remote-or-local decision is `Remote.fromOptions`, where its test
+  runs.
+- **Package.** `macos/LosttyRemote` on Citadel 0.12.1 (pinned exactly; it
+  brings the Wellz26 fork of swift-nio-ssh — review its diff before bumps).
+  Citadel's PTY API needs macOS 15, so the app's minimum is 14 and remote code
+  is gated to 15.
+- **Commands over SSH.** Every command prefixes
+  `PATH=/opt/homebrew/bin:/usr/local/bin:$PATH` and runs `tmux -u` (SSH gives
+  no locale, and tmux then turns the tab separators of `-F` output into `_`).
+  Attach is typed into the PTY's login shell, since Citadel has no PTY+exec:
+  ` exec env LANG=… TERMINFO='<Lostty.app terminfo>' … tmux -u -L lostty -f
+  /dev/null attach-session -t '$N'` (leading space keeps it out of zsh
+  history; `-f /dev/null` so a stray attach can never start a server that
+  reads `~/.tmux.conf`; never `-d`). Only `list-sessions` exit 1 means "no
+  sessions".
+- **Keys.** The Secure Enclave key's handle lives at
+  `~/Library/Application Support/Lostty/remote-key`, used behind user presence
+  (one Touch ID prompt per connect, so two per open and one per reconnect).
+  Host keys are pinned in `…/Lostty/known_hosts` on first connect; a changed
+  key, a refused key or a cancelled Touch ID is a hard stop that leaves the
+  pane open with a red message.
+- **Ending and reconnecting.** How an attach ended is recorded inside the PTY
+  closure (Citadel throws `alreadyClosed` after a clean end): the remote
+  exiting closes the window; a dropped connection shows "reconnecting…" and
+  retries with backoff 0.5 s → 15 s, reset once a connection opens; typing
+  while disconnected is dropped. Closing a remote window closes only the SSH
+  channel (about 5 s later, while undo can still restore it).
+- **App bridge.** `RemoteSurfaceIO` uses two locks so a feed never blocks the
+  core's writes, re-checks the view on the main thread before reporting an
+  exit, and is kept alive by `Ghostty.Surface.keepAlive` until the C surface is
+  freed. Remote panes never run the tmux launcher and never ask to close.
+- **Desk check.** All ten checks passed on 2026-10-11 (open, shared input,
+  skin, Claude trace, resize, Unicode, close, network drop and reconnect,
+  `exit` closing both windows, host-key change). It first caught the empty
+  session list over SSH (the locale bug above).
+- **Deferred to phase 3.** Reconnect on app foreground and network change;
+  tmux session ids are reused after a server restart (check the name or
+  `@lostty_surface` on reattach); remote windows are restored after a relaunch
+  as local panes; one reusable Touch ID approval instead of a prompt per
+  connect; every LocalAuthentication failure reads "Touch ID was cancelled";
+  bracket IPv6 hosts in `known_hosts`; Citadel leaves a socket open after a
+  failed login until sshd's LoginGraceTime.
+
 ## 5. iPhone app
 
 - Built from the existing `Ghostty-iOS` target (`macos/Sources/App/iOS/`),
