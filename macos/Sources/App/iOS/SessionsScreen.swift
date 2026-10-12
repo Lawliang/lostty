@@ -139,9 +139,8 @@ struct SessionsScreen: View {
 private struct EmptySessions: View {
     var body: some View {
         ZStack {
-            BlueprintBackground()
             VStack(spacing: 16) {
-                Axolotl(pose: .resting).frame(width: 120, height: 120)
+                Axolotl(pose: .resting).frame(width: 120, height: 120).losttyGlow(diameter: 280)
                 Text("Nothing running yet. Open Lostty on your Mac.")
                     .font(LosttyFont.body)
                     .foregroundStyle(LosttyTheme.textSecondary)

@@ -140,11 +140,11 @@ private struct PairingSheet: View {
 
     var body: some View {
         ZStack {
-            BlueprintBackground()
+            LosttyTheme.background.ignoresSafeArea()
             VStack(spacing: 18) {
                 switch pairing {
                 case .showing(let payload, let expires):
-                    Axolotl(pose: .waiting).frame(width: 56, height: 56)
+                    Axolotl(pose: .waiting).frame(width: 64, height: 64).losttyGlow(diameter: 220)
                     Text("Scan this with Lostty on your iPhone.")
                         .font(LosttyFont.title).foregroundStyle(LosttyTheme.textPrimary)
                         .multilineTextAlignment(.center)
@@ -159,7 +159,7 @@ private struct PairingSheet: View {
                     }
                     .buttonStyle(.lostty(.secondary))
                 case .expired:
-                    Axolotl(pose: .resting).frame(width: 56, height: 56)
+                    Axolotl(pose: .resting).frame(width: 64, height: 64).losttyGlow(diameter: 220)
                     Text("This code expired.").font(LosttyFont.title).foregroundStyle(LosttyTheme.textPrimary)
                     Button("Show a New Code") { store.startPairing() }.buttonStyle(.lostty(.primary))
                 }

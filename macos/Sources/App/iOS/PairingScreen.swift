@@ -11,7 +11,6 @@ struct PairingScreen: View {
 
     var body: some View {
         ZStack {
-            BlueprintBackground()
             ScrollView {
                 VStack(spacing: 20) {
                     switch store.pairing {
@@ -27,7 +26,7 @@ struct PairingScreen: View {
                         }
                         .buttonStyle(.lostty(.secondary))
                     case .finding, .waitingForAllow, .testing:
-                        Axolotl(pose: .waiting).frame(width: 120, height: 120).padding(.top, 24)
+                        Axolotl(pose: .waiting).frame(width: 120, height: 120).losttyGlow(diameter: 290).padding(.top, 24)
                         Text(waitingTitle)
                             .font(LosttyFont.title)
                             .foregroundStyle(LosttyTheme.textPrimary)
@@ -50,7 +49,7 @@ struct PairingScreen: View {
                                 .buttonStyle(.lostty(.primary, fullWidth: true))
                         }
                     case .done:
-                        Axolotl(pose: .happy).frame(width: 140, height: 140).padding(.top, 24)
+                        Axolotl(pose: .happy).frame(width: 140, height: 140).losttyGlow(diameter: 330).padding(.top, 24)
                         Text("Paired.").font(LosttyFont.largeTitle).foregroundStyle(LosttyTheme.textPrimary)
                         Text("Your Mac's sessions are ready.")
                             .font(LosttyFont.body).foregroundStyle(LosttyTheme.textSecondary)
