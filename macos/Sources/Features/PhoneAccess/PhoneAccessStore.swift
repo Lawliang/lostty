@@ -138,6 +138,7 @@ final class PhoneAccessStore: ObservableObject {
                 if pairingID == id, case .showing = pairing {
                     server.stop()
                     self.server = nil
+                    pairingID = UUID()
                     pairing = .expired
                 }
             }
