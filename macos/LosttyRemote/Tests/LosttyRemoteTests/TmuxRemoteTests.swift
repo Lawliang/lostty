@@ -3,7 +3,11 @@ import Testing
 
 struct TmuxRemoteTests {
     @Test func listFindsTmuxOnAMinimalSSHPath() {
-        #expect(TmuxRemote.listCommand.hasPrefix("PATH=/opt/homebrew/bin:/usr/local/bin:$PATH tmux -L lostty list-sessions -F "))
+        #expect(TmuxRemote.listCommand.hasPrefix("PATH=/opt/homebrew/bin:/usr/local/bin:$PATH tmux -u -L lostty list-sessions -F "))
+    }
+
+    @Test func listKeepsTabsWithoutALocale() {
+        #expect(TmuxRemote.listCommand.contains("tmux -u "))
     }
 
     @Test func attachQuotesTheSessionIDAndNeverDetachesOthers() throws {

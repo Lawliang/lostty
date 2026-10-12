@@ -173,7 +173,8 @@ pub fn attachIdFromArgs(argv: []const []const u8) ?[]const u8 {
 /// Lists every session as "id<TAB>surface<TAB>owner", for `orphanFor`.
 pub fn listArgv(alloc: Allocator, tmux: []const u8) ![]const []const u8 {
     const format = "#{session_id}\t#{" ++ opt_surface ++ "}\t#{" ++ opt_owner ++ "}";
-    return alloc.dupe([]const u8, &.{ tmux, "-L", socket, "list-sessions", "-F", format });
+    // -u: without a UTF-8 locale tmux turns the tab separators in -F output into `_`.
+    return alloc.dupe([]const u8, &.{ tmux, "-u", "-L", socket, "list-sessions", "-F", format });
 }
 
 /// The session a crashed Lostty left showing pane `surface`, from

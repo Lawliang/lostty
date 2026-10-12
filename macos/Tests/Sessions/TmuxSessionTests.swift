@@ -132,7 +132,7 @@ final class TmuxClientTests {
 
     @Test func runReturnsStdoutOnSuccess() throws {
         let client = TmuxClient(tmuxPath: try fakeTmux("echo \"$@\""))
-        #expect(client.run(["list-sessions"]) == "-L lostty list-sessions\n")
+        #expect(client.run(["list-sessions"]) == "-u -L lostty list-sessions\n")
     }
 
     @Test func runReportsFailure() throws {

@@ -34,7 +34,9 @@ struct TmuxClient {
         guard let tmuxPath else { return nil }
         let process = Process()
         process.executableURL = URL(fileURLWithPath: tmuxPath)
-        process.arguments = ["-L", TmuxConstants.socket] + args
+        // -u: the app may run without a UTF-8 locale; without it tmux turns
+        // the tab separators in -F output into `_`.
+        process.arguments = ["-u", "-L", TmuxConstants.socket] + args
         let out = Pipe()
         process.standardOutput = out
         process.standardError = FileHandle.nullDevice

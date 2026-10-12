@@ -32,8 +32,10 @@ public enum TmuxRemote {
     /// id, name, Mac pane, Mac Lostty pid — tab separated.
     public static let listFormat = "#{session_id}\t#{session_name}\t#{@lostty_surface}\t#{@lostty_owner}"
 
+    /// SSH commands have no locale, and without UTF-8 tmux turns the tab
+    /// separators into `_`, so `-u` keeps them.
     public static var listCommand: String {
-        "\(pathPrefix) tmux -L lostty list-sessions -F \(shellQuote(listFormat))"
+        "\(pathPrefix) tmux -u -L lostty list-sessions -F \(shellQuote(listFormat))"
     }
 
     /// The command the PTY's shell replaces itself with. `-u` and LANG keep
