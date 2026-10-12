@@ -88,9 +88,9 @@ struct PhoneAccessView: View {
 
     private var header: some View {
         HStack(spacing: 14) {
-            Axolotl(pose: .resting).frame(width: 52, height: 52)
+            Axolotl(pose: .resting).frame(width: 58, height: 58)
             VStack(alignment: .leading, spacing: 2) {
-                Text("Phone Access").font(LosttyFont.largeTitle).foregroundStyle(LosttyTheme.textPrimary)
+                Text("Phone Access").font(.system(size: 24, weight: .bold)).foregroundStyle(LosttyTheme.textPrimary)
                 let readiness = PhoneAccessRow.readiness(store.rows)
                 if readiness.total > 0 {
                     Text("\(readiness.ready) of \(readiness.total) ready")

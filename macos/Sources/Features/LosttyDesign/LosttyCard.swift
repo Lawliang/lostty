@@ -23,7 +23,7 @@ struct LosttyCard<Content: View>: View {
 
 enum StatusRowStatus { case ok, warning, missing }
 
-/// A checklist row: status icon, title, wrapping detail, trailing buttons.
+/// A checklist row: status dot, title, wrapping detail, and fix buttons under it.
 struct StatusRow<Trailing: View>: View {
     var status: StatusRowStatus
     var title: String
@@ -39,28 +39,34 @@ struct StatusRow<Trailing: View>: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            Image(systemName: icon)
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(color)
-                .accessibilityLabel(status == .ok ? "Ready" : status == .warning ? "Needs attention" : "Not ready")
+            ZStack {
+                Circle().fill(color)
+                Image(systemName: glyph)
+                    .font(.system(size: 9, weight: .heavy))
+                    .foregroundStyle(LosttyTheme.background)
+            }
+            .frame(width: 18, height: 18)
+            .padding(.top, 1)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(status == .ok ? "Ready" : status == .warning ? "Needs attention" : "Not ready")
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(LosttyFont.bodyEmphasis).foregroundStyle(LosttyTheme.textPrimary)
                 Text(detail).font(LosttyFont.detail).foregroundStyle(LosttyTheme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled)
+                // Fix buttons sit under the text so the text keeps the full width.
+                FlowLayout(spacing: 8, topPadding: 8) { trailing }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            HStack(spacing: 8) { trailing }
-                .fixedSize()
         }
-        .padding(.vertical, 10)
+        .padding(.vertical, 12)
     }
 
-    private var icon: String {
+    private var glyph: String {
         switch status {
-        case .ok: "checkmark.circle.fill"
-        case .warning: "exclamationmark.triangle.fill"
-        case .missing: "xmark.circle.fill"
+        case .ok: "checkmark"
+        case .warning: "exclamationmark"
+        case .missing: "xmark"
         }
     }
 
