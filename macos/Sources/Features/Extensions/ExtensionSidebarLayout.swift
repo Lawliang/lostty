@@ -1,6 +1,18 @@
 #if os(macOS)
 import SwiftUI
 
+/// Where the notification stack sits beside the sidebar chrome.
+enum NotificationPlacement {
+    /// How far notifications sit from the terminal's right edge: clear of an
+    /// open sidebar app, and of the strip while it slides over the terminal.
+    static func trailingInset(active: LosttyExtension?, autoHide: Bool, stripVisible: Bool) -> CGFloat {
+        var inset: CGFloat = 0
+        if let active, case .sidebar(let width) = active.presentation { inset += width }
+        if autoHide, stripVisible { inset += ExtensionSidebarView.width }
+        return inset
+    }
+}
+
 /// Puts the extensions sidebar beside the terminal content, so it narrows
 /// the terminal rather than covering it, and the Claude usage bar below
 /// both. An open overlay extension covers the terminal content; an open
@@ -24,8 +36,15 @@ struct ExtensionSidebarLayout<Content: View>: View {
                                 .transition(.opacity)
                         }
                     }
-                    .overlay(alignment: .topTrailing) { NotificationStackView() }
                     .overlay(alignment: .trailing) { trailingChrome }
+                    // Above the chrome and just left of it, so an open panel
+                    // never hides a notification.
+                    .overlay(alignment: .topTrailing) {
+                        NotificationStackView()
+                            .padding(.trailing, NotificationPlacement.trailingInset(
+                                active: model.active, autoHide: preferences.autoHide,
+                                stripVisible: autoHide.isVisible))
+                    }
                 if !preferences.autoHide {
                     ExtensionSidebarView(model: model)
                 }

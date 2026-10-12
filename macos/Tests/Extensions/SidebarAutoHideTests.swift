@@ -103,4 +103,19 @@ struct SidebarAutoHideTests {
         #expect(driver.isVisible == false)
     }
 }
+
+struct NotificationPlacementTests {
+    @Test func notificationsSitLeftOfAnOpenPanel() {
+        #expect(NotificationPlacement.trailingInset(active: nil, autoHide: false, stripVisible: false) == 0)
+        #expect(NotificationPlacement.trailingInset(active: .skins, autoHide: false, stripVisible: false) == 0)
+        #expect(NotificationPlacement.trailingInset(active: .branches, autoHide: false, stripVisible: false) == 340)
+    }
+
+    @Test func andLeftOfTheStripWhileItSlidesOverTheTerminal() {
+        let strip = ExtensionSidebarView.width
+        #expect(NotificationPlacement.trailingInset(active: nil, autoHide: true, stripVisible: false) == 0)
+        #expect(NotificationPlacement.trailingInset(active: nil, autoHide: true, stripVisible: true) == strip)
+        #expect(NotificationPlacement.trailingInset(active: .branches, autoHide: true, stripVisible: true) == 340 + strip)
+    }
+}
 #endif
