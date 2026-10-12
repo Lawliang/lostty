@@ -73,7 +73,7 @@ final class MobileStore: ObservableObject {
     func terminalClosedItself(_ session: RemoteSession) async {
         await refresh()
         if sessions.contains(where: { $0.id == session.id && $0.name == session.name }) {
-            message = "Couldn't open \(session.name). Check that tmux runs on the Mac."
+            message = "Couldn't open \(session.name). Check that tmux runs on the Mac and that Phone Access shows Terminal definition ✓."
         }
     }
 
@@ -250,7 +250,8 @@ final class MobileStore: ObservableObject {
             return
         } catch {
             guard attempt == pairingAttempt else { return }
-            pairing = .failed(describe(error), canRetryTest: false)
+            // Network and decoding errors say nothing a customer can use.
+            pairing = .failed(PairingError.connectionFailed.message, canRetryTest: false)
             return
         }
         await runPairingTest(attempt: attempt)
@@ -267,16 +268,29 @@ final class MobileStore: ObservableObject {
         guard attempt == pairingAttempt, let payload = allowedPayload else { return }
         pairing = .testing
         let candidate = RemoteHostSettings.paired(with: payload, at: Date())
+        // Test against scratch pins; the real ones change only on success.
+        let scratch = FileManager.default.temporaryDirectory
+            .appendingPathComponent("pairing-known-hosts-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: scratch) }
+        let testHosts = KnownHosts(fileURL: scratch)
         do {
             for host in candidate.remoteHosts {
-                guard attempt == pairingAttempt else { return }
-                try knownHosts.pin(host: host.host, port: host.port, key: payload.hostKeyLine)
+                try testHosts.pin(host: host.host, port: host.port, key: payload.hostKeyLine)
             }
             let connection = try await RemoteConnection.connect(
-                toFirstReachable: candidate.remoteHosts, key: try remoteKey(), knownHosts: knownHosts)
-            let found = try await connection.sessions()
+                toFirstReachable: candidate.remoteHosts, key: try remoteKey(), knownHosts: testHosts)
+            let found: [RemoteSession]
+            do {
+                found = try await connection.sessions()
+            } catch {
+                await connection.close()
+                throw error
+            }
             await connection.close()
             guard attempt == pairingAttempt else { return }
+            for host in candidate.remoteHosts {
+                try knownHosts.pin(host: host.host, port: host.port, key: payload.hostKeyLine)
+            }
             settings = candidate
             saveSettings()
             sessions = RemoteSession.forPicking(found)

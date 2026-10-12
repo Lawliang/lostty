@@ -63,9 +63,17 @@ public struct PairingPayload: Equatable, Sendable {
         try self.init(name: name, ip: ip, user: user, hostKey: hostKey.base64EncodedString(), secret: secret)
     }
 
+    /// A plain IPv4 address in Tailscale's 100.64.0.0/10 (no scope suffix).
+    static func isTailscaleAddress(_ text: String) -> Bool {
+        guard text.allSatisfy({ $0.isASCII && ($0.isNumber || $0 == ".") }),
+              let address = IPv4Address(text),"\(address)" == text else { return false }
+        let b = address.rawValue
+        return b[0] == 100 && (64...127).contains(b[1])
+    }
+
     private var isValid: Bool {
         !name.isEmpty && name.count <= 253 && !name.contains(where: \.isWhitespace)
-            && IPv4Address(ip) != nil
+            && Self.isTailscaleAddress(ip)
             && !user.isEmpty && !user.contains(where: \.isWhitespace)
             && secret.count == 32
             && (try? NIOSSHPublicKey(openSSHPublicKey: hostKeyLine)) != nil

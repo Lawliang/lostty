@@ -101,3 +101,10 @@ final class Box<T>: @unchecked Sendable {
         #expect(Date().timeIntervalSince(start) < 10)
     }
 }
+
+struct PairingTimeoutTests {
+    @Test func timeoutReportsPermissionOnlyWhenTheBrowserWasPolicyDenied() {
+        #expect(PairingClient.timeoutError(lastStateWasPolicyDenied: true) == .localNetworkDenied)
+        #expect(PairingClient.timeoutError(lastStateWasPolicyDenied: false) == .macNotFound)
+    }
+}

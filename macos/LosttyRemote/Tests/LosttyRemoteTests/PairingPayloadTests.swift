@@ -40,6 +40,10 @@ struct PairingPayloadTests {
         #expect(throws: PairingError.invalidLink) { try payload(name: "my mac") }
         #expect(throws: PairingError.invalidLink) { try payload(ip: "not-an-ip") }
         #expect(throws: PairingError.invalidLink) { try payload(ip: "fd7a:115c:a1e0::1") }
+        #expect(throws: PairingError.invalidLink) { try payload(ip: "8.8.8.8") }
+        #expect(throws: PairingError.invalidLink) { try payload(ip: "100.128.0.1") }
+        #expect(throws: PairingError.invalidLink) { try payload(ip: "100.63.255.255") }
+        #expect(throws: PairingError.invalidLink) { try payload(ip: "100.64.0.1%en0") }
         #expect(throws: PairingError.invalidLink) { try payload(user: "") }
         #expect(throws: PairingError.invalidLink) { try payload(user: "law liang") }
         #expect(throws: PairingError.invalidLink) { try payload(hostKey: ecdsa) }

@@ -25,6 +25,13 @@ public enum PairingError: Error, Equatable {
 }
 
 /// Runs a closure at most once, from any thread.
+final class Flag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = false
+    func set(_ new: Bool) { lock.lock(); value = new; lock.unlock() }
+    var get: Bool { lock.lock(); defer { lock.unlock() }; return value }
+}
+
 final class Once: @unchecked Sendable {
     private let lock = NSLock()
     private var done = false
@@ -208,6 +215,9 @@ public enum PairingClient {
             using: PairingCrypto.parameters(secret: secret))
         let queue = DispatchQueue(label: "com.lawliang.lostty.pairing.browse")
         let once = Once()
+        // iOS also reports PolicyDenied while the first-run Local Network
+        // alert is on screen, so keep browsing and decide at the timeout.
+        let policyDenied = Flag()
         return try await withCheckedThrowingContinuation { (done: CheckedContinuation<NWEndpoint, Error>) in
             browser.browseResultsChangedHandler = { results, _ in
                 for result in results {
@@ -222,7 +232,11 @@ public enum PairingClient {
             }
             browser.stateUpdateHandler = { state in
                 switch state {
-                case .waiting(let error) where isPolicyDenied(error), .failed(let error) where isPolicyDenied(error):
+                case .waiting(let error) where isPolicyDenied(error):
+                    policyDenied.set(true)
+                case .ready:
+                    policyDenied.set(false)
+                case .failed(let error) where isPolicyDenied(error):
                     once.run {
                         browser.cancel()
                         done.resume(throwing: PairingError.localNetworkDenied)
@@ -240,10 +254,15 @@ public enum PairingClient {
             queue.asyncAfter(deadline: .now() + timeout) {
                 once.run {
                     browser.cancel()
-                    done.resume(throwing: PairingError.macNotFound)
+                    done.resume(throwing: timeoutError(lastStateWasPolicyDenied: policyDenied.get))
                 }
             }
         }
+    }
+
+    /// What to report when no Mac showed up in time.
+    static func timeoutError(lastStateWasPolicyDenied: Bool) -> PairingError {
+        lastStateWasPolicyDenied ? .localNetworkDenied : .macNotFound
     }
 
     /// Sends `request` to the Mac and waits for its answer while the Allow

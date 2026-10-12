@@ -11,6 +11,20 @@ struct SettingsScreen: View {
     @State private var showPairing = false
     @State private var showAdvanced = false
 
+    /// A binding for a field typed by hand: changing it means this is no
+    /// longer the paired Mac (a programmatic change by pairing doesn't go
+    /// through here).
+    private func editedByHand(_ field: WritableKeyPath<RemoteHostSettings, String>) -> Binding<String> {
+        Binding(
+            get: { store.settings[keyPath: field] },
+            set: { new in
+                guard new != store.settings[keyPath: field] else { return }
+                store.settings[keyPath: field] = new
+                store.settings.fallbackHost = nil
+                store.settings.pairedAt = nil
+            })
+    }
+
     var body: some View {
         Form {
             Section("Mac") {
@@ -25,11 +39,11 @@ struct SettingsScreen: View {
 
             Section {
                 DisclosureGroup("Advanced", isExpanded: $showAdvanced) {
-                    TextField("Address (Tailscale name or IP)", text: $store.settings.host)
+                    TextField("Address (Tailscale name or IP)", text: editedByHand(\.host))
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .keyboardType(.URL)
-                    TextField("User", text: $store.settings.user)
+                    TextField("User", text: editedByHand(\.user))
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                     TextField("Port", value: $store.settings.port, format: .number.grouping(.never))

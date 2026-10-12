@@ -29,11 +29,11 @@ struct RemoteHostSettingsTests {
     @Test func pairingFillsEverything() throws {
         let hostKey = String(String(openSSHPublicKey: NIOSSHPrivateKey(ed25519Key: Curve25519.Signing.PrivateKey()).publicKey)
             .split(separator: " ")[1])
-        let payload = try PairingPayload(name: "mac.ts.net", ip: "100.1.2.3", user: "law", hostKey: hostKey,
+        let payload = try PairingPayload(name: "mac.ts.net", ip: "100.64.1.3", user: "law", hostKey: hostKey,
                                          secret: Data(repeating: 1, count: 32))
         let date = Date(timeIntervalSince1970: 1_000)
         let s = RemoteHostSettings.paired(with: payload, at: date)
-        #expect(s == RemoteHostSettings(host: "mac.ts.net", port: 22, user: "law", fallbackHost: "100.1.2.3", pairedAt: date))
+        #expect(s == RemoteHostSettings(host: "mac.ts.net", port: 22, user: "law", fallbackHost: "100.64.1.3", pairedAt: date))
         #expect(s.paired)
         #expect(!RemoteHostSettings(host: "mac", port: 22, user: "me").paired)
     }
