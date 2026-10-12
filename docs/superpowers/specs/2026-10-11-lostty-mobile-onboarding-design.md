@@ -177,9 +177,9 @@ where ncurses looks by default, so the attach line
 4. **Wait** for Allow. Denied → "Your Mac declined. Try again from Phone
    Access."
 5. **Pin** the Mac's identity: store `hostkey` for both `name` and `ip` in
-   `KnownHosts`, replacing any earlier entry. Connections to a paired Mac
-   offer only `ssh-ed25519` as the host key algorithm, so sshd presents the
-   key that was pinned.
+   `KnownHosts`, replacing any earlier entry. swift-nio-ssh's client always
+   lists `ssh-ed25519` first among host key algorithms and macOS sshd always
+   has an ed25519 host key, so the key sshd presents is the one pinned.
 6. **Test**: connect over Tailscale with the existing `RemoteConnection`
    (name first, then ip) and list sessions. Only success saves the pairing
    and opens the session list. Failure keeps the scanned payload and shows
@@ -248,9 +248,6 @@ Lostty's own SSH server. Bundled tmux.
 - TLS with a pre-shared key in Network framework (`sec_protocol_options_add_pre_shared_key`)
   is the least-used piece; verify it on the 27 SDKs first, before building UI
   around it.
-- Citadel must let the client limit host key algorithms to `ssh-ed25519`;
-  if it can't, the pin check compares against whichever key type sshd
-  presents and the QR carries the ECDSA host key as well.
 - iOS shows the local-network prompt on first pairing; if the customer
   declines, pairing can't find the Mac. The phone detects the failure and
   points to Settings → Privacy → Local Network.
