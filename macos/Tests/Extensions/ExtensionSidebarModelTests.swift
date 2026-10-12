@@ -5,29 +5,35 @@ import Testing
 
 @MainActor
 struct ExtensionSidebarModelTests {
-    @Test func startsWithNothingOpen() {
-        let model = ExtensionSidebarModel()
+    /// A sidebar whose Branches model reads a scripted world.
+    private func makeModel() throws -> (ExtensionSidebarModel, BranchesModel) {
+        let branches = BranchesModel(env: try FakeBranchesWorld().environment())
+        return (ExtensionSidebarModel(branches: branches), branches)
+    }
+
+    @Test func startsWithNothingOpen() throws {
+        let (model, _) = try makeModel()
         #expect(model.active == nil)
         #expect(model.focusedSurfaceID == nil)
     }
 
-    @Test func clickingAnIconOpensItAndClickingAgainCloses() {
-        let model = ExtensionSidebarModel()
+    @Test func clickingAnIconOpensItAndClickingAgainCloses() throws {
+        let (model, _) = try makeModel()
         model.select(.skins)
         #expect(model.active == .skins)
         model.select(.skins)
         #expect(model.active == nil)
     }
 
-    @Test func clickingAnotherIconSwitchesToIt() {
-        let model = ExtensionSidebarModel()
+    @Test func clickingAnotherIconSwitchesToIt() throws {
+        let (model, _) = try makeModel()
         model.select(.branches)
         model.select(.skins)
         #expect(model.active == .skins)
     }
 
-    @Test func closeLeavesAnyOpenApp() {
-        let model = ExtensionSidebarModel()
+    @Test func closeLeavesAnyOpenApp() throws {
+        let (model, _) = try makeModel()
         model.select(.branches)
         model.close()
         #expect(model.active == nil)
@@ -44,11 +50,19 @@ struct ExtensionSidebarModelTests {
         #expect(LosttyExtension.skins.presentation == .overlay)
     }
 
-    @Test func tracksTheFocusedPane() {
-        let model = ExtensionSidebarModel()
+    @Test func tracksTheFocusedPane() throws {
+        let (model, _) = try makeModel()
         let pane = UUID()
         model.focusedSurfaceID = pane
         #expect(model.focusedSurfaceID == pane)
+    }
+
+    @Test func openingBranchesOpensItsModelAndLeavingClosesIt() throws {
+        let (model, branches) = try makeModel()
+        model.select(.branches)
+        #expect(branches.isOpen)
+        model.select(.skins)
+        #expect(branches.isOpen == false)
     }
 }
 #endif

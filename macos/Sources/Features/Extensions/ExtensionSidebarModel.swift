@@ -36,11 +36,31 @@ enum LosttyExtension: String, CaseIterable, Identifiable {
 /// color, which the sidebar matches.
 @MainActor
 final class ExtensionSidebarModel: ObservableObject {
-    @Published private(set) var active: LosttyExtension?
+    @Published private(set) var active: LosttyExtension? {
+        didSet {
+            guard active != oldValue else { return }
+            if active == .branches {
+                branches.open(focused: focusedSurfaceID)
+            } else if oldValue == .branches {
+                branches.close()
+            }
+        }
+    }
     /// The window's focused (or last focused) pane, set by the controller.
-    @Published var focusedSurfaceID: UUID?
+    @Published var focusedSurfaceID: UUID? {
+        didSet {
+            if active == .branches, focusedSurfaceID != oldValue { branches.focusChanged(focusedSurfaceID) }
+        }
+    }
     /// The title bar's color (the top pane's background), set by the window.
     @Published var chromeColor: NSColor?
+
+    /// The Branches panel's state; idle until Branches opens.
+    let branches: BranchesModel
+
+    init(branches: BranchesModel? = nil) {
+        self.branches = branches ?? BranchesModel()
+    }
 
     /// Clicking an icon opens its extension; clicking the open one closes it.
     func select(_ ext: LosttyExtension) {
