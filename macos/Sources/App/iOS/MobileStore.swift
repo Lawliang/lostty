@@ -112,9 +112,11 @@ final class MobileStore: ObservableObject {
             let connection = try await RemoteConnection.connect(toFirstReachable: hosts, key: try remoteKey(), knownHosts: knownHosts)
             defer { Task { await connection.close() } }
             sessions = RemoteSession.forPicking(try await connection.sessions())
-            message = sessions.isEmpty ? "No Lostty sessions are running on the Mac." : nil
+            message = sessions.isEmpty ? Self.noSessionsMessage : nil
+            needsPairing = false
         } catch {
             message = describe(error)
+            noteNeedsPairing(error)
         }
     }
 
@@ -136,6 +138,7 @@ final class MobileStore: ObservableObject {
             return true
         } catch {
             message = describe(error)
+            noteNeedsPairing(error)
             return false
         }
     }
@@ -173,6 +176,100 @@ final class MobileStore: ObservableObject {
     /// disappear of an old screen can't drop a newer terminal.
     func terminalClosed(_ io: RemoteSurfaceIO?) {
         if openIO === io { openIO = nil }
+    }
+
+    // MARK: Pairing
+
+    enum PairingPhase: Equatable {
+        case idle
+        case finding
+        case waitingForAllow
+        case testing
+        case failed(String, canRetryTest: Bool)
+        case done
+    }
+
+    @Published private(set) var pairing: PairingPhase = .idle
+    /// The Mac refused this phone or its identity changed: show Pair Again.
+    @Published private(set) var needsPairing = false
+    /// Kept after the Mac allowed this phone, so a failed test can retry
+    /// without scanning again.
+    private var allowedPayload: PairingPayload?
+
+    static let noSessionsMessage = "No sessions. Is Lostty open on your Mac?"
+    static let tailscaleHint = "Is Tailscale on and signed into the same account as your Mac?"
+
+    func resetPairing() {
+        pairing = .idle
+        allowedPayload = nil
+    }
+
+    /// Scan → find the Mac nearby → send this phone's key → wait for Allow
+    /// → test over Tailscale. Only a working test saves the pairing.
+    func pair(link: String) async {
+        guard let url = URL(string: link.trimmingCharacters(in: .whitespacesAndNewlines)),
+              let payload = try? PairingPayload(url: url)
+        else {
+            pairing = .failed(PairingError.invalidLink.message, canRetryTest: false)
+            return
+        }
+        do {
+            let key = try remoteKey()
+            pairing = .finding
+            let endpoint = try await PairingClient.find(secret: payload.secret)
+            pairing = .waitingForAllow
+            let response = try await PairingClient.send(
+                PairingRequest(publicKey: key.publicKeyLine, model: DeviceModel.current),
+                to: endpoint, secret: payload.secret)
+            guard response.result == .allowed else {
+                pairing = .failed("Your Mac declined. Try again from Phone Access.", canRetryTest: false)
+                return
+            }
+            allowedPayload = payload
+        } catch let error as PairingError {
+            pairing = .failed(error.message, canRetryTest: false)
+            return
+        } catch {
+            pairing = .failed(describe(error), canRetryTest: false)
+            return
+        }
+        await retryPairingTest()
+    }
+
+    /// Pins the Mac's key from the QR and connects over Tailscale.
+    func retryPairingTest() async {
+        guard let payload = allowedPayload else { return }
+        pairing = .testing
+        let candidate = RemoteHostSettings.paired(with: payload, at: Date())
+        do {
+            for host in candidate.remoteHosts {
+                try knownHosts.pin(host: host.host, port: host.port, key: payload.hostKeyLine)
+            }
+            let connection = try await RemoteConnection.connect(
+                toFirstReachable: candidate.remoteHosts, key: try remoteKey(), knownHosts: knownHosts)
+            let found = try await connection.sessions()
+            await connection.close()
+            settings = candidate
+            saveSettings()
+            sessions = RemoteSession.forPicking(found)
+            message = sessions.isEmpty ? Self.noSessionsMessage : nil
+            needsPairing = false
+            allowedPayload = nil
+            pairing = .done
+        } catch {
+            let text = RemoteError.isUnreachable(error)
+                ? "Your Mac allowed this phone, but Lostty couldn't reach it. \(Self.tailscaleHint)"
+                : describe(error)
+            pairing = .failed(text, canRetryTest: true)
+        }
+    }
+
+    /// Errors that only pairing again fixes.
+    private func noteNeedsPairing(_ error: Error) {
+        switch error as? RemoteError {
+        case .keyRejected?, .hostKeyChanged?: needsPairing = true
+        default: break
+        }
     }
 
     // MARK: Reconnect triggers

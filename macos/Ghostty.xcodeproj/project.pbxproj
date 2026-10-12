@@ -1262,6 +1262,9 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Lostty;
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Lostty uses Face ID to unlock the key it signs in to your Mac with.";
+				INFOPLIST_FILE = "Lostty-iOS-Info.plist";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Lostty uses the camera to scan the pairing code on your Mac.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Lostty finds your Mac nearby while you pair them.";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -1302,6 +1305,9 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Lostty;
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Lostty uses Face ID to unlock the key it signs in to your Mac with.";
+				INFOPLIST_FILE = "Lostty-iOS-Info.plist";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Lostty uses the camera to scan the pairing code on your Mac.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Lostty finds your Mac nearby while you pair them.";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -1342,6 +1348,9 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Lostty;
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Lostty uses Face ID to unlock the key it signs in to your Mac with.";
+				INFOPLIST_FILE = "Lostty-iOS-Info.plist";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Lostty uses the camera to scan the pairing code on your Mac.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Lostty finds your Mac nearby while you pair them.";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;

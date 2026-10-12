@@ -3,43 +3,26 @@ import GhosttyKit
 import LosttyRemote
 import SwiftUI
 
-/// Home: the Mac's Lostty sessions by project name.
+/// Home: the Mac's Lostty sessions by project name; the welcome screen while
+/// no Mac is set up.
 struct SessionsScreen: View {
     @EnvironmentObject private var store: MobileStore
     @EnvironmentObject private var ghostty: Ghostty.App
     @State private var path: [String] = []
     @State private var open: (session: RemoteSession, view: Ghostty.SurfaceView, io: RemoteSurfaceIO)?
     @State private var showSettings = false
+    @State private var showPairing = false
     @State private var confirmKill: RemoteSession?
 
     var body: some View {
         NavigationStack(path: $path) {
-            List {
-                if let message = store.message {
-                    Text(message).foregroundStyle(.secondary)
-                }
-                ForEach(store.sessions, id: \.id) { session in
-                    Button {
-                        guard let app = ghostty.app, let terminal = store.terminal(for: session, app: app) else { return }
-                        open = (session, terminal.view, terminal.io)
-                        path = ["terminal"]
-                    } label: {
-                        HStack {
-                            Text(session.name).font(.body.monospaced())
-                            Spacer()
-                            if session.owner != nil {
-                                Image(systemName: "desktopcomputer").foregroundStyle(.secondary)
-                                    .accessibilityLabel("Open on the Mac")
-                            }
-                        }
-                    }
-                    .swipeActions {
-                        Button("Close", role: .destructive) { confirmKill = session }
-                    }
+            Group {
+                if store.settings.remoteHost == nil {
+                    WelcomeScreen(pair: { showPairing = true }, settings: { showSettings = true })
+                } else {
+                    sessionList
                 }
             }
-            .overlay { if store.loading && store.sessions.isEmpty { ProgressView() } }
-            .refreshable { await store.refresh() }
             .navigationTitle("Lostty")
             .toolbar {
                 Button { showSettings = true } label: { Image(systemName: "gearshape") }
@@ -49,8 +32,11 @@ struct SessionsScreen: View {
                     TerminalScreen(session: open.session, surfaceView: open.view, io: open.io)
                 }
             }
-            .sheet(isPresented: $showSettings, onDismiss: { Task { await store.refresh() } }) {
+            .sheet(isPresented: $showSettings, onDismiss: { Task { await refreshIfSetUp() } }) {
                 NavigationStack { SettingsScreen() }
+            }
+            .sheet(isPresented: $showPairing, onDismiss: { Task { await refreshIfSetUp() } }) {
+                NavigationStack { PairingScreen() }
             }
             .confirmationDialog(
                 "Close \(confirmKill?.name ?? "")?",
@@ -64,15 +50,51 @@ struct SessionsScreen: View {
             } message: { _ in
                 Text("This ends the session on the Mac and closes its window there.")
             }
-            .task { await store.refresh() }
+            .task { await refreshIfSetUp() }
             .onChange(of: path) { _, newPath in
                 // Back from the terminal: drop it, and refresh the list.
                 if newPath.isEmpty {
                     open = nil
-                    Task { await store.refresh() }
+                    Task { await refreshIfSetUp() }
                 }
             }
         }
+    }
+
+    private var sessionList: some View {
+        List {
+            if let message = store.message {
+                Text(message).foregroundStyle(.secondary)
+            }
+            if store.needsPairing {
+                Button("Pair Again") { showPairing = true }
+            }
+            ForEach(store.sessions, id: \.id) { session in
+                Button {
+                    guard let app = ghostty.app, let terminal = store.terminal(for: session, app: app) else { return }
+                    open = (session, terminal.view, terminal.io)
+                    path = ["terminal"]
+                } label: {
+                    HStack {
+                        Text(session.name).font(.body.monospaced())
+                        Spacer()
+                        if session.owner != nil {
+                            Image(systemName: "desktopcomputer").foregroundStyle(.secondary)
+                                .accessibilityLabel("Open on the Mac")
+                        }
+                    }
+                }
+                .swipeActions {
+                    Button("Close", role: .destructive) { confirmKill = session }
+                }
+            }
+        }
+        .overlay { if store.loading && store.sessions.isEmpty { ProgressView() } }
+        .refreshable { await store.refresh() }
+    }
+
+    private func refreshIfSetUp() async {
+        if store.settings.remoteHost != nil { await store.refresh() }
     }
 }
 #endif
