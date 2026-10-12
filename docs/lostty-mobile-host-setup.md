@@ -28,7 +28,8 @@ setting up by hand.
 6. **Tailscale** on the Mac and the iPhone, signed in to the same tailnet,
    starting at login, with two-factor on the account. In the phone app use
    the Mac's Tailscale name (`your-mac.tailXXXX.ts.net`) or 100.x address.
-7. **Awake in a bag** (optional): `sudo pmset -a disablesleep 1` keeps a
-   closed MacBook awake (`sudo pmset -a disablesleep 0` to undo), or use
-   Amphetamine with a battery floor. Set the Mac's Wi-Fi to auto-join the
-   iPhone's hotspot. Expect heat under heavy builds and battery drain.
+7. **Awake in a bag** (optional): Phone Access → Stay-awake permission →
+   Install, then menu bar → Lostty → Stay Awake for Phone. By hand instead:
+   `sudo pmset -a disablesleep 1` (and `sudo pmset -a disablesleep 0` to
+   undo). Set the Mac's Wi-Fi to join the iPhone's hotspot automatically.
+   Expect heat under heavy builds and battery drain.

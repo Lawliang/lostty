@@ -20,6 +20,10 @@ Tailscale. Nothing goes through a Lostty server; there isn't one.
    and scan the code (or scan it with the Camera app and tap **Open in Lostty**). Click **Allow** on the Mac.
 
 Your phone can reach the Mac only while the Mac is awake and Lostty is open.
+To keep it awake with the lid closed, install the **Stay-awake permission** in
+Phone Access, then choose **Stay Awake for Phone** from Lostty's menu bar icon.
+While it's on, Low Power Mode is on whenever the lid is closed, and it turns
+itself off at your battery floor (15% by default) or if the Mac gets too hot.
 
 ## Lost phone
 
@@ -37,6 +41,7 @@ If you deleted Lostty instead, clean up by hand:
 
 - remove the lines ending in `lostty-phone:…` from `~/.ssh/authorized_keys`;
 - `sudo rm /etc/ssh/sshd_config.d/000-lostty.conf` to allow password logins again;
+- `sudo rm /etc/sudoers.d/lostty` and `sudo pmset -a disablesleep 0`;
 - optionally `rm ~/.terminfo/78/xterm-ghostty ~/.terminfo/67/ghostty`.
 
 ## Troubleshooting
@@ -50,3 +55,6 @@ If you deleted Lostty instead, clean up by hand:
 - **"Your Mac doesn't accept this phone"** right after pairing: in System
   Settings → General → Sharing → Remote Login, check that "Allow access for"
   includes your user.
+- **The Mac never sleeps** after Lostty was force-quit while Stay Awake was
+  on: open Lostty once (it puts things back), or run
+  `sudo pmset -a disablesleep 0`.
