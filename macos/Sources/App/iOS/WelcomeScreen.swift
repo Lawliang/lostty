@@ -29,7 +29,10 @@ struct WelcomeScreen: View {
             .safeAreaInset(edge: .bottom) {
                 VStack(spacing: 4) {
                     Button("Pair with Mac", action: pair).buttonStyle(.lostty(.primary, fullWidth: true))
+                    // Only Debug builds can set up by hand (see SettingsScreen).
+                    #if DEBUG
                     Button("Set Up by Hand", action: settings).buttonStyle(.lostty(.quiet))
+                    #endif
                 }
                 .padding(LosttyTheme.margin)
                 .background(LosttyTheme.background.opacity(0.9))

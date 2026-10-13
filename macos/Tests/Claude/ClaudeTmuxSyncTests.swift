@@ -12,6 +12,14 @@ struct ClaudeTmuxSyncTests {
         RemoteSession(id: id, name: "p", surface: pane?.uuidString, owner: owner, claude: claude)
     }
 
+    @Test func onlySubagentsWorkingSaysSo() {
+        #expect(ClaudeTmuxSync.desired(phases: [a, b], awaiting: [], subagents: [b])
+            == [a.uuidString: .working, b.uuidString: .subagents])
+        let since = Date()
+        #expect(ClaudeTmuxSync.subagents([a: .racing(since: since), b: .racing(since: since, subagents: true)]) == [b])
+        #expect(ClaudeActivity(rawValue: "agents") == .subagents)
+    }
+
     @Test func waitingBeatsWorking() {
         #expect(ClaudeTmuxSync.desired(phases: [a, b], awaiting: [a]) == [a.uuidString: .waiting, b.uuidString: .working])
     }
@@ -52,6 +60,14 @@ struct ClaudeTmuxSyncTests {
     @Test func otherLosttysAndPaneLessSessionsAreLeftAlone() {
         let sessions = [session("$1", a, owner: 200, claude: nil), session("$2", nil, owner: 100, claude: .working)]
         #expect(ClaudeTmuxSync.args(desired: [a.uuidString: .working], sessions: sessions, pid: 100).isEmpty)
+    }
+
+    @Test func actionsGoOnlyToPanesWorkingOrWaitingInOneLine() {
+        let c = UUID()
+        let actions = [a: "Editing\tFoo.swift", b: "Reading Bar.swift", c: "Stale"]
+        #expect(ClaudeTmuxSync.desiredActions(actions, showing: [a.uuidString, b.uuidString]) == [
+            a.uuidString: "Editing Foo.swift", b.uuidString: "Reading Bar.swift",
+        ])
     }
 }
 #endif

@@ -14,9 +14,9 @@ final class SessionSync {
     private(set) var labels: [UUID: String] = [:]
     private var observer: NSObjectProtocol?
     private let pid = ProcessInfo.processInfo.processIdentifier
-    /// Sessions a phone was attached to at the last refresh: only a new
-    /// attach counts as seeing, so a phone left attached hides nothing later.
-    private var previouslyAttached: Set<String> = []
+    /// The SSH clients attached at the last refresh: only a new attach
+    /// counts as seeing, so a phone left attached hides nothing later.
+    private var previouslyAttached: Set<AttachedClient> = []
 
     func start() {
         guard observer == nil else { return }
@@ -30,13 +30,13 @@ final class SessionSync {
     func refresh() {
         Task {
             let (sessions, phones) = await Task.detached(priority: .utility) {
-                (TmuxClient().remoteSessions(), Set(AttachedPhones.currentSessionIDs()))
+                (TmuxClient().remoteSessions(), Set(AttachedPhones.currentClients()))
             }.value
             apply(sessions, phoneAttached: phones)
         }
     }
 
-    func apply(_ sessions: [RemoteSession], phoneAttached: Set<String>) {
+    func apply(_ sessions: [RemoteSession], phoneAttached: Set<AttachedClient>) {
         let next = Self.labels(sessions, pid: pid)
         if next != labels {
             labels = next
@@ -70,10 +70,12 @@ final class SessionSync {
         return result
     }
 
-    /// Sessions a phone attached to since the last refresh: only a new
-    /// attach counts as seeing a waiting Claude.
-    nonisolated static func newlyAttached(previous: Set<String>, current: Set<String>) -> Set<String> {
-        current.subtracting(previous)
+    /// Sessions a client attached to since the last refresh: only a new
+    /// attach counts as seeing a waiting Claude. By client, not session: a
+    /// phone reconnecting while its dropped connection is still listed
+    /// (sshd takes up to a minute to notice) is still a new attach.
+    nonisolated static func newlyAttached(previous: Set<AttachedClient>, current: Set<AttachedClient>) -> Set<String> {
+        Set(current.subtracting(previous).map(\.session))
     }
 
     nonisolated static func panesWithAPhone(_ sessions: [RemoteSession], phoneAttached: Set<String>, pid: Int32) -> [UUID] {

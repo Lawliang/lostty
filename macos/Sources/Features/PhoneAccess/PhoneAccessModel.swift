@@ -4,9 +4,9 @@ import LosttyRemote
 
 /// One checklist row: what it checks, how it stands, and what can fix it.
 struct PhoneAccessRow: Identifiable, Equatable {
-    enum Kind: String { case tailscale, tmux, remoteLogin, passwords, firewall, terminfo, stayAwake, folders }
+    enum Kind: String { case tailscale, tmux, remoteLogin, passwords, lostConnections, firewall, terminfo, stayAwake, folders }
     enum State: Equatable { case ok, warning, missing }
-    enum Fix: Equatable { case installTailscale, openTailscale, copyBrew, adminSetup, lockPasswords, skipLockdown, openFirewall, installTerminfo, installStayAwake, grantFolders, openFilesAndFolders }
+    enum Fix: Equatable { case installTailscale, openTailscale, copyBrew, adminSetup, lockPasswords, skipLockdown, openFirewall, installTerminfo, installStayAwake, grantFolders, openFilesAndFolders, dropLostConnections }
 
     var id: Kind
     var title: String
@@ -63,6 +63,13 @@ struct PhoneAccessRow: Identifiable, Equatable {
                               state: .missing, fixes: [.lockPasswords, .skipLockdown])
         }
         rows.append(passwords)
+
+        // Optional: never blocks pairing.
+        rows.append(s.dropsLostConnections
+            ? .init(id: .lostConnections, title: "Dropped connections", detail: "Noticed within a minute.", state: .ok, fixes: [])
+            : .init(id: .lostConnections, title: "Dropped connections",
+                    detail: "Lets this Mac notice within a minute when your phone loses its connection, instead of up to two hours.",
+                    state: .warning, fixes: [.dropLostConnections]))
 
         rows.append(s.blockAllIncoming
             ? .init(id: .firewall, title: "Firewall", detail: "The firewall blocks all incoming connections, including your phone.", state: .missing, fixes: [.openFirewall])

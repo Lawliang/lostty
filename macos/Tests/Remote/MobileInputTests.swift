@@ -46,13 +46,9 @@ struct MobileInputTests {
 
     @Test func keyRowKeys() {
         #expect(MI.press(for: .esc, ctrl: false) == P(key: .escape, mods: [], text: nil, unshifted: 0))
-        #expect(MI.press(for: .tab, ctrl: false) == P(key: .tab, mods: [], text: nil, unshifted: 0))
-        #expect(MI.press(for: .shiftTab, ctrl: false) == P(key: .tab, mods: .shift, text: nil, unshifted: 0))
-        #expect(MI.press(for: .up, ctrl: false) == P(key: .arrowUp, mods: [], text: nil, unshifted: 0))
-        #expect(MI.press(for: .left, ctrl: true) == P(key: .arrowLeft, mods: .ctrl, text: nil, unshifted: 0))
-        #expect(MI.press(for: .slash, ctrl: false) == P(key: nil, mods: [], text: "/", unshifted: 0x2F))
-        #expect(MI.press(for: .at, ctrl: false) == P(key: nil, mods: [], text: "@", unshifted: 0x40))
-        #expect(MI.press(for: .ctrl, ctrl: false) == nil)
+        #expect(MI.press(for: .esc, ctrl: true) == P(key: .escape, mods: .ctrl, text: nil, unshifted: 0))
+        // The globe switches keyboards; it types nothing.
+        #expect(MI.press(for: .keyboard, ctrl: false) == nil)
     }
 
     @Test func backspace() {
@@ -75,7 +71,24 @@ struct MobileInputTests {
     }
 
     @Test func everyRowKeyHasALabel() {
-        for key in MI.RowKey.allCases { #expect(!key.label.isEmpty) }
+        for key in MI.RowKey.allCases {
+            #expect(!key.label.isEmpty)
+            #expect(!key.accessibilityName.isEmpty)
+        }
+    }
+
+    @Test func newlineIsCtrlJAndEnterSends() {
+        // Lostty's keyboard: return is a line feed, Send is Enter.
+        #expect(MI.newline == P(key: .j, mods: .ctrl, text: nil, unshifted: 0x6A))
+        #expect([MI.newline] == MI.presses(typed: "j", ctrl: true))
+        #expect(MI.enter == P(key: .enter, mods: [], text: nil, unshifted: 0))
+        // The iOS keyboard's return is still Enter.
+        #expect(MI.presses(typed: "\n", ctrl: false) == [MI.enter])
+    }
+
+    @Test func theRowHasOnlyWhatTheKeyboardLacks() {
+        #expect(MI.RowKey.allCases == [.esc, .keyboard])
+        #expect(MI.RowKey.allCases.filter { $0.symbol != nil } == [.keyboard])
     }
 
     /// The keycodes are copied from the desktop table; this keeps them in step.
@@ -95,5 +108,72 @@ struct MobileInputTests {
         for key in MI.Key.allCases {
             #expect(key.keycode == UInt32(desktop[key]!.keyCode!), "\(key)")
         }
+    }
+
+    @Test func everyLayerHasFourRowsTenKeysWide() {
+        for layer in [MI.Board.Layer.letters, .numbers, .symbols] {
+            let rows = MI.Board.rows(layer)
+            #expect(rows.count == 4)
+            // Rows fill the width (the letters' middle row is inset by half
+            // a key each side, as on iOS).
+            for (i, row) in rows.enumerated() where !(layer == .letters && i == 1) {
+                #expect(abs(row.map(\.width).reduce(0, +) - 10) < 0.001, "\(layer) row \(i)")
+            }
+            #expect(rows[3].map(\.key).contains(.newline))
+            // Ctrl right of the layer key, where iOS has emoji.
+            #expect(rows[3][1].key == .ctrl)
+            #expect(rows[3].map(\.key).contains(.space))
+        }
+        #expect(MI.Board.rows(.letters)[0].map(\.key) == "qwertyuiop".map { .char(String($0)) })
+    }
+
+    @Test func theTerminalsSymbolsAreOnTheKeyboard() {
+        let typed = Set([MI.Board.Layer.letters, .numbers, .symbols].flatMap { layer in
+            MI.Board.rows(layer).flatMap { $0 }.compactMap { slot -> String? in
+                if case .char(let c) = slot.key { return c }
+                return nil
+            }
+        })
+        for char in ["|", "\\", "~", "`", "<", ">", "_", "-", "/", "$", "&", "*", "\"", "'", "@", "#", "!"] {
+            #expect(typed.contains(char), "\(char)")
+        }
+    }
+
+    @Test func shiftCapitalizesOnceOrLocks() {
+        var shift = MI.Board.Shift.off
+        shift.tapped(double: false)
+        #expect(shift == .once)
+        #expect(MI.Board.text("a", shift: shift) == "A")
+        shift.typedLetter()
+        #expect(shift == .off)
+        #expect(MI.Board.text("a", shift: shift) == "a")
+        // Double tap: caps lock, kept across letters until tapped again.
+        shift.tapped(double: false)
+        shift.tapped(double: true)
+        #expect(shift == .locked)
+        shift.typedLetter()
+        #expect(shift == .locked)
+        shift.tapped(double: false)
+        #expect(shift == .off)
+    }
+
+    @Test func aSwipeIsItsLongerAxisOnceFarEnough() {
+        typealias Swipe = MI.Board.Swipe
+        #expect(Swipe.of(dx: 0, dy: -40) == .up)
+        #expect(Swipe.of(dx: 0, dy: 40) == .down)
+        #expect(Swipe.of(dx: -40, dy: 10) == .left)
+        #expect(Swipe.of(dx: 40, dy: -25) == .right)
+        #expect(Swipe.of(dx: 10, dy: -35) == .up)
+        // Too short: a tap that wandered.
+        #expect(Swipe.of(dx: 20, dy: 5) == nil)
+        #expect(Swipe.of(dx: 29.9, dy: 0) == nil)
+        // Perfectly diagonal: no way to tell.
+        #expect(Swipe.of(dx: 40, dy: 40) == nil)
+    }
+
+    @Test func aSwipePressesItsArrowWithCtrlIfLatched() {
+        #expect(MI.Board.Swipe.up.press(ctrl: false) == P(key: .arrowUp, mods: [], text: nil, unshifted: 0))
+        #expect(MI.Board.Swipe.left.press(ctrl: true) == P(key: .arrowLeft, mods: .ctrl, text: nil, unshifted: 0))
+        #expect(MI.Board.Swipe.allCases.map { $0.press(ctrl: false).key } == [.arrowUp, .arrowDown, .arrowLeft, .arrowRight])
     }
 }

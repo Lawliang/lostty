@@ -27,6 +27,9 @@ final class RemoteSurfaceIO: Ghostty.RemoteIO, @unchecked Sendable {
         /// Connection events for the screen showing the pane (the phone's
         /// overlay). On the main thread.
         var status: @Sendable (RemoteLinkStatus) -> Void = { _ in }
+        /// The first output of the session reached the surface: it shows
+        /// something. On the main thread.
+        var drawn: @Sendable () -> Void = {}
 
         static let live = SurfaceCalls(
             feed: { surface, data in
@@ -42,8 +45,10 @@ final class RemoteSurfaceIO: Ghostty.RemoteIO, @unchecked Sendable {
         /// The phone: no "reconnecting…" line and no exit in the terminal.
         /// Its screen shows an overlay over the last screen instead, and
         /// decides when to close.
-        static func overlaid(status: @escaping @Sendable (RemoteLinkStatus) -> Void) -> SurfaceCalls {
-            SurfaceCalls(feed: live.feed, disconnected: { _ in }, exited: { _, _ in }, status: status)
+        static func overlaid(
+            status: @escaping @Sendable (RemoteLinkStatus) -> Void, drawn: @escaping @Sendable () -> Void = {}
+        ) -> SurfaceCalls {
+            SurfaceCalls(feed: live.feed, disconnected: { _ in }, exited: { _, _ in }, status: status, drawn: drawn)
         }
     }
 
@@ -66,6 +71,11 @@ final class RemoteSurfaceIO: Ghostty.RemoteIO, @unchecked Sendable {
     private var size = (cols: 80, rows: 24)
     private var detached = false
     private var didOpen = false
+    /// Output has reached the surface (reported once).
+    private var didDraw = false
+    /// The current attach's login banner and echoed command, held back
+    /// until tmux takes the screen (see `AttachPreamble`).
+    private var preamble = AttachPreamble()
     /// The size the current attach started with.
     private var attachedSize = (cols: 80, rows: 24)
     private var task: Task<Void, Never>?
@@ -171,6 +181,7 @@ final class RemoteSurfaceIO: Ghostty.RemoteIO, @unchecked Sendable {
         while !Task.isCancelled {
             let (cols, rows) = stateLock.withLock {
                 didOpen = false
+                preamble = AttachPreamble()
                 attachedSize = size
                 return size
             }
@@ -181,7 +192,9 @@ final class RemoteSurfaceIO: Ghostty.RemoteIO, @unchecked Sendable {
                     rows: rows,
                     onOpen: { [self] terminal in opened(terminal) },
                     onOutput: { [self] data in received(data) })
+                releaseHeld()
             } catch let error as RemoteError {
+                releaseHeld()
                 // Host key changed, key refused, no Secure Enclave, Touch ID
                 // cancelled: say why and stop; retrying cannot help. No exit
                 // is reported: that would close the pane and the message with
@@ -190,6 +203,7 @@ final class RemoteSurfaceIO: Ghostty.RemoteIO, @unchecked Sendable {
                 report(.stopped)
                 return
             } catch {
+                releaseHeld()
                 // Could not connect (or the pane closed mid-attach): try
                 // again unless the pane is gone.
                 closed()
@@ -288,10 +302,33 @@ final class RemoteSurfaceIO: Ghostty.RemoteIO, @unchecked Sendable {
     /// across the call so `detach` (before the surface is freed) waits for
     /// a feed in flight.
     private func received(_ data: Data) {
+        let shown = stateLock.withLock { preamble.feed(data) }
+        guard !shown.isEmpty else { return }
+        show(shown)
+    }
+
+    /// The attach ended: what it held back before tmux took the screen
+    /// (an error, say) is shown after all.
+    private func releaseHeld() {
+        let held = stateLock.withLock { preamble.flush() }
+        if !held.isEmpty { show(held) }
+    }
+
+    private func show(_ data: Data) {
         surfaceLock.lock()
         defer { surfaceLock.unlock() }
         guard let surface else { return }
         calls.feed(surface, data)
+        let first = stateLock.withLock {
+            defer { didDraw = true }
+            return !didDraw
+        }
+        if first {
+            onMain { [self] in
+                guard !stateLock.withLock({ detached }) else { return }
+                calls.drawn()
+            }
+        }
     }
 
     private func withSurface(_ body: (ghostty_surface_t) -> Void) {

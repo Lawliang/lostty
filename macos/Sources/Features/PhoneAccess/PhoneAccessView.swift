@@ -128,6 +128,7 @@ struct PhoneAccessView: View {
         case .installStayAwake: "Install…"
         case .grantFolders: "Grant Now…"
         case .openFilesAndFolders: "Open Privacy Settings"
+        case .dropLostConnections: "Turn On…"
         }
     }
 }

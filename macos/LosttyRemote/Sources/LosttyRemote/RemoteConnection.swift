@@ -68,7 +68,7 @@ public final class RemoteConnection: @unchecked Sendable {
     public func sessions() async throws -> [RemoteSession] {
         do {
             let out = try await client.executeCommand(TmuxRemote.listCommand)
-            return TmuxRemote.parse(String(buffer: out))
+            return TmuxRemote.parseListing(String(buffer: out))
         } catch let failed as SSHClient.CommandFailed where failed.exitCode == 1 {
             // tmux exits 1 when no server is running; anything else is a
             // real failure.
@@ -98,6 +98,63 @@ public final class RemoteConnection: @unchecked Sendable {
         } catch let failed as SSHClient.CommandFailed where failed.exitCode == 1 {
             return false
         }
+    }
+
+    /// The models `agent` can start with: those it lists on the Mac, else
+    /// its fallback ones.
+    public func agentModels(_ agent: TerminalAgent) async throws -> AgentModelList {
+        let listed = TmuxRemote.parseAgentModels(
+            String(buffer: try await client.executeCommand(TmuxRemote.agentModelsCommand(agent))), for: agent)
+        return listed.models.isEmpty ? AgentModelList(models: agent.fallbackModels, defaultModel: listed.defaultModel) : listed
+    }
+
+    /// Folders below `path` (as `folder(at:)` takes it) named like
+    /// `keyword`; nil when it isn't there or can't be opened.
+    public func searchFolders(in path: String?, matching keyword: String) async throws -> FolderSearch? {
+        guard let command = TmuxRemote.searchFoldersCommand(in: path, matching: keyword) else { return nil }
+        do {
+            return TmuxRemote.parseFolderSearch(String(buffer: try await client.executeCommand(command)))
+        } catch let failed as SSHClient.CommandFailed where failed.exitCode == 3 {
+            return nil
+        }
+    }
+
+    /// Folder `path` on the Mac (the home folder when nil); nil when it
+    /// isn't there or can't be opened.
+    public func folder(at path: String?) async throws -> MacFolder? {
+        do {
+            return TmuxRemote.parseFolder(String(buffer: try await client.executeCommand(TmuxRemote.folderCommand(path: path))))
+        } catch let failed as SSHClient.CommandFailed where failed.exitCode == 3 {
+            return nil
+        }
+    }
+
+    /// Asks the Mac's Lostty for a new terminal. Throws `RemoteError.noLostty`
+    /// when no tmux server runs there.
+    public func requestNewTerminal(_ request: NewTerminalRequest) async throws {
+        do {
+            _ = try await client.executeCommand(TmuxRemote.requestNewTerminalCommand(request))
+        } catch let failed as SSHClient.CommandFailed where failed.exitCode == 1 {
+            throw RemoteError.noLostty
+        }
+    }
+
+    /// The Mac's answer to request `id`, once there is one.
+    public func newTerminalAnswer(id: String) async throws -> NewTerminalAnswer? {
+        NewTerminalAnswer(String(buffer: try await client.executeCommand(TmuxRemote.newTerminalAnswerCommand(id: id))))
+    }
+
+    /// Withdraws request `id` and drops its answer.
+    public func clearNewTerminal(id: String) async {
+        _ = try? await client.executeCommand(TmuxRemote.clearNewTerminalCommand(id: id))
+    }
+
+    /// A logo's texture tile the Mac drew (`SessionSkin.Texture.Look.logo`):
+    /// the PNG's bytes, or nil when `path` isn't one or can't be read.
+    public func textureTile(at path: String) async throws -> Data? {
+        guard let command = TmuxRemote.readTileCommand(path: path) else { return nil }
+        let out = try await client.executeCommand(command)
+        return Data(base64Encoded: String(buffer: out), options: .ignoreUnknownCharacters)
     }
 
     /// Why session `sessionID` ended: its end tag, and whether it is in

@@ -35,6 +35,45 @@ struct ClaudeRuntimeTests {
         }
     }
 
+    func action(_ text: String) -> String {
+        #"{"v":1,"state":"tool","action":"\#(text)"}"#
+    }
+
+    @Test func aToolCallsActionShowsWhileWorkingAndLeavesWithTheTurn() {
+        let runtime = makeRuntime()
+        runtime.userVarChanged(pane, name: "LOSTTY_CLAUDE", value: payload("busy"))
+        runtime.userVarChanged(pane, name: "LOSTTY_CLAUDE", value: action("Reading Foo.swift"))
+        runtime.userVarChanged(pane, name: "LOSTTY_CLAUDE", value: action("Editing Foo.swift"))
+        #expect(runtime.actions[pane] == "Editing Foo.swift")
+        // An action is no state change.
+        #expect(runtime.phases[pane] != nil)
+        runtime.userVarChanged(pane, name: "LOSTTY_CLAUDE", value: payload("agents"))
+        #expect(runtime.actions[pane] == "Editing Foo.swift")
+        runtime.userVarChanged(pane, name: "LOSTTY_CLAUDE", value: payload("idle"))
+        #expect(runtime.actions[pane] == nil)
+    }
+
+    @Test func aPermissionWaitKeepsTheActionItAsksFor() {
+        let runtime = makeRuntime()
+        runtime.userVarChanged(pane, name: "LOSTTY_CLAUDE", value: payload("busy"))
+        runtime.userVarChanged(pane, name: "LOSTTY_CLAUDE", value: action("Run the tests"))
+        runtime.userVarChanged(pane, name: "LOSTTY_CLAUDE", value: #"{"v":1,"state":"idle","permission":true}"#)
+        #expect(runtime.actions[pane] == "Run the tests")
+        // A new prompt starts over.
+        runtime.userVarChanged(pane, name: "LOSTTY_CLAUDE", value: payload("busy"))
+        #expect(runtime.actions[pane] == nil)
+    }
+
+    @Test func exitingOrClosingDropsTheAction() {
+        let runtime = makeRuntime()
+        runtime.userVarChanged(pane, name: "LOSTTY_CLAUDE", value: action("Editing Foo.swift"))
+        runtime.userVarChanged(pane, name: "LOSTTY_CLAUDE", value: payload("exit"))
+        #expect(runtime.actions[pane] == nil)
+        runtime.userVarChanged(pane, name: "LOSTTY_CLAUDE", value: action("Editing Foo.swift"))
+        runtime.surfaceClosed(pane)
+        #expect(runtime.actions[pane] == nil)
+    }
+
     @Test func busyUserVarStartsRacing() {
         let runtime = makeRuntime()
         runtime.userVarChanged(pane, name: "LOSTTY_CLAUDE", value: payload("busy"))

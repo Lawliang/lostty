@@ -25,6 +25,22 @@ struct ClaudeMessageTests {
         #expect(ClaudeMessage.decode("") == nil)
     }
 
+    @Test func readsAToolCallsAction() {
+        // Exact JSON `+claude-state tool` encodes (see protocol.zig).
+        #expect(ClaudeMessage.action(#"{"v":1,"state":"tool","action":"Editing Foo.swift"}"#) == "Editing Foo.swift")
+        #expect(ClaudeMessage.decode(#"{"v":1,"state":"tool","action":"Editing Foo.swift"}"#) == nil)
+        #expect(ClaudeMessage.action(#"{"v":1,"state":"tool","action":""}"#) == nil)
+        #expect(ClaudeMessage.action(#"{"v":1,"state":"busy","action":"x"}"#) == nil)
+        #expect(ClaudeMessage.action(#"{"v":2,"state":"tool","action":"x"}"#) == nil)
+    }
+
+    @Test func readsAPermissionWait() {
+        #expect(ClaudeMessage.isPermission(#"{"v":1,"state":"idle","permission":true}"#))
+        #expect(ClaudeMessage.decode(#"{"v":1,"state":"idle","permission":true}"#) == .idle)
+        #expect(!ClaudeMessage.isPermission(#"{"v":1,"state":"idle"}"#))
+        #expect(!ClaudeMessage.isPermission(#"{"v":1,"state":"idle","permission":false}"#))
+    }
+
     @Test func matchesTheZigEncoder() {
         // Exact JSON `+claude-state busy` encodes (see protocol.zig).
         #expect(ClaudeMessage.decode(#"{"v":1,"state":"busy"}"#) == .busy)

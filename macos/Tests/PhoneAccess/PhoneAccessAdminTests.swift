@@ -40,6 +40,30 @@ struct PhoneAccessAdminTests {
         #expect(PhoneAccessAdmin.unlockScript == "rm -f /etc/ssh/sshd_config.d/000-lostty.conf")
     }
 
+    @Test func dropsLostConnectionsWithItsOwnDropIn() throws {
+        let script = try #require(PhoneAccessAdmin.setupScript(enableRemoteLogin: false, lockPasswords: false, dropLostConnections: true))
+        #expect(script == """
+        printf 'ClientAliveInterval 15\\nClientAliveCountMax 4\\n' > /etc/ssh/sshd_config.d/001-lostty-alive.conf
+        chmod 644 /etc/ssh/sshd_config.d/001-lostty-alive.conf
+        """)
+        // Read before macOS's 100-macos.conf: sshd keeps the first value.
+        #expect(PhoneAccessProbe.alivePath < "/etc/ssh/sshd_config.d/100-macos.conf")
+        #expect(PhoneAccessAdmin.removeAliveScript == "rm -f /etc/ssh/sshd_config.d/001-lostty-alive.conf")
+    }
+
+    @Test func thePromptMentionsDroppedConnections() {
+        #expect(PhoneAccessAdmin.prompt(enableRemoteLogin: false, lockPasswords: false, dropLostConnections: true)
+            == "Lostty wants this Mac to notice within a minute when your phone's connection drops.")
+        #expect(PhoneAccessAdmin.prompt(enableRemoteLogin: true, lockPasswords: false, dropLostConnections: true)
+            == "Lostty wants to turn on Remote Login for your phone. It also lets this Mac notice when your phone's connection drops.")
+    }
+
+    @Test func onlyWhatLosttyWritesCounts() {
+        #expect(PhoneAccessProbe.dropsLostConnections(fileContents: "ClientAliveInterval 15\nClientAliveCountMax 4\n"))
+        #expect(!PhoneAccessProbe.dropsLostConnections(fileContents: nil))
+        #expect(!PhoneAccessProbe.dropsLostConnections(fileContents: "ClientAliveInterval 60\n"))
+    }
+
     @Test func appleScriptEscapesQuotesAndBackslashes() {
         let source = PhoneAccessAdmin.appleScript(running: #"printf 'a\nb' > "x""#, prompt: #"Say "hi""#)
         #expect(source == #"do shell script "printf 'a\\nb' > \"x\"" with prompt "Say \"hi\"" with administrator privileges"#)

@@ -15,16 +15,29 @@ struct PairingScreen: View {
                 VStack(spacing: 20) {
                     switch store.pairing {
                     case .idle:
-                        viewfinder
-                        Text("On your Mac, open Lostty → Phone Access → Pair a Phone, then point the camera at the code.")
-                            .font(LosttyFont.body)
-                            .foregroundStyle(LosttyTheme.textSecondary)
-                            .multilineTextAlignment(.center)
-                        Button("Paste Pairing Link") {
-                            let link = UIPasteboard.general.string ?? ""
-                            Task { await store.pair(link: link) }
+                        if let problem = cameraProblem {
+                            // No way to scan: say why, and pair by link.
+                            UhOh(headline: problem,
+                                 detail: "On your Mac, open Lostty → Phone Access → Pair a Phone and click Copy Pairing Link. Then paste it here.") {
+                                pasteButton(.primary)
+                                if cameraAllowed == false {
+                                    Button("Open Settings") {
+                                        if let url = URL(string: UIApplication.openSettingsURLString) {
+                                            UIApplication.shared.open(url)
+                                        }
+                                    }
+                                    .buttonStyle(.lostty(.secondary, fullWidth: true))
+                                }
+                            }
+                            .containerRelativeFrame(.vertical)
+                        } else {
+                            viewfinder
+                            Text("On your Mac, open Lostty → Phone Access → Pair a Phone, then point the camera at the code.")
+                                .font(LosttyFont.body)
+                                .foregroundStyle(LosttyTheme.textSecondary)
+                                .multilineTextAlignment(.center)
+                            pasteButton(.secondary)
                         }
-                        .buttonStyle(.lostty(.secondary))
                     case .finding, .waitingForAllow, .testing:
                         Axolotl(pose: .waiting).frame(width: 120, height: 120).losttyGlow(diameter: 290).padding(.top, 24)
                         Text(waitingTitle)
@@ -33,28 +46,31 @@ struct PairingScreen: View {
                             .multilineTextAlignment(.center)
                         LosttyCard(padding: 0) { StepIndicator(progress: progress) }
                     case .failed(let text, let canRetryTest):
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.system(size: 36))
-                            .foregroundStyle(LosttyTheme.warning)
-                            .padding(.top, 24)
-                        Text(text)
-                            .font(LosttyFont.body)
-                            .foregroundStyle(LosttyTheme.textPrimary)
-                            .multilineTextAlignment(.center)
-                        if canRetryTest {
-                            Button("Try Again") { Task { await store.retryPairingTest() } }
-                                .buttonStyle(.lostty(.primary, fullWidth: true))
-                        } else {
-                            Button("Scan Again") { store.resetPairing() }
-                                .buttonStyle(.lostty(.primary, fullWidth: true))
+                        UhOh(headline: "Pairing didn't finish", detail: text) {
+                            if canRetryTest {
+                                Button("Try Again") { Task { await store.retryPairingTest() } }
+                                    .buttonStyle(.lostty(.primary, fullWidth: true))
+                            } else {
+                                // "Scan" only where there's a camera to scan with.
+                                Button(cameraProblem == nil ? "Scan Again" : "Start Over") { store.resetPairing() }
+                                    .buttonStyle(.lostty(.primary, fullWidth: true))
+                            }
                         }
+                        .containerRelativeFrame(.vertical)
                     case .done:
-                        Axolotl(pose: .happy).frame(width: 140, height: 140).losttyGlow(diameter: 330).padding(.top, 24)
-                        Text("Paired.").font(LosttyFont.largeTitle).foregroundStyle(LosttyTheme.textPrimary)
-                        Text("Your Mac's sessions are ready.")
-                            .font(LosttyFont.body).foregroundStyle(LosttyTheme.textSecondary)
+                        // In the middle of the screen, the axolotl waving hello.
+                        VStack(spacing: 20) {
+                            Axolotl(pose: .waving).frame(width: 140, height: 140).losttyGlow(diameter: 330)
+                            Text("Paired.").font(LosttyFont.largeTitle).foregroundStyle(LosttyTheme.textPrimary)
+                            Text("Your Mac's sessions are ready.")
+                                .font(LosttyFont.body).foregroundStyle(LosttyTheme.textSecondary)
+                        }
+                        .containerRelativeFrame(.vertical)
                     }
                 }
+                // Full width, so a glow wider than the text isn't cut off at
+                // the text's edges.
+                .frame(maxWidth: .infinity)
                 .padding(LosttyTheme.margin)
             }
             .safeAreaInset(edge: .bottom) {
@@ -69,9 +85,12 @@ struct PairingScreen: View {
         .losttyScreen()
         .navigationTitle("Pair with Mac")
         .toolbar {
-            Button("Cancel") {
-                store.cancelPairing()
-                dismiss()
+            // Once paired there's nothing to cancel: Done closes it.
+            if store.pairing != .done {
+                Button("Cancel") {
+                    store.cancelPairing()
+                    dismiss()
+                }
             }
         }
         .onAppear {
@@ -88,8 +107,28 @@ struct PairingScreen: View {
         }
     }
 
-    /// The scanner in a rounded frame with magenta corner brackets, or why
-    /// there is none.
+    /// Why the camera can't scan, in a line; nil when it can (or is still
+    /// being asked for).
+    private var cameraProblem: String? {
+        if !QRScannerView.isSupported {
+            // No camera at all (the simulator), or one too old to read
+            // codes (before the A12).
+            return AVCaptureDevice.default(for: .video) == nil
+                ? "This device has no camera" : "This iPhone can't scan codes"
+        }
+        return cameraAllowed == false ? "Lostty can't use the camera" : nil
+    }
+
+    private func pasteButton(_ kind: LosttyButtonStyle.Kind) -> some View {
+        Button("Paste Pairing Link") {
+            let link = UIPasteboard.general.string ?? ""
+            Task { await store.pair(link: link) }
+        }
+        .buttonStyle(.lostty(kind, fullWidth: kind == .primary))
+    }
+
+    /// The scanner in a rounded frame with magenta corner brackets; empty
+    /// until the camera may be used.
     @ViewBuilder private var viewfinder: some View {
         if QRScannerView.isSupported && cameraAllowed == true {
             QRScannerView { link in Task { await store.pair(link: link) } }
@@ -97,16 +136,6 @@ struct PairingScreen: View {
                 .overlay(ViewfinderBrackets().stroke(LosttyTheme.accent,
                                                      style: StrokeStyle(lineWidth: 4, lineCap: .round)))
                 .frame(height: 320)
-        } else if cameraAllowed == false {
-            LosttyCard {
-                Text("Lostty can't use the camera. Allow it in Settings → Lostty, or on the Mac click Copy Pairing Link and paste it here.")
-                    .font(LosttyFont.body).foregroundStyle(LosttyTheme.textSecondary)
-            }
-        } else if !QRScannerView.isSupported {
-            LosttyCard {
-                Text("This device can't scan codes. On the Mac, click Copy Pairing Link, then paste it here.")
-                    .font(LosttyFont.body).foregroundStyle(LosttyTheme.textSecondary)
-            }
         }
     }
 

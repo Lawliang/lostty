@@ -2,6 +2,13 @@
 import Darwin
 import Foundation
 
+/// One client attached over SSH: its tmux client's pid and its session.
+/// A phone that reconnects is a new client, even on the same session.
+struct AttachedClient: Hashable, Sendable {
+    var pid: Int32
+    var session: String
+}
+
 /// Sessions a client attached to over SSH right now: the phone, or any
 /// other SSH login. They can't be told apart, so the menu never names a phone.
 enum AttachedPhones {
@@ -14,25 +21,24 @@ enum AttachedPhones {
 
     static let idFormat = "#{client_pid}\t#{session_id}"
 
-    /// Session ids ("$3") with an SSH-attached client.
-    static func currentSessionIDs() -> [String] {
+    /// Each SSH client and the session id ("$3") it is on.
+    static func currentClients() -> [AttachedClient] {
         guard let out = TmuxClient().run(["list-clients", "-F", idFormat]) else { return [] }
-        return sessionIDs(clients: out, parent: processParent)
+        return clients(out, parent: processParent)
     }
 
-    /// `list-clients` output in `idFormat`: the session ids SSH clients are on.
-    static func sessionIDs(clients: String, parent: (Int32) -> (ppid: Int32, name: String)?) -> [String] {
-        sessions(clients: clients, parent: parent)
-    }
-
-    static func sessions(clients: String, parent: (Int32) -> (ppid: Int32, name: String)?) -> [String] {
-        var names = Set<String>()
-        for line in clients.split(separator: "\n") {
+    /// `list-clients` output (`listFormat` or `idFormat`): the clients
+    /// that came through SSH.
+    static func clients(_ output: String, parent: (Int32) -> (ppid: Int32, name: String)?) -> [AttachedClient] {
+        output.split(separator: "\n").compactMap { line in
             let fields = line.split(separator: "\t", maxSplits: 1)
-            guard fields.count == 2, let pid = Int32(fields[0]) else { continue }
-            if cameThroughSSH(pid, parent: parent) { names.insert(String(fields[1])) }
+            guard fields.count == 2, let pid = Int32(fields[0]), cameThroughSSH(pid, parent: parent) else { return nil }
+            return AttachedClient(pid: pid, session: String(fields[1]))
         }
-        return names.sorted()
+    }
+
+    static func sessions(clients output: String, parent: (Int32) -> (ppid: Int32, name: String)?) -> [String] {
+        Set(clients(output, parent: parent).map(\.session)).sorted()
     }
 
     /// Walks up at most 10 parents looking for sshd (or sshd-session).

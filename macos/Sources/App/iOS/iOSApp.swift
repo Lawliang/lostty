@@ -22,10 +22,10 @@ struct Ghostty_iOSApp: App {
                 if UserDefaults.standard.bool(forKey: "LosttyDesignGallery") {
                     DesignGalleryScreen()
                 } else {
-                    SessionsScreen()
+                    MainTabs()
                 }
                 #else
-                SessionsScreen()
+                MainTabs()
                 #endif
             }
             .environmentObject(ghostty_app)

@@ -19,6 +19,12 @@ final class ClaudeRuntime: ObservableObject {
     /// looked at it since.
     @Published private(set) var awaiting: Set<UUID> = []
 
+    /// What each pane's Claude (or one of its subagents) last set out to do,
+    /// as `+claude-state tool` words a tool call: "Editing Foo.swift". Kept
+    /// while it works and while it asks permission for that call; gone when
+    /// it finishes its turn or exits, and on a new prompt.
+    @Published private(set) var actions: [UUID: String] = [:]
+
     private let now: () -> Date
     private let schedule: Scheduler
     /// Panes not focused right now. Panes start focused (SurfaceView does).
@@ -44,11 +50,15 @@ final class ClaudeRuntime: ObservableObject {
 
     func userVarChanged(_ id: UUID, name: String, value: String) {
         guard name == ClaudeConstants.userVarName else { return }
+        if let action = ClaudeMessage.action(value) {
+            setAction(action, for: id)
+            return
+        }
         guard let state = ClaudeMessage.decode(value) else {
             Ghostty.logger.debug("claude: rejected malformed \(ClaudeConstants.userVarName) payload")
             return
         }
-        apply(state, to: id)
+        apply(state, to: id, permission: ClaudeMessage.isPermission(value))
     }
 
     /// The pane's shell reported a command finished, so whatever ran there
@@ -63,6 +73,7 @@ final class ClaudeRuntime: ObservableObject {
         seen.remove(id)
         awaiting.remove(id)
         sawSpinner.remove(id)
+        setAction(nil, for: id)
     }
 
     /// A pane is focused when its window is key and it is the selected pane.
@@ -114,7 +125,9 @@ final class ClaudeRuntime: ObservableObject {
         return false
     }
 
-    func apply(_ state: ClaudeState, to id: UUID) {
+    /// `permission`: an `idle` that asks permission for the last action,
+    /// which then stays to say what it asks.
+    func apply(_ state: ClaudeState, to id: UUID, permission: Bool = false) {
         let next = phase(id).applying(state, now: now())
         store(next, for: id)
 
@@ -125,11 +138,15 @@ final class ClaudeRuntime: ObservableObject {
             // nothing to respond to yet.
             seen.remove(id)
             awaiting.remove(id)
+            // A new prompt: the last one's action is done.
+            if state == .busy { setAction(nil, for: id) }
         case .resumed:
             break
         case .exit:
             awaiting.remove(id)
+            setAction(nil, for: id)
         case .idle:
+            if !permission { setAction(nil, for: id) }
             // Waiting for the user. Focused now means they see it already.
             if !unfocused.contains(id) {
                 seen.insert(id)
@@ -151,6 +168,10 @@ final class ClaudeRuntime: ObservableObject {
         apply(.busy, to: id)
         schedule(4) { [weak self] in self?.apply(.agents, to: id) }
         schedule(10) { [weak self] in self?.apply(.idle, to: id) }
+    }
+
+    private func setAction(_ action: String?, for id: UUID) {
+        if actions[id] != action { actions[id] = action }
     }
 
     private func store(_ phase: TracePhase, for id: UUID) {

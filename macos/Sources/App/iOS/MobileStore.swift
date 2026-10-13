@@ -11,8 +11,14 @@ import SwiftUI
 /// to the foreground or the network changes.
 @MainActor
 final class MobileStore: ObservableObject {
-    @Published var settings: RemoteHostSettings
-    @Published private(set) var sessions: [RemoteSession] = []
+    @Published var settings: RemoteHostSettings {
+        // Another Mac or user: warm terminals belong to the old one.
+        didSet { if oldValue.remoteHosts != settings.remoteHosts { close(warm.removeAll()) } }
+    }
+    @Published private(set) var sessions: [RemoteSession] = [] {
+        // A warm terminal whose session is gone has nothing left to show.
+        didSet { close(warm.remove { key in !sessions.contains { $0.id == key.id } }) }
+    }
     @Published private(set) var loading = false
     @Published var message: String?
 
@@ -21,6 +27,10 @@ final class MobileStore: ObservableObject {
     private var key: RemoteKey?
     private let defaults: UserDefaults
     private var openIO: RemoteSurfaceIO?
+    /// Terminals kept open after going back to the list, so opening one
+    /// again is instant (see `WarmTerminals`).
+    private var warm = WarmTerminals<OpenTerminal>()
+    private var warmCheck: Task<Void, Never>?
     private let pathMonitor = NWPathMonitor()
     private var sawFirstPath = false
     private var lastStatus: NWPath.Status?
@@ -49,26 +59,6 @@ final class MobileStore: ObservableObject {
     private func describe(_ error: Error) -> String {
         guard let host = settings.remoteHost else { return (error as? RemoteError)?.message ?? error.localizedDescription }
         return RemoteError.describe(error, host: host)
-    }
-
-    /// Drops the pinned host key for the Mac in the settings, so the next
-    /// connect trusts whatever key it offers.
-    func forgetHostKey() {
-        #if DEBUG
-        if isGallery { return }
-        #endif
-        // The pins are written under the trimmed addresses, so forget them there.
-        let hosts = settings.remoteHosts
-        guard !hosts.isEmpty else {
-            message = settings.problem
-            return
-        }
-        do {
-            for host in hosts { try knownHosts.forget(host: host.host, port: host.port) }
-            message = "Forgot the Mac's host key. The next connection will trust the key it offers."
-        } catch {
-            message = error.localizedDescription
-        }
     }
 
     /// A terminal closed by itself. If the session is still on the Mac, the
@@ -225,10 +215,22 @@ final class MobileStore: ObservableObject {
 
     /// A terminal view attached to `session`, with its IO and its link
     /// events; nil (with a message) when the settings or key aren't ready.
-    func terminal(for session: RemoteSession, app: ghostty_app_t) -> (view: Ghostty.SurfaceView, io: RemoteSurfaceIO, link: TerminalLink)? {
+    typealias OpenTerminal = (view: Ghostty.SurfaceView, io: RemoteSurfaceIO, link: TerminalLink)
+
+
+    func terminal(for session: RemoteSession, app: ghostty_app_t) -> OpenTerminal? {
         #if DEBUG
         if isGallery { return nil }
         #endif
+        // Still warm from last time: its screen and connection as they are.
+        // By id: it has stayed attached, which proves the id still names it.
+        var kept = warm.remove { $0.id == session.id }
+        if let terminal = kept.popLast() {
+            close(kept)
+            scheduleWarmCheck()
+            openIO = terminal.io
+            return terminal
+        }
         let hosts = settings.remoteHosts
         guard !hosts.isEmpty else {
             message = settings.problem
@@ -247,13 +249,21 @@ final class MobileStore: ObservableObject {
                     knownHosts: knownHosts,
                     sessionID: session.id,
                     sessionName: session.name),
-                surfaceCalls: .overlaid { status in
-                    MainActor.assumeIsolated { link.send(status) }
-                })
+                surfaceCalls: .overlaid(
+                    status: { status in MainActor.assumeIsolated { link.send(status) } },
+                    drawn: { MainActor.assumeIsolated { link.markDrawn() } }))
             var config = Ghostty.SurfaceConfiguration()
             config.remoteIO = io
+            config.fontSize = TerminalLook.fontSize
             openIO = io
-            return (Ghostty.SurfaceView(app, baseConfig: config), io, link)
+            let view = Ghostty.SurfaceView(app, baseConfig: config)
+            // Its row's colors and the branch line's size.
+            if let surface = view.surface {
+                TerminalLook.apply(
+                    skin: session.skin, to: surface,
+                    overlayDir: FileManager.default.temporaryDirectory.appendingPathComponent("terminal-look"))
+            }
+            return (view, io, link)
         } catch {
             message = describe(error)
             return nil
@@ -272,10 +282,32 @@ final class MobileStore: ObservableObject {
         }
     }
 
-    /// Only clears the open IO if it is the one being closed, so a late
-    /// disappear of an old screen can't drop a newer terminal.
-    func terminalClosed(_ io: RemoteSurfaceIO?) {
-        if openIO === io { openIO = nil }
+    /// The terminal's screen went away. Back keeps it warm; one that ended
+    /// or was closed (`keepWarm` false) goes with its view. Only clears the
+    /// open IO if it is this one, so a late disappear of an old screen
+    /// can't drop a newer terminal.
+    func terminalLeft(_ session: RemoteSession, _ terminal: OpenTerminal, keepWarm: Bool) {
+        if openIO === terminal.io { openIO = nil }
+        guard keepWarm else { return }
+        close(warm.put(.init(id: session.id, name: session.name), terminal, now: Date()))
+        scheduleWarmCheck()
+    }
+
+    /// Ends warm terminals' connections now, not whenever their views go.
+    private func close(_ terminals: [OpenTerminal]) {
+        for terminal in terminals { terminal.io.detach() }
+    }
+
+    /// Closes warm terminals as their time runs out.
+    private func scheduleWarmCheck() {
+        warmCheck?.cancel()
+        guard let next = warm.nextExpiry else { return }
+        warmCheck = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(max(0, next.timeIntervalSinceNow)))
+            guard !Task.isCancelled, let self else { return }
+            self.close(self.warm.expired(now: Date()))
+            self.scheduleWarmCheck()
+        }
     }
 
     // MARK: Live list
@@ -291,11 +323,6 @@ final class MobileStore: ObservableObject {
     func listAppeared() {
         gate.listVisible = true
         gate.userAsked()
-        updateWatch()
-    }
-
-    func listDisappeared() {
-        gate.listVisible = false
         updateWatch()
     }
 
@@ -357,16 +384,21 @@ final class MobileStore: ObservableObject {
         if !Task.isCancelled { watchTask = nil }
     }
 
-    /// Lists, then lists again after each change (at most every 300 ms)
-    /// until the watch ends: no tmux server, or the connection dropped.
-    /// True when the change stream delivered at least one event.
+    /// Lists, then lists again after each change (at most every 300 ms),
+    /// and every few seconds while a Claude works, until the watch ends: no
+    /// tmux server, or the connection dropped. True when the change stream
+    /// delivered at least one event.
     private func watch(on connection: RemoteConnection) async -> Bool {
         var lastList = Date.distantPast
         var delivered = false
         func relist() async throws {
             let found = try await connection.sessions()
+            // Cancelled while listing (unpaired, or another Mac): the list
+            // belongs to the old one.
+            try Task.checkCancellation()
             lastList = Date()
             show(found)
+            await loadLogoTiles(found, on: connection)
         }
         do {
             try await relist()
@@ -377,8 +409,12 @@ final class MobileStore: ObservableObject {
         }
         do {
             let changes = try await connection.watchChanges()
-            for await _ in changes {
-                delivered = true
+            for await wake in Self.wakes(changes, every: ListPacing.whileWorking) {
+                if wake == .change {
+                    delivered = true
+                } else if !sessions.contains(where: { $0.claude?.isWorking == true }) {
+                    continue
+                }
                 let wait = ListPacing.delay(sinceLastList: lastList, now: Date())
                 if wait > 0 { try await Task.sleep(for: .seconds(wait)) }
                 try await relist()
@@ -389,6 +425,208 @@ final class MobileStore: ObservableObject {
         // One more look, so a server that went away shows the empty state.
         if !Task.isCancelled { try? await relist() }
         return delivered
+    }
+
+    private enum Wake { case change, tick }
+
+    /// `changes`, with a tick every `interval` between them; ends with them.
+    private nonisolated static func wakes(_ changes: AsyncStream<Void>, every interval: TimeInterval) -> AsyncStream<Wake> {
+        AsyncStream { continuation in
+            let forward = Task {
+                for await _ in changes { continuation.yield(.change) }
+                continuation.finish()
+            }
+            let ticker = Task {
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(interval))
+                    continuation.yield(.tick)
+                }
+            }
+            continuation.onTermination = { _ in
+                forward.cancel()
+                ticker.cancel()
+            }
+        }
+    }
+
+    // MARK: New terminals
+
+    /// Why a new terminal couldn't be made, to show.
+    struct CreateFailure: Error, Equatable {
+        var message: String
+    }
+
+    /// How long the Mac has to make a terminal: fetching for a new branch
+    /// can take a while.
+    static let createWait: TimeInterval = 75
+    private static let recentProjectsKey = "LosttyRecentProjects"
+    static let recentProjectsLimit = 5
+
+    /// Project folders picked here before, most recent first.
+    @Published private(set) var recentProjects: [String] =
+        UserDefaults.standard.stringArray(forKey: MobileStore.recentProjectsKey) ?? []
+
+    /// What browsing to a folder on the Mac found.
+    enum FolderLook: Equatable {
+        case found(MacFolder)
+        /// Not there, or not one that can be opened.
+        case missing
+        case failed(String)
+    }
+
+    /// What a search below a folder on the Mac found.
+    enum SearchLook: Equatable {
+        case found(FolderSearch)
+        case missing
+        case failed(String)
+    }
+
+    /// One connection for a whole browse (`endBrowsing`), so each folder
+    /// opens without connecting again.
+    private var browsing: Task<RemoteConnection, Error>?
+
+    /// Folder `path` on the Mac, the home folder when nil (or "~"), for
+    /// the new terminal's browser.
+    func folder(at path: String?) async -> FolderLook {
+        #if DEBUG
+        if isGallery {
+            let at = path ?? "/Users/alex"
+            return .found(MacFolder(path: at, isRepo: at.hasSuffix("lostty"), folders: at.hasSuffix("lostty") ? [] : [
+                .init(name: "api-server", isRepo: true), .init(name: "lostty", isRepo: true), .init(name: "notes", isRepo: false),
+            ]))
+        }
+        #endif
+        switch await onBrowsingConnection({ try await $0.folder(at: path) }) {
+        case .success(let folder): return folder.map(FolderLook.found) ?? .missing
+        case .failure(let failure): return .failed(failure.message)
+        }
+    }
+
+    /// The models `agent` can start with (and its default), nil when the
+    /// Mac couldn't say.
+    func agentModels(_ agent: TerminalAgent) async -> AgentModelList? {
+        #if DEBUG
+        if isGallery {
+            let model = AgentModel(id: "gpt-model", name: "GPT-Model")
+            return AgentModelList(models: [model], defaultModel: model)
+        }
+        #endif
+        return try? await onBrowsingConnection { try await $0.agentModels(agent) }.get()
+    }
+
+    /// Folders below `path` (as `folder(at:)` takes it) named like `keyword`.
+    func searchFolders(in path: String?, matching keyword: String) async -> SearchLook {
+        #if DEBUG
+        if isGallery { return .found(FolderSearch(path: path ?? "/Users/alex", hits: [])) }
+        #endif
+        switch await onBrowsingConnection({ try await $0.searchFolders(in: path, matching: keyword) }) {
+        case .success(let found): return found.map(SearchLook.found) ?? .missing
+        case .failure(let failure): return .failed(failure.message)
+        }
+    }
+
+    /// Runs `body` on the browsing connection: once more on a new one if
+    /// the connection dropped since the last call.
+    private func onBrowsingConnection<T>(_ body: (RemoteConnection) async throws -> T) async -> Result<T, CreateFailure> {
+        guard !settings.remoteHosts.isEmpty else {
+            return .failure(CreateFailure(message: settings.problem ?? "Pair with your Mac first."))
+        }
+        for attempt in 0..<2 {
+            do {
+                return .success(try await body(try await browsingConnection()))
+            } catch {
+                await endBrowsing()
+                if attempt == 1 || error is CancellationError { return .failure(CreateFailure(message: describe(error))) }
+            }
+        }
+        return .failure(CreateFailure(message: "Couldn't reach your Mac."))
+    }
+
+    private func browsingConnection() async throws -> RemoteConnection {
+        if let browsing { return try await browsing.value }
+        let hosts = settings.remoteHosts
+        let key = try remoteKey()
+        let knownHosts = knownHosts
+        let connecting = Task { try await RemoteConnection.connect(toFirstReachable: hosts, key: key, knownHosts: knownHosts) }
+        browsing = connecting
+        return try await connecting.value
+    }
+
+    /// Closes the browser's connection.
+    func endBrowsing() async {
+        guard let browsing else { return }
+        self.browsing = nil
+        if let connection = try? await browsing.value { await connection.close() }
+    }
+
+    /// Asks the Mac's Lostty for a new terminal (`NewTerminalRequest`) and
+    /// waits for it: the new session, or why not. A request the Mac never
+    /// took is withdrawn, so it can't open a window later.
+    func createTerminal(_ request: NewTerminalRequest) async -> Result<RemoteSession, CreateFailure> {
+        #if DEBUG
+        if isGallery { return .failure(CreateFailure(message: "The gallery can't make terminals.")) }
+        #endif
+        remember(project: request.folder)
+        do {
+            return try await withConnection { connection in
+                try await connection.requestNewTerminal(request)
+                let deadline = Date().addingTimeInterval(Self.createWait)
+                while Date() < deadline {
+                    do {
+                        try await Task.sleep(for: .milliseconds(400))
+                    } catch {
+                        await connection.clearNewTerminal(id: request.id)
+                        throw error
+                    }
+                    guard let answer = try await connection.newTerminalAnswer(id: request.id) else { continue }
+                    await connection.clearNewTerminal(id: request.id)
+                    switch answer {
+                    case .failed(let why):
+                        return .failure(CreateFailure(message: why))
+                    case .made(let id):
+                        let listed = try await connection.sessions()
+                        show(listed)
+                        guard let session = listed.first(where: { $0.id == id }) else {
+                            return .failure(CreateFailure(message: "The new terminal closed before it opened."))
+                        }
+                        return .success(session)
+                    }
+                }
+                await connection.clearNewTerminal(id: request.id)
+                return .failure(CreateFailure(
+                    message: "Your Mac didn't answer. Make sure Lostty is open there and up to date."))
+            }
+        } catch {
+            return .failure(CreateFailure(message: describe(error)))
+        }
+    }
+
+    private func remember(project folder: String) {
+        recentProjects = Array(([folder] + recentProjects.filter { $0 != folder }).prefix(Self.recentProjectsLimit))
+        UserDefaults.standard.set(recentProjects, forKey: Self.recentProjectsKey)
+    }
+
+    /// Logo tiles the Mac couldn't give: not asked for again this run.
+    private var unreadableTiles: Set<String> = []
+    /// Bumped when a logo tile arrives, so rows that name it redraw.
+    @Published private(set) var texturesLoaded = 0
+
+    /// Fetches, over `connection`, the logo tiles the listed skins name
+    /// and the phone doesn't have yet.
+    private func loadLogoTiles(_ found: [RemoteSession], on connection: RemoteConnection) async {
+        let scale = TerminalLook.surfaceScale
+        let tiles = Set(found.compactMap { session -> String? in
+            if case .logo(let tile) = session.skin?.texture?.look { return tile }
+            return nil
+        })
+        for tile in tiles where TextureTile.needsLogo(tile, displayScale: scale) && !unreadableTiles.contains(tile) {
+            guard let png = try? await connection.textureTile(at: tile),
+                  TextureTile.storeLogo(png, tile: tile, displayScale: scale) else {
+                unreadableTiles.insert(tile)
+                continue
+            }
+            texturesLoaded += 1
+        }
     }
 
     private func show(_ found: [RemoteSession]) {
@@ -465,6 +703,24 @@ final class MobileStore: ObservableObject {
         pairingAttempt = UUID()
         pairing = .idle
         allowedPayload = nil
+    }
+
+    /// Forgets the Mac: its address and its pinned host key. The phone's own
+    /// key stays, so pairing again (with this Mac or another) reuses it; the
+    /// Mac still lists this phone under Phone Access until removed there.
+    func unpair() {
+        #if DEBUG
+        if isGallery { return }
+        #endif
+        for host in settings.remoteHosts {
+            try? knownHosts.forget(host: host.host, port: host.port)
+        }
+        settings = RemoteHostSettings()
+        defaults.removeObject(forKey: RemoteHostSettings.defaultsKey)
+        sessions = []
+        message = nil
+        needsPairing = false
+        restartWatch(userAsked: false)
     }
 
     /// The user backed out: stop acting on whatever the attempt still gets.
@@ -596,6 +852,9 @@ final class MobileStore: ObservableObject {
             if returning { openIO?.restart() }
         case .background:
             wasBackgrounded = true
+            // iOS suspends their connections anyway; don't keep them.
+            close(warm.removeAll())
+            warmCheck?.cancel()
             gate.wentToBackground()
             updateWatch()
             // Face ID again after the app has been away.
@@ -623,6 +882,7 @@ final class MobileStore: ObservableObject {
         // (Tailscale) changing don't drop the connection.
         if previousStatus != .satisfied || previousTypes != types {
             openIO?.restart()
+            for terminal in warm.values { terminal.io.restart() }
             restartWatch(userAsked: false)
         }
     }

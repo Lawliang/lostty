@@ -26,6 +26,9 @@ struct PhoneAccessStatus: Equatable {
     /// The sudoers rule Stay Awake for Phone needs. Optional: never blocks
     /// pairing.
     var stayAwakePermission: Bool = false
+    /// Lostty's sshd setting that drops silent clients is in place, as
+    /// Lostty writes it. Optional: never blocks pairing.
+    var dropsLostConnections: Bool = false
 
     var tailscaleReady: Bool {
         tailscale?.running == true && tailscale?.name != nil && tailscale?.ipv4 != nil
@@ -178,6 +181,14 @@ enum PhoneAccessFolders {
 enum PhoneAccessProbe {
     static let tailscaleCLI = "/Applications/Tailscale.app/Contents/MacOS/Tailscale"
     static let lockdownPath = "/etc/ssh/sshd_config.d/000-lostty.conf"
+    /// Before macOS's own 100-macos.conf: sshd keeps the first value it reads.
+    static let alivePath = "/etc/ssh/sshd_config.d/001-lostty-alive.conf"
+
+    /// The file holds exactly what Lostty writes: an older or edited one
+    /// is offered again.
+    static func dropsLostConnections(fileContents: String?) -> Bool {
+        fileContents == PhoneAccessAdmin.aliveConfig
+    }
 
     /// Runs every check. Takes up to a few seconds: call it off the main thread.
     /// Folders are checked only once the customer has asked for access
@@ -212,7 +223,8 @@ enum PhoneAccessProbe {
             terminfoInstalled: PhoneAccessTerminfo.installed(
                 bundle: PhoneAccessTerminfo.bundleDirectory, home: PhoneAccessTerminfo.homeDirectory),
             folders: foldersRequested ? PhoneAccessFolders.check() : nil,
-            stayAwakePermission: SystemPowerControl().hasPermission())
+            stayAwakePermission: SystemPowerControl().hasPermission(),
+            dropsLostConnections: dropsLostConnections(fileContents: try? String(contentsOfFile: alivePath, encoding: .utf8)))
     }
 }
 #endif

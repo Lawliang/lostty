@@ -1,4 +1,5 @@
 #if os(macOS)
+import LosttyRemote
 import Testing
 @testable import Ghostty
 

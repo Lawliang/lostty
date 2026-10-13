@@ -14,6 +14,8 @@ public enum RemoteError: Error, Equatable {
 
     case tmuxMissing
     case notPaired
+    /// No Lostty runs on the Mac to open a terminal (no tmux server).
+    case noLostty
 
     public var message: String {
         switch self {
@@ -29,6 +31,8 @@ public enum RemoteError: Error, Equatable {
             "tmux isn't installed on the Mac (Lostty looks in /opt/homebrew/bin and /usr/local/bin)."
         case .notPaired:
             "Pair this iPhone with your Mac first."
+        case .noLostty:
+            "Lostty isn't running on your Mac. Open it there, then try again."
         }
     }
 
@@ -36,7 +40,7 @@ public enum RemoteError: Error, Equatable {
     private static func hostKeyChangedMessage(host: String, pinned: String) -> String {
         "This Mac's identity changed. If you reinstalled macOS, pair again; otherwise, don't connect."
     }
-    private static let keyRejectedMessage = "Your Mac doesn't accept this phone anymore."
+    private static let keyRejectedMessage = "This phone isn't paired with your Mac anymore. Pair again to reconnect."
     private static let authCancelledMessage =
         "Face ID was cancelled, so Lostty did not connect. Open the session again to retry."
     #else

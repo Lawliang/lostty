@@ -38,7 +38,7 @@ enum StayAwakeMenuText {
         switch row.status {
         case .waiting: marker = "● "
         case .working: marker = "○ "
-        case .lastUsed: marker = ""
+        case .ready, .idle, .lastUsed: marker = ""
         }
         let right = row.statusText.isEmpty ? "" : " — \(row.statusText)"
         return "   \(marker)\(row.title)\(right)"

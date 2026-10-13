@@ -10,7 +10,7 @@ struct PhoneAccessRowsTests {
         tmuxPath: "/opt/homebrew/bin/tmux", remoteLogin: true, authMethods: ["publickey"],
         lockdownFileExists: true, blockAllIncoming: false, terminfoInstalled: true,
         folders: ["Desktop": true, "Documents": true, "Downloads": true],
-        stayAwakePermission: true)
+        stayAwakePermission: true, dropsLostConnections: true)
 
     func row(_ kind: PhoneAccessRow.Kind, _ status: PhoneAccessStatus, skipped: Bool = false) -> PhoneAccessRow {
         PhoneAccessRow.rows(for: status, lockdownSkipped: skipped).first { $0.id == kind }!
@@ -18,8 +18,17 @@ struct PhoneAccessRowsTests {
 
     @Test func allDoneIsAllOK() {
         let rows = PhoneAccessRow.rows(for: ready, lockdownSkipped: false)
-        #expect(rows.map(\.id) == [.tailscale, .tmux, .remoteLogin, .passwords, .firewall, .terminfo, .stayAwake, .folders])
+        #expect(rows.map(\.id) == [.tailscale, .tmux, .remoteLogin, .passwords, .lostConnections, .firewall, .terminfo, .stayAwake, .folders])
         #expect(rows.allSatisfy { $0.state == .ok })
+    }
+
+    @Test func droppedConnectionsAreOfferedAndNeverBlockPairing() {
+        var s = ready
+        s.dropsLostConnections = false
+        let r = row(.lostConnections, s)
+        #expect(r.state == .warning)
+        #expect(r.fixes == [.dropLostConnections])
+        #expect(s.readyToPair(lockdownSkipped: false))
     }
 
     @Test func stayAwakePermissionIsOfferedAndNeverBlocksPairing() {

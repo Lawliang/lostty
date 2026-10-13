@@ -6,8 +6,15 @@ import AppKit
 /// Settings toggles), never `systemsetup`, which needs Full Disk Access.
 /// sshd starts per connection, so changes apply to the next one.
 enum PhoneAccessAdmin {
+    /// sshd asks every 15 s whether the client is still there and drops it
+    /// after 4 unanswered (about a minute): a phone that lost its network
+    /// stops showing as attached, instead of lingering for TCP's two hours.
+    /// Live clients answer on their own (SSH requires it; the phone's
+    /// library does). Applies to every SSH login, and drops only the silent.
+    static let aliveConfig = "ClientAliveInterval 15\nClientAliveCountMax 4\n"
+
     /// The script for the prompt; nil when there is nothing to do.
-    static func setupScript(enableRemoteLogin: Bool, lockPasswords: Bool) -> String? {
+    static func setupScript(enableRemoteLogin: Bool, lockPasswords: Bool, dropLostConnections: Bool = false) -> String? {
         var lines: [String] = []
         if enableRemoteLogin {
             lines.append("launchctl enable system/com.openssh.sshd")
@@ -17,6 +24,11 @@ enum PhoneAccessAdmin {
         if lockPasswords {
             let path = PhoneAccessProbe.lockdownPath
             lines.append("printf 'PasswordAuthentication no\\nKbdInteractiveAuthentication no\\n' > \(path)")
+            lines.append("chmod 644 \(path)")
+        }
+        if dropLostConnections {
+            let path = PhoneAccessProbe.alivePath
+            lines.append("printf '\(aliveConfig.replacingOccurrences(of: "\n", with: "\\n"))' > \(path)")
             lines.append("chmod 644 \(path)")
         }
         return lines.isEmpty ? nil : lines.joined(separator: "\n")
@@ -35,17 +47,25 @@ enum PhoneAccessAdmin {
         }
     }
 
-    /// Turns password logins back on (Turn Off Phone Access).
+    static let dropLostPrompt = "Lostty wants this Mac to notice within a minute when your phone's connection drops."
+
     /// What the admin prompt says the script does.
-    static func prompt(enableRemoteLogin: Bool, lockPasswords: Bool) -> String {
+    static func prompt(enableRemoteLogin: Bool, lockPasswords: Bool, dropLostConnections: Bool = false) -> String {
+        let main: String
         switch (enableRemoteLogin, lockPasswords) {
-        case (true, true): "Lostty wants to turn on Remote Login and turn off SSH password logins for every account on this Mac."
-        case (false, true): "Lostty wants to turn off SSH password logins for every account on this Mac."
-        default: "Lostty wants to turn on Remote Login for your phone."
+        case (true, true): main = "Lostty wants to turn on Remote Login and turn off SSH password logins for every account on this Mac."
+        case (false, true): main = "Lostty wants to turn off SSH password logins for every account on this Mac."
+        case (true, false): main = "Lostty wants to turn on Remote Login for your phone."
+        case (false, false): return dropLostPrompt
         }
+        return dropLostConnections ? main + " It also lets this Mac notice when your phone's connection drops." : main
     }
 
+    /// Turns password logins back on (Turn Off Phone Access).
     static var unlockScript: String { "rm -f \(PhoneAccessProbe.lockdownPath)" }
+
+    /// Takes the dropped-connection setting back out (Turn Off Phone Access).
+    static var removeAliveScript: String { "rm -f \(PhoneAccessProbe.alivePath)" }
 
     static func appleScript(running script: String, prompt: String) -> String {
         "do shell script \"\(escape(script))\" with prompt \"\(escape(prompt))\" with administrator privileges"

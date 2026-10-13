@@ -33,11 +33,16 @@ struct TmuxClient {
     @discardableResult
     func run(_ args: [String]) -> String? {
         guard let tmuxPath else { return nil }
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: tmuxPath)
         // -u: the app may run without a UTF-8 locale; without it tmux turns
         // the tab separators in -F output into `_`.
-        process.arguments = ["-u", "-L", TmuxConstants.socket] + args
+        return exec(tmuxPath, ["-u", "-L", TmuxConstants.socket] + args)
+    }
+
+    /// stdout of `executable <arguments>` when it exits 0 within `timeout`.
+    private func exec(_ executable: String, _ arguments: [String]) -> String? {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: executable)
+        process.arguments = arguments
         let out = Pipe()
         process.standardOutput = out
         process.standardError = FileHandle.nullDevice
@@ -84,6 +89,13 @@ struct TmuxClient {
     /// folder, last use), for the menu bar and the sync.
     func remoteSessions() -> [RemoteSession] {
         run(["list-sessions", "-F", TmuxRemote.listFormat]).map(TmuxRemote.parse) ?? []
+    }
+
+    /// `remoteSessions` plus each one's repo and branch, as the phone lists
+    /// them (`TmuxRemote.listScript`), for the menu bar.
+    func sessionListing() -> [RemoteSession] {
+        guard tmuxPath != nil else { return [] }
+        return exec("/bin/sh", ["-c", TmuxRemote.listScript]).map { TmuxRemote.parseListing($0) } ?? []
     }
 
     /// Wakes everything waiting on `lostty-changed`: the phone's list, other

@@ -1,4 +1,3 @@
-#if os(macOS)
 import SwiftUI
 
 /// The stretch of a pane's inside edge the trace's head has travelled
@@ -75,4 +74,3 @@ struct EdgePath {
         return path
     }
 }
-#endif

@@ -32,8 +32,9 @@ enum PhoneAccessGallery {
             tailscale: .init(running: true, name: "studio-mac.example.ts.net", ipv4: "100.64.0.10"),
             tmuxPath: "/opt/homebrew/bin/tmux", remoteLogin: true, authMethods: ["publickey"],
             lockdownFileExists: true, blockAllIncoming: false, terminfoInstalled: true,
-            folders: ["Desktop": true, "Documents": true, "Downloads": true])
+            folders: ["Desktop": true, "Documents": true, "Downloads": true], dropsLostConnections: true)
         var mixed = ready
+        mixed.dropsLostConnections = false
         mixed.authMethods = ["publickey", "password"]
         mixed.lockdownFileExists = false
         mixed.terminfoInstalled = false

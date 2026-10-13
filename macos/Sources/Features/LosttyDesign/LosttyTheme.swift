@@ -62,9 +62,10 @@ extension Color {
 }
 
 #if os(iOS)
-/// The tokens UIKit views need (the key row).
+/// The tokens UIKit views need (the key row and keyboard).
 enum LosttyUIColor {
     static let background = UIColor(LosttyTheme.background)
+    static let surface = UIColor(LosttyTheme.surface)
     static let surfaceRaised = UIColor(LosttyTheme.surfaceRaised)
     static let textPrimary = UIColor(LosttyTheme.textPrimary)
     static let accent = UIColor(LosttyTheme.accent)

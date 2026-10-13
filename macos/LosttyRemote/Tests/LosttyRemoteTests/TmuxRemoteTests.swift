@@ -4,11 +4,15 @@ import Testing
 
 struct TmuxRemoteTests {
     @Test func listFindsTmuxOnAMinimalSSHPath() {
-        #expect(TmuxRemote.listCommand.hasPrefix("PATH=/opt/homebrew/bin:/usr/local/bin:$PATH tmux -u -L lostty list-sessions -F "))
+        #expect(TmuxRemote.listScript.contains("o=$(PATH=/opt/homebrew/bin:/usr/local/bin:$PATH tmux -u -L lostty list-sessions -F "))
     }
 
     @Test func listKeepsTabsWithoutALocale() {
-        #expect(TmuxRemote.listCommand.contains("tmux -u "))
+        #expect(TmuxRemote.listScript.contains("tmux -u "))
+    }
+
+    @Test func listRunsInShWhateverTheLoginShell() {
+        #expect(TmuxRemote.listCommand == "/bin/sh -c " + TmuxRemote.shellQuote(TmuxRemote.listScript))
     }
 
     private static let guardPrefix = "PATH=/opt/homebrew/bin:/usr/local/bin:$PATH tmux -u -L lostty -f /dev/null display-message -p -t"
@@ -136,13 +140,15 @@ struct TmuxRemoteTests {
     }
 
     @Test func parsesTheSessionList() {
-        let out = "$1\tlostty\tABCD-1\t4242\tDeploy\twaiting\t1700000000\t2.1.296\t/Users/me/lostty\t✳ Fix login\n"
-            + "$2\tnotes\t\t\t\t\t\tzsh\t/Users/me/notes\t~/notes\n"
+        let out = "$1\tlostty\tABCD-1\t4242\tDeploy\twaiting\t1700000000\t2.1.296\t/Users/me/lostty\t1c1c1c,,e5199c\tEditing Foo.swift\t✳ Fix login\n"
+            + "$2\tnotes\t\t\t\t\t\tzsh\t/Users/me/notes\t\t\t~/notes\n"
         #expect(TmuxRemote.parse(out) == [
             RemoteSession(
                 id: "$1", name: "lostty", surface: "ABCD-1", owner: 4242, label: "Deploy", claude: .waiting,
-                title: "✳ Fix login", path: "/Users/me/lostty", command: "2.1.296",
-                activity: Date(timeIntervalSince1970: 1_700_000_000)),
+                action: "Editing Foo.swift", title: "✳ Fix login", path: "/Users/me/lostty", command: "2.1.296",
+                activity: Date(timeIntervalSince1970: 1_700_000_000),
+                skin: SessionSkin(
+                    background: .init(r: 0x1c, g: 0x1c, b: 0x1c), foreground: nil, accent: .init(r: 0xe5, g: 0x19, b: 0x9c))),
             RemoteSession(
                 id: "$2", name: "notes", surface: nil, owner: nil, label: nil, claude: nil,
                 title: "~/notes", path: "/Users/me/notes", command: "zsh", activity: nil),
@@ -150,18 +156,87 @@ struct TmuxRemoteTests {
     }
 
     @Test func aTabInTheTitleStaysInTheTitle() {
-        let out = "$1\tx\t\t\t\t\t1\tzsh\t/x\tleft\tright 🚀\n"
+        let out = "$1\tx\t\t\t\t\t1\tzsh\t/x\t\t\tleft\tright 🚀\n"
         #expect(TmuxRemote.parse(out).first?.title == "left\tright 🚀")
+        #expect(TmuxRemote.parseListing("r\tb\t1\t\t" + out).first?.title == "left\tright 🚀")
     }
 
     @Test func theListAsksForEveryColumnTitleLast() {
         #expect(TmuxRemote.listFormat == "#{session_id}\t#{session_name}\t#{@lostty_surface}\t#{@lostty_owner}\t"
             + "#{@lostty_label}\t#{@lostty_claude}\t#{session_activity}\t#{pane_current_command}\t"
-            + "#{pane_current_path}\t#{pane_title}")
+            + "#{pane_current_path}\t#{@lostty_skin}\t#{@lostty_action}\t#{pane_title}")
     }
 
     @Test func anUnknownClaudeValueIsNone() {
-        #expect(TmuxRemote.parse("$1\tx\t\t\t\tthinking\t1\tzsh\t/x\tt\n").first?.claude == nil)
+        #expect(TmuxRemote.parse("$1\tx\t\t\t\tthinking\t1\tzsh\t/x\t\t\tt\n").first?.claude == nil)
+    }
+
+    @Test func aBadSkinIsNone() {
+        #expect(TmuxRemote.parse("$1\tx\t\t\t\t\t1\tzsh\t/x\t#1c1c1c,,e5199c\t\tt\n").first?.skin == nil)
+    }
+
+    @Test func skinsRoundTrip() {
+        let skin = SessionSkin(
+            background: .init(r: 0x1c, g: 0x1c, b: 0x1c), foreground: .init(r: 0xe0, g: 0xe0, b: 0xe0),
+            accent: .init(r: 0x89, g: 0xb4, b: 0xfa))
+        #expect(skin.encoded == "1c1c1c,e0e0e0,89b4fa")
+        #expect(SessionSkin(encoded: skin.encoded) == skin)
+        #expect(SessionSkin(encoded: "1C1C1C,,89B4FA")?.foreground == nil)
+        for bad in ["", "1c1c1c", "1c1c1c,,", "1c1c1c,zz,89b4fa", "1c1c1c,e0e0e0,89b4fa,00"] {
+            #expect(SessionSkin(encoded: bad) == nil, "\(bad)")
+        }
+        #expect(!skin.isLight)
+        #expect(SessionSkin(encoded: "f4efe6,,ffffff")?.isLight == true)
+    }
+
+    @Test func aSkinCarriesItsTexture() {
+        var skin = SessionSkin(
+            background: .init(r: 0x1c, g: 0x1c, b: 0x1c), foreground: nil, accent: .init(r: 0x89, g: 0xb4, b: 0xfa),
+            texture: .init(pattern: .waves, opacity: 0.16))
+        #expect(skin.encoded == "1c1c1c,,89b4fa,waves,0.160")
+        #expect(SessionSkin(encoded: skin.encoded) == skin)
+        skin.texture = .init(pattern: .starfield, opacity: 0.12345)
+        #expect(SessionSkin(encoded: skin.encoded) == skin)
+        // A texture from a newer Mac, or a bad opacity: the colors still come.
+        #expect(SessionSkin(encoded: "1c1c1c,,89b4fa,hexagons,0.160")?.texture == nil)
+        #expect(SessionSkin(encoded: "1c1c1c,,89b4fa,waves,lots")?.accent == .init(r: 0x89, g: 0xb4, b: 0xfa))
+        #expect(SessionSkin(encoded: "1c1c1c,,89b4fa,waves,9")?.texture?.opacity == 1)
+        #expect(SessionSkin(encoded: "1c1c1c,,89b4fa,waves") == nil)
+    }
+
+    @Test func aLogoSkinCarriesItsTilesPath() {
+        let tile = "/Users/me/Library/Caches/Lostty, Inc/textures/v1-l-ab12-99-e5199c.png"
+        let skin = SessionSkin(
+            background: .init(r: 0x1c, g: 0x1c, b: 0x1c), foreground: nil, accent: .init(r: 0xe5, g: 0x19, b: 0x9c),
+            texture: .init(look: .logo(tile: tile), opacity: 0.2))
+        #expect(skin.encoded.split(separator: ",", omittingEmptySubsequences: false).count == 6)
+        #expect(skin.encoded.hasPrefix("1c1c1c,,e5199c,logo,0.200,/Users/me/"))
+        #expect(SessionSkin(encoded: skin.encoded) == skin)
+        #expect(SessionSkin(encoded: "1c1c1c,,e5199c,logo,0.200,")?.texture == nil)
+        #expect(SessionSkin(encoded: "1c1c1c,,e5199c,waves,0.200,/x.png")?.texture == nil)
+    }
+
+    @Test func onlyAPNGsPathIsRead() throws {
+        let command = try #require(TmuxRemote.readTileCommand(path: "/Users/me/it's/t.png"))
+        #expect(command == #"[ $(wc -c < '/Users/me/it'\''s/t.png') -le 1048576 ] && base64 < '/Users/me/it'\''s/t.png'"#)
+        for bad in ["t.png", "/Users/me/.ssh/id_ed25519", "/a/../b.png", "/a/b\n.png"] {
+            #expect(TmuxRemote.readTileCommand(path: bad) == nil, "\(bad)")
+        }
+    }
+
+    @Test func theListingLeadsEachSessionWithRepoBranchAndOwnerRunning() {
+        let line = "$1\tx\tPANE\t4242\t\t\t1\tzsh\t/x\t\t\tt"
+        let sessions = TmuxRemote.parseListing("lostty\tskins\t1\t\t\(line)\n\t\t1\t\t\(line)\nlostty\t\t\t\t\(line)\n")
+        #expect(sessions.map(\.repo) == ["lostty", nil, "lostty"])
+        #expect(sessions.map(\.branch) == ["skins", nil, nil])
+        // The last one's Lostty is gone.
+        #expect(sessions.map(\.owner) == [4242, 4242, nil])
+        #expect(TmuxRemote.parseListing("\t\t\t\n").isEmpty)
+    }
+
+    @Test func theListAsksTmuxForTheFolderAndOwnerFirst() {
+        #expect(TmuxRemote.listScript.contains(
+            TmuxRemote.shellQuote("#{pane_current_path}\t#{@lostty_owner}\t" + TmuxRemote.listFormat)))
     }
 
     @Test func emptyOrGarbageListIsNoSessions() {

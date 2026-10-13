@@ -114,30 +114,45 @@ extension Ghostty {
             }
         }
 
+        /// Keys outside the letters: esc and the keyboard switch, on Lostty's
+        /// keyboard and in the row over iOS's.
         enum RowKey: String, CaseIterable, Identifiable {
-            case esc, ctrl, tab, shiftTab, left, down, up, right, slash, at, bang, pipe
+            case esc, keyboard
 
             var id: String { rawValue }
+
+            /// The SF Symbol a key shows instead of its label.
+            var symbol: String? {
+                switch self {
+                case .keyboard: "globe"
+                case .esc: nil
+                }
+            }
+
+            var accessibilityName: String {
+                switch self {
+                case .esc: "Escape"
+                case .keyboard: "Switch keyboard"
+                }
+            }
 
             var label: String {
                 switch self {
                 case .esc: "esc"
-                case .ctrl: "ctrl"
-                case .tab: "tab"
-                case .shiftTab: "⇧tab"
-                case .left: "←"
-                case .down: "↓"
-                case .up: "↑"
-                case .right: "→"
-                case .slash: "/"
-                case .at: "@"
-                case .bang: "!"
-                case .pipe: "|"
+                case .keyboard: "🌐"
                 }
             }
         }
 
         static let backspace = Press(key: .backspace)
+
+        /// A new line that isn't sent: Ctrl+J, a line feed, which Claude
+        /// Code (and most line editors) insert as a new line. Lostty's
+        /// keyboard's return key.
+        static let newline = Press(key: .j, mods: .ctrl, text: nil, unshifted: 0x6A)
+
+        /// Enter: sends what's typed. Lostty's keyboard's Send.
+        static let enter = Press(key: .enter)
 
         /// Presses for text the soft keyboard inserted. `ctrl` (the sticky
         /// key) applies to the first character only.
@@ -147,22 +162,13 @@ extension Ghostty {
             }
         }
 
-        /// The press for a key-row key; nil for Ctrl, which only latches.
+        /// The press for a key-row key; nil for the keyboard switch, which
+        /// sends nothing.
         static func press(for key: RowKey, ctrl: Bool) -> Press? {
             let mods: Mods = ctrl ? .ctrl : []
             switch key {
-            case .ctrl: return nil
+            case .keyboard: return nil
             case .esc: return Press(key: .escape, mods: mods)
-            case .tab: return Press(key: .tab, mods: mods)
-            case .shiftTab: return Press(key: .tab, mods: mods.union(.shift))
-            case .left: return Press(key: .arrowLeft, mods: mods)
-            case .down: return Press(key: .arrowDown, mods: mods)
-            case .up: return Press(key: .arrowUp, mods: mods)
-            case .right: return Press(key: .arrowRight, mods: mods)
-            case .slash: return press(for: "/", ctrl: ctrl)
-            case .at: return press(for: "@", ctrl: ctrl)
-            case .bang: return press(for: "!", ctrl: ctrl)
-            case .pipe: return press(for: "|", ctrl: ctrl)
             }
         }
 

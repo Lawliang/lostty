@@ -18,16 +18,25 @@ struct DesignGalleryScreen: View {
         fallbackHost: "100.64.0.10", pairedAt: Date(timeIntervalSince1970: 1_791_000_000))
     private static let sessions = [
         RemoteSession(
-            id: "$1", name: "lostty", surface: "A", owner: 1, claude: .waiting,
+            id: "$1", name: "lostty", surface: "A", owner: 1, claude: .waiting, action: "Run the iOS tests",
             title: "✳ Lostty UI redesign plan", path: "/Users/alex/projectrepos/lostty",
-            command: "2.1.296", activity: Date().addingTimeInterval(-120)),
+            command: "2.1.296", activity: Date().addingTimeInterval(-120),
+            skin: SessionSkin(encoded: "1b2a20,,7fd1a0"), repo: "lostty", branch: "skins"),
         RemoteSession(
             id: "$3", name: "home", surface: "B", owner: 1, label: "Deploy watch",
-            title: "~", path: "/Users/alex", command: "zsh", activity: Date().addingTimeInterval(-300)),
+            title: "~", path: "/Users/alex", command: "zsh", activity: Date().addingTimeInterval(-300),
+            skin: SessionSkin(encoded: "f4efe6,3a3226,b5651d")),
         RemoteSession(
             id: "$4", name: "lostty-2", surface: "C", owner: 1, claude: .working,
+            action: "Editing StayAwakeController.swift",
+            spinner: ClaudeSpinner(word: "Incubating…", elapsed: 231, detail: "↓ 23.5k tokens", seenAt: Date()),
             title: "◐ Fix the login bug", path: "/Users/alex/projectrepos/lostty/.claude/worktrees/stay-awake",
-            command: "2.1.296", activity: Date().addingTimeInterval(-10)),
+            command: "2.1.296", activity: Date().addingTimeInterval(-10),
+            skin: SessionSkin(encoded: "2a1b33,,b98ad6"), repo: "lostty", branch: "stay-awake"),
+        RemoteSession(
+            id: "$5", name: "api-server", surface: "D", owner: 1,
+            title: "~/projectrepos/api-server", path: "/Users/alex/projectrepos/api-server", command: "zsh",
+            activity: Date().addingTimeInterval(-2 * 3600), repo: "api-server", branch: "main"),
         RemoteSession(
             id: "$2", name: "ghostty-skins-experiments-with-a-very-long-name", surface: nil, owner: nil,
             title: "~/projectrepos/ghostty-skins-experiments-with-a-very-long-name", command: "zsh",
@@ -81,7 +90,10 @@ struct DesignGalleryScreen: View {
                 entry("Settings") {
                     NavigationStack { SettingsScreen() }.environmentObject(MobileStore.gallery(settings: Self.paired))
                 },
-                entry("Terminal bar and key row (Ctrl latched)") { NavigationStack { TerminalBarPreview() } },
+                entry("Terminal bar and row over iOS keyboard") { NavigationStack { TerminalBarPreview() } },
+                entry("Keyboard") { KeyboardPreview() },
+                entry("Claude trace — working") { TracePreview(activity: .working) },
+                entry("Claude trace — subagents") { TracePreview(activity: .subagents) },
             ]),
         ]
     }
@@ -116,13 +128,41 @@ struct DesignGalleryScreen: View {
     }
 }
 
-/// The terminal's top bar over an empty terminal, and the key row with Ctrl
-/// latched.
+/// Lostty's keyboard, as a terminal shows it.
+private struct KeyboardPreview: View {
+    var body: some View {
+        VStack(spacing: 0) {
+            Color.black
+            KeyboardViewPreview().frame(height: Ghostty.TerminalKeyboardView.fullHeight)
+        }
+        .ignoresSafeArea(edges: .bottom)
+    }
+}
+
+private struct KeyboardViewPreview: UIViewRepresentable {
+    func makeUIView(context: Context) -> Ghostty.TerminalKeyboardView { Ghostty.TerminalKeyboardView() }
+    func updateUIView(_ view: Ghostty.TerminalKeyboardView, context: Context) {}
+}
+
+/// The phone's Claude trace over a skinned terminal's background.
+private struct TracePreview: View {
+    let activity: ClaudeActivity
+    private let skin = SessionSkin(encoded: "2d1620,,d3699b")
+
+    var body: some View {
+        TerminalLook.background(skin: skin)
+            .ignoresSafeArea()
+            .overlay { PhoneTrace(activity: activity, skin: skin) }
+    }
+}
+
+/// The terminal's top bar over an empty terminal, and the row shown over
+/// iOS's keyboard.
 private struct TerminalBarPreview: View {
     var body: some View {
         VStack(spacing: 0) {
             Color.black
-            KeyRowPreview().frame(height: 52)
+            KeyRowPreview().frame(height: Ghostty.KeyRowView.rowHeight)
         }
         .toolbar { ToolbarItem(placement: .principal) { TerminalTitle(name: "lostty") } }
         .navigationBarTitleDisplayMode(.inline)
@@ -132,9 +172,7 @@ private struct TerminalBarPreview: View {
 
 private struct KeyRowPreview: UIViewRepresentable {
     func makeUIView(context: Context) -> Ghostty.KeyRowView {
-        let row = Ghostty.KeyRowView()
-        row.setCtrl(true)
-        return row
+        Ghostty.KeyRowView()
     }
 
     func updateUIView(_ view: Ghostty.KeyRowView, context: Context) {}

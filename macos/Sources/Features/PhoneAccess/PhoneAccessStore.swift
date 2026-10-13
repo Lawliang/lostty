@@ -105,6 +105,8 @@ final class PhoneAccessStore: ObservableObject {
         case .lockPasswords:
             lockdownSkipped = false
             runAdmin(enableRemoteLogin: status?.remoteLogin != true, lockPasswords: true)
+        case .dropLostConnections:
+            runAdmin(enableRemoteLogin: false, lockPasswords: false)
         case .skipLockdown:
             let alert = NSAlert()
             alert.messageText = "Keep password logins on?"
@@ -146,8 +148,12 @@ final class PhoneAccessStore: ObservableObject {
         }
     }
 
+    /// Any admin step also writes the dropped-connection setting when it's
+    /// missing: one prompt instead of two.
     private func runAdmin(enableRemoteLogin: Bool, lockPasswords: Bool) {
-        let setup = PhoneAccessAdmin.setupScript(enableRemoteLogin: enableRemoteLogin, lockPasswords: lockPasswords)
+        let dropLost = status?.dropsLostConnections != true
+        let setup = PhoneAccessAdmin.setupScript(
+            enableRemoteLogin: enableRemoteLogin, lockPasswords: lockPasswords, dropLostConnections: dropLost)
         let stayAwake = status?.stayAwakePermission == false ? StayAwakeSudoers.installScript(user: NSUserName()) : nil
         guard let script = PhoneAccessAdmin.combinedScript(setup: setup, stayAwake: stayAwake) else {
             refresh()
@@ -155,7 +161,8 @@ final class PhoneAccessStore: ObservableObject {
         }
         var prompt = setup == nil
             ? Self.stayAwakePrompt
-            : PhoneAccessAdmin.prompt(enableRemoteLogin: enableRemoteLogin, lockPasswords: lockPasswords)
+            : PhoneAccessAdmin.prompt(
+                enableRemoteLogin: enableRemoteLogin, lockPasswords: lockPasswords, dropLostConnections: dropLost)
         if setup != nil && stayAwake != nil { prompt += " It also lets Lostty keep this Mac awake for your phone when you ask." }
         switch PhoneAccessAdmin.run(script, prompt: prompt) {
         case .done, .cancelled: break
@@ -344,6 +351,12 @@ final class PhoneAccessStore: ObservableObject {
                 adminScripts.append(PhoneAccessAdmin.unlockScript)
                 prompts.append("turn password logins back on")
             }
+        }
+        // Rides along with another admin step only: alone it's harmless
+        // (it drops only silent clients) and not worth a password prompt.
+        if !adminScripts.isEmpty, FileManager.default.fileExists(atPath: PhoneAccessProbe.alivePath) {
+            adminScripts.append(PhoneAccessAdmin.removeAliveScript)
+            prompts.append("remove its setting for dropped connections")
         }
         if !adminScripts.isEmpty,
            case .failed(let text) = PhoneAccessAdmin.run(adminScripts.joined(separator: "\n"),

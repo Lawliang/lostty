@@ -1,5 +1,6 @@
 #if os(macOS)
 import Foundation
+import LosttyRemote
 import Testing
 @testable import Ghostty
 

@@ -19,7 +19,9 @@ pub const Options = struct {
 /// the pane it runs in whether Claude is working: `+claude-state busy`,
 /// `idle`, `exit`, `agents` or `resumed`. For `idle` and `resumed` it reads
 /// the hook input on stdin, which can turn a Stop into `agents` (subagents
-/// still working) or mean nothing should be sent (protocol.refine). It
+/// still working) or mean nothing should be sent (protocol.refine), and
+/// marks Claude asking permission. `tool` (PreToolUse) sends what the tool
+/// call is about to do, for Lostty Mobile's session list. It
 /// never fails and never prints: outside Lostty, without a terminal, or
 /// with a bad argument it does nothing and exits 0, so a hook can never
 /// break Claude.
@@ -33,12 +35,18 @@ pub fn run(gpa: Allocator) !u8 {
     for (argv) |arg| args.append(alloc, arg) catch return 0;
     var state = protocol.stateFromArgs(args.items) orelse return 0;
     if (std.posix.getenv(protocol.surface_env) == null) return 0;
-    if (state == .idle or state == .resumed) {
-        if (hookInput(alloc)) |input| state = protocol.refine(alloc, state, input) orelse return 0;
+    var detail: protocol.Detail = .{};
+    switch (state) {
+        .idle, .resumed => if (hookInput(alloc)) |input| {
+            state = protocol.refine(alloc, state, input) orelse return 0;
+            detail.permission = state == .idle and protocol.isPermissionPrompt(alloc, input);
+        },
+        .tool => detail.action = protocol.action(alloc, hookInput(alloc) orelse return 0) orelse return 0,
+        else => {},
     }
 
     const tmux = std.posix.getenv("TMUX") != null;
-    const seq = protocol.encodeSequence(alloc, state, tmux) catch return 0;
+    const seq = protocol.encodeSequence(alloc, state, detail, tmux) catch return 0;
     const tty = openTerminal(alloc) orelse return 0;
     defer tty.close();
     tty.writeAll(seq) catch {};

@@ -2,6 +2,7 @@
 import AppKit
 import Foundation
 import ImageIO
+import LosttyRemote
 import Testing
 @testable import Ghostty
 

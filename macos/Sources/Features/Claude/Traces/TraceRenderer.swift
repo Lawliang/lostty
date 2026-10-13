@@ -1,4 +1,3 @@
-#if os(macOS)
 import SwiftUI
 
 /// Draws one trace style for one frame. Implementations are stateless:
@@ -8,6 +7,7 @@ protocol TraceRenderer {
     func draw(in ctx: inout GraphicsContext, along path: EdgePath, frame: TraceFrame, time: Double, colors: TraceColors)
 }
 
+#if os(macOS)
 enum TraceRenderers {
     static func renderer(for style: BuiltinTrace) -> any TraceRenderer {
         switch style {
@@ -27,6 +27,7 @@ enum TraceRenderers {
         }
     }
 }
+#endif
 
 /// Shared drawing helpers for trace styles.
 enum TraceDraw {
@@ -158,4 +159,3 @@ enum TraceDraw {
         return Double(x >> 11) / Double(1 << 53)
     }
 }
-#endif

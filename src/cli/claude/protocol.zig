@@ -9,8 +9,21 @@ pub const surface_env = "LOSTTY_SURFACE";
 
 /// `agents`: Claude finished its turn but its subagents are still working,
 /// so it carries on by itself when they finish. `resumed`: the last of
-/// them finished, so Claude itself works again.
-pub const State = enum { busy, idle, exit, agents, resumed };
+/// them finished, so Claude itself works again. `tool`: Claude (or one of
+/// its subagents) is about to run a tool; it carries the action, not a
+/// change of state.
+pub const State = enum { busy, idle, exit, agents, resumed, tool };
+
+/// What a message says beyond its state.
+pub const Detail = struct {
+    /// `tool`: what the tool call does, as `action` words it.
+    action: ?[]const u8 = null,
+    /// `idle`: Claude asks permission to run the last action.
+    permission: bool = false,
+};
+
+/// The longest action sent, in characters.
+pub const action_max = 80;
 
 pub fn parseState(s: []const u8) ?State {
     return std.meta.stringToEnum(State, s);
@@ -47,6 +60,127 @@ pub fn refine(alloc: Allocator, state: State, input: []const u8) ?State {
         return if (runningAgents(root, stringField(root, "agent_id"))) null else .resumed;
     }
     return state;
+}
+
+/// Whether a Notification hook's input is Claude asking permission (for
+/// the tool call the last PreToolUse described).
+pub fn isPermissionPrompt(alloc: Allocator, input: []const u8) bool {
+    const parsed = std.json.parseFromSlice(std.json.Value, alloc, input, .{}) catch return false;
+    defer parsed.deinit();
+    const root = parsed.value;
+    if (root != .object) return false;
+    const event = stringField(root, "hook_event_name") orelse return false;
+    const kind = stringField(root, "notification_type") orelse return false;
+    return std.mem.eql(u8, event, "Notification") and std.mem.eql(u8, kind, "permission_prompt");
+}
+
+/// What a PreToolUse hook's tool call does, as a person reads it at a
+/// glance: "Editing Foo.swift", "Searching for \"bar\"", or the
+/// description Claude gave a shell command (never the command itself when
+/// it gave one: commands can carry secrets). One line, at most
+/// `action_max` characters. Null when the input isn't a PreToolUse
+/// payload, or for a to-do list with nothing in progress.
+pub fn action(alloc: Allocator, input: []const u8) ?[]const u8 {
+    const parsed = std.json.parseFromSlice(std.json.Value, alloc, input, .{}) catch return null;
+    defer parsed.deinit();
+    const root = parsed.value;
+    if (root != .object) return null;
+    const event = stringField(root, "hook_event_name") orelse return null;
+    if (!std.mem.eql(u8, event, "PreToolUse")) return null;
+    const tool = stringField(root, "tool_name") orelse return null;
+    const raw = (describe(alloc, tool, root.object.get("tool_input") orelse .null) catch return null) orelse return null;
+    const line = clean(alloc, raw) catch return null;
+    return if (line.len == 0) null else line;
+}
+
+fn describe(alloc: Allocator, tool: []const u8, input: std.json.Value) Allocator.Error!?[]const u8 {
+    const is = struct {
+        fn any(name: []const u8, names: []const []const u8) bool {
+            for (names) |n| if (std.mem.eql(u8, name, n)) return true;
+            return false;
+        }
+    }.any;
+    if (is(tool, &.{ "Edit", "MultiEdit", "Write", "NotebookEdit" })) {
+        if (textField(input, "file_path") orelse textField(input, "notebook_path")) |path|
+            return try std.fmt.allocPrint(alloc, "Editing {s}", .{std.fs.path.basenamePosix(path)});
+    } else if (is(tool, &.{"Read"})) {
+        if (textField(input, "file_path")) |path|
+            return try std.fmt.allocPrint(alloc, "Reading {s}", .{std.fs.path.basenamePosix(path)});
+    } else if (is(tool, &.{ "Grep", "Glob" })) {
+        if (textField(input, "pattern")) |pattern| return try std.fmt.allocPrint(alloc, "Searching for \"{s}\"", .{pattern});
+    } else if (is(tool, &.{"WebSearch"})) {
+        if (textField(input, "query")) |query| return try std.fmt.allocPrint(alloc, "Searching for \"{s}\"", .{query});
+    } else if (is(tool, &.{"WebFetch"})) {
+        if (textField(input, "url")) |url| return try std.fmt.allocPrint(alloc, "Reading {s}", .{host(url)});
+    } else if (is(tool, &.{"Bash"})) {
+        if (textField(input, "description")) |description| return description;
+        if (textField(input, "command")) |command| {
+            const trimmed = std.mem.trim(u8, command, " \t\r\n");
+            return trimmed[0 .. std.mem.indexOfScalar(u8, trimmed, '\n') orelse trimmed.len];
+        }
+    } else if (is(tool, &.{ "Task", "Agent" })) {
+        if (textField(input, "description")) |description| return try std.fmt.allocPrint(alloc, "Agent: {s}", .{description});
+    } else if (is(tool, &.{"TodoWrite"})) {
+        // The item now in progress, as Claude words it while working on it.
+        const todos = if (input == .object) input.object.get("todos") orelse return null else return null;
+        if (todos != .array) return null;
+        for (todos.array.items) |todo| {
+            const status = if (todo == .object) stringField(todo, "status") orelse continue else continue;
+            if (!std.mem.eql(u8, status, "in_progress")) continue;
+            return textField(todo, "activeForm") orelse textField(todo, "content");
+        }
+        return null;
+    }
+    // An MCP tool ("mcp__server__tool") by its own name.
+    if (std.mem.startsWith(u8, tool, "mcp__")) if (std.mem.lastIndexOf(u8, tool, "__")) |i| {
+        if (i + 2 < tool.len) return tool[i + 2 ..];
+    };
+    return tool;
+}
+
+/// A string field with something in it besides blanks.
+fn textField(object: std.json.Value, key: []const u8) ?[]const u8 {
+    if (object != .object) return null;
+    const s = stringField(object, key) orelse return null;
+    return if (std.mem.trim(u8, s, " \t\r\n").len == 0) null else s;
+}
+
+/// "https://docs.example.com:8080/a?b" → "docs.example.com".
+fn host(url: []const u8) []const u8 {
+    const rest = if (std.mem.indexOf(u8, url, "://")) |i| url[i + 3 ..] else url;
+    const end = std.mem.indexOfAny(u8, rest, "/:?#") orelse rest.len;
+    return if (end == 0) url else rest[0..end];
+}
+
+/// One line: control characters and runs of blanks become one space, then
+/// at most `action_max` characters, the last an ellipsis when cut.
+fn clean(alloc: Allocator, raw: []const u8) Allocator.Error![]const u8 {
+    var out: std.ArrayList(u8) = .empty;
+    var blank = false;
+    for (raw) |c| {
+        if (c <= ' ' or c == 0x7f) {
+            blank = out.items.len > 0;
+            continue;
+        }
+        if (blank) try out.append(alloc, ' ');
+        blank = false;
+        try out.append(alloc, c);
+    }
+    // Characters start at every byte but UTF-8 continuation bytes.
+    var chars: usize = 0;
+    for (out.items) |c| chars += @intFromBool(c & 0xC0 != 0x80);
+    if (chars > action_max) {
+        var seen: usize = 0;
+        const cut = for (out.items, 0..) |c, i| {
+            if (c & 0xC0 == 0x80) continue;
+            if (seen == action_max - 1) break i;
+            seen += 1;
+        } else out.items.len;
+        out.shrinkRetainingCapacity(cut);
+        while (out.items.len > 0 and out.items[out.items.len - 1] == ' ') out.items.len -= 1;
+        try out.appendSlice(alloc, "\u{2026}");
+    }
+    return out.toOwnedSlice(alloc);
 }
 
 fn stringField(object: std.json.Value, key: []const u8) ?[]const u8 {
@@ -123,10 +257,16 @@ pub fn findTty(ctx: anytype, start: i32, max_hops: usize) ?[]const u8 {
     return null;
 }
 
-/// OSC 1337 SetUserVar carrying `{"v":1,"state":"<state>"}`. With `tmux`,
+/// OSC 1337 SetUserVar carrying `{"v":1,"state":"<state>"}`, plus
+/// `"action"` and `"permission":true` when `detail` has them. With `tmux`,
 /// wrapped in tmux's DCS passthrough (requires `allow-passthrough on`).
-pub fn encodeSequence(alloc: Allocator, state: State, tmux: bool) ![]u8 {
-    const json = try std.fmt.allocPrint(alloc, "{{\"v\":1,\"state\":\"{s}\"}}", .{@tagName(state)});
+pub fn encodeSequence(alloc: Allocator, state: State, detail: Detail, tmux: bool) ![]u8 {
+    const json = try std.json.Stringify.valueAlloc(alloc, .{
+        .v = 1,
+        .state = @tagName(state),
+        .action = detail.action,
+        .permission = if (detail.permission) true else null,
+    }, .{ .emit_null_optional_fields = false });
     defer alloc.free(json);
     return encodeUserVar(alloc, user_var_name, json, tmux);
 }
@@ -184,6 +324,7 @@ test "claude protocol: parseState" {
     try t.expectEqual(State.exit, parseState("exit").?);
     try t.expectEqual(State.agents, parseState("agents").?);
     try t.expectEqual(State.resumed, parseState("resumed").?);
+    try t.expectEqual(State.tool, parseState("tool").?);
     try t.expect(parseState("BUSY") == null);
     try t.expect(parseState("") == null);
 }
@@ -198,7 +339,7 @@ test "claude protocol: stateFromArgs" {
 
 test "claude protocol: encodeSequence round-trips through base64" {
     const alloc = std.testing.allocator;
-    const seq = try encodeSequence(alloc, .idle, false);
+    const seq = try encodeSequence(alloc, .idle, .{}, false);
     defer alloc.free(seq);
     const prefix = "\x1b]1337;SetUserVar=LOSTTY_CLAUDE=";
     try std.testing.expect(std.mem.startsWith(u8, seq, prefix));
@@ -212,7 +353,7 @@ test "claude protocol: encodeSequence round-trips through base64" {
 
 test "claude protocol: encodeSequence wraps for tmux" {
     const alloc = std.testing.allocator;
-    const seq = try encodeSequence(alloc, .busy, true);
+    const seq = try encodeSequence(alloc, .busy, .{}, true);
     defer alloc.free(seq);
     try std.testing.expect(std.mem.startsWith(u8, seq, "\x1bPtmux;\x1b\x1b]1337;SetUserVar=LOSTTY_CLAUDE="));
     try std.testing.expect(std.mem.endsWith(u8, seq, "\x07\x1b\\"));
@@ -275,4 +416,89 @@ test "claude protocol: input that isn't a hook payload keeps the state" {
     // Only a Stop hook's idle is refined to agents.
     const stop = "{\"hook_event_name\":\"Stop\",\"background_tasks\":[{\"id\":\"a\",\"type\":\"subagent\"}]}";
     try t.expectEqual(State.exit, refine(alloc, .exit, stop).?);
+}
+
+fn decodeSequence(alloc: Allocator, seq: []const u8) ![]u8 {
+    const prefix = "\x1b]1337;SetUserVar=LOSTTY_CLAUDE=";
+    const b64 = seq[prefix.len .. seq.len - 1];
+    const out = try alloc.alloc(u8, try std.base64.standard.Decoder.calcSizeForSlice(b64));
+    try std.base64.standard.Decoder.decode(out, b64);
+    return out;
+}
+
+test "claude protocol: encodeSequence carries the action and a permission wait" {
+    const t = std.testing;
+    var arena = std.heap.ArenaAllocator.init(t.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+    const tool = try encodeSequence(alloc, .tool, .{ .action = "Searching for \"a\\b\"" }, false);
+    try t.expectEqualStrings(
+        \\{"v":1,"state":"tool","action":"Searching for \"a\\b\""}
+    , try decodeSequence(alloc, tool));
+    const asks = try encodeSequence(alloc, .idle, .{ .permission = true }, false);
+    try t.expectEqualStrings("{\"v\":1,\"state\":\"idle\",\"permission\":true}", try decodeSequence(alloc, asks));
+}
+
+test "claude protocol: isPermissionPrompt" {
+    const t = std.testing;
+    const alloc = t.allocator;
+    try t.expect(isPermissionPrompt(alloc, "{\"hook_event_name\":\"Notification\",\"notification_type\":\"permission_prompt\"}"));
+    try t.expect(!isPermissionPrompt(alloc, "{\"hook_event_name\":\"Notification\",\"notification_type\":\"idle_prompt\"}"));
+    try t.expect(!isPermissionPrompt(alloc, "{\"hook_event_name\":\"Notification\"}"));
+    try t.expect(!isPermissionPrompt(alloc, "{\"hook_event_name\":\"Stop\"}"));
+    try t.expect(!isPermissionPrompt(alloc, "not json"));
+}
+
+test "claude protocol: action words each tool call" {
+    const t = std.testing;
+    var arena = std.heap.ArenaAllocator.init(t.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+    const cases = [_][2][]const u8{
+        .{ "{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"/a/b/Foo.swift\"}}", "Editing Foo.swift" },
+        .{ "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"/a/new.md\"}}", "Editing new.md" },
+        .{ "{\"tool_name\":\"NotebookEdit\",\"tool_input\":{\"notebook_path\":\"/n.ipynb\"}}", "Editing n.ipynb" },
+        .{ "{\"tool_name\":\"Read\",\"tool_input\":{\"file_path\":\"/a/TmuxRemote.swift\"}}", "Reading TmuxRemote.swift" },
+        .{ "{\"tool_name\":\"Grep\",\"tool_input\":{\"pattern\":\"listFormat\"}}", "Searching for \"listFormat\"" },
+        .{ "{\"tool_name\":\"Glob\",\"tool_input\":{\"pattern\":\"**/*.zig\"}}", "Searching for \"**/*.zig\"" },
+        .{ "{\"tool_name\":\"WebSearch\",\"tool_input\":{\"query\":\"tmux hooks\"}}", "Searching for \"tmux hooks\"" },
+        .{ "{\"tool_name\":\"WebFetch\",\"tool_input\":{\"url\":\"https://docs.example.com:8/a?b\"}}", "Reading docs.example.com" },
+        .{ "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"TOKEN=x make\",\"description\":\"Build the app\"}}", "Build the app" },
+        .{ "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"  zig build test\\n  echo done\"}}", "zig build test" },
+        .{ "{\"tool_name\":\"Agent\",\"tool_input\":{\"description\":\"Find sources\"}}", "Agent: Find sources" },
+        .{ "{\"tool_name\":\"Task\",\"tool_input\":{\"description\":\"Find sources\"}}", "Agent: Find sources" },
+        .{ "{\"tool_name\":\"TodoWrite\",\"tool_input\":{\"todos\":[{\"status\":\"completed\",\"activeForm\":\"Old\"},{\"status\":\"in_progress\",\"activeForm\":\"Fixing the header\"}]}}", "Fixing the header" },
+        .{ "{\"tool_name\":\"mcp__XcodeBuildMCP__build_sim\",\"tool_input\":{}}", "build_sim" },
+        .{ "{\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"x\"}}", "Skill" },
+        // A field missing or blank: the tool's name.
+        .{ "{\"tool_name\":\"Read\",\"tool_input\":{\"file_path\":\"  \"}}", "Read" },
+        .{ "{\"tool_name\":\"Bash\"}", "Bash" },
+        // One line, blanks collapsed.
+        .{ "{\"tool_name\":\"Bash\",\"tool_input\":{\"description\":\"Run\\tthe\\n\\ntests  \"}}", "Run the tests" },
+    };
+    for (cases) |c| {
+        const input = try std.fmt.allocPrint(alloc, "{{\"hook_event_name\":\"PreToolUse\",{s}", .{c[0][1..]});
+        try t.expectEqualStrings(c[1], action(alloc, input) orelse "(null)");
+    }
+}
+
+test "claude protocol: action caps the line and ignores other input" {
+    const t = std.testing;
+    var arena = std.heap.ArenaAllocator.init(t.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+    const long = "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"description\":\"" ++
+        "\u{e9}" ** 100 ++ "\"}}";
+    const line = action(alloc, long).?;
+    try t.expectEqual(@as(usize, action_max), try std.unicode.utf8CountCodepoints(line));
+    try t.expect(std.mem.endsWith(u8, line, "\u{2026}"));
+    // A cut that lands after a blank doesn't leave it before the ellipsis.
+    const spaced = "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"description\":\"" ++
+        "a" ** 78 ++ " " ++ "b" ** 10 ++ "\"}}";
+    try t.expectEqualStrings("a" ** 78 ++ "\u{2026}", action(alloc, spaced).?);
+    const todo = "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"TodoWrite\",\"tool_input\":{\"todos\":[{\"status\":\"pending\",\"activeForm\":\"Later\"}]}}";
+    try t.expect(action(alloc, todo) == null);
+    try t.expect(action(alloc, "{\"hook_event_name\":\"Stop\",\"tool_name\":\"Bash\"}") == null);
+    try t.expect(action(alloc, "not json") == null);
+    try t.expect(action(alloc, "") == null);
 }

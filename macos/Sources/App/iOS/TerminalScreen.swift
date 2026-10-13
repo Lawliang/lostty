@@ -13,12 +13,22 @@ final class TerminalLink {
     /// Made once, so the screen's `onReceive` sees the same publisher.
     let events: AnyPublisher<RemoteLinkStatus, Never>
 
+    private let shown = CurrentValueSubject<Bool, Never>(false)
+    /// Whether the terminal has drawn anything yet; stays true from then
+    /// on, so a warm terminal reopens drawn.
+    let drawn: AnyPublisher<Bool, Never>
+
     init() {
         events = latest.compactMap { $0 }.eraseToAnyPublisher()
+        drawn = shown.removeDuplicates().eraseToAnyPublisher()
     }
 
     func send(_ status: RemoteLinkStatus) {
         latest.send(status)
+    }
+
+    func markDrawn() {
+        shown.send(true)
     }
 }
 
@@ -34,7 +44,8 @@ struct TerminalScreen: View {
     @EnvironmentObject private var store: MobileStore
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
-    @State private var confirmClose = false
+    /// The session Close Session is asking about.
+    @State private var confirmClose: RemoteSession?
     @State private var closeError: String?
     @State private var overlay: TerminalOverlay = .none
     /// Close Session from this screen is under way: its end is ours.
@@ -47,6 +58,8 @@ struct TerminalScreen: View {
     /// The attach's end is being (or was) explained: a replayed `.exited`
     /// must not ask the Mac again.
     @State private var endHandled = false
+    /// tmux has drawn the terminal: until then, the axolotl waits over it.
+    @State private var drawn = false
 
     init(session: RemoteSession, surfaceView: Ghostty.SurfaceView, io: RemoteSurfaceIO, link: TerminalLink) {
         _session = State(initialValue: session)
@@ -61,7 +74,8 @@ struct TerminalScreen: View {
         RemoteSession.current(of: session, in: store.sessions) ?? session
     }
 
-    private var title: String { SessionLabel.row(for: current, now: Date()).title }
+    private var row: SessionRow { SessionLabel.row(for: current, now: Date()) }
+    private var title: String { row.title }
 
     var body: some View {
         GeometryReader { geo in
@@ -76,40 +90,53 @@ struct TerminalScreen: View {
             }
         }
         .animation(LosttyTheme.motion, value: overlay)
+        .overlay {
+            if !drawn && overlay == .none {
+                TerminalLoading(skin: current.skin).transition(.opacity)
+            }
+        }
+        .animation(LosttyTheme.motion, value: drawn)
+        // Claude's trace round the whole screen while it works.
+        .overlay { PhoneTrace(activity: current.claude, skin: current.skin) }
         .ignoresSafeArea(.container, edges: .bottom)
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
-        .losttyScreen()
+        // The whole screen for the terminal and its keyboard.
+        .toolbar(.hidden, for: .tabBar)
+        // The terminal's own color up to the top edge, under the bar: the
+        // bar's buttons float over the terminal, as the list's do once it
+        // scrolls. Its text starts below them, so none is hidden.
+        .background(TerminalLook.background(skin: current.skin).ignoresSafeArea())
+        .toolbarBackground(.hidden, for: .navigationBar)
         .toolbar {
-            ToolbarItem(placement: .principal) { TerminalTitle(name: title) }
+            ToolbarItem(placement: .principal) {
+                TerminalTitle(
+                    name: title, detail: row.detail,
+                    color: TerminalLook.text(skin: current.skin), prompt: TerminalLook.prompt(skin: current.skin))
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     Button("Rename") { renaming = current }
-                    Button("Close Session", role: .destructive) { confirmClose = true }
+                    Button("Close Session", role: .destructive) { confirmClose = current }
                 } label: {
-                    Image(systemName: "ellipsis.circle")
+                    Image(systemName: "ellipsis.circle").foregroundStyle(.white)
                 }
+                .tint(.white)
                 // Under an overlay the attach is down or the session gone:
                 // the id may no longer name this session.
                 .disabled(overlay != .none)
             }
         }
-        .confirmationDialog(
-            "Close \(title)?", isPresented: $confirmClose, titleVisibility: .visible
-        ) {
-            Button("Close Session", role: .destructive) {
-                closingHere = true
-                Task {
-                    if await store.kill(current, attached: true) {
-                        dismiss()
-                    } else {
-                        closingHere = false
-                        closeError = store.message ?? "Couldn't close the session."
-                    }
+        .confirmCloseSession($confirmClose) { target in
+            closingHere = true
+            Task {
+                if await store.kill(target, attached: true) {
+                    dismiss()
+                } else {
+                    closingHere = false
+                    closeError = store.message ?? "Couldn't close the session."
                 }
             }
-        } message: {
-            Text("This ends the session on the Mac and closes its window there.")
         }
         .alert("Couldn't Close Session", isPresented: Binding(get: { closeError != nil }, set: { if !$0 { closeError = nil } })) {
             Button("OK", role: .cancel) {}
@@ -122,9 +149,14 @@ struct TerminalScreen: View {
         } message: {
             Text(renameError ?? "")
         }
-        .onAppear { surfaceView.showKeyboard() }
-        .onDisappear { store.terminalClosed(io) }
+        .onAppear { surfaceView.showKeyboardWhenSettled() }
+        // Back keeps it warm for a quick return; not once it ended or is
+        // being closed.
+        .onDisappear {
+            store.terminalLeft(session, (surfaceView, io, link), keepWarm: !closingHere && !endHandled)
+        }
         .onReceive(link.events) { handle($0) }
+        .onReceive(link.drawn) { drawn = $0 }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active, let typed = endWhileAway {
                 endWhileAway = nil
@@ -133,6 +165,7 @@ struct TerminalScreen: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .losttySurfaceClosed)) { note in
             if (note.object as AnyObject?) === surfaceView {
+                endHandled = true
                 dismiss()
                 Task { await store.terminalClosedItself(session) }
             }
@@ -185,6 +218,29 @@ struct TerminalScreen: View {
 
 /// The card over a dimmed terminal: why, which session, and (when closed,
 /// or after 30 s of reconnecting) Back to Sessions.
+/// A terminal opening, before tmux has drawn it (or being made on the Mac):
+/// the axolotl waiting, in the terminal's colors, so the empty screen never
+/// shows.
+struct TerminalLoading: View {
+    let skin: SessionSkin?
+    /// For VoiceOver: the screen shows only the axolotl and the spinner.
+    var label = "Opening the terminal"
+
+    var body: some View {
+        ZStack {
+            TerminalLook.background(skin: skin).ignoresSafeArea()
+            VStack(spacing: 14) {
+                Axolotl(pose: .waiting).frame(width: 120, height: 120)
+                // The terminal rows' spinner, in the skin's accent.
+                BufferSpinner(color: TerminalLook.prompt(skin: skin))
+                    .frame(width: 22, height: 22)
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(label)
+    }
+}
+
 private struct TerminalOverlayCard: View {
     let overlay: TerminalOverlay
     let title: String
@@ -219,15 +275,30 @@ private struct TerminalOverlayCard: View {
     }
 }
 
-/// The session's name in the terminal's top bar.
+/// The terminal's top bar: its title, and "> repo/branch" under it, as
+/// its row in the list says them, small enough to fit between the buttons.
 struct TerminalTitle: View {
     var name: String
+    var detail: String?
+    var color: Color = LosttyTheme.textPrimary
+    var prompt: Color = LosttyTheme.accent
+
     var body: some View {
-        Text(name)
-            .font(LosttyFont.mono(.headline, weight: .semibold))
-            .foregroundStyle(LosttyTheme.textPrimary)
-            .lineLimit(1)
-            .truncationMode(.middle)
+        VStack(spacing: 1) {
+            Text(name)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(color)
+            if let detail {
+                HStack(spacing: 4) {
+                    Text(">").fontWeight(.heavy).foregroundStyle(prompt).accessibilityHidden(true)
+                    Text(detail).foregroundStyle(color.opacity(0.65))
+                }
+                .font(LosttyFont.mono(.caption2, size: 11))
+            }
+        }
+        .lineLimit(1)
+        .truncationMode(.middle)
+        .accessibilityElement(children: .combine)
     }
 }
 #endif

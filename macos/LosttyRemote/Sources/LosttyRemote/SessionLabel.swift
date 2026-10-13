@@ -7,10 +7,18 @@ public struct SessionRow: Equatable, Sendable {
         case claude
     }
 
+    /// A session open on the Mac is waiting (Claude finished or asks, and
+    /// you haven't looked), working, ready (seen, used in the last
+    /// `SessionLabel.idleAfter`) or idle. One no Mac window shows only
+    /// says when it was last used.
     public enum Status: Equatable, Sendable {
         case waiting
         case working
-        /// "now", "5m ago", …; empty when tmux didn't say.
+        case ready
+        /// How long since it was used: "2h ago"; empty when tmux didn't say.
+        case idle(String)
+        /// No Mac window shows it: "now", "5m ago", …; empty when tmux
+        /// didn't say.
         case lastUsed(String)
     }
 
@@ -18,54 +26,98 @@ public struct SessionRow: Equatable, Sendable {
     /// A name you typed, else the Claude task, else the project.
     public var title: String
     public var project: String
+    /// The branch checked out in the session's folder, if git says one.
+    public var branch: String?
     public var kind: Kind
+    /// A Mac window shows it.
     public var openOnMac: Bool
     public var status: Status
+    /// The Mac pane's skin, for the phone's row.
+    public var skin: SessionSkin?
+    /// What its Claude is doing, over the state: "Editing Foo.swift"
+    /// while working, "Allow? Run the tests" while it asks permission;
+    /// nil otherwise.
+    public var action: String?
+    /// Claude's working line, while working and the pane showed one.
+    public var spinner: ClaudeSpinner?
 
-    /// "lostty · claude · Open on Mac"
+    /// "lostty/skins", or "lostty" without a branch.
     public var detail: String {
-        ([project, kind.rawValue] + (openOnMac ? ["Open on Mac"] : [])).joined(separator: " · ")
+        branch.map { "\(project)/\($0)" } ?? project
     }
 
-    /// "Waiting", "Working", or when it was last used.
+    /// "Waiting", "Working", "Ready", or when it was last used.
     public var statusText: String {
         switch status {
         case .waiting: "Waiting"
         case .working: "Working"
-        case .lastUsed(let text): text
+        case .ready: "Ready"
+        case .idle(let text), .lastUsed(let text): text
         }
     }
 }
 
-/// Sessions in list order: those open on the Mac, then the rest.
+/// Sessions in list order, under "Active Terminals" (a Mac window shows
+/// them) and "Inactive Terminals" (none does).
 public struct SessionGroups: Equatable, Sendable {
-    public var open: [RemoteSession]
-    public var notOpen: [RemoteSession]
+    public var active: [RemoteSession]
+    public var inactive: [RemoteSession]
 }
 
 /// Turns tmux's view of a session into what a person reads. One
 /// implementation for the phone's list and the Mac's menu bar.
 public enum SessionLabel {
+    /// Not typed into (or opened) for this long: idle, not ready. tmux's
+    /// session_activity moves on input, not on output, so a log scrolling
+    /// or Claude writing doesn't keep a terminal ready.
+    public static let idleAfter: TimeInterval = 30 * 60
+
     public static func row(for session: RemoteSession, now: Date) -> SessionRow {
-        let project = Self.project(path: session.path, name: session.name)
+        // The repo's folder goes with a branch: a worktree's own name would
+        // only repeat it. Without one, the worktree's name says the most.
+        let fromName = Self.project(path: session.path, name: session.name)
+        let project = session.branch == nil ? fromName : session.repo ?? fromName
         let claude = Self.isClaude(session)
         let openOnMac = session.owner != nil
         let typed = session.label?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let task = claude ? Self.cleanTitle(session.title) : ""
         let title = !typed.isEmpty ? typed : (!task.isEmpty ? task : project)
         let status: SessionRow.Status
-        switch openOnMac ? session.claude : nil {
-        case .waiting?: status = .waiting
-        case .working?: status = .working
-        case nil: status = .lastUsed(Self.relative(session.activity, now: now))
+        var action: String?
+        var spinner: ClaudeSpinner?
+        let used = Self.relative(session.activity, now: now)
+        if !openOnMac {
+            status = .lastUsed(used)
+        } else if let claude = session.claude {
+            status = claude == .waiting ? .waiting : .working
+            // The Mac keeps an action through a wait only when Claude asks
+            // permission for it.
+            action = session.action.map { claude == .waiting ? "Allow? \($0)" : $0 }
+            spinner = claude.isWorking ? session.spinner : nil
+        } else if let activity = session.activity, now.timeIntervalSince(activity) < idleAfter {
+            status = .ready
+        } else {
+            status = .idle(used)
         }
         return SessionRow(
-            id: session.id, title: title, project: project, kind: claude ? .claude : .shell,
-            openOnMac: openOnMac, status: status)
+            id: session.id, title: title, project: project, branch: session.branch, kind: claude ? .claude : .shell,
+            openOnMac: openOnMac, status: status, skin: session.skin, action: action,
+            spinner: spinner)
+    }
+
+    /// What closing `session` from the phone does, said before it happens:
+    /// the terminal goes on the phone and the Mac alike.
+    public static func closeWarning(for session: RemoteSession) -> (title: String, message: String) {
+        let name = row(for: session, now: Date()).title
+        let message = session.owner != nil
+            ? "This closes the terminal on both your phone and your Mac, and stops whatever is running in it."
+            : "This closes the terminal on your phone and ends it on your Mac, where it's running without a "
+                + "window. Whatever is running in it stops."
+        return ("Close \u{201C}\(name)\u{201D}?", message)
     }
 
     /// Waiting first, then most recently used; sessions no Mac window shows
-    /// go in their own group after.
+    /// in their own group (never waiting: nothing keeps their Claude state).
     public static func ordered(_ sessions: [RemoteSession]) -> SessionGroups {
         func waiting(_ s: RemoteSession) -> Bool { s.owner != nil && s.claude == .waiting }
         func number(_ s: RemoteSession) -> Int { Int(s.id.dropFirst()) ?? 0 }
@@ -76,7 +128,7 @@ public enum SessionLabel {
             if ta != tb { return ta > tb }
             return number(a) < number(b)
         }
-        return SessionGroups(open: sorted.filter { $0.owner != nil }, notOpen: sorted.filter { $0.owner == nil })
+        return SessionGroups(active: sorted.filter { $0.owner != nil }, inactive: sorted.filter { $0.owner == nil })
     }
 
     /// `.../<repo>/.claude/worktrees/<name>/...` reads `<repo>/<name>`;

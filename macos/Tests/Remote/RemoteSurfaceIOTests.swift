@@ -234,6 +234,29 @@ struct RemoteSurfaceIOTests {
         #expect(statuses.values == [.attached, .lost, .attached, .exited(0)])
     }
 
+    @Test func theFirstOutputShownSaysDrawnOnce() async {
+        let log = SurfaceLog()
+        var calls = RemoteSurfaceIO.SurfaceCalls.overlaid(status: { _ in }, drawn: { log.event("drawn") })
+        calls.feed = log.calls.feed
+        // Output on both attaches: drawn only once, for the phone's loading
+        // axolotl.
+        let attacher = ScriptedAttacher([.success(.lost), .success(.exited(0))])
+        let io = RemoteSurfaceIO(attacher: attacher, surfaceCalls: calls, delays: { _ in }, onMain: { $0() })
+        io.attach(to: fakeSurface)
+        await io.finished()
+        #expect(log.events == ["drawn"])
+    }
+
+    @Test func noOutputIsNotDrawn() async {
+        let log = SurfaceLog()
+        let calls = RemoteSurfaceIO.SurfaceCalls.overlaid(status: { _ in }, drawn: { log.event("drawn") })
+        let attacher = ScriptedAttacher([.success(.exited(0))], output: Data())
+        let io = RemoteSurfaceIO(attacher: attacher, surfaceCalls: calls, delays: { _ in }, onMain: { $0() })
+        io.attach(to: fakeSurface)
+        await io.finished()
+        #expect(log.events.isEmpty)
+    }
+
     @Test func typingCountsAsRecentForThreeSeconds() async throws {
         let clock = TestClock()
         let statuses = StatusLog()

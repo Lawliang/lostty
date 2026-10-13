@@ -92,16 +92,18 @@ final class LosttyStatusItem: NSObject, NSMenuDelegate {
         for phone in phones { menu.addItem(disabled("   " + phone.name)) }
         for session in AttachedPhones.current() { menu.addItem(disabled("   " + StayAwakeMenuText.attached(session))) }
 
-        let sessions = TmuxClient().remoteSessions()
+        let sessions = TmuxClient().sessionListing()
         if !sessions.isEmpty {
             let groups = SessionLabel.ordered(sessions)
             let now = Date()
             menu.addItem(.separator())
-            menu.addItem(disabled("Sessions"))
-            for session in groups.open { menu.addItem(sessionItem(session, now: now)) }
-            if !groups.notOpen.isEmpty {
-                menu.addItem(disabled("Not open on Mac"))
-                for session in groups.notOpen { menu.addItem(sessionItem(session, now: now)) }
+            if !groups.active.isEmpty {
+                menu.addItem(disabled("Active Terminals"))
+                for session in groups.active { menu.addItem(sessionItem(session, now: now)) }
+            }
+            if !groups.inactive.isEmpty {
+                menu.addItem(disabled("Inactive Terminals"))
+                for session in groups.inactive { menu.addItem(sessionItem(session, now: now)) }
             }
         }
 

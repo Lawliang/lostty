@@ -21,12 +21,15 @@ struct SessionSyncTests {
     }
 
     @Test func onlyANewAttachCountsAsSeeing() {
-        #expect(SessionSync.newlyAttached(previous: [], current: ["$1"]) == ["$1"])
+        func c(_ pid: Int32, _ session: String) -> AttachedClient { AttachedClient(pid: pid, session: session) }
+        #expect(SessionSync.newlyAttached(previous: [], current: [c(1, "$1")]) == ["$1"])
         // A phone left attached hides nothing later.
-        #expect(SessionSync.newlyAttached(previous: ["$1"], current: ["$1", "$2"]) == ["$2"])
-        #expect(SessionSync.newlyAttached(previous: ["$1", "$2"], current: ["$1"]).isEmpty)
+        #expect(SessionSync.newlyAttached(previous: [c(1, "$1")], current: [c(1, "$1"), c(2, "$2")]) == ["$2"])
+        #expect(SessionSync.newlyAttached(previous: [c(1, "$1"), c(2, "$2")], current: [c(1, "$1")]).isEmpty)
         // Leaving and attaching again is a new attach.
-        #expect(SessionSync.newlyAttached(previous: ["$2"], current: ["$1"]) == ["$1"])
+        #expect(SessionSync.newlyAttached(previous: [c(2, "$2")], current: [c(3, "$1")]) == ["$1"])
+        // A reconnect next to its dropped connection, still listed, is too.
+        #expect(SessionSync.newlyAttached(previous: [c(1, "$1")], current: [c(1, "$1"), c(4, "$1")]) == ["$1"])
     }
 
     @Test func aPhoneOnOneOfOurSessionsNamesItsPane() {

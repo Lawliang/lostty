@@ -31,6 +31,19 @@ enum AxolotlGeometry {
         side == .left ? UnitPoint(x: 0.20, y: 0.34) : UnitPoint(x: 0.80, y: 0.34)
     }
 
+    /// The waving pose's raised arm (its own right, on the viewer's left):
+    /// from the shoulder up past the cheek to the hand.
+    static let shoulder = CGPoint(x: 37, y: 73)
+    static let hand = CGPoint(x: 12, y: 40)
+    static let armWidth: CGFloat = 7
+    static let handRadius: CGFloat = 5.4
+
+    /// Where the tail meets the body, as a unit point, for wagging it.
+    static let tailAnchor = UnitPoint(x: 0.61, y: 0.8)
+
+    /// The shoulder as a unit point, for swinging the arm.
+    static var shoulderAnchor: UnitPoint { UnitPoint(x: shoulder.x / 100, y: shoulder.y / 100) }
+
     static let skin = Color(losttyHex: 0xF7B2D8)
     static let shade = Color(losttyHex: 0xEC97C6)
     static let ink = Color(losttyHex: 0x3A1530)
@@ -54,7 +67,8 @@ private extension Path {
 
 /// One filled part of the chibi; each part is a single colour.
 struct AxolotlPart: Shape {
-    enum Kind { case tail, body, belly, limbs, gills(AxolotlSide), head, highlight, blush }
+    /// `limbsWaving`: the limbs less the arm the waving pose raises.
+    enum Kind { case tail, body, belly, limbs, limbsWaving, gills(AxolotlSide), head, highlight, blush }
 
     var kind: Kind
 
@@ -74,9 +88,10 @@ struct AxolotlPart: Shape {
             return .unitEllipse(50, 76, 15, 12)
         case .belly:
             return .unitEllipse(50, 79, 8, 6)
-        case .limbs:
+        case .limbs, .limbsWaving:
             var path = Path()
-            let limbs: [(CGFloat, CGFloat, CGFloat, CGFloat)] = [(39, 80, 4.2, 3.2), (61, 80, 4.2, 3.2), (43, 88, 5, 3), (57, 88, 5, 3)]
+            var limbs: [(CGFloat, CGFloat, CGFloat, CGFloat)] = [(39, 80, 4.2, 3.2), (61, 80, 4.2, 3.2), (43, 88, 5, 3), (57, 88, 5, 3)]
+            if case .limbsWaving = kind { limbs.removeFirst() }
             for (x, y, rx, ry) in limbs { path.addPath(.unitEllipse(x, y, rx, ry)) }
             return path
         case .gills(let side):
@@ -106,6 +121,41 @@ struct AxolotlPart: Shape {
     }
 }
 
+/// The waving pose's raised arm, in parts: the arm, the hand, and two
+/// little wave marks beyond the hand.
+struct AxolotlRaisedArm: Shape {
+    enum Part { case arm, hand, marks }
+
+    var part: Part
+
+    func path(in rect: CGRect) -> Path { Self.unitPath(part).fitted(to: rect) }
+
+    static func unitPath(_ part: Part) -> Path {
+        let from = AxolotlGeometry.shoulder
+        let to = AxolotlGeometry.hand
+        let angle = atan2(to.y - from.y, to.x - from.x)
+        switch part {
+        case .arm:
+            let length = hypot(to.x - from.x, to.y - from.y)
+            let width = AxolotlGeometry.armWidth
+            return Path(roundedRect: CGRect(x: 0, y: -width / 2, width: length, height: width), cornerRadius: width / 2)
+                .applying(CGAffineTransform(rotationAngle: angle).concatenating(CGAffineTransform(translationX: from.x, y: from.y)))
+        case .hand:
+            let r = AxolotlGeometry.handRadius
+            return Path(ellipseIn: CGRect(x: to.x - r, y: to.y - r, width: r * 2, height: r * 2))
+        case .marks:
+            var path = Path()
+            for radius: CGFloat in [8, 11] {
+                // Each mark its own stroke: no line joining one to the next.
+                path.move(to: CGPoint(x: to.x + radius * cos(angle - 0.45), y: to.y + radius * sin(angle - 0.45)))
+                path.addArc(center: to, radius: radius, startAngle: .radians(angle - 0.45),
+                            endAngle: .radians(angle + 0.45), clockwise: false)
+            }
+            return path
+        }
+    }
+}
+
 /// The icon's prompt eyes: ">" and a "—" that blinks like a cursor.
 struct AxolotlEyes: Shape {
     var cursorVisible = true
@@ -119,6 +169,18 @@ struct AxolotlEyes: Shape {
             path.move(to: CGPoint(x: 56, y: 43))
             path.addLine(to: CGPoint(x: 68, y: 43))
         }
+        return path.fitted(to: rect)
+    }
+}
+
+/// Eyes shut in sleep: two soft arcs where the prompt eyes would be.
+struct AxolotlSleepingEyes: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: 32, y: 42))
+        path.addQuadCurve(to: CGPoint(x: 43, y: 42), control: CGPoint(x: 37.5, y: 48))
+        path.move(to: CGPoint(x: 56, y: 42))
+        path.addQuadCurve(to: CGPoint(x: 68, y: 42), control: CGPoint(x: 62, y: 48))
         return path.fitted(to: rect)
     }
 }

@@ -23,11 +23,30 @@ enum ClaudeMessage {
     /// already base64-decoded it (Surface.decodeUserVar). Other versions,
     /// unknown states and malformed input decode to nil.
     static func decode(_ value: String) -> ClaudeState? {
+        guard let raw = object(value)?["state"] as? String else { return nil }
+        return ClaudeState(rawValue: raw)
+    }
+
+    /// What a tool call is about to do, from a PreToolUse hook's
+    /// `{"v":1,"state":"tool","action":"Editing Foo.swift"}`; nil for
+    /// anything else.
+    static func action(_ value: String) -> String? {
+        guard let object = object(value), object["state"] as? String == "tool",
+              let action = object["action"] as? String, !action.isEmpty else { return nil }
+        return action
+    }
+
+    /// An `idle` that is Claude asking permission (`"permission":true`) to
+    /// run the last action, rather than finishing its turn.
+    static func isPermission(_ value: String) -> Bool {
+        object(value)?["permission"] as? Bool == true
+    }
+
+    private static func object(_ value: String) -> [String: Any]? {
         guard let data = value.data(using: .utf8),
               let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-              (object["v"] as? Int) == 1,
-              let raw = object["state"] as? String else { return nil }
-        return ClaudeState(rawValue: raw)
+              (object["v"] as? Int) == 1 else { return nil }
+        return object
     }
 }
 #endif

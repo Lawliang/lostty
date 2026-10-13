@@ -68,12 +68,36 @@ extension Ghostty {
         private let remoteIO: RemoteIO?
         /// The sticky Ctrl from the key row, used by the next key.
         var ctrlLatched = false {
-            didSet { keyRow.setCtrl(ctrlLatched) }
+            didSet {
+                if ctrlLatched != oldValue, ctrlLatched { UIImpactFeedbackGenerator(style: .light).impactOccurred() }
+                keyboard.ctrlLatched = ctrlLatched
+            }
         }
         private lazy var keyRow: KeyRowView = {
             let row = KeyRowView()
             row.onKey = { [weak self] key in self?.rowKey(key) }
             return row
+        }()
+        /// Lostty's keyboard (return makes a new line, Send sends), unless the
+        /// key row's globe switched to iOS's for now; the globe switches back,
+        /// and it's back anyway the next time the keyboard opens.
+        private var usesLosttyKeyboard = true
+        private lazy var keyboard: TerminalKeyboardView = {
+            let keyboard = TerminalKeyboardView()
+            keyboard.onText = { [weak self] text in self?.insertText(text) }
+            keyboard.onBackspace = { [weak self] in self?.deleteBackward() }
+            keyboard.onNewline = { [weak self] in self?.sendIgnoringCtrl(MobileInput.newline) }
+            keyboard.onCtrl = { [weak self] in self?.ctrlLatched.toggle() }
+            keyboard.onRowKey = { [weak self] key in self?.rowKey(key) }
+            keyboard.onDismiss = { [weak self] in _ = self?.resignFirstResponder() }
+            keyboard.onSwipe = { [weak self] swipe in
+                guard let self else { return }
+                let ctrl = self.ctrlLatched
+                self.ctrlLatched = false
+                self.send([swipe.press(ctrl: ctrl)])
+            }
+            keyboard.onSend = { [weak self] in self?.sendIgnoringCtrl(MobileInput.enter) }
+            return keyboard
         }()
         /// Scroll distance not yet sent, in points.
         private var pendingScroll: CGFloat = 0
@@ -145,10 +169,46 @@ extension Ghostty {
         // MARK: UIView
 
         override var canBecomeFirstResponder: Bool { true }
-        override var inputAccessoryView: UIView? { keyRow }
+        /// Over iOS's keyboard only: esc and the way back. Lostty's has its
+        /// own keys, and its grabber.
+        override var inputAccessoryView: UIView? { usesLosttyKeyboard ? nil : keyRow }
+        override var inputView: UIView? { usesLosttyKeyboard ? keyboard : nil }
+
+        override func resignFirstResponder() -> Bool {
+            let resigned = super.resignFirstResponder()
+            // Next time, Lostty's keyboard again.
+            if resigned { usesLosttyKeyboard = true }
+            return resigned
+        }
 
         func showKeyboard() {
             _ = becomeFirstResponder()
+        }
+
+        /// Shows the keyboard once a push or pop under way has finished:
+        /// raised mid-push, it rides in with the screen from the side
+        /// rather than up from the bottom.
+        func showKeyboardWhenSettled() {
+            // On appearing, the view may not be in its controller yet.
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                guard let coordinator = self.owningViewController?.transitionCoordinator else {
+                    self.showKeyboard()
+                    return
+                }
+                coordinator.animate(alongsideTransition: nil) { [weak self] context in
+                    if !context.isCancelled { self?.showKeyboard() }
+                }
+            }
+        }
+
+        private var owningViewController: UIViewController? {
+            var responder: UIResponder? = next
+            while let current = responder {
+                if let controller = current as? UIViewController { return controller }
+                responder = current.next
+            }
+            return nil
         }
 
         @objc private func tapped() {
@@ -187,9 +247,17 @@ extension Ghostty {
             }
         }
 
+        /// New line and Send are what they are, Ctrl or not.
+        private func sendIgnoringCtrl(_ press: MobileInput.Press) {
+            ctrlLatched = false
+            send([press])
+        }
+
         private func rowKey(_ key: MobileInput.RowKey) {
-            if key == .ctrl {
-                ctrlLatched.toggle()
+            if key == .keyboard {
+                // Lostty's keyboard ⇄ iOS's (emoji, dictation, languages).
+                usesLosttyKeyboard.toggle()
+                reloadInputViews()
                 return
             }
             let ctrl = ctrlLatched
@@ -216,6 +284,12 @@ extension Ghostty {
         }
 
         override func didMoveToWindow() {
+            // A view backed by a Metal layer starts at 1x: the terminal drew
+            // at one pixel per point and the screen stretched it, blurring
+            // the text. Draw at the screen's own scale.
+            if let window {
+                contentScaleFactor = window.screen.scale
+            }
             sizeDidChange(frame.size)
         }
     }

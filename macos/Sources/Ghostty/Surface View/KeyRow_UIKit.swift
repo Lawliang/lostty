@@ -2,42 +2,32 @@
 import UIKit
 
 extension Ghostty {
-    /// Lostty Mobile: the key row above the keyboard. Ctrl latches for the
-    /// next key and shows it.
+    /// Lostty Mobile: the row over iOS's keyboard (when the space bar's hold
+    /// switched to it): esc, and the globe back to Lostty's keyboard, which
+    /// iOS's has no way to. Lostty's own keyboard has no row above it.
     final class KeyRowView: UIInputView {
+        static let rowHeight: CGFloat = 56
+        static let keyGap: CGFloat = 6
+
         var onKey: ((MobileInput.RowKey) -> Void)?
-        private var ctrlButton: UIButton?
+        private let tap = UIImpactFeedbackGenerator(style: .light)
 
         init() {
-            super.init(frame: CGRect(x: 0, y: 0, width: 0, height: 44), inputViewStyle: .keyboard)
+            super.init(frame: CGRect(x: 0, y: 0, width: 0, height: Self.rowHeight), inputViewStyle: .keyboard)
             allowsSelfSizing = true
-            let stack = UIStackView()
-            stack.axis = .horizontal
-            stack.distribution = .fillEqually
-            stack.spacing = 4
-            stack.translatesAutoresizingMaskIntoConstraints = false
-            for key in MobileInput.RowKey.allCases {
-                let button = UIButton(type: .system)
-                button.setTitle(key.label, for: .normal)
-                button.titleLabel?.font = .monospacedSystemFont(ofSize: 15, weight: .medium)
-                button.titleLabel?.adjustsFontSizeToFitWidth = true
-                button.titleLabel?.minimumScaleFactor = 0.6
-                button.backgroundColor = LosttyUIColor.surfaceRaised
-                button.setTitleColor(LosttyUIColor.textPrimary, for: .normal)
-                button.layer.cornerRadius = 8
-                button.layer.cornerCurve = .continuous
-                button.accessibilityLabel = key.rawValue
-                button.addAction(UIAction { [weak self] _ in self?.onKey?(key) }, for: .touchUpInside)
-                if key == .ctrl { ctrlButton = button }
-                stack.addArrangedSubview(button)
-            }
-            addSubview(stack)
+            let keys = UIStackView(arrangedSubviews: [MobileInput.RowKey.esc, .keyboard].map(button))
+            keys.axis = .horizontal
+            keys.distribution = .fillEqually
+            keys.spacing = Self.keyGap
+            keys.translatesAutoresizingMaskIntoConstraints = false
+            addSubview(keys)
             NSLayoutConstraint.activate([
-                stack.leadingAnchor.constraint(equalTo: layoutMarginsGuide.leadingAnchor),
-                stack.trailingAnchor.constraint(equalTo: layoutMarginsGuide.trailingAnchor),
-                stack.topAnchor.constraint(equalTo: topAnchor, constant: 4),
-                stack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -4),
-                heightAnchor.constraint(equalToConstant: 44),
+                // From the screen's edges: the same as between keys.
+                keys.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Self.keyGap),
+                keys.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Self.keyGap),
+                keys.topAnchor.constraint(equalTo: topAnchor, constant: 6),
+                keys.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -6),
+                heightAnchor.constraint(equalToConstant: Self.rowHeight),
             ])
         }
 
@@ -45,11 +35,34 @@ extension Ghostty {
             fatalError("init(coder:) is not supported")
         }
 
-        /// Shows whether Ctrl is latched; a light tap when it latches.
-        func setCtrl(_ on: Bool) {
-            ctrlButton?.backgroundColor = on ? LosttyUIColor.accent : LosttyUIColor.surfaceRaised
-            ctrlButton?.setTitleColor(on ? .white : LosttyUIColor.textPrimary, for: .normal)
-            if on { UIImpactFeedbackGenerator(style: .light).impactOccurred() }
+        private func button(_ key: MobileInput.RowKey) -> UIButton {
+            var config = UIButton.Configuration.filled()
+            config.cornerStyle = .fixed
+            config.background.cornerRadius = 10
+            config.contentInsets = .zero
+            if let symbol = key.symbol {
+                config.image = UIImage(systemName: symbol)
+                config.preferredSymbolConfigurationForImage = UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold)
+            } else {
+                var title = AttributedString(key.label)
+                title.font = .systemFont(ofSize: 13, weight: .semibold)
+                config.attributedTitle = title
+            }
+            let button = UIButton(configuration: config)
+            button.accessibilityLabel = key.accessibilityName
+            // Darker while pressed.
+            button.configurationUpdateHandler = { button in
+                var config = button.configuration
+                config?.baseForegroundColor = LosttyUIColor.textPrimary
+                config?.baseBackgroundColor = button.isHighlighted
+                    ? LosttyUIColor.textPrimary.withAlphaComponent(0.22) : LosttyUIColor.surfaceRaised
+                button.configuration = config
+            }
+            button.addAction(UIAction { [weak self] _ in
+                self?.tap.impactOccurred(intensity: 0.6)
+                self?.onKey?(key)
+            }, for: .touchUpInside)
+            return button
         }
     }
 }
