@@ -4,7 +4,7 @@ import Foundation
 import ImageIO
 import LosttyRemote
 import Testing
-@testable import Ghostty
+@testable import Lostty
 
 struct TextureStoreTests {
     private func tempDir() -> URL {

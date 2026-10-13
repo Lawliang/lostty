@@ -1,6 +1,6 @@
 import GhosttyKit
 import Testing
-@testable import Ghostty
+@testable import Lostty
 
 private typealias MI = Ghostty.MobileInput
 private typealias P = Ghostty.MobileInput.Press

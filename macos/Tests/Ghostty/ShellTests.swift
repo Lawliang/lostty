@@ -1,5 +1,5 @@
 import Testing
-@testable import Ghostty
+@testable import Lostty
 
 struct ShellTests {
     @Test(arguments: [

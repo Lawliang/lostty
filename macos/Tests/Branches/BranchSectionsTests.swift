@@ -1,7 +1,7 @@
 #if os(macOS)
 import Foundation
 import Testing
-@testable import Ghostty
+@testable import Lostty
 
 struct BranchSectionsTests {
     private let now = Date(timeIntervalSince1970: 1_800_000_000)

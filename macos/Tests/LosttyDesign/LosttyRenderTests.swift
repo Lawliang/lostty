@@ -2,7 +2,7 @@
 import AppKit
 import SwiftUI
 import Testing
-@testable import Ghostty
+@testable import Lostty
 
 /// Writes PNGs of the axolotl when LOSTTY_RENDER_DIR is set (for review and
 /// for the iPhone launch image); does nothing otherwise.

@@ -1,11 +1,38 @@
-//! Pure logic for the `skins` CLI: argument parsing, the GHOSTTY_SKIN wire
+//! Pure logic for the `skins` CLI: argument parsing, the LOSTTY_SKIN wire
 //! format, and reading catalog.json. See docs/superpowers/specs (§6).
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-pub const user_var_name = "GHOSTTY_SKIN";
-pub const surface_env = "GHOSTTY_SKINS_SURFACE";
+/// The user var the CLI sends. The app also accepts the old `GHOSTTY_SKIN`.
+pub const user_var_name = "LOSTTY_SKIN";
+/// The pane's UUID, set by the app on every surface.
+pub const surface_env = "LOSTTY_SKINS_SURFACE";
+/// What older Lostty builds set; shells they started (e.g. long-lived tmux
+/// sessions) still carry it, so it is read when `surface_env` is unset.
+pub const legacy_surface_env = "GHOSTTY_SKINS_SURFACE";
+
+/// Skins' folder under $HOME. The app copies the old folder here on first
+/// launch; until this one exists, both read the old one.
+pub const config_dir = ".config/lostty/skins";
+pub const legacy_config_dir = ".config/ghostty-skins";
+
+/// catalog.json in the skins folder in use: Lostty's if it exists, else the
+/// old `~/.config/ghostty-skins` (same rule as the app's SkinsRuntime).
+pub fn catalogPath(alloc: Allocator, home: []const u8, config_dir_exists: bool) ![]u8 {
+    const dir = if (config_dir_exists) config_dir else legacy_config_dir;
+    return std.fs.path.join(alloc, &.{ home, dir, "state/catalog.json" });
+}
+
+test "skins: catalogPath prefers Lostty's folder" {
+    const alloc = std.testing.allocator;
+    const a = try catalogPath(alloc, "/Users/me", true);
+    defer alloc.free(a);
+    try std.testing.expectEqualStrings("/Users/me/.config/lostty/skins/state/catalog.json", a);
+    const b = try catalogPath(alloc, "/Users/me", false);
+    defer alloc.free(b);
+    try std.testing.expectEqualStrings("/Users/me/.config/ghostty-skins/state/catalog.json", b);
+}
 
 pub const Op = enum { preview, set, cancel, reset };
 
@@ -223,7 +250,7 @@ test "skins: encodeSequence round-trips through base64" {
     const alloc = std.testing.allocator;
     const seq = try encodeSequence(alloc, .{ .op = .reset }, false);
     defer alloc.free(seq);
-    const prefix = "\x1b]1337;SetUserVar=GHOSTTY_SKIN=";
+    const prefix = "\x1b]1337;SetUserVar=LOSTTY_SKIN=";
     try std.testing.expect(std.mem.startsWith(u8, seq, prefix));
     try std.testing.expect(std.mem.endsWith(u8, seq, "\x07"));
     const b64 = seq[prefix.len .. seq.len - 1];
@@ -237,7 +264,7 @@ test "skins: encodeSequence wraps for tmux" {
     const alloc = std.testing.allocator;
     const seq = try encodeSequence(alloc, .{ .op = .cancel }, true);
     defer alloc.free(seq);
-    try std.testing.expect(std.mem.startsWith(u8, seq, "\x1bPtmux;\x1b\x1b]1337;SetUserVar=GHOSTTY_SKIN="));
+    try std.testing.expect(std.mem.startsWith(u8, seq, "\x1bPtmux;\x1b\x1b]1337;SetUserVar=LOSTTY_SKIN="));
     try std.testing.expect(std.mem.endsWith(u8, seq, "\x07\x1b\\"));
 }
 
@@ -330,7 +357,7 @@ test "skins: validateAgainstCatalog rejects an unknown texture" {
 // Real shape written by `SkinManager.writeCatalog()` (`JSONEncoder` with
 // `.prettyPrinted, .sortedKeys`), including a pane entry, so a change to the
 // Swift encoder's output that this parser can't read is caught here rather
-// than only at runtime against `~/.config/ghostty-skins/state/catalog.json`.
+// than only at runtime against `~/.config/lostty/skins/state/catalog.json`.
 test "skins: parseCatalog reads the Swift writer's fixture" {
     const alloc = std.testing.allocator;
     const bytes = @embedFile("testdata/catalog.json");

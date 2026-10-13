@@ -30,4 +30,8 @@ if ghostty_init(UInt(CommandLine.argc), CommandLine.unsafeArgv) != GHOSTTY_SUCCE
 // action is a command starting with a `+`, such as `ghostty +boo`.
 ghostty_cli_try_action()
 
+// The app's bundle identifier changed with the Lostty rename. Bring the old
+// preferences over before AppKit or anything else reads UserDefaults.
+LegacySettingsMigration.runIfNeeded()
+
 _ = NSApplicationMain(CommandLine.argc, CommandLine.unsafeArgv)

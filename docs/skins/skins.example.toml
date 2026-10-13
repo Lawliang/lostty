@@ -1,4 +1,4 @@
-# Copy to ~/.config/ghostty-skins/skins.toml. Saved changes apply immediately.
+# Copy to ~/.config/lostty/skins/skins.toml. Saved changes apply immediately.
 
 [defaults]
 texture_opacity = 0.16   # 0–1; how visible textures are

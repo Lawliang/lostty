@@ -3,15 +3,15 @@ import SwiftUI
 struct AboutView: View {
     @Environment(\.openURL) var openURL
 
-    private let githubURL = URL(string: "https://github.com/Lawliang/ghostty-skins")
+    private let githubURL = URL(string: "https://github.com/Lawliang/lostty")
     private let ghosttyURL = URL(string: "https://ghostty.org")
-    private let docsURL = URL(string: "https://github.com/Lawliang/ghostty-skins/tree/main/docs")
+    private let docsURL = URL(string: "https://github.com/Lawliang/lostty/tree/main/docs")
 
     /// Read the commit from the bundle.
     private var build: String? { Bundle.main.infoDictionary?["CFBundleVersion"] as? String }
     private var commit: String? { Bundle.main.infoDictionary?["GhosttyCommit"] as? String }
     private var version: String? { Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String }
-    private var copyright: String? { Bundle.main.infoDictionary?["NSHumanReadableCopyright"] as? String }
+    private let copyright = "© 2026 Lawrence Liang"
 
     #if os(macOS)
     // This creates a background style similar to the Apple "About My Mac" Window
@@ -44,21 +44,25 @@ struct AboutView: View {
 
     var body: some View {
         VStack(alignment: .center) {
-            CyclingIconView()
+            Image("LosttyIconImage")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(height: 128)
+                .accessibilityLabel("Lostty Application Icon")
 
             VStack(alignment: .center, spacing: 32) {
                 VStack(alignment: .center, spacing: 8) {
                     Text("Lostty")
                         .bold()
                         .font(.title)
-                    Text("Fast, native, feature-rich terminal \nemulator pushing modern features.")
+                    Text("Your terminals, on your Mac\nand in your pocket.")
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
                         .font(.caption)
                         .tint(.secondary)
                         .opacity(0.8)
                     if let url = ghosttyURL {
-                        Link("Built on Ghostty by Mitchell Hashimoto", destination: url)
+                        Link("Built on Ghostty, by Mitchell Hashimoto and contributors", destination: url)
                             .font(.caption)
                             .opacity(0.8)
                     }
@@ -92,15 +96,13 @@ struct AboutView: View {
                     }
                 }
 
-                if let copy = self.copyright {
-                    Text(copy)
-                        .font(.caption)
-                        .textSelection(.enabled)
-                        .tint(.secondary)
-                        .opacity(0.8)
-                        .multilineTextAlignment(.center)
-                        .frame(maxWidth: .infinity)
-                }
+                Text(copyright)
+                    .font(.caption)
+                    .textSelection(.enabled)
+                    .tint(.secondary)
+                    .opacity(0.8)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
             }
             .frame(maxWidth: .infinity)
         }

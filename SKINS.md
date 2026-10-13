@@ -1,7 +1,7 @@
-# Lostty
+# Lostty Skins
 
-A fork of [Ghostty](https://github.com/ghostty-org/ghostty) that gives every
-pane a background color and texture based on the project it is in.
+Lostty gives every pane a background color and texture based on the project
+it is in.
 
 - `cd` into a project and the pane re-skins; leave and it reverts.
 - Split panes are skinned independently.
@@ -14,11 +14,13 @@ pane a background color and texture based on the project it is in.
 
 Requires Xcode (with the Metal Toolchain component:
 `xcodebuild -downloadComponent MetalToolchain`), `brew install zig@0.15 nushell`.
-It reads your normal Ghostty config.
+Its config lives in `~/.config/lostty/config`; an existing
+`~/.config/ghostty/config` is still read.
 
 ## Configure
 
-Copy `docs/skins/skins.example.toml` to `~/.config/ghostty-skins/skins.toml`.
+Copy `docs/skins/skins.example.toml` to `~/.config/lostty/skins/skins.toml`.
+(Lostty still reads an older `~/.config/ghostty-skins/` folder.)
 Errors never break the terminal: the last good config stays active and the
 Skins icon in the sidebar shows a yellow dot.
 
@@ -65,7 +67,7 @@ Click the Skins icon in the sidebar, then go to the Custom tab (the
 terminal `skins` picker has no Custom tab). The "Any color" row lets you pick
 any background color with a native color panel or type a hex code. Click Save
 to add it to your saved swatches. Saved colors live in
-`~/.config/ghostty-skins/state/saved-colors.json` and are shared across all
+`~/.config/lostty/skins/state/saved-colors.json` and are shared across all
 Lostty windows (max 24).
 
 ## Override
@@ -79,15 +81,15 @@ Lostty windows (max 24).
   `skins reset`, `skins list` (shows name, background, texture, rarity), `skins current`.
 
 Overrides last until reset or until the pane closes. zsh and bash get the
-`skins` function from Ghostty's shell integration; other shells can run
-`ghostty +skins`. In tmux, enable `set -g allow-passthrough on`.
+`skins` function from Lostty's shell integration; other shells can run
+`lostty +skins`. In tmux, enable `set -g allow-passthrough on`.
 
 ## Known limitations
 
 - Quick Terminal panes are not skinned.
 - fish, nushell, and other non-zsh/bash shells do not get the `skins`
-  shell function; run `ghostty +skins` directly instead.
-- Launching Lostty from inside another Ghostty pane (e.g. via
+  shell function; run `lostty +skins` directly instead.
+- Launching Lostty from inside another Lostty or Ghostty pane (e.g. via
   `open -a Lostty`, or double-clicking from within a terminal)
   inherits that parent app's `GHOSTTY_RESOURCES_DIR`, which breaks the
   `skins` shell function in every new pane. Launch it from Finder, the
@@ -113,7 +115,7 @@ or `~/.codex/hooks.json` (it saves a `.lostty-backup` of the file first).
 Notifications fade after a few seconds; hovering keeps them. Codex asks you to approve
 Lostty's hooks the first time it sees them. The hooks do nothing outside
 Lostty. Manage them from **Lostty → Claude Integration…**, or run
-`ghostty +claude-hooks install`, `remove`, `status` or `preview`.
+`lostty +claude-hooks install`, `remove`, `status` or `preview`.
 
 Custom skins pick a trace in `skins.toml`:
 
@@ -155,7 +157,7 @@ until you click it again, across restarts. Sounds your own Claude hooks
 play (e.g. `afplay`) are not Lostty's and keep playing.
 
 The numbers come from Claude Code's status line: Connect (or
-`ghostty +claude-hooks install`) sets `statusLine` in
+`lostty +claude-hooks install`) sets `statusLine` in
 `~/.claude/settings.json` to Lostty's `+claude-usage`, which prints
 nothing. If you already have your own status line, Lostty leaves it alone
 and the bar stays empty. Plan limits show for Pro and Max plans after

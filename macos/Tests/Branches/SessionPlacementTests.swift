@@ -1,7 +1,7 @@
 #if os(macOS)
 import Foundation
 import Testing
-@testable import Ghostty
+@testable import Lostty
 
 struct SessionPlacementTests {
     private func session(_ pwd: String, _ title: String = "pane") -> BranchSession {

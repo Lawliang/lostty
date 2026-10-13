@@ -1,6 +1,6 @@
 import SwiftUI
 import Testing
-@testable import Ghostty
+@testable import Lostty
 
 struct CountdownRingTests {
     let rect = CGRect(x: 0, y: 0, width: 280, height: 280)

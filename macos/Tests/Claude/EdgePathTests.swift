@@ -1,7 +1,7 @@
 #if os(macOS)
 import SwiftUI
 import Testing
-@testable import Ghostty
+@testable import Lostty
 
 struct EdgePathTests {
     // Along the top (100pt) then down the right side (50pt): length 150.

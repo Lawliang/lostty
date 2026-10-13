@@ -82,10 +82,10 @@ final class SkinManager: ObservableObject {
     }
 
     func handleUserVar(_ id: UUID, name: String, value: String) {
-        guard name == SkinsConstants.userVarName else { return }
+        guard name == SkinsConstants.userVarName || name == SkinsConstants.legacyUserVarName else { return }
         guard let request = SkinRequest.decode(value) else {
             // Spec §7: invalid CLI messages are ignored, logged at debug level.
-            Ghostty.logger.debug("skins: rejected malformed \(SkinsConstants.userVarName) payload")
+            Ghostty.logger.debug("skins: rejected malformed \(name) payload")
             return
         }
         handle(request, for: id)

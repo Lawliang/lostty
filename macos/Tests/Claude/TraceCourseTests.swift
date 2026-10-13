@@ -1,7 +1,7 @@
 #if os(macOS)
 import SwiftUI
 import Testing
-@testable import Ghostty
+@testable import Lostty
 
 struct TraceCourseTests {
     // 100x50 pane at the origin.

@@ -19,7 +19,7 @@ pub const tmux_candidates = [_][]const u8{ "/opt/homebrew/bin/tmux", "/usr/local
 pub const Env = struct {
     surface: ?[]const u8 = null, // LOSTTY_SURFACE
     bin: ?[]const u8 = null, // LOSTTY_BIN
-    skins_surface: ?[]const u8 = null, // GHOSTTY_SKINS_SURFACE
+    skins_surface: ?[]const u8 = null, // LOSTTY_SKINS_SURFACE (or older GHOSTTY_SKINS_SURFACE)
     app_pid: ?[]const u8 = null, // LOSTTY_APP_PID
     shell: ?[]const u8 = null, // SHELL
     resources_dir: ?[]const u8 = null, // GHOSTTY_RESOURCES_DIR
@@ -32,7 +32,7 @@ pub const Env = struct {
         return .{
             .surface = get("LOSTTY_SURFACE"),
             .bin = get("LOSTTY_BIN"),
-            .skins_surface = get("GHOSTTY_SKINS_SURFACE"),
+            .skins_surface = get("LOSTTY_SKINS_SURFACE") orelse get("GHOSTTY_SKINS_SURFACE"),
             .app_pid = get("LOSTTY_APP_PID"),
             .shell = get("SHELL"),
             .resources_dir = get("GHOSTTY_RESOURCES_DIR"),
@@ -128,7 +128,7 @@ pub fn newSessionArgv(alloc: Allocator, s: NewSession) ![]const []const u8 {
     try appendEnv(alloc, &argv, "LOSTTY_SURFACE", s.surface);
     try appendEnv(alloc, &argv, "GHOSTTY_RESOURCES_DIR", s.resources_dir);
     if (s.env.bin) |v| try appendEnv(alloc, &argv, "LOSTTY_BIN", v);
-    if (s.env.skins_surface) |v| try appendEnv(alloc, &argv, "GHOSTTY_SKINS_SURFACE", v);
+    if (s.env.skins_surface) |v| try appendEnv(alloc, &argv, "LOSTTY_SKINS_SURFACE", v);
     if (s.env.app_pid) |v| try appendEnv(alloc, &argv, "LOSTTY_APP_PID", v);
     if (s.env.shell_features) |v| try appendEnv(alloc, &argv, "GHOSTTY_SHELL_FEATURES", v);
     const shell = s.env.shellPath();
@@ -287,7 +287,7 @@ test "lostty tmux session: newSessionArgv for zsh" {
     const argv = try newSessionArgv(a, .{
         .tmux = "/opt/homebrew/bin/tmux",
         .env = .{
-            .bin = "/Apps/Lostty.app/Contents/MacOS/ghostty",
+            .bin = "/Apps/Lostty.app/Contents/MacOS/lostty",
             .skins_surface = test_surface,
             .app_pid = "4242",
             .shell = "/bin/zsh",
@@ -312,8 +312,8 @@ test "lostty tmux session: newSessionArgv for zsh" {
     try t.expect(hasPair(argv, "-y", "40"));
     try t.expect(hasPair(argv, "-e", "LOSTTY_TMUX=1"));
     try t.expect(hasPair(argv, "-e", "LOSTTY_SURFACE=" ++ test_surface));
-    try t.expect(hasPair(argv, "-e", "GHOSTTY_SKINS_SURFACE=" ++ test_surface));
-    try t.expect(hasPair(argv, "-e", "LOSTTY_BIN=/Apps/Lostty.app/Contents/MacOS/ghostty"));
+    try t.expect(hasPair(argv, "-e", "LOSTTY_SKINS_SURFACE=" ++ test_surface));
+    try t.expect(hasPair(argv, "-e", "LOSTTY_BIN=/Apps/Lostty.app/Contents/MacOS/lostty"));
     try t.expect(hasPair(argv, "-e", "LOSTTY_APP_PID=4242"));
     try t.expect(hasPair(argv, "-e", "GHOSTTY_RESOURCES_DIR=/R"));
     try t.expect(hasPair(argv, "-e", "GHOSTTY_SHELL_FEATURES=cursor,title"));
@@ -411,6 +411,8 @@ test "lostty tmux session: notices and OSC 7" {
 
 test "lostty tmux session: isLauncherCommand" {
     const t = std.testing;
+    try t.expect(isLauncherCommand("'/Applications/Lostty.app/Contents/MacOS/lostty' +tmux-launch"));
+    // Sessions launched before the executable was renamed.
     try t.expect(isLauncherCommand("'/Applications/Lostty.app/Contents/MacOS/ghostty' +tmux-launch"));
     try t.expect(isLauncherCommand("'/x/ghostty' +tmux-launch '--attach=$3'"));
     try t.expect(!isLauncherCommand("vim foo"));

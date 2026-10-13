@@ -1,6 +1,6 @@
 #if os(macOS)
 import Foundation
-@testable import Ghostty
+@testable import Lostty
 
 enum TempRepoError: Error {
     case failed(String)

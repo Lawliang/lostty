@@ -1,7 +1,7 @@
 #if os(macOS)
 import Foundation
 import Testing
-@testable import Ghostty
+@testable import Lostty
 
 @MainActor
 struct ClaudeRuntimeTests {
@@ -82,7 +82,7 @@ struct ClaudeRuntimeTests {
 
     @Test func otherUserVarsAndGarbageAreIgnored() {
         let runtime = makeRuntime()
-        runtime.userVarChanged(pane, name: "GHOSTTY_SKIN", value: payload("busy"))
+        runtime.userVarChanged(pane, name: "LOSTTY_SKIN", value: payload("busy"))
         runtime.userVarChanged(pane, name: "LOSTTY_CLAUDE", value: "garbage")
         #expect(runtime.phase(pane) == .off)
         #expect(runtime.phases.isEmpty)

@@ -16,9 +16,19 @@ struct AppNameTests {
 
     @Test func menuBarNameIsLostty() throws {
         // CFBundleName feeds the menu bar's bold app name. Xcode generates it
-        // from PRODUCT_NAME (Ghostty), so a build phase rewrites it.
-        let pbxproj = try Self.read("macos/Ghostty.xcodeproj/project.pbxproj")
-        #expect(pbxproj.contains("Set :CFBundleName Lostty"))
+        // from PRODUCT_NAME, which follows the Mac target's name.
+        let pbxproj = try Self.read("macos/Lostty.xcodeproj/project.pbxproj")
+        #expect(pbxproj.contains("path = Lostty.app;"))
+        #expect(!pbxproj.contains("Ghostty.app"))
+    }
+
+    @Test func oldExecutablePathKeepsWorking() throws {
+        // tmux sessions and Claude Code hooks from before the rename run
+        // Contents/MacOS/ghostty; a build phase links it to the new binary.
+        let pbxproj = try Self.read("macos/Lostty.xcodeproj/project.pbxproj")
+        #expect(pbxproj.contains("EXECUTABLE_NAME = lostty;"))
+        #expect(!pbxproj.contains("EXECUTABLE_NAME = ghostty;"))
+        #expect(pbxproj.contains(#"ln -sfh \"${EXECUTABLE_NAME}\" \"${TARGET_BUILD_DIR}/${EXECUTABLE_FOLDER_PATH}/ghostty\""#))
     }
 
     @Test func hostAppBundleIsNamedLostty() {

@@ -1,7 +1,7 @@
 #if os(macOS)
 import Foundation
 import Testing
-@testable import Ghostty
+@testable import Lostty
 
 struct BranchSummarizerTests {
     /// An executable stand-in for `claude` that runs `body` after reading stdin.

@@ -8,7 +8,7 @@ mkdir -p macos/build
 # The scheme turns code coverage on for every build. An instrumented Lostty
 # drops a default.profraw wherever its Claude hooks run, so switch it off.
 env -i HOME="$HOME" PATH=/usr/bin:/bin:/usr/sbin:/sbin \
-  xcodebuild -project macos/Ghostty.xcodeproj -scheme Ghostty -configuration ReleaseLocal \
+  xcodebuild -project macos/Lostty.xcodeproj -scheme Lostty -configuration ReleaseLocal \
   SYMROOT="$PWD/macos/build" ENABLE_CODE_COVERAGE=NO CLANG_COVERAGE_MAPPING=NO \
   build > macos/build/last-install.log 2>&1 || true
 grep -q "\*\* BUILD SUCCEEDED \*\*" macos/build/last-install.log || {
@@ -16,7 +16,7 @@ grep -q "\*\* BUILD SUCCEEDED \*\*" macos/build/last-install.log || {
   echo "Build failed; see macos/build/last-install.log" >&2
   exit 1
 }
-APP="macos/build/ReleaseLocal/Ghostty.app"
+APP="macos/build/ReleaseLocal/Lostty.app"
 if [ -e "$APP" ] && codesign -dv "$APP" >/dev/null 2>&1; then
   echo "$APP is already signed by the build; not re-signing."
 else
@@ -25,14 +25,4 @@ else
 fi
 rm -rf "/Applications/Lostty.app" "/Applications/Ghostty Skins.app"
 cp -R "$APP" "/Applications/Lostty.app"
-# Stamp the hologram-pink Blueprint icon so Finder/Spotlight show it before
-# the first launch (the Dock tile plugin keeps it in sync afterwards).
-ICON="$PWD/macos/Assets.xcassets/AppIconImage.imageset/macOS-AppIcon-1024px.png"
-swift - "$ICON" <<'SWIFT' || echo "warning: could not set the Finder icon" >&2
-import AppKit
-let args = CommandLine.arguments
-if let image = NSImage(contentsOfFile: args[1]) {
-    NSWorkspace.shared.setIcon(image, forFile: "/Applications/Lostty.app")
-}
-SWIFT
 echo "Installed /Applications/Lostty.app"

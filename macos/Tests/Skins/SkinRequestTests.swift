@@ -1,6 +1,6 @@
 #if os(macOS)
 import Testing
-@testable import Ghostty
+@testable import Lostty
 
 struct SkinRequestTests {
     @Test func decodesValidRequests() {

@@ -1,4 +1,4 @@
-# Upgrading Lostty (Ghostty Skins) to a new Ghostty release
+# Upgrading Lostty to a new Ghostty release
 
 Lostty is `skins` = upstream tag + our commits. To move to a new tag:
 
@@ -14,9 +14,9 @@ Lostty is `skins` = upstream tag + our commits. To move to a new tag:
 
 ## Upstream files we hook (keep these hunks when resolving conflicts)
 
-- `macos/Ghostty.xcodeproj/project.pbxproj` — app target `PRODUCT_BUNDLE_IDENTIFIER` and `INFOPLIST_KEY_CFBundleDisplayName` (3 build configurations).
-- `images/Ghostty.icon/` (Screen.png, Ghostty.png, Inner Bevel 6px.png, and icon.json's frame gradient + GhosttyBlur fill) and `macos/Assets.xcassets/AppIconImage.imageset/*.png` — Lostty's neon-pink icon. On conflict keep ours. If upstream redraws the icon, rerun `python3 docs/skins/recolor-icon.py screen|bevel|ghost <upstream layer> <dst>`, reapply the icon.json colors, build, and re-export the fallback PNGs from the built app's icon.
-- `macos/Sources/Features/Custom App Icon/DockTilePlugin.swift` — release builds on macOS 26 use the bundled `AppIconImage` (hologram-pink Blueprint) and stamp it on the bundle instead of the composed glass icon. `macos/Assets.xcassets/AppIconImage.imageset/*.png` hold that artwork (`python3 docs/skins/recolor-icon.py blueprint <Blueprint 1024px> <dst>`).
+- `macos/Lostty.xcodeproj/project.pbxproj` (upstream's `macos/Ghostty.xcodeproj`, renamed) — the `Lostty`, `Lostty-iOS` and `LosttyTests` targets and schemes, the `lostty` executable name, app target `PRODUCT_BUNDLE_IDENTIFIER` and `INFOPLIST_KEY_CFBundleDisplayName` (3 build configurations). Git follows the rename; take upstream's new files and settings, keep our names.
+- Icons: Lostty's own axolotl icons are `macos/Assets.xcassets/LosttyMacIcon.appiconset`, `LosttyIconImage.imageset` and `LosttyPhoneIcon.appiconset`. Upstream's icon art (`AppIconImage.imageset`, `Alternate Icons/`, `Custom Icon/`) and its custom-icon code were removed, and the project no longer uses `images/Ghostty.icon`. If upstream changes those, keep them removed.
+- `macos/Sources/Features/Custom App Icon/DockTilePlugin.swift`: ours only clears a custom icon an older build stamped on the app. The app ignores the `macos-icon` options. On conflict keep ours.
 - `src/terminal/osc.zig` — `set_user_var` Command field, `Key` list entry (last), reset-switch entry.
 - `src/terminal/osc/parsers/iterm2.zig` — `.SetUserVar` branch (removed from unimplemented list) + tests.
 - `src/terminal/stream.zig` — `set_user_var` Action + Key entry (last) + `SetUserVar` struct + `oscDispatch` arm.
@@ -27,7 +27,7 @@ Lostty is `skins` = upstream tag + our commits. To move to a new tag:
 - `src/apprt/action.zig` + `include/ghostty.h` — `set_user_var` action (last in enum/union), `ghostty_action_set_user_var_s`.
 - `src/apprt/gtk/class/application.zig` — `.set_user_var` unimplemented.
 - `macos/Sources/Ghostty/Ghostty.App.swift` — `pwdChanged` calls `SkinsRuntime.shared.pwdChanged`; `GHOSTTY_ACTION_SET_USER_VAR` case + `userVarChanged`; app-target `configChange` schedules `ghosttyConfigReloaded()`; surface-target `configReload` schedules `SkinsRuntime.shared.surfaceConfigReloaded(surfaceView)` after `ghostty.reloadConfig(surface:soft:)` (covers the soft reload macOS sends on a light/dark appearance change).
-- `macos/Sources/Ghostty/Surface View/SurfaceView_AppKit.swift` — `GHOSTTY_SKINS_SURFACE` env var on surface creation.
+- `macos/Sources/Ghostty/Surface View/SurfaceView_AppKit.swift` — `LOSTTY_SKINS_SURFACE` env var on surface creation.
 - `macos/Sources/Features/Terminal/Window Styles/TerminalWindow.swift` — `skinChipModel`, `skinAccessory`, chip mount in `awakeFromNib`.
 - `macos/Sources/Features/Terminal/BaseTerminalController.swift` — `focusedSurface.didSet` updates the chip.
 - `src/cli/ghostty.zig` — `skins` import, `Action.skins`, `runMain` and `options` entries, trailing `test { _ = skins; }` block.

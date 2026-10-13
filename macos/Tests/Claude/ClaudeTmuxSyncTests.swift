@@ -2,7 +2,7 @@
 import Foundation
 import LosttyRemote
 import Testing
-@testable import Ghostty
+@testable import Lostty
 
 struct ClaudeTmuxSyncTests {
     let a = UUID(uuidString: "ABCDEF01-0000-4000-8000-000000000001")!

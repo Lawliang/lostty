@@ -1,6 +1,6 @@
 #if os(macOS) && DEBUG
 import Testing
-@testable import Ghostty
+@testable import Lostty
 
 /// A Design Gallery store is frozen: it never probes the Mac.
 @MainActor

@@ -105,7 +105,7 @@ class BaseTerminalController: NSWindowController,
     private var titleOverrideFromLabel = false
 
     /// The last computed title from the focused surface (without the override).
-    private var lastComputedTitle: String = "👻"
+    private var lastComputedTitle: String = "Lostty"
 
     /// The time that undo/redo operations that contain running ptys are valid for.
     var undoExpiration: Duration {
@@ -856,7 +856,7 @@ class BaseTerminalController: NSWindowController,
                 .store(in: &focusedSurfaceCancellables)
         } else {
             // There is no surface to listen to titles for.
-            titleDidChange(to: "👻")
+            titleDidChange(to: "Lostty")
         }
 
         // Lostty Mobile: the newly focused pane's session label, if any.
@@ -1580,7 +1580,7 @@ extension BaseTerminalController {
 
 extension Notification.Name {
     /// Terminal window aggregate bell state changed.
-    static let terminalWindowBellDidChangeNotification = Notification.Name("com.mitchellh.ghostty.terminalWindowBellDidChange")
+    static let terminalWindowBellDidChangeNotification = Notification.Name("com.lawliang.lostty.terminalWindowBellDidChange")
     static let terminalWindowHasBellKey = terminalWindowBellDidChangeNotification.rawValue + ".hasBell"
     /// Lostty: a terminal window's panes were added, removed or rearranged.
     static let losttySurfaceTreeDidChange = Notification.Name("LosttySurfaceTreeDidChange")

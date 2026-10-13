@@ -2,7 +2,7 @@
 import Foundation
 import LosttyRemote
 import Testing
-@testable import Ghostty
+@testable import Lostty
 
 struct StayAwakeMenuTextTests {
     let now = Date(timeIntervalSince1970: 1_000_000)

@@ -2,7 +2,7 @@
 import Combine
 import Foundation
 import Testing
-@testable import Ghostty
+@testable import Lostty
 
 /// Scripted inputs for a BranchesModel.
 @MainActor

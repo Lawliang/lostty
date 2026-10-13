@@ -7,8 +7,8 @@
 # Usage: macos/lostty-tmux-smoke.sh   (after building the Debug app)
 set -u
 cd "$(dirname "$0")/.."
-APP="$PWD/macos/build/Debug/Ghostty.app/Contents"
-BIN="$APP/MacOS/ghostty"
+APP="$PWD/macos/build/Debug/Lostty.app/Contents"
+BIN="$APP/MacOS/lostty"
 RES="$APP/Resources/ghostty"
 TMUX_BIN=$(command -v tmux || echo /opt/homebrew/bin/tmux)
 SURFACE="ABCDEF01-0000-4000-8000-0000000000AA"

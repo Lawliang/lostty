@@ -3,9 +3,12 @@ import Foundation
 
 enum SkinsConstants {
     /// Environment variable holding the pane's UUID (set on every new surface).
-    static let surfaceEnvKey = "GHOSTTY_SKINS_SURFACE"
+    /// Older builds set `GHOSTTY_SKINS_SURFACE`; the `skins` CLI still reads it.
+    static let surfaceEnvKey = "LOSTTY_SKINS_SURFACE"
     /// OSC 1337 SetUserVar name carrying skin requests.
-    static let userVarName = "GHOSTTY_SKIN"
+    static let userVarName = "LOSTTY_SKIN"
+    /// What an older `skins` CLI sends; still accepted.
+    static let legacyUserVarName = "GHOSTTY_SKIN"
     static let maxPayloadBytes = 4096
 }
 

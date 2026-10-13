@@ -69,18 +69,48 @@ final class GhosttySkinApplier {
     }
 }
 
+/// Where skins.toml and skins' state live: `~/.config/lostty/skins`.
+/// Older builds used `~/.config/ghostty-skins`; the first time the new
+/// folder is missing, the old one is copied there (copied, not moved, so an
+/// older build still finds its files). If the copy fails, the old folder is
+/// used as is. The `skins` CLI (src/cli/skins) follows the same rule: the new
+/// folder if it exists, else the old one.
+enum SkinsLocation {
+    static let path = ".config/lostty/skins"
+    static let legacyPath = ".config/ghostty-skins"
+
+    static func configDir(home: URL, fileManager: FileManager = .default) -> URL {
+        let dir = home.appendingPathComponent(path)
+        let legacy = home.appendingPathComponent(legacyPath)
+        guard !fileManager.fileExists(atPath: dir.path),
+              fileManager.fileExists(atPath: legacy.path) else { return dir }
+        do {
+            try fileManager.createDirectory(
+                at: dir.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try fileManager.copyItem(at: legacy, to: dir)
+            return dir
+        } catch {
+            Ghostty.logger.warning("skins: could not copy \(legacy.path) to \(dir.path): \(String(describing: error))")
+            // Leave no half-copied folder: the CLI would pick it over the old one.
+            try? fileManager.removeItem(at: dir)
+            return legacy
+        }
+    }
+}
+
 /// App-wide skins wiring: config store, manager, applier, preview expiry.
 @MainActor
 final class SkinsRuntime {
     static let shared = SkinsRuntime()
 
-    static var configDir: URL {
-        URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".config/ghostty-skins")
-    }
+    /// `~/.config/lostty/skins` (see `SkinsLocation`), resolved once.
+    static let configDir: URL = SkinsLocation.configDir(home: URL(fileURLWithPath: NSHomeDirectory()))
 
+    /// `~/Library/Caches/Lostty/skins`: textures and overlays, all
+    /// regenerated on demand (older builds used `Caches/ghostty-skins`).
     static var cacheDir: URL {
         FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("ghostty-skins")
+            .appendingPathComponent("Lostty/skins")
     }
 
     let manager: SkinManager

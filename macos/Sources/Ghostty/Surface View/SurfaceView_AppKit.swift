@@ -347,7 +347,7 @@ extension Ghostty {
             // Set a timer to show the ghost emoji after 500ms if no title is set
             titleFallbackTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: false) { [weak self] _ in
                 if let self = self, self.title.isEmpty {
-                    self.title = "👻"
+                    self.title = "Lostty"
                 }
             }
 
@@ -669,7 +669,7 @@ extension Ghostty {
                     // Empty means that user wants the title to be set automatically
                     // We also need to reload the config for the "title" property to be
                     // used again by this tab.
-                    let prevTitle = titleFromTerminal ?? "👻"
+                    let prevTitle = titleFromTerminal ?? "Lostty"
                     titleFromTerminal = nil
                     setTitle(prevTitle)
                 } else {

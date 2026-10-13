@@ -1,7 +1,7 @@
 #if os(macOS)
 import LosttyRemote
 import Testing
-@testable import Ghostty
+@testable import Lostty
 
 struct AutoSkinTests {
     @Test func deterministicAndCaseInsensitive() {

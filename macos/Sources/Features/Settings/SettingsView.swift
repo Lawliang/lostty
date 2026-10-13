@@ -19,7 +19,7 @@ struct SettingsView: View {
             }
             .formStyle(.grouped)
 
-            Text("Terminal settings live in $HOME/.config/ghostty/config.ghostty "
+            Text("Terminal settings live in ~/.config/lostty/config "
                  + "(Lostty → Preferences… opens it).")
                 .font(.caption)
                 .foregroundStyle(.secondary)

@@ -1,7 +1,7 @@
 #if os(macOS)
 import Foundation
 import Testing
-@testable import Ghostty
+@testable import Lostty
 
 /// The core base64-decodes SetUserVar values (Surface.decodeUserVar), so
 /// the app receives the JSON text itself.

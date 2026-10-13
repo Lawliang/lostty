@@ -3991,7 +3991,18 @@ fn writeConfigTemplate(path: []const u8) !void {
 ///
 /// The legacy `config` file (without extension) is first loaded,
 /// then `config.ghostty`.
+///
+/// Lostty: if any Lostty config file exists (see `file_load.zig`), only
+/// those load. The Ghostty files above are the fallback, and a new
+/// template goes to Lostty's XDG path.
 pub fn loadDefaultFiles(self: *Config, alloc: Allocator) !void {
+    {
+        var arena: ArenaAllocator = .init(alloc);
+        defer arena.deinit();
+        const lostty_paths = try file_load.losttyPaths(arena.allocator());
+        if (self.loadLosttyFiles(alloc, lostty_paths)) return;
+    }
+
     // Load XDG first
     const legacy_xdg_path = try file_load.legacyDefaultXdgPath(alloc);
     defer alloc.free(legacy_xdg_path);
@@ -4048,18 +4059,67 @@ pub fn loadDefaultFiles(self: *Config, alloc: Allocator) !void {
         };
 
         // If both files are not found, then we create a template file.
-        // For macOS, we only create the template file in the app support
+        // Lostty: at Lostty's XDG path (upstream: Ghostty's app support).
         if (!app_support_loaded and !xdg_loaded) {
-            writeConfigTemplate(app_support_path) catch |err| {
-                log.warn("error creating template config file err={}", .{err});
-            };
+            writeLosttyConfigTemplate(alloc);
         }
     } else {
-        if (!xdg_loaded) {
-            writeConfigTemplate(xdg_path) catch |err| {
-                log.warn("error creating template config file err={}", .{err});
-            };
-        }
+        if (!xdg_loaded) writeLosttyConfigTemplate(alloc); // Lostty: Lostty's XDG path
+    }
+}
+
+/// Lostty: loads Lostty's config files in order. Returns false, loading
+/// nothing, if none of them exists (the caller then falls back to Ghostty's).
+fn loadLosttyFiles(self: *Config, alloc: Allocator, paths: []const []const u8) bool {
+    if (!file_load.anyExists(paths)) return false;
+    for (paths) |path| _ = self.loadOptionalFile(alloc, path);
+    return true;
+}
+
+/// Lostty: a new user's template config goes to Lostty's XDG path.
+fn writeLosttyConfigTemplate(alloc: Allocator) void {
+    const path = file_load.losttyXdgPath(alloc) catch |err| {
+        log.warn("error creating template config file err={}", .{err});
+        return;
+    };
+    defer alloc.free(path);
+    writeConfigTemplate(path) catch |err| {
+        log.warn("error creating template config file err={}", .{err});
+    };
+}
+
+test "lostty: Lostty's config files load only when one exists" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+    var td = testing.tmpDir(.{});
+    defer td.cleanup();
+    var buf: [std.fs.max_path_bytes]u8 = undefined;
+    const root = try td.dir.realpath(".", &buf);
+
+    const xdg = try std.fs.path.join(alloc, &.{ root, "xdg-config" });
+    defer alloc.free(xdg);
+    const app = try std.fs.path.join(alloc, &.{ root, "app-support-config" });
+    defer alloc.free(app);
+    const paths: []const []const u8 = &.{ xdg, app };
+
+    // None exists: nothing loads, so the caller falls back to Ghostty's.
+    {
+        var cfg = try Config.default(alloc);
+        defer cfg.deinit();
+        try testing.expect(!cfg.loadLosttyFiles(alloc, paths));
+        try testing.expectEqual(@as(u32, 250), cfg.@"abnormal-command-exit-runtime");
+    }
+
+    // Both exist: both load in order, the later one winning.
+    try td.dir.writeFile(.{ .sub_path = "xdg-config", .data = "abnormal-command-exit-runtime = 1000\nscrollback-limit = 7\n" });
+    try td.dir.writeFile(.{ .sub_path = "app-support-config", .data = "abnormal-command-exit-runtime = 2000\n" });
+    {
+        var cfg = try Config.default(alloc);
+        defer cfg.deinit();
+        try testing.expect(cfg.loadLosttyFiles(alloc, paths));
+        try cfg.finalize();
+        try testing.expectEqual(@as(u32, 2000), cfg.@"abnormal-command-exit-runtime");
+        try testing.expectEqual(@as(usize, 7), cfg.@"scrollback-limit");
     }
 }
 

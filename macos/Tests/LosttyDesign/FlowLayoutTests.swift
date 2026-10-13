@@ -1,6 +1,6 @@
 import CoreGraphics
 import Testing
-@testable import Ghostty
+@testable import Lostty
 
 struct FlowLayoutTests {
     let button = CGSize(width: 100, height: 28)

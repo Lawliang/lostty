@@ -1,13 +1,13 @@
 #if os(macOS)
 import Testing
-@testable import Ghostty
+@testable import Lostty
 
 struct SessionLaunchTests {
-    let bin = "/Applications/Lostty.app/Contents/MacOS/ghostty"
+    let bin = "/Applications/Lostty.app/Contents/MacOS/lostty"
 
     @Test func wrapsAPaneWithoutACommand() {
         #expect(SessionLaunch.command(existing: nil, binary: bin, disabled: false)
-            == "'/Applications/Lostty.app/Contents/MacOS/ghostty' +tmux-launch")
+            == "'/Applications/Lostty.app/Contents/MacOS/lostty' +tmux-launch")
         #expect(SessionLaunch.command(existing: "", binary: bin, disabled: false) != nil)
     }
 

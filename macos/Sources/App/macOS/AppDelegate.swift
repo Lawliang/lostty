@@ -151,9 +151,6 @@ class AppDelegate: NSObject,
     /// Signals
     private var signals: [DispatchSourceSignal] = []
 
-    /// The custom app icon image that is currently in use.
-    @Published private(set) var appIcon: NSImage?
-
     /// Ghostty menu items indexed by their normalized shortcut. This avoids traversing
     /// the entire menu tree on every key equivalent event.
     ///
@@ -895,7 +892,7 @@ class AppDelegate: NSObject,
                 autoUpdate == .download
             /*
              To test `auto-update` easily, uncomment the line below and
-             delete `SUEnableAutomaticChecks` in Ghostty-Info.plist.
+             delete `SUEnableAutomaticChecks` in Lostty-Info.plist.
 
              Note: When `auto-update = download`, you may need to
              `Clean Build Folder` if a background install has already begun.
@@ -951,24 +948,11 @@ class AppDelegate: NSObject,
         } else {
             GlobalEventTap.shared.disable()
         }
-
-        updateAppIcon(from: config)
     }
 
     /// Sync the appearance of our app with the theme specified in the config.
     private func syncAppearance(config: Ghostty.Config) {
         NSApplication.shared.appearance = .init(ghosttyConfig: config)
-    }
-
-    private func updateAppIcon(from config: Ghostty.Config) {
-        // Since this is called after `DockTilePlugin` has been running,
-        // clean it up here to trigger a correct update of the current config.
-        UserDefaults.ghostty.removeObject(forKey: "CustomGhosttyIcon")
-        DispatchQueue.global().async {
-            UserDefaults.ghostty.appIcon = AppIcon(config: config)
-            DistributedNotificationCenter.default()
-                .postNotificationName(.ghosttyIconDidChange, object: nil, userInfo: nil, deliverImmediately: true)
-        }
     }
 
     // MARK: - Restorable State
@@ -1101,7 +1085,7 @@ class AppDelegate: NSObject,
     }
 
     @IBAction func showHelp(_ sender: Any) {
-        guard let url = URL(string: "https://github.com/Lawliang/ghostty-skins/tree/main/docs") else { return }
+        guard let url = URL(string: "https://github.com/Lawliang/lostty/tree/main/docs") else { return }
         NSWorkspace.shared.open(url)
     }
 

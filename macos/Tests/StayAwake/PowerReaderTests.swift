@@ -1,7 +1,7 @@
 #if os(macOS)
 import IOKit.ps
 import Testing
-@testable import Ghostty
+@testable import Lostty
 
 struct PowerReaderTests {
     @Test func percentFromTheInternalBattery() {

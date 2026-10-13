@@ -30,12 +30,13 @@ pub const Options = struct {
 /// this yet.
 ///
 /// The filepath opened is the default user-specific configuration
-/// file, which is typically located at `$XDG_CONFIG_HOME/ghostty/config.ghostty`.
+/// file, which is typically located at `$XDG_CONFIG_HOME/lostty/config`.
 /// On macOS, this may also be located at
-/// `~/Library/Application Support/com.mitchellh.ghostty/config.ghostty`.
-/// On macOS, whichever path exists and is non-empty will be prioritized,
-/// prioritizing the Application Support directory if neither are
-/// non-empty.
+/// `~/Library/Application Support/com.lawliang.lostty/config`, which is
+/// prioritized if it exists. If no Lostty config exists, the Ghostty
+/// config in use (`$XDG_CONFIG_HOME/ghostty/config.ghostty`, or on macOS
+/// `~/Library/Application Support/com.mitchellh.ghostty/config.ghostty`)
+/// is opened instead.
 ///
 /// This command prefers the `$VISUAL` environment variable over `$EDITOR`,
 /// if both are set. If neither are set, it will print an error

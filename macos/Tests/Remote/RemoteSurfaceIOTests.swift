@@ -2,7 +2,7 @@
 import Foundation
 import LosttyRemote
 import Testing
-@testable import Ghostty
+@testable import Lostty
 
 /// Records what the bridge does to the surface; never touches a real one.
 private final class SurfaceLog: @unchecked Sendable {

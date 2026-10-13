@@ -57,7 +57,7 @@ struct iOS_GhosttyInitView: View {
 
     var body: some View {
         VStack {
-            Image("AppIconImage")
+            Image("LosttyIconImage")
                 .resizable()
                 .aspectRatio(contentMode: .fit)
                 .frame(maxHeight: 96)

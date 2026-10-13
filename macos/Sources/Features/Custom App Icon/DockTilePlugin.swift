@@ -1,31 +1,20 @@
 import AppKit
 
+/// Lostty always shows its own icon, so this plugin no longer swaps icons.
+///
+/// Ghostty used it to apply alternate and custom icon styles. All it does now
+/// is undo what older builds may have left behind: a custom icon stamped on the
+/// app bundle or a custom Dock tile view, so the bundle's own icon shows.
 class DockTilePlugin: NSObject, NSDockTilePlugIn {
-    // WARNING: An instance of this class is alive as long as Ghostty's icon is
-    // in the doc (running or not!), so keep any state and processing to a
-    // minimum to respect resource usage.
+    // WARNING: An instance of this class is alive as long as the app's icon is
+    // in the Dock (running or not!), so keep state and processing to a minimum.
 
     private let pluginBundle = Bundle(for: DockTilePlugin.self)
 
-    // Separate defaults based on debug vs release builds so we can test icons
-    // without messing up releases.
-    #if DEBUG
-    private let ghosttyUserDefaults = UserDefaults(suiteName: "com.mitchellh.ghostty.debug")
-    #else
-    private let ghosttyUserDefaults = UserDefaults(suiteName: "com.mitchellh.ghostty")
-    #endif
-
-    private var iconChangeObserver: Any?
-
-    /// The URL to the enclosing app bundle, determined from the plugin bundle path.
-    var ghosttyAppURL: URL? {
-        Self.appBundleURL(for: pluginBundle.bundleURL)
-    }
-
     /// Determine the enclosing app bundle for the dock tile plugin bundle.
     ///
-    /// We intentionally avoid matching a specific bundle name (such as
-    /// "Ghostty.app") so renaming the app in Finder still works.
+    /// We intentionally avoid matching a specific bundle name so renaming the
+    /// app in Finder still works.
     static func appBundleURL(for pluginBundleURL: URL) -> URL? {
         var url = pluginBundleURL
         while true {
@@ -45,87 +34,17 @@ class DockTilePlugin: NSObject, NSDockTilePlugIn {
 
     /// The primary NSDockTilePlugin function.
     func setDockTile(_ dockTile: NSDockTile?) {
-        // If no dock tile or no access to Ghostty defaults, we can't do anything.
-        guard let dockTile, let ghosttyUserDefaults else {
-            iconChangeObserver = nil
-            return
-        }
+        guard let dockTile else { return }
 
-        // Try to restore the previous icon on launch.
-        iconDidChange(ghosttyUserDefaults.appIcon, dockTile: dockTile)
-
-        // Setup a new observer for when the icon changes so we can update. This message
-        // is sent by the primary Ghostty app.
-        iconChangeObserver = DistributedNotificationCenter
-            .default()
-            .publisher(for: .ghosttyIconDidChange)
-            .map { [weak self] _ in self?.ghosttyUserDefaults?.appIcon }
-            .receive(on: DispatchQueue.global())
-            .sink { [weak self] newIcon in self?.iconDidChange(newIcon, dockTile: dockTile) }
-    }
-
-    private func iconDidChange(_ newIcon: AppIcon?, dockTile: NSDockTile) {
-        guard let appIcon = newIcon?.image(in: pluginBundle) else {
-            resetIcon(dockTile: dockTile)
-            return
-        }
-
-        if let appBundleURL = self.ghosttyAppURL {
-            let appBundlePath = appBundleURL.path
-            NSWorkspace.shared.setIcon(appIcon, forFile: appBundlePath)
+        if let appBundlePath = Self.appBundleURL(for: pluginBundle.bundleURL)?.path {
+            // Passing nil removes any custom icon an older build set on the bundle.
+            NSWorkspace.shared.setIcon(nil, forFile: appBundlePath)
             NSWorkspace.shared.noteFileSystemChanged(appBundlePath)
         }
 
-        dockTile.setIcon(appIcon)
-    }
-
-    /// Reset the application icon and dock tile icon to the default.
-    private func resetIcon(dockTile: NSDockTile) {
-        let appBundlePath = self.ghosttyAppURL?.path
-        let appIcon: NSImage
-        if #available(macOS 26.0, *) {
-            // Reset to the default (glassy) icon.
-            if let appBundlePath {
-                NSWorkspace.shared.setIcon(nil, forFile: appBundlePath)
-            }
-
-            #if DEBUG
-            // Use the `Blueprint` icon to distinguish Debug from Release builds.
-            appIcon = pluginBundle.image(forResource: "BlueprintImage")!
-            #else
-            // Ghostty Skins (Lostty): always use the bundled hologram-pink
-            // Blueprint icon (AppIconImage) instead of the composed glass icon,
-            // and stamp it on the bundle so Finder/Spotlight match the Dock.
-            appIcon = pluginBundle.image(forResource: "AppIconImage")!
-            if let appBundlePath {
-                NSWorkspace.shared.setIcon(appIcon, forFile: appBundlePath)
-            }
-            #endif
-        } else {
-            // Use the bundled icon to keep the corner radius consistent with pre-Tahoe apps.
-            appIcon = pluginBundle.image(forResource: "AppIconImage")!
-            if let appBundlePath {
-                NSWorkspace.shared.setIcon(appIcon, forFile: appBundlePath)
-            }
-        }
-
-        // Notify Finder/Dock so icon caches refresh immediately.
-        if let appBundlePath {
-            NSWorkspace.shared.noteFileSystemChanged(appBundlePath)
-        }
-        dockTile.setIcon(appIcon)
-    }
-}
-
-private extension NSDockTile {
-    func setIcon(_ newIcon: NSImage) {
-        // Update the Dock tile on the main thread.
         DispatchQueue.main.async {
-            let iconView = NSImageView(frame: CGRect(origin: .zero, size: self.size))
-            iconView.wantsLayer = true
-            iconView.image = newIcon
-            self.contentView = iconView
-            self.display()
+            dockTile.contentView = nil
+            dockTile.display()
         }
     }
 }

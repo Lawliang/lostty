@@ -2,7 +2,7 @@
 import Foundation
 import LosttyRemote
 import Testing
-@testable import Ghostty
+@testable import Lostty
 
 @MainActor
 struct SkinManagerTests {
@@ -115,6 +115,13 @@ struct SkinManagerTests {
         m.expirePreviews()
         #expect(m.effectiveSkin(id) == milo)
         #expect(h.calls.last?.1?.skin == milo)
+    }
+
+    @Test func acceptsTheOldUserVarName() {
+        let h = Harness(); let m = makeManager(h); let id = UUID()
+        #expect(SkinsConstants.userVarName == "LOSTTY_SKIN")
+        m.handleUserVar(id, name: "GHOSTTY_SKIN", value: #"{"v":1,"op":"set","skin":"prod"}"#)
+        #expect(m.effectiveSkin(id) == prod)
     }
 
     @Test func rejectsUnknownNames() {

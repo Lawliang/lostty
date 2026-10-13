@@ -1,5 +1,5 @@
 import Testing
-@testable import Ghostty
+@testable import Lostty
 @testable import GhosttyKit
 import SwiftUI
 
@@ -125,16 +125,6 @@ struct ConfigTests {
     @Test func resizeOverlayPositionDefaultsToCenter() throws {
         let config = try TemporaryConfig("")
         #expect(config.resizeOverlayPosition == .center)
-    }
-
-    @Test func macosIconDefaultsToOfficial() throws {
-        let config = try TemporaryConfig("")
-        #expect(config.macosIcon == .official)
-    }
-
-    @Test func macosIconFrameDefaultsToAluminum() throws {
-        let config = try TemporaryConfig("")
-        #expect(config.macosIconFrame == .aluminum)
     }
 
     @Test func macosWindowButtonsDefaultsToVisible() throws {

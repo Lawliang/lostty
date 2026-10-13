@@ -1,7 +1,7 @@
 #if os(macOS)
 import Foundation
 import Testing
-@testable import Ghostty
+@testable import Lostty
 
 struct StayAwakeModelTests {
     let t0 = Date(timeIntervalSince1970: 1_000_000)

@@ -7,7 +7,7 @@ extension UpdateDriver: SPUUpdaterDelegate {
         // must never point at upstream Ghostty's feed — doing so would let
         // "Check for Updates…" offer to replace this fork with official
         // Ghostty. Returning nil here (with no `SUFeedURL` in
-        // Ghostty-Info.plist to fall back to) leaves Sparkle with no feed
+        // Lostty-Info.plist to fall back to) leaves Sparkle with no feed
         // URL at all, so a manual check surfaces a "no update information"
         // error instead of silently reaching for the real ghostty.org feed.
         // See UPGRADING.md.

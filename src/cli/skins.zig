@@ -71,7 +71,8 @@ pub fn run(gpa: Allocator) !u8 {
         return 0;
     }
 
-    const surface_id = std.posix.getenv(protocol.surface_env) orelse {
+    const surface_id = std.posix.getenv(protocol.surface_env) orelse
+        std.posix.getenv(protocol.legacy_surface_env) orelse {
         try stderr.writeAll("skins: run this inside a Lostty terminal\n");
         return 1;
     };
@@ -145,16 +146,22 @@ fn sanitizeForDisplay(alloc: Allocator, s: []const u8) ![]const u8 {
 /// `.send` path, where a missing/stale/corrupt catalog should not block
 /// sending the escape sequence (see the `.send` case in `run`).
 fn tryLoadCatalog(alloc: Allocator) ?protocol.Catalog {
-    const home = std.posix.getenv("HOME") orelse return null;
-    const path = std.fs.path.join(alloc, &.{ home, ".config/ghostty-skins/state/catalog.json" }) catch return null;
+    const path = (catalogPath(alloc) catch return null) orelse return null;
     const bytes = std.fs.cwd().readFileAlloc(alloc, path, 1 << 20) catch return null;
     const parsed = protocol.parseCatalog(alloc, bytes) catch return null;
     return parsed.value;
 }
 
-fn loadCatalog(alloc: Allocator, stderr: *std.Io.Writer) !?protocol.Catalog {
+/// catalog.json in Lostty's skins folder, or the old one until it exists.
+fn catalogPath(alloc: Allocator) !?[]const u8 {
     const home = std.posix.getenv("HOME") orelse return null;
-    const path = try std.fs.path.join(alloc, &.{ home, ".config/ghostty-skins/state/catalog.json" });
+    const dir = try std.fs.path.join(alloc, &.{ home, protocol.config_dir });
+    const exists = if (std.fs.cwd().access(dir, .{})) true else |_| false;
+    return try protocol.catalogPath(alloc, home, exists);
+}
+
+fn loadCatalog(alloc: Allocator, stderr: *std.Io.Writer) !?protocol.Catalog {
+    const path = try catalogPath(alloc) orelse return null;
     const bytes = std.fs.cwd().readFileAlloc(alloc, path, 1 << 20) catch {
         try stderr.print("skins: cannot read {s} (is Lostty running?)\n", .{path});
         return null;

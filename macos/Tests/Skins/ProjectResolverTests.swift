@@ -1,7 +1,7 @@
 #if os(macOS)
 import Foundation
 import Testing
-@testable import Ghostty
+@testable import Lostty
 
 struct ProjectResolverTests {
     /// Builds a throwaway tree and returns its canonical root.

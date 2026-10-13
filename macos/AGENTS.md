@@ -1,14 +1,17 @@
-# macOS Ghostty Application
+# Lostty Mac and iPhone apps
 
 - Use `swiftlint` for formatting and linting Swift code.
 - If code outside of `macos/` directory is modified, use
-  `zig build -Demit-macos-app=false` before building the macOS app to update
-  the underlying Ghostty library.
-- Use `macos/build.nu` to build the macOS app, do not use `zig build`
+  `zig build -Demit-macos-app=false` before building the Mac app to update
+  the underlying terminal engine library (GhosttyKit).
+- Use `macos/build.nu` to build the Mac app, do not use `zig build`
   (except to build the underlying library as mentioned above).
-  - Build: `macos/build.nu [--scheme Ghostty] [--configuration Debug] [--action build]`
-  - Output: `macos/build/<configuration>/Ghostty.app` (e.g. `macos/build/Debug/Ghostty.app`)
-- Run unit tests directly with `macos/build.nu --action test`
+  - Build: `macos/build.nu [--scheme Lostty] [--configuration Debug] [--action build]`
+  - Schemes: `Lostty` (Mac), `Lostty-iOS` (iPhone), `DockTilePlugin`
+  - Output: `macos/build/<configuration>/Lostty.app` (e.g. `macos/build/Debug/Lostty.app`)
+- Run unit tests (`LosttyTests`) directly with `macos/build.nu --action test`,
+  or one suite with `macos/skins-test.sh <SuiteName>`.
+- Test the phone's shared package with `cd macos/LosttyRemote && swift test`.
 
 ## AppleScript
 
@@ -25,10 +28,10 @@
   (1) Build with `macos/build.nu`
   (2) Launch and activate the app via osascript using the absolute path
       to the built app bundle:
-      `osascript -e 'tell application "<absolute path to build/Debug/Ghostty.app>" to activate'`
+      `osascript -e 'tell application "<absolute path to build/Debug/Lostty.app>" to activate'`
   (3) Wait a few seconds for the app to fully launch and open a terminal.
   (4) Run test scripts with `osascript`, always targeting the app by
       its absolute path (not by name) to avoid calling the wrong
       application.
   (5) When done, quit via:
-      `osascript -e 'tell application "<absolute path to build/Debug/Ghostty.app>" to quit'`
+      `osascript -e 'tell application "<absolute path to build/Debug/Lostty.app>" to quit'`

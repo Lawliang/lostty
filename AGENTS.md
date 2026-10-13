@@ -2,25 +2,33 @@
 
 A file for [guiding coding agents](https://agents.md/).
 
+Lostty is a Mac terminal and iPhone companion app built on Ghostty's
+terminal engine. It still merges from upstream Ghostty, so don't delete
+engine code or other-platform code (`src/apprt/gtk`, `flatpak/`, `snap/`,
+`nix/`, `dist/`, `po/`, `pkg/`). See `HACKING.md` for more.
+
 ## Commands
 
-- **Build:** `zig build`
-  - If you're on macOS and don't need to build the macOS app, use
-    `-Demit-macos-app=false` to skip building the app bundle and speed up
-    compilation.
+- **Build (engine):** `zig build -Demit-macos-app=false`
+  - Run this whenever code outside `macos/` changes.
+- **Build (Mac app):** `macos/build.nu` (see `macos/AGENTS.md`)
 - **Test (Zig):** `zig build test`
   - Prefer to run targeted tests with `-Dtest-filter` because the full
     test suite is slow to run.
 - **Test filter (Zig)**: `zig build test -Dtest-filter=<test name>`
+- **Test (Mac app):** `macos/build.nu --action test`
+- **Test (phone package):** `cd macos/LosttyRemote && swift test`
 - **Formatting (Zig)**: `zig fmt .`
 - **Formatting (Swift)**: `swiftlint lint --strict --fix`
 - **Formatting (other)**: `prettier -w .`
 
 ## Directory Structure
 
-- Shared Zig core: `src/`
-- macOS app: `macos/`
-- GTK (Linux and FreeBSD) app: `src/apprt/gtk`
+- Terminal engine (Ghostty's Zig core): `src/`
+- Lostty's CLI additions: `src/cli/`
+- Mac and iPhone apps: `macos/` (`macos/Lostty.xcodeproj`)
+- Shared Swift package for the phone: `macos/LosttyRemote`
+- GTK (Linux and FreeBSD) app, kept from upstream: `src/apprt/gtk`
 
 ## Issue and PR Guidelines
 

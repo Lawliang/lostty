@@ -2,7 +2,7 @@
 import Foundation
 import LosttyRemote
 import Testing
-@testable import Ghostty
+@testable import Lostty
 
 /// Real repos in a temporary folder: an "origin" (bare) and a clone of it.
 struct WorktreeMakerTests {

@@ -7,7 +7,7 @@
 
 import SwiftUI
 import Testing
-@testable import Ghostty
+@testable import Lostty
 
 class MockTerminalViewContainer: TerminalViewContainer {
     var _windowCornerRadius: CGFloat?

@@ -2,7 +2,7 @@
 import Foundation
 import LosttyRemote
 import Testing
-@testable import Ghostty
+@testable import Lostty
 
 private let paneA = UUID(uuidString: "ABCDEF01-0000-4000-8000-000000000001")!
 private let paneB = UUID(uuidString: "ABCDEF02-0000-4000-8000-000000000002")!

@@ -44,7 +44,7 @@ func requestIntentPermission() async -> Bool {
             }
 
             PermissionRequest.show(
-                "com.mitchellh.ghostty.shortcutsPermission",
+                "com.lawliang.lostty.shortcutsPermission",
                 message: "Allow Shortcuts to interact with Lostty?",
                 allowDuration: .forever,
                 rememberDuration: nil,
