@@ -20,7 +20,8 @@ pub const Options = struct {
 /// `idle`, `exit`, `agents` or `resumed`. For `idle` and `resumed` it reads
 /// the hook input on stdin, which can turn a Stop into `agents` (subagents
 /// still working) or mean nothing should be sent (protocol.refine), and
-/// marks Claude asking permission. `tool` (PreToolUse) sends what the tool
+/// marks Claude asking permission. An `idle` also names the conversation
+/// file, for the Mac's turn observer. `tool` (PreToolUse) sends what the tool
 /// call is about to do, for Lostty Mobile's session list. It
 /// never fails and never prints: outside Lostty, without a terminal, or
 /// with a bad argument it does nothing and exits 0, so a hook can never
@@ -40,6 +41,7 @@ pub fn run(gpa: Allocator) !u8 {
         .idle, .resumed => if (hookInput(alloc)) |input| {
             state = protocol.refine(alloc, state, input) orelse return 0;
             detail.permission = state == .idle and protocol.isPermissionPrompt(alloc, input);
+            if (state == .idle) detail.transcript = protocol.transcriptPath(alloc, input);
         },
         .tool => detail.action = protocol.action(alloc, hookInput(alloc) orelse return 0) orelse return 0,
         else => {},

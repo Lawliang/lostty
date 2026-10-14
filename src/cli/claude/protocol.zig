@@ -20,10 +20,17 @@ pub const Detail = struct {
     action: ?[]const u8 = null,
     /// `idle`: Claude asks permission to run the last action.
     permission: bool = false,
+    /// `idle`: the conversation file the Stop or Notification hook named,
+    /// for the Mac's turn observer.
+    transcript: ?[]const u8 = null,
 };
 
 /// The longest action sent, in characters.
 pub const action_max = 80;
+
+/// The longest conversation file path sent, in bytes; a longer one is
+/// dropped rather than cut.
+pub const transcript_max = 1024;
 
 pub fn parseState(s: []const u8) ?State {
     return std.meta.stringToEnum(State, s);
@@ -72,6 +79,22 @@ pub fn isPermissionPrompt(alloc: Allocator, input: []const u8) bool {
     const event = stringField(root, "hook_event_name") orelse return false;
     const kind = stringField(root, "notification_type") orelse return false;
     return std.mem.eql(u8, event, "Notification") and std.mem.eql(u8, kind, "permission_prompt");
+}
+
+/// The conversation file a Stop or Notification hook's input names
+/// (`transcript_path`, which Claude Code and Codex both send). Null for
+/// other events, a missing or blank path, or one longer than
+/// `transcript_max` bytes. The Mac decides whether to read it.
+pub fn transcriptPath(alloc: Allocator, input: []const u8) ?[]const u8 {
+    const parsed = std.json.parseFromSlice(std.json.Value, alloc, input, .{}) catch return null;
+    defer parsed.deinit();
+    const root = parsed.value;
+    if (root != .object) return null;
+    const event = stringField(root, "hook_event_name") orelse return null;
+    if (!std.mem.eql(u8, event, "Stop") and !std.mem.eql(u8, event, "Notification")) return null;
+    const path = textField(root, "transcript_path") orelse return null;
+    if (path.len > transcript_max) return null;
+    return alloc.dupe(u8, path) catch null;
 }
 
 /// What a PreToolUse hook's tool call does, as a person reads it at a
@@ -258,14 +281,16 @@ pub fn findTty(ctx: anytype, start: i32, max_hops: usize) ?[]const u8 {
 }
 
 /// OSC 1337 SetUserVar carrying `{"v":1,"state":"<state>"}`, plus
-/// `"action"` and `"permission":true` when `detail` has them. With `tmux`,
-/// wrapped in tmux's DCS passthrough (requires `allow-passthrough on`).
+/// `"action"`, `"permission":true` and `"transcript"` when `detail` has
+/// them. With `tmux`, wrapped in tmux's DCS passthrough (requires
+/// `allow-passthrough on`).
 pub fn encodeSequence(alloc: Allocator, state: State, detail: Detail, tmux: bool) ![]u8 {
     const json = try std.json.Stringify.valueAlloc(alloc, .{
         .v = 1,
         .state = @tagName(state),
         .action = detail.action,
         .permission = if (detail.permission) true else null,
+        .transcript = detail.transcript,
     }, .{ .emit_null_optional_fields = false });
     defer alloc.free(json);
     return encodeUserVar(alloc, user_var_name, json, tmux);
@@ -501,4 +526,52 @@ test "claude protocol: action caps the line and ignores other input" {
     try t.expect(action(alloc, "{\"hook_event_name\":\"Stop\",\"tool_name\":\"Bash\"}") == null);
     try t.expect(action(alloc, "not json") == null);
     try t.expect(action(alloc, "") == null);
+}
+test "claude protocol: transcriptPath reads Stop and Notification input" {
+    const t = std.testing;
+    var arena = std.heap.ArenaAllocator.init(t.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+    try t.expectEqualStrings("/Users/a/.claude/projects/p/s.jsonl", transcriptPath(
+        alloc,
+        "{\"hook_event_name\":\"Stop\",\"transcript_path\":\"/Users/a/.claude/projects/p/s.jsonl\"}",
+    ).?);
+    try t.expectEqualStrings("/Users/a/.codex/sessions/r.jsonl", transcriptPath(
+        alloc,
+        "{\"hook_event_name\":\"Notification\",\"notification_type\":\"permission_prompt\",\"transcript_path\":\"/Users/a/.codex/sessions/r.jsonl\"}",
+    ).?);
+    try t.expect(transcriptPath(alloc, "{\"hook_event_name\":\"Stop\"}") == null);
+    try t.expect(transcriptPath(alloc, "{\"hook_event_name\":\"Stop\",\"transcript_path\":\"  \"}") == null);
+    try t.expect(transcriptPath(alloc, "{\"hook_event_name\":\"Stop\",\"transcript_path\":42}") == null);
+    try t.expect(transcriptPath(alloc, "{\"hook_event_name\":\"PreToolUse\",\"transcript_path\":\"/x.jsonl\"}") == null);
+    try t.expect(transcriptPath(alloc, "not json") == null);
+    try t.expect(transcriptPath(alloc, "") == null);
+}
+
+test "claude protocol: transcriptPath drops an over-long path" {
+    const t = std.testing;
+    var arena = std.heap.ArenaAllocator.init(t.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+    const at_max = "{\"hook_event_name\":\"Stop\",\"transcript_path\":\"/" ++ "a" ** (transcript_max - 1) ++ "\"}";
+    try t.expectEqual(@as(usize, transcript_max), transcriptPath(alloc, at_max).?.len);
+    const over = "{\"hook_event_name\":\"Stop\",\"transcript_path\":\"/" ++ "a" ** transcript_max ++ "\"}";
+    try t.expect(transcriptPath(alloc, over) == null);
+}
+
+test "claude protocol: encodeSequence carries the transcript" {
+    const t = std.testing;
+    var arena = std.heap.ArenaAllocator.init(t.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+    const done = try encodeSequence(alloc, .idle, .{ .transcript = "/Users/a/.claude/projects/p/s.jsonl" }, false);
+    try t.expectEqualStrings(
+        "{\"v\":1,\"state\":\"idle\",\"transcript\":\"/Users/a/.claude/projects/p/s.jsonl\"}",
+        try decodeSequence(alloc, done),
+    );
+    const asks = try encodeSequence(alloc, .idle, .{ .permission = true, .transcript = "/t.jsonl" }, false);
+    try t.expectEqualStrings(
+        "{\"v\":1,\"state\":\"idle\",\"permission\":true,\"transcript\":\"/t.jsonl\"}",
+        try decodeSequence(alloc, asks),
+    );
 }
