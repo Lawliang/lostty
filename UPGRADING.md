@@ -1,6 +1,15 @@
 # Upgrading Lostty to a new Ghostty release
 
-Lostty is `skins` = upstream tag + our commits. To move to a new tag:
+Lostty is `skins` = upstream tag + our commits. Lostty's history starts at
+its own root commit, a copy of Ghostty 1.3.1, so git can't see that it
+shares history with upstream. Before merging, tell your clone once that the
+root sits on top of Ghostty's 1.3.1 commit (this stays local and is never
+pushed):
+
+    git fetch upstream tag v1.3.1 --no-tags
+    git replace --graft "$(git rev-list --max-parents=0 HEAD)" v1.3.1
+
+To move to a new tag:
 
     git fetch upstream tag v1.3.2 --no-tags
     git merge v1.3.2
@@ -15,7 +24,8 @@ Lostty is `skins` = upstream tag + our commits. To move to a new tag:
 ## Upstream files we hook (keep these hunks when resolving conflicts)
 
 - `macos/Lostty.xcodeproj/project.pbxproj` (upstream's `macos/Ghostty.xcodeproj`, renamed) — the `Lostty`, `Lostty-iOS` and `LosttyTests` targets and schemes, the `lostty` executable name, app target `PRODUCT_BUNDLE_IDENTIFIER` and `INFOPLIST_KEY_CFBundleDisplayName` (3 build configurations). Git follows the rename; take upstream's new files and settings, keep our names.
-- Icons: Lostty's own axolotl icons are `macos/Assets.xcassets/LosttyMacIcon.appiconset`, `LosttyIconImage.imageset` and `LosttyPhoneIcon.appiconset`. Upstream's icon art (`AppIconImage.imageset`, `Alternate Icons/`, `Custom Icon/`) and its custom-icon code were removed, and the project no longer uses `images/Ghostty.icon`. If upstream changes those, keep them removed.
+- Icons: Lostty's own axolotl icons are `macos/Assets.xcassets/LosttyMacIcon.appiconset`, `LosttyIconImage.imageset` and `LosttyPhoneIcon.appiconset`. Upstream's icon art (`AppIconImage.imageset`, `Alternate Icons/`, `Custom Icon/`) and its custom-icon code were removed, and `images/Ghostty.icon` was deleted. If upstream changes those, keep them removed.
+- Removed Ghostty project tooling: `nix/`, `flake.nix`, `flake.lock`, `default.nix`, `shell.nix`, `.envrc`, `build.zig.zon.nix`, `Doxyfile`, `DoxygenLayout.xml`, `src/build/docker/`, `example/`, `typos.toml`, `.mailmap`, `.github/`. If upstream changes these, keep them deleted (`git rm` them).
 - `macos/Sources/Features/Custom App Icon/DockTilePlugin.swift`: ours only clears a custom icon an older build stamped on the app. The app ignores the `macos-icon` options. On conflict keep ours.
 - `src/terminal/osc.zig` — `set_user_var` Command field, `Key` list entry (last), reset-switch entry.
 - `src/terminal/osc/parsers/iterm2.zig` — `.SetUserVar` branch (removed from unimplemented list) + tests.

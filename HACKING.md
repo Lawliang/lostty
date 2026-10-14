@@ -83,9 +83,10 @@ The full Zig suite is slow, so prefer `-Dtest-filter`. Add
 | `docs/`               | Lostty docs; `docs/skins/` has the example skins config              |
 
 Lostty still merges from upstream Ghostty, so code for other platforms
-(`src/apprt/gtk`, `flatpak/`, `snap/`, `nix/` and so on) stays even though
-Lostty is Mac-only. Leave it in place. See [UPGRADING.md](UPGRADING.md) for
-merging a new Ghostty release.
+(`src/apprt/gtk`, `flatpak/`, `snap/` and so on) stays even though Lostty is
+Mac-only. Leave it in place. Ghostty's project tooling that the build never
+uses (Nix, Doxygen, examples) was removed. See [UPGRADING.md](UPGRADING.md)
+for merging a new Ghostty release.
 
 ## Logging
 

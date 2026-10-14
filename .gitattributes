@@ -1,4 +1,3 @@
-build.zig.zon.nix linguist-generated=true
 build.zig.zon.txt linguist-generated=true
 build.zig.zon.json linguist-generated=true
 vendor/** linguist-vendored
