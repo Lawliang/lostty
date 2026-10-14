@@ -19,6 +19,9 @@ struct RestartHandoff: Codable, Equatable {
     var hookAgents: [String]
     /// `NSQuitAlwaysKeepsWindows` before the restart forced it on; nil when unset.
     var keepWindows: Bool?
+    /// Each pane's conversation file for the turn observer, by pane UUID;
+    /// nil from a build before the observer.
+    var transcripts: [String: String]? = nil
 
     /// Older than this, it's not a restart's: a crash's prompt applies.
     static let maxAge: TimeInterval = 120

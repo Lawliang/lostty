@@ -52,7 +52,8 @@ enum LosttyRestart {
             claude: Dictionary(uniqueKeysWithValues: ClaudeRuntime.shared.carry().map { ($0.key.uuidString, $0.value) }),
             stayAwakeOn: stayAwake.isOn, stayAwakeUntil: stayAwake.until,
             hookAgents: agentsWithHooks { hooks.status(agent: $0) },
-            keepWindows: UserDefaults.ghostty.object(forKey: keepWindowsKey) as? Bool)
+            keepWindows: UserDefaults.ghostty.object(forKey: keepWindowsKey) as? Bool,
+            transcripts: Dictionary(uniqueKeysWithValues: TurnObserver.shared.carry().map { ($0.key.uuidString, $0.value) }))
         do {
             try handoff.save(to: RestartHandoff.standardURL)
         } catch {
@@ -93,6 +94,9 @@ enum LosttyRestart {
         }
         ClaudeRuntime.shared.restore(Dictionary(uniqueKeysWithValues: handoff.claude.compactMap { key, carry in
             UUID(uuidString: key).map { ($0, carry) }
+        }))
+        TurnObserver.shared.restore(Dictionary(uniqueKeysWithValues: (handoff.transcripts ?? [:]).compactMap { key, path in
+            UUID(uuidString: key).map { ($0, path) }
         }))
         // Before StayAwakeStore.start(), which would otherwise restore the
         // power settings it left applied.

@@ -460,12 +460,13 @@ extension Ghostty {
         }
 
         deinit {
-            // Lostty Claude trace: forget this pane's trace phase and usage.
+            // Lostty Claude trace: forget this pane's trace phase, usage and conversation.
             let closedID = id
             Task { @MainActor in
                 ClaudeRuntime.shared.surfaceClosed(closedID)
                 ClaudeUsageRuntime.shared.surfaceClosed(closedID)
                 SessionTitleSignal.shared.surfaceClosed(closedID)
+                TurnObserver.shared.surfaceClosed(closedID)
             }
 
             // Lostty Mobile: a remote pane closes its channel; the session

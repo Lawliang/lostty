@@ -5,6 +5,7 @@ import SwiftUI
 /// config file.
 struct SettingsView: View {
     @ObservedObject var sidebar: SidebarPreferences
+    @ObservedObject var observer: ObserverPreferences
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -13,6 +14,14 @@ struct SettingsView: View {
                     Toggle("Automatically hide sidebar", isOn: $sidebar.autoHide)
                     Text("Shows when you move the pointer to the window's right edge. "
                          + "Stays open while an app is open.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Section("Mascot") {
+                    Toggle("Summarize turns in the background", isOn: $observer.background)
+                    Text("After each turn, Claude Haiku (or Codex, or Apple Intelligence) updates what the "
+                         + "mascot tells you when you tap it, using your own subscription. "
+                         + "Off, it summarizes only when you tap.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -33,7 +42,9 @@ struct SettingsView: View {
 
 struct SettingsView_Previews: PreviewProvider {
     static var previews: some View {
-        SettingsView(sidebar: SidebarPreferences(defaults: UserDefaults(suiteName: "preview")!))
+        SettingsView(
+            sidebar: SidebarPreferences(defaults: UserDefaults(suiteName: "preview")!),
+            observer: ObserverPreferences(defaults: UserDefaults(suiteName: "preview")!))
     }
 }
 #endif

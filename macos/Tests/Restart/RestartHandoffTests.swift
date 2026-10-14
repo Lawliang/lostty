@@ -49,5 +49,21 @@ struct RestartHandoffTests {
         #expect(RestartHandoff.url(bundleID: "com.lawliang.lostty", in: dir)
             != RestartHandoff.url(bundleID: "com.lawliang.lostty.debug", in: dir))
     }
+
+    @Test func anOlderHandoffWithoutTranscriptsStillReads() throws {
+        let url = RestartHandoff.url(bundleID: "com.lawliang.lostty", in: try folder())
+        let json = #"{"pid":4242,"at":1999999995,"claude":{},"stayAwakeOn":false,"hookAgents":[]}"#
+        try Data(json.utf8).write(to: url)
+        let taken = try #require(RestartHandoff.take(from: url))
+        #expect(taken.transcripts == nil)
+    }
+
+    @Test func transcriptsRoundTrip() throws {
+        let url = RestartHandoff.url(bundleID: "com.lawliang.lostty", in: try folder())
+        var saved = handoff()
+        saved.transcripts = ["ABCDEF01-0000-4000-8000-000000000001": "/Users/a/.claude/projects/p/s.jsonl"]
+        try saved.save(to: url)
+        #expect(RestartHandoff.take(from: url) == saved)
+    }
 }
 #endif
