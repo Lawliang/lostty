@@ -45,5 +45,17 @@ struct ClaudeMessageTests {
         // Exact JSON `+claude-state busy` encodes (see protocol.zig).
         #expect(ClaudeMessage.decode(#"{"v":1,"state":"busy"}"#) == .busy)
     }
+
+    @Test func readsAnIdlesTranscript() {
+        // Exact JSON `+claude-state idle` encodes (see protocol.zig).
+        #expect(ClaudeMessage.transcript(#"{"v":1,"state":"idle","transcript":"/Users/a/.claude/projects/p/s.jsonl"}"#)
+            == "/Users/a/.claude/projects/p/s.jsonl")
+        #expect(ClaudeMessage.transcript(#"{"v":1,"state":"idle","permission":true,"transcript":"/t.jsonl"}"#) == "/t.jsonl")
+        #expect(ClaudeMessage.decode(#"{"v":1,"state":"idle","transcript":"/t.jsonl"}"#) == .idle)
+        #expect(ClaudeMessage.transcript(#"{"v":1,"state":"idle"}"#) == nil)
+        #expect(ClaudeMessage.transcript(#"{"v":1,"state":"idle","transcript":""}"#) == nil)
+        #expect(ClaudeMessage.transcript(#"{"v":1,"state":"busy","transcript":"/t.jsonl"}"#) == nil)
+        #expect(ClaudeMessage.transcript(#"{"v":2,"state":"idle","transcript":"/t.jsonl"}"#) == nil)
+    }
 }
 #endif

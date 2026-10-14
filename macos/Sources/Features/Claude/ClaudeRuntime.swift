@@ -25,6 +25,10 @@ final class ClaudeRuntime: ObservableObject {
     /// it finishes its turn or exits, and on a new prompt.
     @Published private(set) var actions: [UUID: String] = [:]
 
+    /// An agent finished its turn (or stopped to ask permission) in a pane,
+    /// naming its conversation file: the turn observer's cue. Set at launch.
+    var turnEnded: @MainActor (UUID, String) -> Void = { _, _ in }
+
     private let now: () -> Date
     private let schedule: Scheduler
     /// Panes not focused right now. Panes start focused (SurfaceView does).
@@ -62,6 +66,7 @@ final class ClaudeRuntime: ObservableObject {
             return
         }
         apply(state, to: id, permission: ClaudeMessage.isPermission(value))
+        if state == .idle, let path = ClaudeMessage.transcript(value) { turnEnded(id, path) }
     }
 
     /// The pane's shell reported a command finished, so whatever ran there

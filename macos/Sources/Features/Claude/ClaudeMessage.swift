@@ -42,6 +42,15 @@ enum ClaudeMessage {
         object(value)?["permission"] as? Bool == true
     }
 
+    /// The conversation file an `idle` names (`"transcript":"…"`), for the
+    /// turn observer; nil for anything else. Only a hint: anything in a pane
+    /// can print this user var, so TranscriptLocation decides what is read.
+    static func transcript(_ value: String) -> String? {
+        guard let object = object(value), object["state"] as? String == "idle",
+              let path = object["transcript"] as? String, !path.isEmpty else { return nil }
+        return path
+    }
+
     private static func object(_ value: String) -> [String: Any]? {
         guard let data = value.data(using: .utf8),
               let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],

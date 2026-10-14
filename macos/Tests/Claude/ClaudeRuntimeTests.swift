@@ -384,5 +384,25 @@ struct ClaudeRuntimeTests {
         let carry = ClaudeCarry(activity: .waiting, action: "Run the iOS tests")
         #expect(try JSONDecoder().decode(ClaudeCarry.self, from: JSONEncoder().encode(carry)) == carry)
     }
+
+    final class Ended {
+        var turns: [(pane: UUID, path: String)] = []
+    }
+
+    @Test func anIdleWithATranscriptTellsTheObserver() {
+        let runtime = makeRuntime()
+        let ended = Ended()
+        runtime.turnEnded = { ended.turns.append(($0, $1)) }
+        runtime.userVarChanged(pane, name: "LOSTTY_CLAUDE", value: payload("busy"))
+        runtime.userVarChanged(pane, name: "LOSTTY_CLAUDE", value: #"{"v":1,"state":"idle","transcript":"/t.jsonl"}"#)
+        // No transcript, or not an idle: nothing to observe.
+        runtime.userVarChanged(pane, name: "LOSTTY_CLAUDE", value: payload("idle"))
+        runtime.userVarChanged(pane, name: "LOSTTY_CLAUDE", value: #"{"v":1,"state":"busy","transcript":"/t.jsonl"}"#)
+        #expect(ended.turns.count == 1)
+        #expect(ended.turns.first?.pane == pane)
+        #expect(ended.turns.first?.path == "/t.jsonl")
+        // The trace still saw the idle.
+        #expect(runtime.phases[pane] != nil) // the last busy
+    }
 }
 #endif
