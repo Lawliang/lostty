@@ -404,5 +404,15 @@ struct ClaudeRuntimeTests {
         // The trace still saw the idle.
         #expect(runtime.phases[pane] != nil) // the last busy
     }
+
+    @Test func aTranscriptWithoutATurnIsIgnored() {
+        // Anything printed in a pane can carry LOSTTY_CLAUDE: an idle with no
+        // turn before it (no busy) doesn't reach the observer.
+        let runtime = makeRuntime()
+        let ended = Ended()
+        runtime.turnEnded = { ended.turns.append(($0, $1)) }
+        runtime.userVarChanged(pane, name: "LOSTTY_CLAUDE", value: #"{"v":1,"state":"idle","transcript":"/t.jsonl"}"#)
+        #expect(ended.turns.isEmpty)
+    }
 }
 #endif

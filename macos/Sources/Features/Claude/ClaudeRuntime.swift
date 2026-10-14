@@ -65,8 +65,11 @@ final class ClaudeRuntime: ObservableObject {
             Ghostty.logger.debug("claude: rejected malformed \(ClaudeConstants.userVarName) payload")
             return
         }
+        // Only a turn that was under way ends: anything printed in a pane can
+        // carry this user var, so an idle out of nowhere names no file.
+        let turnUnderWay = !phase(id).isOff
         apply(state, to: id, permission: ClaudeMessage.isPermission(value))
-        if state == .idle, let path = ClaudeMessage.transcript(value) { turnEnded(id, path) }
+        if state == .idle, turnUnderWay, let path = ClaudeMessage.transcript(value) { turnEnded(id, path) }
     }
 
     /// The pane's shell reported a command finished, so whatever ran there

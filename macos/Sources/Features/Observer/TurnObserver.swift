@@ -21,6 +21,8 @@ enum BubbleContent: Equatable {
 final class TurnObserver: ObservableObject {
     static let shared = TurnObserver()
     static let nothingYet = "Nothing to sum up yet."
+    /// How soon a pane may move on to another conversation file.
+    static let switchInterval: TimeInterval = 30
     /// Read by the nonisolated run, so not main-actor bound.
     nonisolated static let garbled = "The summary came back garbled. Tap again to retry."
 
@@ -31,6 +33,7 @@ final class TurnObserver: ObservableObject {
         var detect: @Sendable () async -> SummarizerKind
         var summarize: @Sendable (SummarizerKind, String, RunHandle) async -> Result<String, SummaryError>
         var maxRunning = 2
+        var now: @Sendable () -> Date = Date.init
 
         static var live: Dependencies {
             Dependencies(
@@ -85,6 +88,8 @@ final class TurnObserver: ObservableObject {
     /// the switch off.
     private var waitingPanes: Set<UUID> = []
     private var detecting: Task<SummarizerKind, Never>?
+    /// When each pane last took a conversation file.
+    private var switchedAt: [UUID: Date] = [:]
 
     init(deps: Dependencies = .live) {
         self.deps = deps
@@ -99,8 +104,18 @@ final class TurnObserver: ObservableObject {
 
     func turnEnded(pane: UUID, path: String) {
         guard deps.locate(path) != nil else { return }
-        if panes[pane] != path { panes[pane] = path }
-        let wanted = waitingPanes.remove(pane) != nil
+        if panes[pane] != path {
+            // A pane moves to another conversation at most every
+            // `switchInterval`, so text printed in it can't queue runs for
+            // every conversation on disk.
+            let now = deps.now()
+            if panes[pane] != nil, let last = switchedAt[pane], now.timeIntervalSince(last) < Self.switchInterval { return }
+            panes[pane] = path
+            switchedAt[pane] = now
+        }
+        // A tap's run under way wants this turn too, or it would show the
+        // reply before it as current.
+        let wanted = waitingPanes.remove(pane) != nil || tapRuns.contains(path)
         var conversation = conversations[path] ?? Conversation()
         conversation.stale = true
         conversations[path] = conversation
@@ -155,6 +170,7 @@ final class TurnObserver: ObservableObject {
 
     func surfaceClosed(_ pane: UUID) {
         panes[pane] = nil
+        switchedAt[pane] = nil
         waitingPanes.remove(pane)
     }
 

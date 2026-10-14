@@ -85,5 +85,15 @@ struct UsageLedgerTests {
         }
         #expect(ledger.runs(now: now).count == 50)
     }
+
+    @Test func aReportWithinAMinuteDoesntRewriteTheLedger() {
+        let ledger = UsageLedger(url: tempURL())
+        ledger.reported("/c/a.jsonl", at: now, locate: claude)
+        ledger.reported("/c/a.jsonl", at: now + 30, locate: claude)
+        // Had the second report been kept, it would still be in the window here.
+        #expect(ledger.conversations(now: now + UsageLedger.keep + 10).isEmpty)
+        ledger.reported("/c/a.jsonl", at: now + 61, locate: claude)
+        #expect(ledger.conversations(now: now + UsageLedger.keep + 10).count == 1)
+    }
 }
 #endif

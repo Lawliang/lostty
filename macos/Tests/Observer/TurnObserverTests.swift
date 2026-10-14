@@ -56,7 +56,12 @@ struct TurnObserverTests {
     let you = ConversationEntry(speaker: .you, text: "Fix the login bug")
     let agent = ConversationEntry(speaker: .agent, text: "Fixed it.")
 
-    func makeObserver(kind: SummarizerKind = .claude("/fake/claude"), maxRunning: Int = 2) -> TurnObserver {
+    final class Clock: @unchecked Sendable {
+        var now = Date(timeIntervalSince1970: 1_800_000_000)
+    }
+
+    func makeObserver(kind: SummarizerKind = .claude("/fake/claude"), maxRunning: Int = 2,
+                      clock: Clock = Clock()) -> TurnObserver {
         let fake = self.fake
         let toggle = self.toggle
         return TurnObserver(deps: TurnObserver.Dependencies(
@@ -65,7 +70,8 @@ struct TurnObserverTests {
             read: { fake.read($0.url.path, $1) },
             detect: { kind },
             summarize: { _, prompt, handle in await fake.summarize(prompt, handle) },
-            maxRunning: maxRunning))
+            maxRunning: maxRunning,
+            now: { clock.now }))
     }
 
     func reply(_ built: [String], _ justNow: String) -> Result<String, SummaryError> {
@@ -267,6 +273,39 @@ struct TurnObserverTests {
         observer.turnEnded(pane: pane, path: "/ok/a")
         observer.surfaceClosed(pane)
         #expect(observer.carry().isEmpty)
+    }
+
+    @Test func aPaneSwitchingConversationsTooFastIsHeldOff() {
+        toggle.on = false
+        let clock = Clock()
+        let observer = makeObserver(clock: clock)
+        fake.set("/ok/a", [you, agent])
+        fake.set("/ok/b", [you, agent])
+        observer.turnEnded(pane: pane, path: "/ok/a")
+        observer.turnEnded(pane: pane, path: "/ok/b")
+        #expect(observer.carry() == [pane: "/ok/a"])
+        clock.now += TurnObserver.switchInterval + 1
+        observer.turnEnded(pane: pane, path: "/ok/b")
+        #expect(observer.carry() == [pane: "/ok/b"])
+    }
+
+    @Test func aTurnEndingDuringATapsRunIsNotLost() async {
+        toggle.on = false
+        let observer = makeObserver()
+        fake.set("/ok/a", [you, agent])
+        observer.turnEnded(pane: pane, path: "/ok/a")
+        observer.open(pane: pane, working: false)
+        await eventually { fake.started == 1 }
+        fake.set("/ok/a", [you, agent, ConversationEntry(speaker: .you, text: "more"),
+                           ConversationEntry(speaker: .agent, text: "ok")])
+        observer.turnEnded(pane: pane, path: "/ok/a")
+        fake.answer(reply(["a"], "old"))
+        // The newer turn is summarized too, rather than "old" shown as current.
+        await eventually { fake.started == 2 }
+        #expect(fake.started == 2)
+        fake.answer(reply(["a"], "new"))
+        await eventually { observer.content(pane: pane, working: false) == .notes(ObserverNotes(built: ["a"], justNow: "new")) }
+        #expect(observer.content(pane: pane, working: false) == .notes(ObserverNotes(built: ["a"], justNow: "new")))
     }
 }
 #endif

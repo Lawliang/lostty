@@ -26,19 +26,22 @@ struct SidebarMascot: View {
     var body: some View {
         // Each half minute, so ready turns idle on time.
         TimelineView(.periodic(from: .now, by: 30)) { context in
-            if let state = state(now: context.date) {
+            let state = state(now: context.date)
+            if Self.isShown(state: state, bubbleOpen: openPane != nil) {
                 Button(action: toggle) {
-                    Axolotl(pose: openPane != nil ? .happy : Self.pose(state)).frame(width: 56, height: 56)
+                    Axolotl(pose: openPane != nil ? .happy : state.map(Self.pose) ?? .resting).frame(width: 56, height: 56)
                         .background(alignment: .bottom) { MascotPlatform() }
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(state.title)
+                .accessibilityLabel(state?.title ?? "Lostty")
                 .accessibilityHint("Shows what's been done in this terminal")
                 .popover(isPresented: bubbleShown, arrowEdge: .top) {
                     MascotBubble(content: bubbleContent, maxHeight: bubbleMaxHeight)
                 }
                 .transition(.opacity)
+                // Belt and braces: the bubble's anchor gone means it's closed.
+                .onDisappear { close() }
             }
         }
         .animation(.easeInOut(duration: 0.2), value: surfaceID.flatMap { state(id: $0, now: Date()) })
@@ -87,6 +90,11 @@ struct SidebarMascot: View {
         let last = activity.lastActivity[id]
         guard waiting || working || activity.known.contains(id) else { return nil }
         return PaneState(waiting: waiting, working: working, lastActivity: last, now: now)
+    }
+
+    /// Whether the mascot stands in the corner.
+    static func isShown(state: PaneState?, bubbleOpen: Bool) -> Bool {
+        state != nil || bubbleOpen
     }
 
     static func pose(_ state: PaneState) -> Axolotl.Pose {

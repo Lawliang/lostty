@@ -45,7 +45,11 @@ enum Summarizer {
         for executable: String,
         base: [String: String] = ProcessInfo.processInfo.environment
     ) -> [String: String] {
-        let kept = ["HOME", "USER", "LOGNAME", "TMPDIR", "LANG", "CLAUDE_CONFIG_DIR", "CODEX_HOME"]
+        // Proxies and certificates too: behind a company proxy the CLIs can't
+        // reach their servers without them, and they pick no billing.
+        let kept = ["HOME", "USER", "LOGNAME", "TMPDIR", "LANG", "CLAUDE_CONFIG_DIR", "CODEX_HOME",
+                    "HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "NO_PROXY", "no_proxy",
+                    "ALL_PROXY", "all_proxy", "NODE_EXTRA_CA_CERTS", "SSL_CERT_FILE", "SSL_CERT_DIR"]
         var env = base.filter { kept.contains($0.key) }
         let folder = (executable as NSString).deletingLastPathComponent
         env["PATH"] = "\(folder):/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"

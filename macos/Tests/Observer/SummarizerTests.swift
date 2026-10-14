@@ -124,5 +124,13 @@ struct SummarizerTests {
         _ = await Summarizer.run(.codex(codex), prompt: "x", handle: RunHandle(), ledger: ledger)
         #expect(ledger.runs().isEmpty)
     }
+
+    @Test func theEnvironmentKeepsProxiesAndCertificates() {
+        let base = ["HOME": "/Users/me", "HTTPS_PROXY": "http://proxy:8080", "https_proxy": "http://proxy:8080",
+                    "HTTP_PROXY": "http://proxy:8080", "NO_PROXY": "localhost", "ALL_PROXY": "socks5://p",
+                    "NODE_EXTRA_CA_CERTS": "/etc/corp.pem", "SSL_CERT_FILE": "/etc/ca.pem", "SSL_CERT_DIR": "/etc/certs"]
+        let env = Summarizer.environment(for: "/bin/claude", base: base)
+        for key in base.keys { #expect(env[key] == base[key]) }
+    }
 }
 #endif

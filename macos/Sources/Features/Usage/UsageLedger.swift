@@ -53,6 +53,12 @@ final class UsageLedger: @unchecked Sendable {
         locate: (String) -> TranscriptLocation? = { TranscriptLocation.allowed($0) }
     ) {
         guard let location = locate(path), location.agent == .claude else { return }
+        // Reported under a minute ago: no need to rewrite the file (every
+        // turn end reports, and the window is days long).
+        lock.lock()
+        let last = contents.conversations[location.url.path]
+        lock.unlock()
+        if let last, now.timeIntervalSince(last) >= 0, now.timeIntervalSince(last) < 60 { return }
         change(now) { $0.conversations[location.url.path] = now }
     }
 
