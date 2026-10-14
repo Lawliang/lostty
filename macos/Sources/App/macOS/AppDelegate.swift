@@ -357,7 +357,11 @@ class AppDelegate: NSObject,
         // The mascot's turn observer: hears each turn's end from the agent
         // hooks, and finds out which summarizer it can use. Before the
         // restart resume, which hands it each pane's conversation.
-        ClaudeRuntime.shared.turnEnded = { TurnObserver.shared.turnEnded(pane: $0, path: $1) }
+        ClaudeRuntime.shared.turnEnded = { pane, path in
+            TurnObserver.shared.turnEnded(pane: pane, path: path)
+            // The usage breakdown counts this conversation as Claude Code in Lostty.
+            UsageLedger.shared.reported(path)
+        }
         TurnObserver.shared.start()
         // Restart to Update: put back what window restoration doesn't
         // (Claude's state, Stay Awake, the window setting, hooks). Before

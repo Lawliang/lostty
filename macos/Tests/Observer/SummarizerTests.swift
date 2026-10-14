@@ -95,5 +95,34 @@ struct SummarizerTests {
         #expect(SummarizerKind.codex("/c").words == ObserverPrompt.cliWords)
         #expect(SummarizerKind.apple.words == ObserverPrompt.appleWords)
     }
+
+    func tempLedger() -> UsageLedger {
+        UsageLedger(url: FileManager.default.temporaryDirectory.appendingPathComponent("ledger-\(UUID().uuidString).json"))
+    }
+
+    @Test func claudeRunsRecordTheirTokens() async throws {
+        let claude = try script("claude", #"""
+        cat > /dev/null
+        echo '{"type":"result","is_error":false,"result":"{\"built\":[],\"just_now\":\"hi\"}","modelUsage":{"claude-haiku-5-5":{"inputTokens":7,"outputTokens":3}}}'
+        """#)
+        let ledger = tempLedger()
+        let result = await Summarizer.run(.claude(claude), prompt: "x", handle: RunHandle(), ledger: ledger)
+        #expect(result == .success(#"{"built":[],"just_now":"hi"}"#))
+        #expect(ledger.runs().map(\.source) == [.observer])
+        #expect(ledger.runs().first?.tokens == ["claude-haiku-5-5": TokenCounts(input: 7, output: 3)])
+    }
+
+    @Test func codexRunsRecordNothing() async throws {
+        let codex = try script("codex", """
+        out=""
+        while [ $# -gt 0 ]; do if [ "$1" = "-o" ]; then out="$2"; fi; shift; done
+        cat > /dev/null
+        echo '{"type":"result","is_error":false,"result":"x","modelUsage":{"m":{"inputTokens":1}}}'
+        echo '{"built":["a"],"just_now":"b"}' > "$out"
+        """)
+        let ledger = tempLedger()
+        _ = await Summarizer.run(.codex(codex), prompt: "x", handle: RunHandle(), ledger: ledger)
+        #expect(ledger.runs().isEmpty)
+    }
 }
 #endif

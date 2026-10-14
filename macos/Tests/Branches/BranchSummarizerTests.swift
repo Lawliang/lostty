@@ -70,5 +70,40 @@ struct BranchSummarizerTests {
         #expect(result == .failure(.cancelled))
         #expect(Date().timeIntervalSince(start) < 5)
     }
+
+    @Test func recordsTheRunsTokens() throws {
+        let repo = try branchRepo()
+        let claude = try fakeClaude(
+            #"echo '{"type":"result","is_error":false,"result":"Adds feat one.","modelUsage":{"claude-haiku-5-5":{"inputTokens":10,"outputTokens":2}}}'"#)
+        let ledger = UsageLedger(url: FileManager.default.temporaryDirectory
+            .appendingPathComponent("ledger-\(UUID().uuidString).json"))
+        let result = BranchSummarizer.run(
+            branch: "feat", base: "main", root: repo.root, claude: claude, handle: RunHandle(), ledger: ledger)
+        #expect(result == .success("Adds feat one."))
+        #expect(ledger.runs().map(\.source) == [.branchSummary])
+        #expect(ledger.runs().first?.tokens == ["claude-haiku-5-5": TokenCounts(input: 10, output: 2)])
+    }
+
+    @Test func plainOutputRecordsNothing() throws {
+        let repo = try branchRepo()
+        let claude = try fakeClaude("echo 'Adds feat one.'")
+        let ledger = UsageLedger(url: FileManager.default.temporaryDirectory
+            .appendingPathComponent("ledger-\(UUID().uuidString).json"))
+        _ = BranchSummarizer.run(
+            branch: "feat", base: "main", root: repo.root, claude: claude, handle: RunHandle(), ledger: ledger)
+        #expect(ledger.runs().isEmpty)
+    }
+
+    @Test func runsWithoutLosttysAPIKey() throws {
+        let repo = try branchRepo()
+        let claude = try fakeClaude(#"echo "key=${ANTHROPIC_API_KEY:-none}""#)
+        setenv("ANTHROPIC_API_KEY", "sk-test", 1)
+        defer { unsetenv("ANTHROPIC_API_KEY") }
+        let ledger = UsageLedger(url: FileManager.default.temporaryDirectory
+            .appendingPathComponent("ledger-\(UUID().uuidString).json"))
+        let result = BranchSummarizer.run(
+            branch: "feat", base: "main", root: repo.root, claude: claude, handle: RunHandle(), ledger: ledger)
+        #expect(result == .success("key=none"))
+    }
 }
 #endif

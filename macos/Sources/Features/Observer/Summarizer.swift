@@ -93,10 +93,14 @@ enum Summarizer {
 
     /// The model's answer to `prompt`. `handle` cancels a CLI run; cancel
     /// the calling task for Apple's.
-    static func run(_ kind: SummarizerKind, prompt: String, handle: RunHandle) async -> Result<String, SummaryError> {
+    static func run(
+        _ kind: SummarizerKind, prompt: String, handle: RunHandle, ledger: UsageLedger = .shared
+    ) async -> Result<String, SummaryError> {
         switch kind {
         case .claude(let path):
-            return await Task.detached(priority: .utility) { Summarizer.runClaude(path, prompt: prompt, handle: handle) }.value
+            return await Task.detached(priority: .utility) {
+                Summarizer.runClaude(path, prompt: prompt, handle: handle, ledger: ledger)
+            }.value
         case .codex(let path):
             return await Task.detached(priority: .utility) { Summarizer.runCodex(path, prompt: prompt, handle: handle) }.value
         case .apple:
@@ -106,10 +110,13 @@ enum Summarizer {
         }
     }
 
-    private static func runClaude(_ path: String, prompt: String, handle: RunHandle) -> Result<String, SummaryError> {
+    private static func runClaude(
+        _ path: String, prompt: String, handle: RunHandle, ledger: UsageLedger
+    ) -> Result<String, SummaryError> {
         let result = ProcessRunner.run(
             path, ClaudeCLI.arguments, cwd: NSTemporaryDirectory(), environment: environment(for: path),
             inheritEnvironment: false, stdin: prompt, timeout: ClaudeCLI.timeout, onStart: handle.started)
+        if let tokens = ClaudeCLI.usage(result) { ledger.record(tokens, source: .observer) }
         return ClaudeCLI.interpret(result, cancelled: handle.isCancelled)
     }
 

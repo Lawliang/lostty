@@ -31,7 +31,10 @@ final class RunHandle: @unchecked Sendable {
 enum BranchSummarizer {
     /// Reads `branch`'s commits and diff against `base` and asks `claude`
     /// for a summary. Blocking: call it off the main thread.
-    static func run(branch: String, base: String, root: String, claude: String, handle: RunHandle) -> Result<String, SummaryError> {
+    static func run(
+        branch: String, base: String, root: String, claude: String, handle: RunHandle,
+        ledger: UsageLedger = .shared
+    ) -> Result<String, SummaryError> {
         let commits = "refs/heads/\(base)..refs/heads/\(branch)"
         let changes = "refs/heads/\(base)...refs/heads/\(branch)"
         // Plain text whatever the user's config: no external diff tool
@@ -43,13 +46,14 @@ enum BranchSummarizer {
         guard !handle.isCancelled else { return .failure(.cancelled) }
 
         let prompt = SummaryPrompt.build(branch: branch, base: base, log: log, diff: diff, stat: stat)
-        // claude may be a script that needs its own folder (node) on PATH.
-        let folder = (claude as NSString).deletingLastPathComponent
+        // Only what finding the login takes, with claude's own folder (node)
+        // first on PATH: never an API key or pane variable from Lostty's own.
         let result = ProcessRunner.run(
             claude, ClaudeCLI.arguments,
             cwd: NSTemporaryDirectory(),
-            environment: ["PATH": "\(folder):/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"],
+            environment: Summarizer.environment(for: claude), inheritEnvironment: false,
             stdin: prompt, timeout: ClaudeCLI.timeout, onStart: handle.started)
+        if let tokens = ClaudeCLI.usage(result) { ledger.record(tokens, source: .branchSummary) }
         return ClaudeCLI.interpret(result, cancelled: handle.isCancelled)
     }
 }
