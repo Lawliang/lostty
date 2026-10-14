@@ -97,11 +97,6 @@ extension Ghostty {
             let swipe = KeyboardSwipeRecognizer(target: self, action: #selector(swiped(_:)))
             swipe.delegate = self
             addGestureRecognizer(swipe)
-            if KeyboardDebugLog.enabled {
-                let watcher = TouchLogRecognizer(target: nil, action: nil)
-                watcher.describe = { [weak self] point in self?.debugName(at: point) ?? "?" }
-                addGestureRecognizer(watcher)
-            }
         }
 
         // MARK: Touches between keys
@@ -124,44 +119,6 @@ extension Ghostty {
             hypot(max(rect.minX - point.x, 0, point.x - rect.maxX), max(rect.minY - point.y, 0, point.y - rect.maxY))
         }
 
-        // MARK: Debug log
-
-        /// What a touch at `point` is on: a key, the grabber, or the gap
-        /// nearest a key.
-        private func debugName(at point: CGPoint) -> String {
-            if point.y < Self.top { return "GRABBER" }
-            var named: [(UIView, String)] = rows.flatMap { $0 }.map { ($0.button, Self.debugName($0.slot.key, shift: shift)) }
-            named += [(esc, "esc"), (globe, "globe"), (send, "send"), (flowMode, "flow")]
-            if let hit = named.first(where: { $0.0.frame.contains(point) }) { return "key '\(hit.1)'" }
-            let nearest = named.min { distance($0.0.frame, point) < distance($1.0.frame, point) }
-            return String(format: "GAP near '%@' (%.0fpt off)", nearest?.1 ?? "?", nearest.map { distance($0.0.frame, point) } ?? 0)
-        }
-
-        private static func debugName(_ key: Board.Key, shift: Board.Shift) -> String {
-            switch key {
-            case .char(let char): Board.text(char, shift: shift)
-            case .space: "space"
-            case .newline: "return"
-            case .ctrl: "ctrl"
-            case .layer(let layer): Board.label(layer)
-            case .shift: "shift"
-            case .backspace: "delete"
-            }
-        }
-
-        /// Each key's touch events: whether a touch on it became a press, or
-        /// slid off or was cancelled (by a swipe, say) and typed nothing.
-        private func logEvents(_ button: UIButton, _ name: @escaping () -> String) {
-            guard KeyboardDebugLog.enabled else { return }
-            let events: [(UIControl.Event, String)] = [
-                (.touchDown, "down"), (.touchUpInside, "UP-INSIDE"), (.touchUpOutside, "up-OUTSIDE (no key)"),
-                (.touchCancel, "CANCEL (no key)"), (.touchDragExit, "drag-exit"), (.touchDragEnter, "drag-enter"),
-            ]
-            for (event, what) in events {
-                button.addAction(UIAction { _ in KeyboardDebugLog.log("  key '\(name())' \(what)") }, for: event)
-            }
-        }
-
         /// The keyboard's backdrop: between the screen and the keys.
         static let background = UIColor(red: 0x10 / 255, green: 0x0F / 255, blue: 0x13 / 255, alpha: 1)
 
@@ -178,9 +135,6 @@ extension Ghostty {
         }
 
         @objc private func swiped(_ swipe: KeyboardSwipeRecognizer) {
-            KeyboardDebugLog.log(String(
-                format: "  swipe %@ dx=%.0f dy=%.0f%@", swipe.state.debugName, swipe.translation.x, swipe.translation.y,
-                swipe.state == .began ? " (the key under the finger is cancelled)" : ""))
             switch swipe.state {
             case .began:
                 swipeFeedback.begin(at: swipe.start, to: swipe.current)
@@ -190,7 +144,6 @@ extension Ghostty {
                 // The arrow goes the moment the finger lifts; the feedback
                 // only follows.
                 let made = swipe.made
-                KeyboardDebugLog.log("  swipe -> \(made.map { "arrow \($0)" } ?? "nothing (too short)")")
                 if let made {
                     feedback()
                     onSwipe?(made)
@@ -227,10 +180,6 @@ extension Ghostty {
         /// far enough (or flicked down); springs back otherwise.
         @objc private func dragged(_ pan: UIPanGestureRecognizer) {
             let down = max(0, pan.translation(in: self).y)
-            if pan.state != .changed {
-                KeyboardDebugLog.log(String(
-                    format: "  grabber drag %@ down=%.0f vy=%.0f", pan.state.debugName, down, pan.velocity(in: self).y))
-            }
             switch pan.state {
             case .began, .changed:
                 grabber.transform = CGAffineTransform(translationX: 0, y: min(down, Self.dismissDistance) / 3)
@@ -248,19 +197,16 @@ extension Ghostty {
         /// closes. VoiceOver's double-tap still closes.
         @objc private func handleTapped(_ gesture: UITapGestureRecognizer) {
             guard !UIAccessibility.isVoiceOverRunning else {
-                KeyboardDebugLog.log("  grabber TAP (VoiceOver) -> closes the keyboard")
                 hideKeyboard()
                 return
             }
             let point = gesture.location(in: self)
             guard let key = rows.first?.map(\.button).min(by: { distance($0.frame, point) < distance($1.frame, point) })
             else { return }
-            KeyboardDebugLog.log("  grabber TAP -> the top-row key under it")
             key.sendActions(for: .touchUpInside)
         }
 
         private func hideKeyboard() {
-            KeyboardDebugLog.log("  keyboard asks to close (grabber)")
             tap.impactOccurred(intensity: 0.6)
             onDismiss?()
         }
@@ -288,7 +234,6 @@ extension Ghostty {
                         self?.style(button, for: slot.key)
                     }
                     wire(button, slot.key)
-                    logEvents(button) { [weak self] in Self.debugName(slot.key, shift: self?.shift ?? .off) }
                     addSubview(button)
                     return (button, slot)
                 }
@@ -325,13 +270,11 @@ extension Ghostty {
 
         @objc private func spaceHeld(_ hold: UILongPressGestureRecognizer) {
             guard hold.state == .began else { return }
-            KeyboardDebugLog.log("  space HELD -> switches to the iOS keyboard")
             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
             onRowKey?(.keyboard)
         }
 
         private func pressed(_ key: Board.Key) {
-            KeyboardDebugLog.log("  PRESS '\(Self.debugName(key, shift: shift))' (\(Board.label(board)) board)")
             feedback()
             switch key {
             case .char(let char):
@@ -425,7 +368,6 @@ extension Ghostty {
         private func buildStrip() {
             // send has its own look (SendKeyButton).
             send.addAction(UIAction { [weak self] _ in self?.feedback(); self?.onSend?() }, for: .touchUpInside)
-            logEvents(send) { "send" }
             addSubview(send)
             for (button, title, action) in [
                 (flowMode, "flow", { [weak self] in self?.onFlowMode?() }),
@@ -443,7 +385,6 @@ extension Ghostty {
                     button.configuration = config
                 }
                 button.addAction(UIAction { [weak self] _ in self?.feedback(); action() }, for: .touchUpInside)
-                logEvents(button) { title }
                 addSubview(button)
             }
             // esc and the globe at the left, styled as 123 and ctrl.
@@ -466,7 +407,6 @@ extension Ghostty {
                     button.configuration = config
                 }
                 button.addAction(UIAction { [weak self] _ in self?.feedback(); self?.onRowKey?(key) }, for: .touchUpInside)
-                logEvents(button) { key.accessibilityName }
                 addSubview(button)
             }
         }

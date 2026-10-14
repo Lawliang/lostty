@@ -151,29 +151,6 @@ extension Ghostty {
             addGestureRecognizer(UIPanGestureRecognizer(target: self, action: #selector(panned(_:))))
             // The history's copy reaches a line above the top.
             clipsToBounds = true
-            if KeyboardDebugLog.enabled { watchKeyboardForDebugLog() }
-        }
-
-        /// Every show and hide of the keyboard, for the debug log.
-        private func watchKeyboardForDebugLog() {
-            let center = NotificationCenter.default
-            let names: [(Foundation.Notification.Name, String)] = [
-                (UIResponder.keyboardWillShowNotification, "keyboard will SHOW"),
-                (UIResponder.keyboardWillHideNotification, "keyboard will HIDE"),
-                (UIResponder.keyboardDidHideNotification, "keyboard did hide"),
-                (UIApplication.willResignActiveNotification, "app will resign active"),
-                (UIApplication.didBecomeActiveNotification, "app did become active"),
-            ]
-            for (name, what) in names {
-                center.addObserver(forName: name, object: nil, queue: .main) { [weak self] note in
-                    let frame = (note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect).map {
-                        String(format: " frame y=%.0f h=%.0f", $0.minY, $0.height)
-                    } ?? ""
-                    MainActor.assumeIsolated {
-                        KeyboardDebugLog.log("\(what)\(frame) [terminal first responder: \(self?.isFirstResponder ?? false)]")
-                    }
-                }
-            }
         }
 
         required init?(coder: NSCoder) {
@@ -222,15 +199,8 @@ extension Ghostty {
         override var inputAccessoryView: UIView? { usesLosttyKeyboard ? nil : keyRow }
         override var inputView: UIView? { usesLosttyKeyboard ? keyboard : nil }
 
-        override func becomeFirstResponder() -> Bool {
-            let became = super.becomeFirstResponder()
-            KeyboardDebugLog.log("terminal becomeFirstResponder -> \(became) (\(usesLosttyKeyboard ? "Lostty" : "iOS") keyboard)")
-            return became
-        }
-
         override func resignFirstResponder() -> Bool {
             let resigned = super.resignFirstResponder()
-            KeyboardDebugLog.log("terminal RESIGN first responder -> \(resigned); asked by: \(KeyboardDebugLog.caller())")
             // Next time, Lostty's keyboard again.
             if resigned { usesLosttyKeyboard = true }
             return resigned
@@ -275,7 +245,6 @@ extension Ghostty {
                 return
             }
             scroller?.leave()
-            KeyboardDebugLog.log("terminal tapped -> show keyboard")
             showKeyboard()
         }
 
@@ -396,7 +365,6 @@ extension Ghostty {
             if key == .keyboard {
                 // Lostty's keyboard ⇄ iOS's (emoji, dictation, languages).
                 usesLosttyKeyboard.toggle()
-                KeyboardDebugLog.log("switch keyboards -> \(usesLosttyKeyboard ? "Lostty" : "iOS")")
                 reloadInputViews()
                 return
             }
@@ -465,14 +433,12 @@ extension Ghostty.SurfaceView: UIKeyInput {
     var keyboardAppearance: UIKeyboardAppearance { get { .dark } set {} }
 
     func insertText(_ text: String) {
-        Ghostty.KeyboardDebugLog.log("    typed \(text.debugDescription)\(ctrlLatched ? " with ctrl" : "")")
         let ctrl = ctrlLatched
         ctrlLatched = false
         send(Ghostty.MobileInput.presses(typed: text, ctrl: ctrl))
     }
 
     func deleteBackward() {
-        Ghostty.KeyboardDebugLog.log("    typed backspace")
         ctrlLatched = false
         send([Ghostty.MobileInput.backspace])
     }
