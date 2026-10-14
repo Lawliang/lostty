@@ -1,4 +1,5 @@
 #if os(macOS)
+import AppKit
 import Combine
 import LosttyRemote
 import SwiftUI
@@ -6,25 +7,73 @@ import SwiftUI
 /// The axolotl standing in the terminal's bottom-right corner, doing what
 /// the focused pane's terminal is doing, as the phone's rows show it:
 /// waving while Claude waits on you, dancing while it works, wagging its
-/// tail when ready, asleep when idle.
+/// tail when ready, asleep when idle. Tap it for its bubble: what's been
+/// done in this conversation and the last reply in plain words.
 struct SidebarMascot: View {
     let surfaceID: UUID?
+    /// The tallest the bubble gets before it scrolls: half the terminal.
+    var bubbleMaxHeight: CGFloat = 400
     @ObservedObject private var claude = ClaudeRuntime.shared
     @ObservedObject private var activity = PaneActivity.shared
+    @ObservedObject private var observer = TurnObserver.shared
+    /// The pane whose bubble is open.
+    @State private var openPane: UUID?
+    /// When the bubble last closed: the click on the mascot that closes a
+    /// transient popover must not open it again on mouse-up.
+    @State private var closedAt = Date.distantPast
+    @State private var escape = EscapeKeyMonitor()
 
     var body: some View {
         // Each half minute, so ready turns idle on time.
         TimelineView(.periodic(from: .now, by: 30)) { context in
             if let state = state(now: context.date) {
-                Axolotl(pose: Self.pose(state)).frame(width: 56, height: 56)
-                    .background(alignment: .bottom) { MascotPlatform() }
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(state.title)
-                    .transition(.opacity)
+                Button(action: toggle) {
+                    Axolotl(pose: openPane != nil ? .happy : Self.pose(state)).frame(width: 56, height: 56)
+                        .background(alignment: .bottom) { MascotPlatform() }
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(state.title)
+                .accessibilityHint("Shows what's been done in this terminal")
+                .popover(isPresented: bubbleShown, arrowEdge: .top) {
+                    MascotBubble(content: bubbleContent, maxHeight: bubbleMaxHeight)
+                }
+                .transition(.opacity)
             }
         }
         .animation(.easeInOut(duration: 0.2), value: surfaceID.flatMap { state(id: $0, now: Date()) })
         .onAppear { activity.start() }
+        // Focus moving to another pane closes the bubble.
+        .onChange(of: surfaceID) { _ in close() }
+        .onDisappear { close() }
+    }
+
+    private var bubbleShown: Binding<Bool> {
+        Binding(get: { openPane != nil }, set: { shown in if !shown { close() } })
+    }
+
+    private var bubbleContent: BubbleContent {
+        guard let id = openPane else { return .message(TurnObserver.nothingYet) }
+        return observer.content(pane: id, working: claude.phases[id] != nil)
+    }
+
+    private func toggle() {
+        if openPane != nil {
+            close()
+            return
+        }
+        guard Date().timeIntervalSince(closedAt) > 0.3, let id = surfaceID else { return }
+        observer.open(pane: id, working: claude.phases[id] != nil)
+        openPane = id
+        escape.start { close() }
+    }
+
+    private func close() {
+        escape.stop()
+        guard let id = openPane else { return }
+        openPane = nil
+        closedAt = Date()
+        observer.close(pane: id)
     }
 
     /// nil for a pane tmux doesn't know (no session yet) and Claude isn't in.
@@ -47,6 +96,27 @@ struct SidebarMascot: View {
         case .ready: .ready
         case .idle: .sleeping
         }
+    }
+}
+
+/// While the bubble is open, Esc closes it instead of reaching the
+/// terminal, where it would interrupt Claude.
+@MainActor
+private final class EscapeKeyMonitor {
+    private var monitor: Any?
+
+    func start(_ onEscape: @escaping @MainActor () -> Void) {
+        stop()
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            guard event.keyCode == 53 else { return event }
+            MainActor.assumeIsolated { onEscape() }
+            return nil
+        }
+    }
+
+    func stop() {
+        if let monitor { NSEvent.removeMonitor(monitor) }
+        monitor = nil
     }
 }
 

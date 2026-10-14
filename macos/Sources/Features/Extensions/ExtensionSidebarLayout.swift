@@ -26,17 +26,26 @@ struct ExtensionSidebarLayout<Content: View>: View {
     @ObservedObject private var preferences = SidebarPreferences.shared
     @StateObject private var autoHide = SidebarAutoHideDriver()
 
+    /// The terminal's height, for the mascot's bubble (at most half).
+    @State private var terminalHeight: CGFloat = 0
+
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 0) {
                 content()
-                    // Over the terminal's corner, under any open extension;
-                    // clicks and selection pass through to the terminal.
+                    // Read behind the terminal, so nothing covers it.
+                    .background(GeometryReader { geo in
+                        Color.clear
+                            .onAppear { terminalHeight = geo.size.height }
+                            .onChange(of: geo.size.height) { terminalHeight = $0 }
+                    })
+                    // Over the terminal's corner, under any open extension.
+                    // The overlay is only as big as the axolotl, which takes
+                    // clicks (its bubble); the rest of the terminal keeps them.
                     .overlay(alignment: .bottomTrailing) {
-                        SidebarMascot(surfaceID: model.focusedSurfaceID)
+                        SidebarMascot(surfaceID: model.focusedSurfaceID, bubbleMaxHeight: max(160, terminalHeight / 2))
                             .padding(.trailing, 14)
                             .padding(.bottom, 10)
-                            .allowsHitTesting(false)
                     }
                     .overlay {
                         if let ext = model.active, ext.presentation == .overlay {
