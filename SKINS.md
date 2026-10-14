@@ -132,6 +132,15 @@ A skin with the same name as a preset keeps the preset's trace unless it
 sets `trace`. `[defaults] trace = false` turns traces off. With Reduce
 Motion on, the border glows gently instead of racing.
 
+## Project Pill
+
+At the right of the title bar, a pill names the focused pane's project and
+branch, as the phone's terminal list does: `> lostty/skins`. It wears the
+pane's skin (its background and text, the accent for the `>` and the
+edge), follows focus between panes and splits, and catches a checkout
+within a couple of seconds. A worktree shows its repo's name. Outside a git
+repo (or in a home folder under git) there is no pill.
+
 ## Claude Usage Bar
 
 A bar along the bottom of each window, as tall as the title bar and the

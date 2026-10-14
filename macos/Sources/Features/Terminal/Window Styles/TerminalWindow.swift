@@ -24,6 +24,9 @@ class TerminalWindow: NSWindow {
     /// Update notification UI in titlebar
     private let updateAccessory = NSTitlebarAccessoryViewController()
 
+    /// Lostty: the focused pane's repo and branch, at the titlebar's right
+    private let projectAccessory = NSTitlebarAccessoryViewController()
+
     /// Lostty: the extensions sidebar's state (its Skins icon replaces the
     /// old title bar skin chip).
     let extensionSidebarModel = ExtensionSidebarModel()
@@ -137,6 +140,13 @@ class TerminalWindow: NSWindow {
         // Create our reset zoom titlebar accessory. We have to have a title
         // to do this or AppKit triggers an assertion.
         if styleMask.contains(.titled) {
+            // Lostty: added first, so it sits furthest right.
+            projectAccessory.layoutAttribute = .right
+            projectAccessory.view = NSHostingView(rootView: ProjectAccessoryView(
+                viewModel: viewModel, model: extensionSidebarModel))
+            addTitlebarAccessoryViewController(projectAccessory)
+            projectAccessory.view.translatesAutoresizingMaskIntoConstraints = false
+
             resetZoomAccessory.layoutAttribute = .right
             resetZoomAccessory.view = NSHostingView(rootView: ResetZoomAccessoryView(
                 viewModel: viewModel,
@@ -661,6 +671,19 @@ extension TerminalWindow {
                 // We always need space at the end of the titlebar
                 .padding(.trailing, 10)
             }
+        }
+    }
+
+    /// Lostty: the project pill, hugging the titlebar's top and right edge
+    /// as the update pill does.
+    struct ProjectAccessoryView: View {
+        @ObservedObject var viewModel: ViewModel
+        @ObservedObject var model: ExtensionSidebarModel
+
+        var body: some View {
+            ProjectPill(model: model)
+                .padding(.top, viewModel.accessoryTopPadding)
+                .padding(.trailing, viewModel.accessoryTopPadding + 4)
         }
     }
 
