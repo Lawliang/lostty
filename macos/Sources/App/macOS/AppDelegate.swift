@@ -352,10 +352,20 @@ class AppDelegate: NSObject,
         PhoneAccessUI.installMenuItem(after: menuOpenConfig)
         // Lostty Settings (sidebar auto-hide), right after Preferences….
         SettingsUI.installMenuItem(after: menuOpenConfig)
+        // Restart to Update in the app menu, once a new build is installed.
+        RestartUI.installMenuItem(after: menuOpenConfig)
+        // Restart to Update: put back what window restoration doesn't
+        // (Claude's state, Stay Awake, the window setting, hooks). Before
+        // Stay Awake's crash restore, the hooks check and the Claude sync.
+        LosttyRestart.resumeIfRestarted()
         // Lostty Mobile: put back power settings a crashed Lostty left
         // changed, then the menu bar icon (Stay Awake for Phone).
         StayAwakeStore.shared.start()
+        // While Stay Awake is on: Wi-Fi gone, move to the iPhone's hotspot.
+        Hotswitch.shared.start()
         LosttyStatusItem.shared.installIfEnabled()
+        // Restart to Update: notice a new build installed over this one.
+        BundleWatch.shared.start()
         HookNotifications.checkAtLaunch()
 
         // Lostty Mobile: after a crash, offer to reopen the tmux sessions
@@ -369,6 +379,8 @@ class AppDelegate: NSObject,
             SessionWatcher.shared.start()
             // Lostty Mobile: each pane's Claude state, for the phone's badges.
             ClaudeTmuxSync.shared.start()
+            // Ends the trace of a Claude interrupted with Esc or Ctrl+C.
+            ClaudeWorkingLineWatch.shared.start()
             // Lostty Mobile: each pane's skin, for the phone's rows.
             SkinTmuxSync.shared.start()
             // Lostty Mobile: session labels as tab titles; a phone attaching
@@ -376,6 +388,8 @@ class AppDelegate: NSObject,
             SessionSync.shared.start()
             // Lostty Mobile: terminals the phone asks for, opened here.
             NewTerminalRequests.shared.start(ghostty)
+            // Lostty Mobile: the phone's notifications (🔔).
+            NotesKeeper.shared.start()
         }
 
         #if DEBUG
@@ -439,6 +453,11 @@ class AppDelegate: NSObject,
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        // Restart to Update (and Sparkle's install-and-relaunch): keep every
+        // session, ask nothing (LosttyRestart).
+        if updateController.isInstalling { LosttyRestart.restart(reason: .sparkle) }
+        if LosttyRestart.isRestarting { return .terminateNow }
+
         // Lostty Mobile: quitting ends Stay Awake for Phone and this Mac's
         // sessions; one confirmation covers both. Never on shutdown.
         if StayAwakeStore.shared.isOn && !Self.systemIsEnding() && !updateController.isInstalling {
@@ -538,8 +557,13 @@ class AppDelegate: NSObject,
         // more selective and only remove surface-targeted notifications.
         UNUserNotificationCenter.current().removeAllDeliveredNotifications()
 
+        // Restart to Update: the next Lostty takes over the sessions and
+        // Stay Awake (LosttyRestart.resumeIfRestarted).
+        guard !LosttyRestart.isRestarting else { return }
+
         // Lostty Mobile: let the Mac sleep again as it did before.
         StayAwakeStore.shared.quit()
+        Hotswitch.shared.quit()
 
         // Lostty Mobile: quitting ends this Lostty's tmux sessions, as
         // quitting a plain terminal ends its shells. Sessions made on the

@@ -117,13 +117,47 @@ struct ClaudeRuntimeTests {
         #expect(runtime.phase(other) == .off)
     }
 
-    // Esc interrupts send no Stop. The agents title the pane with a spinner
-    // while working, so a racing pane whose title turns idle stops at once.
-    @Test func idleTitleStopsARacingTraceImmediately() {
+    // Esc interrupts send no Stop. Agents that title the pane with a spinner
+    // while working stop at once when the title turns idle.
+    @Test func idleTitleAfterASpinnerStopsARacingTraceImmediately() {
         let runtime = makeRuntime()
         runtime.apply(.busy, to: pane)
+        runtime.titleChanged(pane, title: "◐ My session")
         runtime.titleChanged(pane, title: "✳ My session")
         #expect(runtime.phase(pane) == .off)
+    }
+
+    // Claude Code 2.1 keeps "✳ …" while it works: a retitle mid-turn is no
+    // stop.
+    @Test func aStarTitleWithoutASpinnerKeepsTheTrace() {
+        let runtime = makeRuntime()
+        runtime.apply(.busy, to: pane)
+        runtime.titleChanged(pane, title: "✳ Fix the login bug")
+        guard case .racing = runtime.phase(pane) else { Issue.record("expected racing"); return }
+    }
+
+    // After a permission prompt Claude carries on with no new prompt: its
+    // next tool call starts the trace again.
+    @Test func aToolCallWhileStoppedStartsTheTrace() {
+        let runtime = makeRuntime()
+        runtime.userVarChanged(pane, name: ClaudeConstants.userVarName, value: action("Editing Foo.swift"))
+        guard case .racing = runtime.phase(pane) else { Issue.record("expected racing"); return }
+        #expect(runtime.actions[pane] == "Editing Foo.swift")
+    }
+
+    // An interrupt (Esc, Ctrl+C) leaves Claude waiting for you.
+    @Test func theWorkingLineGoingStopsTheTrace() {
+        let runtime = makeRuntime()
+        runtime.apply(.busy, to: pane)
+        runtime.workingLineGone(pane)
+        #expect(runtime.phase(pane) == .off)
+    }
+
+    @Test func theWorkingLineGoingWhileSubagentsWorkKeepsTheTrace() {
+        let runtime = makeRuntime()
+        runtime.apply(.agents, to: pane)
+        runtime.workingLineGone(pane)
+        guard case .racing = runtime.phase(pane) else { Issue.record("expected racing"); return }
     }
 
     @Test func spinnerTitleKeepsTheTraceRacing() {
@@ -313,6 +347,42 @@ struct ClaudeRuntimeTests {
         let runtime = makeRuntime()
         runtime.apply(.resumed, to: pane)
         #expect(runtime.phases.isEmpty)
+    }
+
+    // MARK: Restart
+
+    @Test func carryReadsWhatThePanesShow() {
+        let runtime = makeRuntime()
+        let working = UUID(), agents = UUID(), waiting = UUID()
+        runtime.apply(.busy, to: working)
+        runtime.apply(.agents, to: agents)
+        runtime.focusChanged(waiting, focused: false)
+        runtime.apply(.busy, to: waiting)
+        runtime.apply(.idle, to: waiting, permission: true)
+        let carried = runtime.carry()
+        #expect(carried[working]?.activity == .working)
+        #expect(carried[agents]?.activity == .subagents)
+        #expect(carried[waiting]?.activity == .waiting)
+        #expect(carried.count == 3)
+    }
+
+    @Test func restoreShowsThemAgain() {
+        let runtime = makeRuntime()
+        let working = UUID(), agents = UUID(), waiting = UUID()
+        runtime.restore([
+            working: ClaudeCarry(activity: .working, action: "Editing Foo.swift"),
+            agents: ClaudeCarry(activity: .subagents, action: nil),
+            waiting: ClaudeCarry(activity: .waiting, action: "Run the iOS tests"),
+        ])
+        #expect(runtime.phase(working) == .racing(since: harness.clock))
+        #expect(runtime.phase(agents) == .racing(since: harness.clock, subagents: true))
+        #expect(runtime.awaiting == [waiting])
+        #expect(runtime.actions == [working: "Editing Foo.swift", waiting: "Run the iOS tests"])
+    }
+
+    @Test func aCarryRoundTripsThroughJSON() throws {
+        let carry = ClaudeCarry(activity: .waiting, action: "Run the iOS tests")
+        #expect(try JSONDecoder().decode(ClaudeCarry.self, from: JSONEncoder().encode(carry)) == carry)
     }
 }
 #endif

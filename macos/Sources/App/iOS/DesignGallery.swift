@@ -16,6 +16,20 @@ struct DesignGalleryScreen: View {
     private static let paired = RemoteHostSettings(
         host: "studio-mac.example.ts.net", port: 22, user: "alex",
         fallbackHost: "100.64.0.10", pairedAt: Date(timeIntervalSince1970: 1_791_000_000))
+    /// A waiting terminal (read) and a new build, in the sample sessions' colors.
+    private static let notes: NoteLog = {
+        var log = NoteLog()
+        log.sync(sessions: sessions, now: Date().addingTimeInterval(-600))
+        if let first = log.notes.last { log.apply(.read([first.id]), now: Date()) }
+        log.apply(
+            .build(
+                NoteBuild(
+                    app: "Lostty", bundleID: "com.lawliang.lostty-mobile", build: "202610131331", commit: "cf0a354c9",
+                    branch: "skins", project: "lostty", installURL: "itms-services://?action=download-manifest&url=https://example.ts.net/manifest.plist"),
+                sessionID: sessions.first?.id, terminal: "✳ Ship the inbox", skin: sessions.first?.skin?.encoded),
+            now: Date().addingTimeInterval(-60))
+        return log
+    }()
     private static let sessions = [
         RemoteSession(
             id: "$1", name: "lostty", surface: "A", owner: 1, claude: .waiting, action: "Run the iOS tests",
@@ -62,7 +76,15 @@ struct DesignGalleryScreen: View {
             ]),
             ("Sessions", [
                 entry("Sessions") {
-                    SessionsScreen().environmentObject(MobileStore.gallery(sessions: Self.sessions, settings: Self.paired))
+                    SessionsScreen().environmentObject(MobileStore.gallery(sessions: Self.sessions, settings: Self.paired, notes: Self.notes))
+                },
+                entry("Notifications") {
+                    NotificationsInbox(openTerminal: { _ in })
+                        .environmentObject(MobileStore.gallery(sessions: Self.sessions, settings: Self.paired, notes: Self.notes))
+                },
+                entry("Notifications — empty") {
+                    NotificationsInbox(openTerminal: { _ in })
+                        .environmentObject(MobileStore.gallery(sessions: Self.sessions, settings: Self.paired))
                 },
                 entry("Sessions — large text") {
                     SessionsScreen().environmentObject(MobileStore.gallery(sessions: Self.sessions, settings: Self.paired))
@@ -89,6 +111,9 @@ struct DesignGalleryScreen: View {
             ("Other", [
                 entry("Settings") {
                     NavigationStack { SettingsScreen() }.environmentObject(MobileStore.gallery(settings: Self.paired))
+                },
+                entry("Notification settings") {
+                    NavigationStack { NotificationSettingsScreen() }.environmentObject(MobileStore.gallery(settings: Self.paired))
                 },
                 entry("Terminal bar and row over iOS keyboard") { NavigationStack { TerminalBarPreview() } },
                 entry("Keyboard") { KeyboardPreview() },

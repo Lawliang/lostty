@@ -27,9 +27,10 @@ and also carries general Lostty shortcuts.
 - The menu shows whether a phone is attached right now and which Claude
   sessions are waiting.
 - While Stay Awake is on, losing working Wi-Fi (gone, or connected with no
-  internet) moves the Mac to the customer's iPhone hotspot without anyone
-  touching the Mac. The "connected with no internet" half depends on the
-  spike in §10.
+  internet) moves the Mac to the customer's iPhone hotspot within 2 minutes,
+  lid closed, without anyone touching the Mac; the phone is told and its
+  terminal keeps working. Back in range of known Wi-Fi, the Mac returns to
+  it within about 5 minutes (§10).
 
 ## Facts this design rests on
 
@@ -71,10 +72,9 @@ and also carries general Lostty shortcuts.
 | Icon visibility | Always shown; checkbox in Phone Access to hide | It is a general Lostty menu |
 | Settings storage | `UserDefaults`, like Phone Access and Claude usage | Lostty features don't add Ghostty config keys |
 | Phone push | `PhoneNotifier` hook, no-op until "Lostty phone push" lands | Push needs APNs work of its own |
-| Wi-Fi gone | macOS auto-joins the iPhone hotspot; Lostty checks the setting | macOS already does it |
-| Wi-Fi with no internet | Lostty switches to the hotspot after ~60 s, if the spike confirms CoreWLAN can | macOS stays on a broken network |
-| Which hotspot | Chosen once from known networks in Phone Access | Names change; guessing breaks |
-| Switching back | Left to macOS | Flapping would drop the phone's session |
+| Wi-Fi gone or no internet | Lostty joins the hotspot itself (CoreWLAN) after 20 s / 60 s | macOS refuses to join with the lid closed (§10) |
+| Which hotspot | Chosen once in Phone Access, password stored by Lostty | Names change; macOS's saved password can't be used |
+| Switching back | Lostty leaves the hotspot after 2 strong scans of known Wi-Fi | Saves the phone's data and battery |
 
 ## Architecture
 
@@ -86,7 +86,7 @@ PowerMonitor ──events──▶ StayAwakeModel ──actions──▶ StayAwa
 LosttyStatusItem ◀── StayAwakeStore, PhoneAccessStore, ClaudeRuntime, AttachedPhones
 ```
 
-`HotspotFallback` (§10) runs beside `StayAwakeStore` while it is on. New code
+`Hotswitch` (§10) runs beside `StayAwakeStore` while it is on. New code
 lives in `macos/Sources/Features/StayAwake/` and
 `macos/Sources/Features/MenuBar/`, tests in `macos/Tests/StayAwake/` and
 `macos/Tests/MenuBar/`.
@@ -235,61 +235,90 @@ Battery Floor                         ▸  10% / 15% / 20% / 30%
   for Phone is on. Quitting lets the Mac sleep and ends this Mac's sessions."
   On quit, restores settings before sessions end.
 
-### 10. Wi-Fi fallback
+### 10. Hotswitch (Wi-Fi to iPhone hotspot)
 
-Two halves, the second gated on a spike.
+Rewritten 2026-10-13 after the spike below. "Hotswitch" in code; in the UI,
+"Switch to iPhone hotspot when Wi-Fi drops".
 
-**Wi-Fi gone.** macOS can join the iPhone's hotspot by itself when no known
-Wi-Fi is available (Wi-Fi settings, joining hotspots automatically). Phone
-Access gets a checklist row "Joins your iPhone's hotspot automatically" that
-reads the setting and, when it is off, opens Wi-Fi settings. How to read the
-setting is a spike question; if it can't be read, the row is informational
-with an Open Settings button and no ✓.
+**Why Lostty does it.** macOS won't do it with the lid closed. On
+2026-10-13 Wi-Fi dropped at 6:42 PM with Stay Awake on and "Ask to join
+hotspots" set to Ask to Join: for 72 minutes macOS only offered join
+prompts, refused them with "Screen is locked or Device sleeping" once the
+lid closed, and joined at 7:54 PM when the lid opened.
 
-**Wi-Fi with no internet.** `HotspotFallback`, active only while Stay Awake is
-on:
+**Spike results (2026-10-13, throwaway app joining through CoreWLAN).**
 
-- Watches `NWPathMonitor` and probes reachability (an HTTPS HEAD to a fixed
-  captive-portal check URL) every 15 s while on Wi-Fi.
-- After 60 s on Wi-Fi with every probe failing, and the current network is
-  not the chosen hotspot, it associates with the chosen hotspot through
-  CoreWLAN (`CWInterface.associate(to:password:)`), password from the
-  system keychain entry for that network.
-- Does not switch again for 10 minutes after a switch, and never switches
-  back; macOS rejoins known Wi-Fi on its own.
-- Records the switch for the status line ("Moved to iPhone hotspot · 9:41
-  PM"), sends `notifyMac` and `notifyPhone`.
-- The rules (timing, cooldown, "already on hotspot") live in a pure
-  `HotspotFallbackModel` like `StayAwakeModel`; CoreWLAN and the probe sit
-  behind protocols.
+- The iPhone's hotspot is invisible to `scanForNetworks` unless Personal
+  Hotspot → "Allow Others to Join" is on (5 scans, lid open, phone beside
+  the Mac: 0 found). With it on: found at −33 dBm.
+- `associate(to:password: nil)` (macOS's saved password) fails with
+  `tmpErr` (-3900) in under a second. With the password passed in, it joins
+  in 0.8–1.1 s and the internet works through the hotspot 4 s later.
+- Lid closed, display off, `disablesleep 1`: the join worked the same. The
+  screen was not locked (this Mac locks 8 h after the display sleeps), so
+  joining while locked is untested.
+- A failed `associate` leaves the Mac on no network.
+- `disassociate()` from the hotspot: macOS rejoined the known Wi-Fi within
+  30 s by itself, internet working.
+- Scanning and network names need Location, and a re-signed ad-hoc build
+  loses it (the spike's rebuild went back to "not asked yet").
 
-Phone Access gets a "Your iPhone's hotspot" picker listing known Wi-Fi
-networks (CoreWLAN known profiles), saved in `UserDefaults`. Without a choice,
-`HotspotFallback` stays idle and the menu says so.
+**When it switches.** Only while Stay Awake is on.
 
-**Spike (first task of the plan, throwaway).** On the MacBook, with Stay Awake
-set by hand (`sudo pmset -a disablesleep 1`) and the lid closed:
+- Wi-Fi gone (no network, and no probe getting through, so Ethernet
+  counts) for 20 s, or on Wi-Fi with every probe failing for 60 s. The probe is a GET to `http://captive.apple.com/hotspot-detect.html`
+  every 15 s that must return 200 with "Success".
+- Not when already on the hotspot, not within 10 minutes of the last switch
+  to it.
+- Scan for the hotspot, then associate with the stored password. Success:
+  phone note "Moved to your iPhone hotspot", menu status line. Failure
+  (not found, refused, or no internet within 60 s): phone note "Couldn't
+  move to your iPhone hotspot" once per outage, retry every 2 minutes, and
+  the Lostty log gets the CoreWLAN error and whether the screen was locked.
+- If the hotspot itself drops, do nothing: macOS takes whatever it finds.
 
-1. Turn the router's Wi-Fi off: does macOS join the iPhone hotspot, and how
-   long does it take? Can Lostty read the "join hotspots" setting?
-2. Keep Wi-Fi up with no internet (unplug the router's uplink): from a small
-   script, can CoreWLAN see the hotspot (Personal Hotspot with "Allow Others
-   to Join" off, so only Instant Hotspot advertises it), read its password,
-   and associate, without any prompt? What permission does reading network
-   names need (Location Services)?
+**Back to Wi-Fi.** While on the hotspot, scan every 2 minutes. After 2
+scans in a row that find a known network (CoreWLAN profiles, not the
+hotspot) at −70 dBm or better, `disassociate()` and let macOS rejoin it.
+If there's no internet within 60 s, go back to the hotspot and ignore that
+network for 15 minutes. Quiet in-app note "Back on <network>". Turning
+Stay Awake off while on the hotspot also disassociates.
 
-If 2 fails, the "no internet" half and the hotspot picker are cut from this
-spec and the plan; the checklist row stays. The results are written into
-this section before implementation continues.
+**Setup (Phone Access).** One row "Switch to iPhone hotspot when Wi-Fi
+drops" with:
 
-**Spike results (2026-10-12).**
+- a hotspot picker of known networks, preselecting the one named like a
+  paired phone (here "Law");
+- a password field, stored as a generic password in the login keychain
+  (service "Lostty hotspot", account = network name);
+- a Location row that asks once and shows ✓ or "Allow in System Settings";
+- the hint "On the iPhone: Personal Hotspot → Allow Others to Join".
 
-- Precondition: `/etc/sudoers` line 64 is `#includedir /private/etc/sudoers.d`.
-- Lid closed with `disablesleep 1`, on battery, no charger or display: on a
-  2 s logger, `AppleClamshellState` read `Yes` from 12:51:35 to 12:54:38
-  (about 3 min) with no gap over 3 s. The Mac stayed awake.
-- `pmset -g` on this Mac reports `lowpowermode` (no `powermode` key).
-- Hotspot questions 1–2: not yet run.
+The switch stays off until all three are set, then turns on by itself once.
+Settings live in `UserDefaults` like the rest.
+
+**Stable signing.** Location and the keychain item both follow the app's
+code signature; `install-skins.sh` signs ad-hoc, which changes on every
+install, so each update would drop Location and make the keychain ask
+again with nobody there. `install-skins.sh` signs with the "Apple
+Development" identity when the keychain has one (ad-hoc otherwise).
+
+**Phone heartbeat.** Tailscale keeps the Mac's address across networks, but
+a dead link can take minutes to notice. The phone runs `true` over its SSH
+connection every 20 s; 3 misses in a row close the connection, which
+reconnects with the usual backoff.
+
+**Code.**
+
+- `HotswitchModel` (pure, in `LosttyRemote` so `swift test` covers it):
+  events `tick(now, Link)`, `stayAwake(Bool)`, `joined(Result)`,
+  `scanned([Sighting])`; actions `join`, `leave`, `scan`, `notifyPhone`,
+  `note`, `log`. `Link` is `.none`, `.wifi(name, internet: Bool?)`.
+- `Hotswitch` (`Features/StayAwake/`): a 5 s timer while Stay Awake is on,
+  the probe, CoreWLAN, the keychain, and the model's actions.
+- `HotswitchSettings` + the Phone Access row; the menu's status line reads
+  `Hotswitch.status`.
+- Phone: a heartbeat task beside each attach and the list watch.
 
 ## Error handling
 
@@ -300,8 +329,8 @@ this section before implementation continues.
 | Lostty force-quit and never reopened | Mac stays awake; the docs give the one-line undo |
 | Battery info unavailable (desktop Mac) | No battery cut-off; status line omits battery |
 | `list-clients` fails or tmux not running | Phones section shows paired phones without "attached" |
-| Hotspot not visible or association fails | Stays on the current network; status line "Couldn't reach iPhone hotspot"; retries after the cooldown |
-| Location or keychain access denied | `HotspotFallback` stays idle; Phone Access row shows what to allow |
+| Hotspot not visible or association fails | Phone note once per outage; status line "Couldn't reach iPhone hotspot"; retries every 2 minutes |
+| Location or keychain access denied | `Hotswitch` stays idle; Phone Access row shows what to allow |
 
 ## Testing
 
@@ -313,10 +342,11 @@ this section before implementation continues.
 - `PowerControl` parsing of `pmset -g` output samples.
 - The sudoers line and admin script text.
 - `AttachedPhones` parsing and ancestry with fake process tables.
-- `HotspotFallbackModel` unit tests: switches only after 60 s of failed
-  probes on Wi-Fi, not when already on the hotspot, not without a chosen
-  hotspot, not when Stay Awake is off, honours the 10-minute cooldown, never
-  switches back.
+- `HotswitchModel` unit tests: 20 s with no network, 60 s of failed
+  probes, not when already on the hotspot, not when Stay Awake is off, the
+  10-minute cooldown, one failure note per outage with 2-minute retries,
+  leaving after 2 strong scans, going back and ignoring a network with no
+  internet for 15 minutes, leaving when Stay Awake turns off.
 - Manual checklist on a MacBook:
   - turn on, close the lid on battery, attach from the phone over LTE, run a
     command, open the lid; `pmset -g` shows the previous Low Power Mode;
@@ -347,8 +377,8 @@ this section before implementation continues.
 - Tailscale status, skins, and Claude state for sessions started from the
   phone.
 - A privileged helper (`SMAppService`).
-- Switching back from the hotspot to Wi-Fi (left to macOS), and turning on
-  the iPhone's Personal Hotspot remotely.
+- Turning on the iPhone's Personal Hotspot remotely; a data or battery
+  guard while on the hotspot.
 - Always-on hosts such as a Mac mini (nothing to build).
 
 ## Risks
@@ -357,9 +387,10 @@ this section before implementation continues.
   closed while `disablesleep` is set; the spike checks this first.
 - A closed MacBook can still get hot under heavy builds; the critical thermal
   cut-off is the backstop, not a guarantee.
-- CoreWLAN may not see or join an Instant Hotspot network that isn't
-  broadcasting, or may need prompts nobody can answer with the lid closed;
-  the spike decides whether the "no internet" half ships.
+- Joining while the screen is locked is untested (§10); a refusal shows up
+  as "Couldn't move" notes and a logged CoreWLAN error.
+- "Allow Others to Join" must stay on, so anyone with the password can join
+  the hotspot.
 - Each switch to the hotspot uses cellular data, and the phone's battery
   drains faster while it is the Mac's uplink.
 - macOS may change `pmset` keys or output; `PowerControl` parsing tests pin

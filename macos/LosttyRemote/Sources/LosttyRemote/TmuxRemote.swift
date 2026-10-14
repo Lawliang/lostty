@@ -39,6 +39,8 @@ public struct RemoteSession: Equatable, Sendable {
     public var activity: Date?
     /// The look of the Mac pane showing it (`@lostty_skin`), if it has one.
     public var skin: SessionSkin?
+    /// Its Claude's context window (`@lostty_context`), while Claude runs there.
+    public var context: SessionContext?
     /// The folder of the git repo `path` is in (the main checkout's, for a
     /// linked worktree); nil outside git or when the listing didn't say.
     public var repo: String?
@@ -49,7 +51,7 @@ public struct RemoteSession: Equatable, Sendable {
         id: String, name: String, surface: String?, owner: Int32?, label: String? = nil,
         claude: ClaudeActivity? = nil, action: String? = nil, spinner: ClaudeSpinner? = nil, title: String = "",
         path: String = "", command: String = "", activity: Date? = nil, skin: SessionSkin? = nil,
-        repo: String? = nil, branch: String? = nil
+        context: SessionContext? = nil, repo: String? = nil, branch: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -64,6 +66,7 @@ public struct RemoteSession: Equatable, Sendable {
         self.command = command
         self.activity = activity
         self.skin = skin
+        self.context = context
         self.repo = repo
         self.branch = branch
     }
@@ -89,16 +92,19 @@ public enum TmuxRemote {
     public static let skinOption = "@lostty_skin"
     /// What its Claude is doing, one line, written by the Mac.
     public static let actionOption = "@lostty_action"
+    /// Its Claude's context window (`SessionContext.encoded`), written by the Mac.
+    public static let contextOption = "@lostty_context"
 
     /// id, name, Mac pane, Mac Lostty pid, label, Claude state, last use,
-    /// command, folder, skin, Claude's action, title — tab separated. The
+    /// command, folder, skin, Claude's action, Claude's context, title — tab
+    /// separated. The
     /// title goes last: any program sets it, so a tab inside it stays
     /// inside it. The Mac writes the action without tabs.
     public static let listFormat = [
         "#{session_id}", "#{session_name}", "#{@lostty_surface}", "#{@lostty_owner}",
         "#{\(labelOption)}", "#{\(claudeOption)}", "#{session_activity}",
         "#{pane_current_command}", "#{pane_current_path}", "#{\(skinOption)}", "#{\(actionOption)}",
-        "#{pane_title}",
+        "#{\(contextOption)}", "#{pane_title}",
     ].joined(separator: "\t")
 
     /// The wait-for channel tmux hooks, the Mac and the phone signal when
@@ -280,8 +286,8 @@ public enum TmuxRemote {
     }
 
     private static func parseLine(_ line: Substring) -> RemoteSession? {
-        let f = line.split(separator: "\t", maxSplits: 11, omittingEmptySubsequences: false).map(String.init)
-        guard f.count == 12, isSessionID(f[0]) else { return nil }
+        let f = line.split(separator: "\t", maxSplits: 12, omittingEmptySubsequences: false).map(String.init)
+        guard f.count == 13, isSessionID(f[0]) else { return nil }
         return RemoteSession(
             id: f[0],
             name: f[1],
@@ -290,11 +296,12 @@ public enum TmuxRemote {
             label: f[4].isEmpty ? nil : f[4],
             claude: ClaudeActivity(rawValue: f[5]),
             action: f[10].isEmpty ? nil : f[10],
-            title: f[11],
+            title: f[12],
             path: f[8],
             command: f[7],
             activity: TimeInterval(f[6]).map { Date(timeIntervalSince1970: $0) },
-            skin: SessionSkin(encoded: f[9]))
+            skin: SessionSkin(encoded: f[9]),
+            context: SessionContext(encoded: f[11]))
     }
 
     public static func shellQuote(_ s: String) -> String {

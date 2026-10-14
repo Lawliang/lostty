@@ -99,8 +99,31 @@ extension Ghostty {
             keyboard.onSend = { [weak self] in self?.sendIgnoringCtrl(MobileInput.enter) }
             return keyboard
         }()
-        /// Scroll distance not yet sent, in points.
+        /// A flick still scrolling after the finger lifted; holds the view
+        /// until stopped.
+        private var scrollMomentum: CADisplayLink?
+        /// The flick's speed, in points per second.
+        private var scrollVelocity: CGFloat = 0
+        /// Finger travel not yet sent as a line, in points.
         private var pendingScroll: CGFloat = 0
+        /// Where the last scroll was sent, inside the view.
+        private var scrollPoint: CGPoint = .zero
+        /// `ghostty_input_scroll_mods_t` with only the precision bit set.
+        private static let preciseScroll: ghostty_input_scroll_mods_t = 1
+        /// Slower than this, in points per second, a flick stops.
+        private static let momentumMinimum: CGFloat = 40
+        /// The link the core reports under the pointer (its mouse-over-link
+        /// action); only meaningful during `link(at:)`.
+        var hoveredLink: String?
+        /// Lostty Mobile: the pane's history, scrolled on the phone; without
+        /// one, scrolling sends tmux the wheel.
+        var scrollback: ScrollbackSource? {
+            didSet {
+                scroller?.leave()
+                scroller = scrollback.map { ScrollbackScroller(host: self, source: $0) }
+            }
+        }
+        private var scroller: ScrollbackScroller?
 
         init(_ app: ghostty_app_t, baseConfig: SurfaceConfiguration? = nil, uuid: UUID? = nil) {
             self.id = uuid ?? .init()
@@ -124,8 +147,33 @@ extension Ghostty {
 
             // Lostty Mobile: a remote surface starts its session now.
             remoteIO?.attach(to: surface)
-            addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(tapped)))
+            addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(tapped(_:))))
             addGestureRecognizer(UIPanGestureRecognizer(target: self, action: #selector(panned(_:))))
+            // The history's copy reaches a line above the top.
+            clipsToBounds = true
+            if KeyboardDebugLog.enabled { watchKeyboardForDebugLog() }
+        }
+
+        /// Every show and hide of the keyboard, for the debug log.
+        private func watchKeyboardForDebugLog() {
+            let center = NotificationCenter.default
+            let names: [(Foundation.Notification.Name, String)] = [
+                (UIResponder.keyboardWillShowNotification, "keyboard will SHOW"),
+                (UIResponder.keyboardWillHideNotification, "keyboard will HIDE"),
+                (UIResponder.keyboardDidHideNotification, "keyboard did hide"),
+                (UIApplication.willResignActiveNotification, "app will resign active"),
+                (UIApplication.didBecomeActiveNotification, "app did become active"),
+            ]
+            for (name, what) in names {
+                center.addObserver(forName: name, object: nil, queue: .main) { [weak self] note in
+                    let frame = (note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect).map {
+                        String(format: " frame y=%.0f h=%.0f", $0.minY, $0.height)
+                    } ?? ""
+                    MainActor.assumeIsolated {
+                        KeyboardDebugLog.log("\(what)\(frame) [terminal first responder: \(self?.isFirstResponder ?? false)]")
+                    }
+                }
+            }
         }
 
         required init?(coder: NSCoder) {
@@ -174,8 +222,15 @@ extension Ghostty {
         override var inputAccessoryView: UIView? { usesLosttyKeyboard ? nil : keyRow }
         override var inputView: UIView? { usesLosttyKeyboard ? keyboard : nil }
 
+        override func becomeFirstResponder() -> Bool {
+            let became = super.becomeFirstResponder()
+            KeyboardDebugLog.log("terminal becomeFirstResponder -> \(became) (\(usesLosttyKeyboard ? "Lostty" : "iOS") keyboard)")
+            return became
+        }
+
         override func resignFirstResponder() -> Bool {
             let resigned = super.resignFirstResponder()
+            KeyboardDebugLog.log("terminal RESIGN first responder -> \(resigned); asked by: \(KeyboardDebugLog.caller())")
             // Next time, Lostty's keyboard again.
             if resigned { usesLosttyKeyboard = true }
             return resigned
@@ -211,36 +266,120 @@ extension Ghostty {
             return nil
         }
 
-        @objc private func tapped() {
+        /// A tap on a link opens it; anywhere else brings up the keyboard,
+        /// back at the newest line.
+        @objc private func tapped(_ tap: UITapGestureRecognizer) {
+            let point = tap.location(in: self)
+            if let url = scroller?.isShowing == true ? scroller?.link(at: point) : link(at: point) {
+                UIApplication.shared.open(url)
+                return
+            }
+            scroller?.leave()
+            KeyboardDebugLog.log("terminal tapped -> show keyboard")
             showKeyboard()
         }
 
-        /// A vertical pan scrolls (tmux turns the wheel into its scrollback).
+        /// The link at `point`: a URL in the text or an OSC 8 hyperlink.
+        /// The core finds links under a pointer held with ⌘, as on the Mac,
+        /// and with ⇧ too while the program (tmux) takes the mouse; it
+        /// reports one as hovered, during the call. The pointer then goes
+        /// back off screen, so nothing stays highlighted.
+        func link(at point: CGPoint) -> URL? {
+            guard let surface else { return nil }
+            hoveredLink = nil
+            let mods = ghostty_input_mods_e(rawValue: GHOSTTY_MODS_SUPER.rawValue | GHOSTTY_MODS_SHIFT.rawValue)
+            ghostty_surface_mouse_pos(surface, point.x, point.y, mods)
+            let found = hoveredLink
+            ghostty_surface_mouse_pos(surface, -1, -1, GHOSTTY_MODS_NONE)
+            hoveredLink = nil
+            // Only real URLs: a file path means the Mac's files, not the phone's.
+            guard let found, let url = URL(string: found), let scheme = url.scheme,
+                  scheme.lowercased() != "file" else { return nil }
+            return url
+        }
+
+        /// A vertical pan scrolls (the history on the phone, or tmux's with
+        /// the wheel), and a flick keeps going, slowing down as a scroll view
+        /// does.
         @objc private func panned(_ pan: UIPanGestureRecognizer) {
-            guard let surface else { return }
-            if pan.state == .began { pendingScroll = 0 }
-            pendingScroll += pan.translation(in: self).y
-            pan.setTranslation(.zero, in: self)
-            // One wheel tick is multiplied by mouse-scroll-multiplier (3) and
-            // tmux scrolls 5 lines per wheel event, so one tick per 15 rows
-            // of finger travel moves the content 1:1 with the finger.
-            let line = max(CGFloat(surfaceSize?.cell_height_px ?? 0) / contentScaleFactor, 8)
-            let step = 15 * line
-            let ticks = (pendingScroll / step).rounded(.towardZero)
-            guard ticks != 0 else { return }
-            pendingScroll -= ticks * step
+            switch pan.state {
+            case .began, .changed, .ended:
+                if pan.state == .began {
+                    stopScrollMomentum()
+                    pendingScroll = 0
+                    scroller?.began()
+                }
+                scroll(by: pan.translation(in: self).y, at: pan.location(in: self))
+                pan.setTranslation(.zero, in: self)
+                if pan.state == .ended { startScrollMomentum(velocity: pan.velocity(in: self).y) }
+            default:
+                break
+            }
+        }
+
+        /// A touch stops a flick, as it does in a scroll view.
+        override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+            stopScrollMomentum()
+            super.touchesBegan(touches, with: event)
+        }
+
+        private func scroll(by points: CGFloat, at location: CGPoint) {
+            guard points != 0 else { return }
             // iOS has no mouse, so the core's cursor sits at (-1,-1) and
             // drops wheel events outside the viewport: put it under the finger.
             // A finger dragged past the edge keeps scrolling: clamp to bounds.
-            let raw = pan.location(in: self)
-            let x = min(max(raw.x, bounds.minX), bounds.maxX)
-            let y = min(max(raw.y, bounds.minY), bounds.maxY)
-            ghostty_surface_mouse_pos(surface, x, y, GHOSTTY_MODS_NONE)
-            ghostty_surface_mouse_scroll(surface, 0, Double(ticks), 0)
+            scrollPoint = CGPoint(
+                x: min(max(location.x, bounds.minX), bounds.maxX),
+                y: min(max(location.y, bounds.minY), bounds.maxY))
+            if scroller?.scroll(by: points) == true { return }
+            wheel(by: points)
+        }
+
+        /// Scrolls with the wheel at the last scroll's point.
+        func wheel(by points: CGFloat) {
+            guard let surface else { return }
+            // tmux scrolls whole lines (Lostty's tmux.conf: a line per wheel
+            // event), so send a line once the finger is past half of one:
+            // the text stays within half a line of the finger instead of
+            // trailing it by up to a whole one.
+            let cell = CGFloat(surfaceSize?.cell_height_px ?? 0)
+            guard cell > 0 else { return }
+            let line = cell / contentScaleFactor
+            pendingScroll += points
+            let rows = (pendingScroll / line).rounded()
+            guard rows != 0 else { return }
+            pendingScroll -= rows * line
+            ghostty_surface_mouse_pos(surface, scrollPoint.x, scrollPoint.y, GHOSTTY_MODS_NONE)
+            // A precise scroll is in pixels; whole rows of them are exactly
+            // that many wheel events.
+            ghostty_surface_mouse_scroll(surface, 0, Double(rows * cell), Self.preciseScroll)
+        }
+
+        private func startScrollMomentum(velocity: CGFloat) {
+            guard abs(velocity) > Self.momentumMinimum else { return }
+            scrollVelocity = velocity
+            let link = CADisplayLink(target: self, selector: #selector(scrollMomentumStep(_:)))
+            link.add(to: .main, forMode: .common)
+            scrollMomentum = link
+        }
+
+        @objc private func scrollMomentumStep(_ link: CADisplayLink) {
+            let seconds = link.targetTimestamp - link.timestamp
+            scroll(by: scrollVelocity * seconds, at: scrollPoint)
+            // A scroll view's normal deceleration is per millisecond.
+            scrollVelocity *= pow(UIScrollView.DecelerationRate.normal.rawValue, seconds * 1000)
+            if abs(scrollVelocity) < Self.momentumMinimum { stopScrollMomentum() }
+        }
+
+        private func stopScrollMomentum() {
+            scrollMomentum?.invalidate()
+            scrollMomentum = nil
         }
 
         func send(_ presses: [MobileInput.Press]) {
             guard let surface else { return }
+            // Typing goes where the newest line is.
+            scroller?.leave()
             for press in presses {
                 press.withCValue(action: GHOSTTY_ACTION_PRESS) { _ = ghostty_surface_key(surface, $0) }
                 press.withCValue(action: GHOSTTY_ACTION_RELEASE) { _ = ghostty_surface_key(surface, $0) }
@@ -257,6 +396,7 @@ extension Ghostty {
             if key == .keyboard {
                 // Lostty's keyboard ⇄ iOS's (emoji, dictation, languages).
                 usesLosttyKeyboard.toggle()
+                KeyboardDebugLog.log("switch keyboards -> \(usesLosttyKeyboard ? "Lostty" : "iOS")")
                 reloadInputViews()
                 return
             }
@@ -274,13 +414,16 @@ extension Ghostty {
             // Lostty Mobile: on iOS the renderer's IOSurfaceLayer is added as a
             // sublayer (not the view's own layer) and nothing sizes it, so it
             // stays 0x0 and draws nothing. Fit it to the view.
+            // Not the layers of subviews (the history's copy).
+            let viewLayers = Set(subviews.map { ObjectIdentifier($0.layer) })
             CATransaction.begin()
             CATransaction.setDisableActions(true)
-            for sublayer in layer.sublayers ?? [] {
+            for sublayer in layer.sublayers ?? [] where !viewLayers.contains(ObjectIdentifier(sublayer)) {
                 sublayer.frame = bounds
                 sublayer.contentsScale = contentScaleFactor
             }
             CATransaction.commit()
+            scroller?.layout()
         }
 
         override func didMoveToWindow() {
@@ -289,6 +432,17 @@ extension Ghostty {
             // the text. Draw at the screen's own scale.
             if let window {
                 contentScaleFactor = window.screen.scale
+            } else {
+                // Off screen (kept warm for a quick return): a flick can't keep
+                // scrolling, nor its display link keep the view alive.
+                stopScrollMomentum()
+                scroller?.leave()
+            }
+            // A warm terminal still reads its output, so it reopens current,
+            // but drawing frames nobody sees only heats the phone. Coming
+            // back on screen draws it at once.
+            if let surface {
+                ghostty_surface_set_occlusion(surface, window != nil)
             }
             sizeDidChange(frame.size)
         }
@@ -311,12 +465,14 @@ extension Ghostty.SurfaceView: UIKeyInput {
     var keyboardAppearance: UIKeyboardAppearance { get { .dark } set {} }
 
     func insertText(_ text: String) {
+        Ghostty.KeyboardDebugLog.log("    typed \(text.debugDescription)\(ctrlLatched ? " with ctrl" : "")")
         let ctrl = ctrlLatched
         ctrlLatched = false
         send(Ghostty.MobileInput.presses(typed: text, ctrl: ctrl))
     }
 
     func deleteBackward() {
+        Ghostty.KeyboardDebugLog.log("    typed backspace")
         ctrlLatched = false
         send([Ghostty.MobileInput.backspace])
     }

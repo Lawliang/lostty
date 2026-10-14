@@ -140,23 +140,45 @@ struct TmuxRemoteTests {
     }
 
     @Test func parsesTheSessionList() {
-        let out = "$1\tlostty\tABCD-1\t4242\tDeploy\twaiting\t1700000000\t2.1.296\t/Users/me/lostty\t1c1c1c,,e5199c\tEditing Foo.swift\t✳ Fix login\n"
-            + "$2\tnotes\t\t\t\t\t\tzsh\t/Users/me/notes\t\t\t~/notes\n"
+        let out = "$1\tlostty\tABCD-1\t4242\tDeploy\twaiting\t1700000000\t2.1.296\t/Users/me/lostty\t1c1c1c,,e5199c\tEditing Foo.swift\t84000,200000\t✳ Fix login\n"
+            + "$2\tnotes\t\t\t\t\t\tzsh\t/Users/me/notes\t\t\t\t~/notes\n"
         #expect(TmuxRemote.parse(out) == [
             RemoteSession(
                 id: "$1", name: "lostty", surface: "ABCD-1", owner: 4242, label: "Deploy", claude: .waiting,
                 action: "Editing Foo.swift", title: "✳ Fix login", path: "/Users/me/lostty", command: "2.1.296",
                 activity: Date(timeIntervalSince1970: 1_700_000_000),
                 skin: SessionSkin(
-                    background: .init(r: 0x1c, g: 0x1c, b: 0x1c), foreground: nil, accent: .init(r: 0xe5, g: 0x19, b: 0x9c))),
+                    background: .init(r: 0x1c, g: 0x1c, b: 0x1c), foreground: nil, accent: .init(r: 0xe5, g: 0x19, b: 0x9c)),
+                context: SessionContext(used: 84_000, size: 200_000)),
             RemoteSession(
                 id: "$2", name: "notes", surface: nil, owner: nil, label: nil, claude: nil,
                 title: "~/notes", path: "/Users/me/notes", command: "zsh", activity: nil),
         ])
     }
 
+    @Test func readsTheContextWindow() {
+        #expect(SessionContext(encoded: "84000,200000") == SessionContext(used: 84_000, size: 200_000))
+        #expect(SessionContext(used: 84_000, size: 200_000).encoded == "84000,200000")
+        #expect(SessionContext(encoded: "") == nil)
+        #expect(SessionContext(encoded: "1,0") == nil)
+        #expect(SessionContext(encoded: "-1,10") == nil)
+        #expect(SessionContext(used: 50_000, size: 200_000).percent == 25)
+    }
+
+    @Test func theMeterMatchesTheMacs() {
+        #expect(UsageMeter.filled(0) == 0)
+        #expect(UsageMeter.filled(2) == 1)
+        #expect(UsageMeter.filled(50) == 5)
+        #expect(UsageMeter.filled(250) == 10)
+        #expect(UsageMeter.level(69) == .normal)
+        #expect(UsageMeter.level(70) == .high)
+        #expect(UsageMeter.level(90) == .critical)
+        #expect(UsageMeter.thousands(49_600) == "50K")
+        #expect(UsageMeter.thousands(1_234_000) == "1,234K")
+    }
+
     @Test func aTabInTheTitleStaysInTheTitle() {
-        let out = "$1\tx\t\t\t\t\t1\tzsh\t/x\t\t\tleft\tright 🚀\n"
+        let out = "$1\tx\t\t\t\t\t1\tzsh\t/x\t\t\t\tleft\tright 🚀\n"
         #expect(TmuxRemote.parse(out).first?.title == "left\tright 🚀")
         #expect(TmuxRemote.parseListing("r\tb\t1\t\t" + out).first?.title == "left\tright 🚀")
     }
@@ -164,15 +186,15 @@ struct TmuxRemoteTests {
     @Test func theListAsksForEveryColumnTitleLast() {
         #expect(TmuxRemote.listFormat == "#{session_id}\t#{session_name}\t#{@lostty_surface}\t#{@lostty_owner}\t"
             + "#{@lostty_label}\t#{@lostty_claude}\t#{session_activity}\t#{pane_current_command}\t"
-            + "#{pane_current_path}\t#{@lostty_skin}\t#{@lostty_action}\t#{pane_title}")
+            + "#{pane_current_path}\t#{@lostty_skin}\t#{@lostty_action}\t#{@lostty_context}\t#{pane_title}")
     }
 
     @Test func anUnknownClaudeValueIsNone() {
-        #expect(TmuxRemote.parse("$1\tx\t\t\t\tthinking\t1\tzsh\t/x\t\t\tt\n").first?.claude == nil)
+        #expect(TmuxRemote.parse("$1\tx\t\t\t\tthinking\t1\tzsh\t/x\t\t\t\tt\n").first?.claude == nil)
     }
 
     @Test func aBadSkinIsNone() {
-        #expect(TmuxRemote.parse("$1\tx\t\t\t\t\t1\tzsh\t/x\t#1c1c1c,,e5199c\t\tt\n").first?.skin == nil)
+        #expect(TmuxRemote.parse("$1\tx\t\t\t\t\t1\tzsh\t/x\t#1c1c1c,,e5199c\t\t\tt\n").first?.skin == nil)
     }
 
     @Test func skinsRoundTrip() {
@@ -225,7 +247,7 @@ struct TmuxRemoteTests {
     }
 
     @Test func theListingLeadsEachSessionWithRepoBranchAndOwnerRunning() {
-        let line = "$1\tx\tPANE\t4242\t\t\t1\tzsh\t/x\t\t\tt"
+        let line = "$1\tx\tPANE\t4242\t\t\t1\tzsh\t/x\t\t\t\tt"
         let sessions = TmuxRemote.parseListing("lostty\tskins\t1\t\t\(line)\n\t\t1\t\t\(line)\nlostty\t\t\t\t\(line)\n")
         #expect(sessions.map(\.repo) == ["lostty", nil, "lostty"])
         #expect(sessions.map(\.branch) == ["skins", nil, nil])

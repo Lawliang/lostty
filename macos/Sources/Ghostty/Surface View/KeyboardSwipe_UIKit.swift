@@ -3,16 +3,18 @@ import UIKit
 import UIKit.UIGestureRecognizerSubclass
 
 extension Ghostty {
-    /// A drag across Lostty's keyboard that becomes an arrow key. It only
-    /// begins once the finger has clearly travelled (`startDistance`), so a
-    /// tap that wanders a little is still a tap; once it begins, the key
-    /// under the finger is cancelled.
+    /// A drag across Lostty's keyboard that becomes an arrow key, judged by
+    /// `Board.SwipeTrack`: it only begins once the finger has clearly
+    /// travelled, so a tap that wanders a little is still a tap; once it
+    /// begins, the key under the finger is cancelled. Turning back or
+    /// wandering off cancels the swipe too: no arrow.
     final class KeyboardSwipeRecognizer: UIGestureRecognizer {
-        static let startDistance: CGFloat = 18
-
         private(set) var start: CGPoint = .zero
         private(set) var current: CGPoint = .zero
+        /// The arrow it made, once ended.
+        private(set) var made: Ghostty.MobileInput.Board.Swipe?
         private var touch: UITouch?
+        private var track = Ghostty.MobileInput.Board.SwipeTrack()
 
         var translation: CGPoint { CGPoint(x: current.x - start.x, y: current.y - start.y) }
 
@@ -30,17 +32,24 @@ extension Ghostty {
         override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent) {
             guard let touch, touches.contains(touch) else { return }
             current = touch.location(in: view)
-            if state == .possible {
-                if hypot(translation.x, translation.y) >= Self.startDistance { state = .began }
-            } else {
-                state = .changed
+            track.move(dx: translation.x, dy: translation.y)
+            switch (state, track.phase) {
+            case (.possible, .going): state = .began
+            case (.possible, _): break
+            case (_, .confused): state = .cancelled
+            default: state = .changed
             }
         }
 
         override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent) {
             guard let touch, touches.contains(touch) else { return }
             current = touch.location(in: view)
-            state = state == .possible ? .failed : .ended
+            guard state != .possible else {
+                state = .failed
+                return
+            }
+            made = track.end(dx: translation.x, dy: translation.y)
+            state = .ended
         }
 
         override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent) {
@@ -50,6 +59,8 @@ extension Ghostty {
         override func reset() {
             super.reset()
             touch = nil
+            made = nil
+            track = Ghostty.MobileInput.Board.SwipeTrack()
         }
     }
 

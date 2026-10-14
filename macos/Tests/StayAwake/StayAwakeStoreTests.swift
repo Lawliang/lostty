@@ -134,5 +134,34 @@ struct StayAwakeStoreTests {
         #expect(store.isOn)
         #expect(control.ran == [.disableSleep(true)])
     }
+
+    // MARK: Restart to Update
+
+    /// The restarted Lostty keeps Stay Awake on as it was, without touching
+    /// the power settings: turning sleep back on, even briefly, could put a
+    /// closed-lid Mac to sleep.
+    @Test func aRestartKeepsStayAwakeOnWithoutTouchingPower() {
+        let control = FakeControl()
+        let defaults = freshDefaults()
+        let before = make(control, power: open, defaults: defaults)
+        before.turnOn(.oneHour)
+        let until = before.until
+        #expect(before.isOn)
+        control.ran.removeAll()
+        let after = make(control, power: open, defaults: defaults)
+        after.resume(until: until)
+        after.start()
+        #expect(after.isOn)
+        #expect(after.until == until)
+        #expect(control.ran.isEmpty)
+    }
+
+    @Test func resumingWithNoRecordStaysOff() {
+        let control = FakeControl()
+        let store = make(control, power: open, defaults: freshDefaults())
+        store.resume(until: nil)
+        #expect(!store.isOn)
+        #expect(control.ran.isEmpty)
+    }
 }
 #endif

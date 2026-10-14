@@ -31,6 +31,7 @@ struct PhoneAccessView: View {
                 }
                 Text("Your phone can reach this Mac only while it's awake. Stay Awake for Phone in the menu bar keeps it awake with the lid closed.")
                     .font(LosttyFont.detail).foregroundStyle(LosttyTheme.textSecondary)
+                HotswitchSettingsView()
                 Toggle("Show Lostty in the menu bar", isOn: $showInMenuBar)
                     .font(LosttyFont.body).foregroundStyle(LosttyTheme.textPrimary)
                     .onChange(of: showInMenuBar) { _, on in LosttyStatusItem.isEnabled = on }

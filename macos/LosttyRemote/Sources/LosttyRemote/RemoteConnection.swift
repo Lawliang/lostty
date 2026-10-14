@@ -78,6 +78,17 @@ public final class RemoteConnection: @unchecked Sendable {
         }
     }
 
+    /// The Mac's notifications (🔔); none before its Lostty keeps any.
+    /// Throws `NotesRemote.Unreadable` rather than showing an empty inbox.
+    public func notes() async throws -> NoteLog {
+        try NotesRemote.notes(String(buffer: try await client.executeCommand(NotesRemote.readCommand)))
+    }
+
+    /// Leaves `drop` for the Mac's Lostty to apply to its notes.
+    public func drop(_ drop: NoteDrop) async throws {
+        _ = try await client.executeCommand(try NotesRemote.dropCommand(drop))
+    }
+
     /// Ends session `sessionID` (named `name`) on the Mac, noting that this
     /// phone (`device`) closed it. A session that already ended, or whose id
     /// now names another session (tmux exits 1), is left alone.
@@ -162,6 +173,13 @@ public final class RemoteConnection: @unchecked Sendable {
     public func endProbe(_ sessionID: String) async throws -> EndProbe? {
         let out = try await client.executeCommand(try TmuxRemote.endProbeCommand(sessionID: sessionID))
         return TmuxRemote.parseEndProbe(String(buffer: out))
+    }
+
+    /// Session `sessionID`'s last `lines` lines and its screen, on a
+    /// channel of its own beside an attach. nil when unreadable.
+    public func paneHistory(_ sessionID: String, lines: Int) async throws -> PaneHistory? {
+        let out = try await client.executeCommand(try PaneHistory.command(sessionID: sessionID, lines: lines))
+        return PaneHistory.parse(Data(buffer: out))
     }
 
     /// One event per change to the Mac's sessions (tmux's `lostty-changed`
@@ -266,6 +284,36 @@ public final class RemoteConnection: @unchecked Sendable {
 
     public func close() async {
         try? await client.close()
+    }
+
+    /// Runs `true` on the Mac every `interval`; with no answer for
+    /// `misses` intervals, closes the connection, so its owner reconnects.
+    /// A path that died quietly (the Mac moved to its iPhone hotspot)
+    /// otherwise hangs until the TCP timeout. Returns when cancelled or
+    /// after closing.
+    public func heartbeat(every interval: TimeInterval = 20, misses: Int = 3) async {
+        let answered = LastAnswer()
+        while true {
+            do { try await Task.sleep(for: .seconds(interval)) } catch { return }
+            if Date().timeIntervalSince(answered.date) >= interval * Double(misses) {
+                await close()
+                return
+            }
+            // Not awaited: on a dead path it hangs, and the next beat counts it.
+            Task { [client] in
+                if (try? await client.executeCommand("true")) != nil { answered.date = Date() }
+            }
+        }
+    }
+}
+
+private final class LastAnswer: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = Date()
+
+    var date: Date {
+        get { lock.withLock { value } }
+        set { lock.withLock { value = newValue } }
     }
 }
 

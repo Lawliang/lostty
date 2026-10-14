@@ -1,6 +1,7 @@
 #if os(macOS)
 import Foundation
 import Combine
+import LosttyRemote
 
 /// What Claude Code's status line feed reports through `+claude-usage`
 /// (the LOSTTY_USAGE user var): `{"v":1,"ctx":{"used":…,"size":…},
@@ -173,8 +174,7 @@ final class ClaudeUsageRuntime: ObservableObject {
 enum ClaudeUsageFormat {
     /// Tokens to the nearest thousand: 49_600 → "50K", 1_234_000 → "1,234K".
     static func thousands(_ n: Int) -> String {
-        let k = Int((Double(n) / 1_000).rounded())
-        return k.formatted(.number.grouping(.automatic).locale(Locale(identifier: "en_US"))) + "K"
+        UsageMeter.thousands(n)
     }
 
     static func percent(_ p: Double) -> String {

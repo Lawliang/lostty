@@ -51,6 +51,9 @@ final class ClaudeRuntime: ObservableObject {
     func userVarChanged(_ id: UUID, name: String, value: String) {
         guard name == ClaudeConstants.userVarName else { return }
         if let action = ClaudeMessage.action(value) {
+            // A tool starting means Claude works, even with no new prompt
+            // (it carries on after a permission prompt without one).
+            if phase(id).isOff { apply(.busy, to: id) }
             setAction(action, for: id)
             return
         }
@@ -96,14 +99,15 @@ final class ClaudeRuntime: ObservableObject {
         awaiting.remove(id)
     }
 
-    /// Agents title the pane with a spinner while working: Claude "◐ …"
+    /// Agents titled the pane with a spinner while working: Claude "◐ …"
     /// (then "✳ …" when idle), Codex "⠋ …" (then just the folder name).
     /// An Esc interrupt sends no Stop hook, so a racing pane whose title
     /// turns idle stops at once. A title without a spinner only counts as
-    /// idle after a spinner was seen, so panes whose titles never show one
-    /// (e.g. inside tmux) keep their trace until a hook ends it. Only title
-    /// changes count: a title left over from before the prompt never stops
-    /// the trace that prompt started.
+    /// idle after a spinner was seen: Claude Code 2.1 keeps "✳ …" while it
+    /// works too, so "✳" alone would stop the trace every time Claude
+    /// retitles the pane mid-turn (its interrupts are caught by
+    /// `workingLineGone` instead). Only title changes count: a title left
+    /// over from before the prompt never stops the trace that prompt started.
     /// While only subagents work, Claude's own title is idle; that is no
     /// interrupt, and a spinner then means Claude took over again.
     func titleChanged(_ id: UUID, title: String) {
@@ -116,8 +120,15 @@ final class ClaudeRuntime: ObservableObject {
             if subagents { apply(.resumed, to: id) }
             return
         }
-        guard !subagents, title.hasPrefix("✳") || sawSpinner.contains(id) else { return }
+        guard !subagents, sawSpinner.contains(id) else { return }
         if case .racing = phase(id) { apply(.exit, to: id) }
+    }
+
+    /// Claude's working line left a racing pane's screen and stayed gone
+    /// (`WorkingLineCheck`): it was interrupted, and waits for you.
+    func workingLineGone(_ id: UUID) {
+        guard case .racing(_, subagents: false) = phase(id) else { return }
+        apply(.idle, to: id)
     }
 
     private func isSubagentsOnly(_ id: UUID) -> Bool {
@@ -177,6 +188,45 @@ final class ClaudeRuntime: ObservableObject {
     private func store(_ phase: TracePhase, for id: UUID) {
         let value: TracePhase? = phase.isOff ? nil : phase
         if phases[id] != value { phases[id] = value }
+    }
+}
+
+/// A pane's Claude as a restart hands it on (`LosttyRestart`): hooks fired
+/// while Lostty is down are lost, so the new Lostty starts from this.
+struct ClaudeCarry: Codable, Equatable {
+    enum Activity: String, Codable {
+        case working, subagents, waiting
+    }
+
+    var activity: Activity
+    var action: String?
+}
+
+extension ClaudeRuntime {
+    /// What each pane's Claude is doing now, for a restart to hand on.
+    func carry() -> [UUID: ClaudeCarry] {
+        var carried: [UUID: ClaudeCarry] = [:]
+        for (id, phase) in phases {
+            guard case .racing(_, let subagents) = phase else { continue }
+            carried[id] = ClaudeCarry(activity: subagents ? .subagents : .working, action: actions[id])
+        }
+        for id in awaiting {
+            carried[id] = ClaudeCarry(activity: .waiting, action: actions[id])
+        }
+        return carried
+    }
+
+    /// After a restart: the panes' Claudes as the old Lostty last saw them.
+    /// The restored panes keep their UUIDs.
+    func restore(_ carried: [UUID: ClaudeCarry]) {
+        for (id, carry) in carried {
+            switch carry.activity {
+            case .working: store(.racing(since: now()), for: id)
+            case .subagents: store(.racing(since: now(), subagents: true), for: id)
+            case .waiting: awaiting.insert(id)
+            }
+            setAction(carry.action, for: id)
+        }
     }
 }
 #endif

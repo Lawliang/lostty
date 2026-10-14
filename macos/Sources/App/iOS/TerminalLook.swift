@@ -16,10 +16,21 @@ enum TerminalLook {
     static let pointScale: Float32 = 72 / 96
 
     /// The branch line's size (`LosttyFont.mono(.footnote)`), following the
-    /// phone's text size, in Ghostty's points.
+    /// phone's text size, in Ghostty's points, made smaller or larger by
+    /// the chosen Text Size.
     static var fontSize: Float32 {
         Float32(UIFont.preferredFont(forTextStyle: .footnote).pointSize) * pointScale
+            * TerminalTextSize.chosen.scale
     }
+
+    /// A skin's texture at the same opacity reads stronger on the phone's
+    /// small, dense screen than on the Mac's, so the phone draws it fainter.
+    static func textureOpacity(_ texture: SessionSkin.Texture) -> Double {
+        texture.opacity * 0.35
+    }
+
+    /// Where `apply` writes its overlays for a moment.
+    static let overlayDir = FileManager.default.temporaryDirectory.appendingPathComponent("terminal-look")
 
     /// `tile`: the skin's texture as a file, drawn as the Mac draws it.
     static func configText(skin: SessionSkin?, fontSize: Float32, tile: URL? = nil) -> String {
@@ -32,7 +43,7 @@ enum TerminalLook {
             lines.append("cursor-color = #\(skin.accent.hexString)")
             if let texture = skin.texture, let tile {
                 lines.append("background-image = \"\(tile.path)\"")
-                lines.append(String(format: "background-image-opacity = %.3f", texture.opacity))
+                lines.append(String(format: "background-image-opacity = %.3f", textureOpacity(texture)))
                 lines.append("background-image-fit = none")
                 lines.append("background-image-position = top-left")
                 lines.append("background-image-repeat = true")
@@ -66,15 +77,17 @@ enum TerminalLook {
                      blue: Double(skin.accent.b) / 255)
     }
 
-    /// Writes the overlay and gives `surface` the config it makes.
-    @MainActor static func apply(skin: SessionSkin?, to surface: ghostty_surface_t, overlayDir: URL) {
+    /// Writes the overlay and gives `surface` the config it makes, plus
+    /// any `extra` lines.
+    @MainActor static func apply(skin: SessionSkin?, to surface: ghostty_surface_t, overlayDir: URL, extra: [String] = []) {
         guard let cfg = ghostty_config_new() else { return }
         defer { ghostty_config_free(cfg) }
         let url = overlayDir.appendingPathComponent("\(UUID().uuidString).ghostty")
         do {
             try FileManager.default.createDirectory(at: overlayDir, withIntermediateDirectories: true)
             let tile = skin.flatMap { TextureTile.file(for: $0, displayScale: surfaceScale) }
-            try configText(skin: skin, fontSize: fontSize, tile: tile).write(to: url, atomically: true, encoding: .utf8)
+            let text = configText(skin: skin, fontSize: fontSize, tile: tile) + extra.map { $0 + "\n" }.joined()
+            try text.write(to: url, atomically: true, encoding: .utf8)
             ghostty_config_load_file(cfg, url.path)
             try? FileManager.default.removeItem(at: url)
         } catch {
@@ -82,6 +95,36 @@ enum TerminalLook {
         }
         ghostty_config_finalize(cfg)
         ghostty_surface_update_config(surface, cfg)
+    }
+}
+
+/// Every terminal's text, a step smaller or larger than the default; picked
+/// in Settings.
+enum TerminalTextSize: String, CaseIterable, Identifiable {
+    case smaller, standard, larger
+
+    static let key = "LosttyTerminalTextSize"
+
+    static var chosen: TerminalTextSize {
+        UserDefaults.standard.string(forKey: key).flatMap(Self.init(rawValue:)) ?? .standard
+    }
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .smaller: "Smaller"
+        case .standard: "Default"
+        case .larger: "Larger"
+        }
+    }
+
+    var scale: Float32 {
+        switch self {
+        case .smaller: 0.85
+        case .standard: 1
+        case .larger: 1.2
+        }
     }
 }
 

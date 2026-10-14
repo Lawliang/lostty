@@ -157,18 +157,73 @@ struct MobileInputTests {
         #expect(shift == .off)
     }
 
-    @Test func aSwipeIsItsLongerAxisOnceFarEnough() {
-        typealias Swipe = MI.Board.Swipe
-        #expect(Swipe.of(dx: 0, dy: -40) == .up)
-        #expect(Swipe.of(dx: 0, dy: 40) == .down)
-        #expect(Swipe.of(dx: -40, dy: 10) == .left)
-        #expect(Swipe.of(dx: 40, dy: -25) == .right)
-        #expect(Swipe.of(dx: 10, dy: -35) == .up)
-        // Too short: a tap that wandered.
-        #expect(Swipe.of(dx: 20, dy: 5) == nil)
-        #expect(Swipe.of(dx: 29.9, dy: 0) == nil)
-        // Perfectly diagonal: no way to tell.
-        #expect(Swipe.of(dx: 40, dy: 40) == nil)
+    // MARK: Swipes (paths from a real keyboard log, in points from the start)
+
+    fileprivate typealias Track = MI.Board.SwipeTrack
+
+    /// The drag through `path`; the arrow it makes when the finger lifts at its last point.
+    fileprivate func swipe(_ path: [(Double, Double)]) -> (track: Track, arrow: MI.Board.Swipe?) {
+        var track = Track()
+        for (dx, dy) in path.dropLast() { track.move(dx: dx, dy: dy) }
+        let last = path.last ?? (0, 0)
+        let arrow = track.end(dx: last.0, dy: last.1)
+        return (track, arrow)
+    }
+
+    @Test func dragsWhileTypingNeverBecomeSwipes() {
+        // 0.07 s and 0.12 s after a key press, peaking at 27 and 25 pt.
+        for path in [[(-11.0, 22.0), (-5, 27)], [(-23.0, 5.0), (-25, 7)]] {
+            let (track, arrow) = swipe(path)
+            #expect(track.phase == .undecided)
+            #expect(arrow == nil)
+        }
+    }
+
+    @Test func aClearSwipeMakesItsArrow() {
+        #expect(swipe([(0, -27), (10, -60), (30, -120), (46, -195)]).arrow == .up)
+        #expect(swipe([(3, 28), (10, 60), (37, 120)]).arrow == .down)
+        #expect(swipe([(-40, 2), (-90, 10)]).arrow == .left)
+        #expect(swipe([(40, -3), (80, 12)]).arrow == .right)
+    }
+
+    @Test func itLocksTheWayItWasGoingOncePast32() {
+        var track = Track()
+        track.move(dx: 0, dy: -31)
+        #expect(track.phase == .undecided)
+        track.move(dx: 2, dy: -33)
+        #expect(track.phase == .going(.up))
+    }
+
+    @Test func turningBackCancelsIt() {
+        // Up about 150 pt, then back down and off to the right: no arrow at
+        // all, rather than the right arrow the old rule made.
+        let (track, arrow) = swipe([(-2, -40), (-5, -90), (0, -149), (20, -60), (36, -16)])
+        #expect(track.phase == .confused)
+        #expect(arrow == nil)
+    }
+
+    @Test func wanderingOffSidewaysCancelsIt() {
+        let (track, arrow) = swipe([(0, -40), (30, -45), (60, -48)])
+        #expect(track.phase == .confused)
+        #expect(arrow == nil)
+    }
+
+    @Test func aSmallWobbleIsStillASwipe() {
+        #expect(swipe([(0, -40), (0, -80), (4, -70), (6, -90)]).arrow == .up)
+    }
+
+    @Test func pastThe32ButShortOf40MakesNoArrow() {
+        let (track, arrow) = swipe([(0, -33), (0, -38)])
+        #expect(track.phase == .going(.up))
+        #expect(arrow == nil)
+    }
+
+    @Test func aPerfectlyDiagonalDragWaitsToTellWhich() {
+        var track = Track()
+        track.move(dx: 30, dy: 30)
+        #expect(track.phase == .undecided)
+        track.move(dx: 30, dy: 45)
+        #expect(track.phase == .going(.down))
     }
 
     @Test func aSwipePressesItsArrowWithCtrlIfLatched() {

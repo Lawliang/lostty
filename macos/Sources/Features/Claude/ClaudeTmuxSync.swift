@@ -7,7 +7,8 @@ import LosttyRemote
 /// tmux (`@lostty_claude`: waiting, working, or unset) whenever
 /// `ClaudeRuntime` changes, then wakes watchers, so the phone shows
 /// "Waiting" and "Working"; and, while it works or waits, what it's doing
-/// (`@lostty_action`). Only sessions this process owns: several Lostty
+/// (`@lostty_action`); and its context window (`@lostty_context`), for the
+/// phone's top bar. Only sessions this process owns: several Lostty
 /// processes share the server and must not fight. The one exception is
 /// clearing the state of sessions whose Lostty is gone.
 @MainActor
@@ -25,15 +26,30 @@ final class ClaudeTmuxSync {
                 Self.sync(phases: phases, awaiting: awaiting, actions: actions)
             }
             .store(in: &watchers)
+        // Claude reports its context after each reply.
+        ClaudeUsageRuntime.shared.$contexts
+            .debounce(for: .milliseconds(500), scheduler: DispatchQueue.main)
+            .sink { Self.syncContexts($0) }
+            .store(in: &watchers)
         // A session made after the change, or a write tmux dropped, catches up.
         NotificationCenter.default.publisher(for: .losttySessionsChanged)
             .sink { _ in
                 MainActor.assumeIsolated {
                     let runtime = ClaudeRuntime.shared
                     Self.sync(phases: runtime.phases, awaiting: runtime.awaiting, actions: runtime.actions)
+                    Self.syncContexts(ClaudeUsageRuntime.shared.contexts)
                 }
             }
             .store(in: &watchers)
+    }
+
+    nonisolated private static func syncContexts(_ contexts: [UUID: ClaudeUsageReport.Context]) {
+        TmuxOptionSync.sync(
+            option: TmuxRemote.contextOption,
+            desired: Dictionary(uniqueKeysWithValues: contexts.map { id, context in
+                (id.uuidString, SessionContext(used: context.used, size: context.size).encoded)
+            }),
+            current: { $0.context?.encoded })
     }
 
     nonisolated private static func sync(phases: [UUID: TracePhase], awaiting: Set<UUID>, actions: [UUID: String]) {

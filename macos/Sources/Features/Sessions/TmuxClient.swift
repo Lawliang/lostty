@@ -94,8 +94,22 @@ struct TmuxClient {
     /// `remoteSessions` plus each one's repo and branch, as the phone lists
     /// them (`TmuxRemote.listScript`), for the menu bar.
     func sessionListing() -> [RemoteSession] {
-        guard tmuxPath != nil else { return [] }
-        return exec("/bin/sh", ["-c", TmuxRemote.listScript]).map { TmuxRemote.parseListing($0) } ?? []
+        readSessionListing() ?? []
+    }
+
+    /// `sessionListing`, or nil when tmux didn't answer (no server, a
+    /// timeout, a failure): for callers that must not read that as "no
+    /// sessions" (the phone's notes).
+    func readSessionListing() -> [RemoteSession]? {
+        guard tmuxPath != nil else { return nil }
+        return exec("/bin/sh", ["-c", TmuxRemote.listScript]).map { TmuxRemote.parseListing($0) }
+    }
+
+    /// Whether Lostty's tmux server has a socket. A server that crashed can
+    /// leave one behind, so this says "maybe running", never "running".
+    static var serverSocketExists: Bool {
+        let dir = ProcessInfo.processInfo.environment["TMUX_TMPDIR"] ?? "/tmp"
+        return FileManager.default.fileExists(atPath: "\(dir)/tmux-\(getuid())/\(TmuxConstants.socket)")
     }
 
     /// Wakes everything waiting on `lostty-changed`: the phone's list, other

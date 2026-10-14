@@ -52,6 +52,9 @@ struct ExtensionSidebarView: View {
             }
 
             Spacer(minLength: 0)
+
+            SidebarMascot(surfaceID: model.focusedSurfaceID)
+                .padding(.bottom, 12)
         }
         .padding(.top, 14)
         .frame(width: Self.width)

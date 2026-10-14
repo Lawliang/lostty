@@ -22,10 +22,17 @@ final class MobileStore: ObservableObject {
     @Published private(set) var loading = false
     @Published var message: String?
 
+    /// The Mac's notifications (🔔), as of the last listing.
+    @Published var notes = NoteLog()
+    /// Which kinds this phone shows (and, in stage 2, pushes).
+    @Published var noteSettings: NoteSettings
+    /// This phone's note changes the Mac may not have applied yet.
+    var pendingNotes = PendingDrops()
+
     /// One Face ID approval per foreground period.
     private var context = LAContext()
     private var key: RemoteKey?
-    private let defaults: UserDefaults
+    let defaults: UserDefaults
     private var openIO: RemoteSurfaceIO?
     /// Terminals kept open after going back to the list, so opening one
     /// again is instant (see `WarmTerminals`).
@@ -40,6 +47,7 @@ final class MobileStore: ObservableObject {
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         self.settings = RemoteHostSettings.load(from: defaults)
+        self.noteSettings = Self.loadNoteSettings(from: defaults)
         pathMonitor.pathUpdateHandler = { [weak self] path in
             let types = Set([NWInterface.InterfaceType.wifi, .cellular, .wiredEthernet].filter { path.usesInterfaceType($0) })
             let status = path.status
@@ -118,7 +126,7 @@ final class MobileStore: ObservableObject {
 
     /// Connects to the first reachable Mac, runs `body`, and closes the
     /// connection whether it succeeded or threw.
-    private func withConnection<T>(_ body: (RemoteConnection) async throws -> T) async throws -> T {
+    func withConnection<T>(_ body: (RemoteConnection) async throws -> T) async throws -> T {
         let connection = try await RemoteConnection.connect(toFirstReachable: settings.remoteHosts, key: try remoteKey(), knownHosts: knownHosts)
         let result: T
         do {
@@ -259,15 +267,36 @@ final class MobileStore: ObservableObject {
             let view = Ghostty.SurfaceView(app, baseConfig: config)
             // Its row's colors and the branch line's size.
             if let surface = view.surface {
-                TerminalLook.apply(
-                    skin: session.skin, to: surface,
-                    overlayDir: FileManager.default.temporaryDirectory.appendingPathComponent("terminal-look"))
+                TerminalLook.apply(skin: session.skin, to: surface, overlayDir: TerminalLook.overlayDir)
             }
+            // Scrolling back reads the history and scrolls it here.
+            let skin = session.skin
+            view.scrollback = .init(
+                fetch: { [weak io] in await io?.paneHistory() },
+                makeView: { Self.historyCopy(app: app, skin: skin) })
             return (view, io, link)
         } catch {
             message = describe(error)
             return nil
         }
+    }
+
+    /// A terminal that looks like a session's, for a block of its history:
+    /// no padding above or below, so blocks stack with no gaps.
+    private static func historyCopy(app: ghostty_app_t, skin: SessionSkin?) -> Ghostty.SurfaceView {
+        var config = Ghostty.SurfaceConfiguration()
+        config.remoteIO = Ghostty.StillIO()
+        config.fontSize = TerminalLook.fontSize
+        let view = Ghostty.SurfaceView(app, baseConfig: config)
+        if let surface = view.surface {
+            TerminalLook.apply(skin: skin, to: surface, overlayDir: TerminalLook.overlayDir,
+                               extra: ["window-padding-y = 0"])
+            // Ghostty takes padding from new settings only when the screen
+            // scale changes: this one changes back when the view goes on
+            // screen, so the blocks really have none.
+            ghostty_surface_set_content_scale(surface, 1, 1)
+        }
+        return view
     }
 
     /// Why `session` ended, read from the Mac: its end tag and whether it
@@ -291,6 +320,16 @@ final class MobileStore: ObservableObject {
         guard keepWarm else { return }
         close(warm.put(.init(id: session.id, name: session.name), terminal, now: Date()))
         scheduleWarmCheck()
+    }
+
+    /// A row pulled to refresh: drops its warm terminal, so opening it
+    /// connects afresh (one that gave up, say, when Face ID couldn't show),
+    /// then reads the list again.
+    func refreshTerminal(_ session: RemoteSession) async {
+        close(warm.remove { $0.id == session.id })
+        scheduleWarmCheck()
+        await refresh()
+        listAppeared()  // resumes a watch that stopped on an error
     }
 
     /// Ends warm terminals' connections now, not whenever their views go.
@@ -359,11 +398,13 @@ final class MobileStore: ObservableObject {
                 let connection = try await RemoteConnection.connect(toFirstReachable: hosts, key: try remoteKey(), knownHosts: knownHosts)
                 // Leaving the list cancels this task; closing the connection
                 // is what ends the watch's channel.
+                let heartbeat = Task { await connection.heartbeat() }
                 let delivered = await withTaskCancellationHandler {
                     await watch(on: connection)
                 } onCancel: {
                     Task { await connection.close() }
                 }
+                heartbeat.cancel()
                 await connection.close()
                 policy.watchEnded(deliveredChange: delivered)
             } catch {
@@ -399,6 +440,7 @@ final class MobileStore: ObservableObject {
             lastList = Date()
             show(found)
             await loadLogoTiles(found, on: connection)
+            await loadNotes(on: connection)
         }
         do {
             try await relist()
@@ -662,7 +704,7 @@ final class MobileStore: ObservableObject {
 
     static func gallery(
         sessions: [RemoteSession] = [], message: String? = nil, pairing: PairingPhase = .idle,
-        needsPairing: Bool = false, settings: RemoteHostSettings = RemoteHostSettings()
+        needsPairing: Bool = false, settings: RemoteHostSettings = RemoteHostSettings(), notes: NoteLog = NoteLog()
     ) -> MobileStore {
         let store = MobileStore(defaults: UserDefaults(suiteName: "lostty-design-gallery")!)
         store.isGallery = true
@@ -671,6 +713,7 @@ final class MobileStore: ObservableObject {
         store.message = message
         store.pairing = pairing
         store.needsPairing = needsPairing
+        store.notes = notes
         return store
     }
     #endif

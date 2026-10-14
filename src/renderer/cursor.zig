@@ -25,6 +25,10 @@ pub const Style = enum {
     }
 };
 
+/// Lostty: a cursor this color (set by OSC 12) isn't drawn. Lostty's
+/// tmux.conf uses it to hide tmux's cursor while the wheel scrolls history.
+pub const hidden_cursor_color: terminal.color.RGB = .{ .r = 1, .g = 2, .b = 3 };
+
 pub const StyleOptions = struct {
     preedit: bool = false,
     focused: bool = false,
@@ -54,6 +58,13 @@ pub fn style(
 
     // If the cursor is explicitly not visible by terminal mode, we don't render.
     if (!state.cursor.visible) return null;
+
+    // Lostty: tmux's history view keeps its own cursor on screen, moving
+    // through the text as the wheel scrolls, and tmux can't hide it. Lostty's
+    // tmux.conf sets this cursor color while the wheel has the pane scrolled.
+    if (state.colors.cursor) |c| {
+        if (std.meta.eql(c, hidden_cursor_color)) return null;
+    }
 
     // If we're not focused, our cursor is always visible so that
     // we can show the hollow box.
@@ -123,6 +134,29 @@ test "cursor: explicitly not visible" {
     try testing.expect(style(&state, .{ .focused = true, .blink_visible = false }) == null);
     try testing.expect(style(&state, .{ .focused = false, .blink_visible = true }) == null);
     try testing.expect(style(&state, .{ .focused = false, .blink_visible = false }) == null);
+}
+
+test "cursor: Lostty's hidden cursor color" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+    var term = try terminal.Terminal.init(alloc, .{ .cols = 10, .rows = 10 });
+    defer term.deinit(alloc);
+
+    term.screens.active.cursor.cursor_style = .bar;
+    term.modes.set(.cursor_blinking, false);
+    term.colors.cursor.set(hidden_cursor_color);
+
+    var state: terminal.RenderState = .empty;
+    defer state.deinit(alloc);
+    try state.update(alloc, &term);
+
+    try testing.expect(style(&state, .{ .focused = true, .blink_visible = true }) == null);
+    try testing.expect(style(&state, .{ .focused = false, .blink_visible = true }) == null);
+
+    // Any other color draws as usual.
+    term.colors.cursor.set(.{ .r = 1, .g = 2, .b = 4 });
+    try state.update(alloc, &term);
+    try testing.expect(style(&state, .{ .focused = true, .blink_visible = true }) == .bar);
 }
 
 test "cursor: always block with preedit" {

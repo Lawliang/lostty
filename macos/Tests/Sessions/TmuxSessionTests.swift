@@ -222,7 +222,7 @@ final class TmuxClientTests {
     @Test func remoteSessionsAskForThePhonesColumns() throws {
         let client = TmuxClient(tmuxPath: try fakeTmux("""
             [ "$6" = '\(TmuxRemote.listFormat)' ] || exit 1
-            printf '$1\\tlostty\\t\\t\\tDeploy\\twaiting\\t100\\t2.1.296\\t/x\\t\\t\\t✳ Fix login\\n'
+            printf '$1\\tlostty\\t\\t\\tDeploy\\twaiting\\t100\\t2.1.296\\t/x\\t\\t\\t\\t✳ Fix login\\n'
             """), timeout: 10)
         let found = client.remoteSessions()
         #expect(found.map(\.label) == ["Deploy"])

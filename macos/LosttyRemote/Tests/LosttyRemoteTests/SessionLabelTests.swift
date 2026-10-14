@@ -131,7 +131,7 @@ struct SessionLabelTests {
 
     @Test func onlySubagentsWorkingIsWorking() {
         #expect(row(session(claude: .subagents)).status == .working)
-        #expect(TmuxRemote.parse("$1\tx\t\t\t\tagents\t1\tzsh\t/x\t\t\tt\n").first?.claude == .subagents)
+        #expect(TmuxRemote.parse("$1\tx\t\t\t\tagents\t1\tzsh\t/x\t\t\t\tt\n").first?.claude == .subagents)
     }
 
     @Test func waitingAndWorkingOnlyForSessionsOpenOnTheMac() {

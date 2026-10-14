@@ -9,6 +9,12 @@
   - Build: `macos/build.nu [--scheme Lostty] [--configuration Debug] [--action build]`
   - Schemes: `Lostty` (Mac), `Lostty-iOS` (iPhone), `DockTilePlugin`
   - Output: `macos/build/<configuration>/Lostty.app` (e.g. `macos/build/Debug/Lostty.app`)
+- Install a new build for the user with `macos/install-skins.sh`, then
+  switch to it with Lostty's menu bar → **Restart to Update** (or
+  `osascript -e 'tell application id "com.lawliang.lostty" to «event GhstRsUp»'`,
+  the raw `restart to update` event). Never Quit Lostty to update:
+  Quit ends every terminal session it owns. Back out with
+  `macos/install-skins.sh --previous`.
 - Run unit tests (`LosttyTests`) directly with `macos/build.nu --action test`,
   or one suite with `macos/skins-test.sh <SuiteName>`.
 - Test the phone's shared package with `cd macos/LosttyRemote && swift test`.

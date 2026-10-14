@@ -95,6 +95,8 @@ struct StayAwakeModel {
         case tick
         case quit
         case launch(StayAwakeRecord?)
+        /// Restart to Update: the Lostty before had it on, with this record.
+        case resume(StayAwakeRecord?, until: Date?)
         case controlFailed(PowerControlError, command: PowerCommand)
     }
 
@@ -153,6 +155,12 @@ struct StayAwakeModel {
         case .tick:
             guard case .on(let until?, _) = state, now >= until else { return [] }
             return finish(.timer, now: now)
+
+        case .resume(let record, let until):
+            // Still applied from before the restart: adopt it, run nothing.
+            guard let record, !isOn else { return [] }
+            state = .on(until: until, record: record)
+            return []
 
         case .launch(let record):
             guard let record else { return [] }

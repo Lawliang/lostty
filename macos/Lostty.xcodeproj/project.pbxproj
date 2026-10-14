@@ -775,7 +775,7 @@
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Lostty uses the local network to pair your iPhone. Programs running in Lostty may use it too.";
 				INFOPLIST_KEY_NSLocationTemporaryUsageDescriptionDictionary = "A program running within Lostty would like to use your location temporarily.";
-				INFOPLIST_KEY_NSLocationUsageDescription = "A program running within Lostty would like to access your location information.";
+				INFOPLIST_KEY_NSLocationUsageDescription = "Lostty reads Wi-Fi network names to find and join your iPhone hotspot when Wi-Fi drops. Programs running in Lostty may ask for your location too.";
 				INFOPLIST_KEY_NSMainNibFile = MainMenu;
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "A program running within Lostty would like to use your microphone.";
 				INFOPLIST_KEY_NSMotionUsageDescription = "A program running within Lostty would like to access motion data.";
@@ -1172,7 +1172,7 @@
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Lostty uses the local network to pair your iPhone. Programs running in Lostty may use it too.";
 				INFOPLIST_KEY_NSLocationTemporaryUsageDescriptionDictionary = "A program running within Lostty would like to use your location temporarily.";
-				INFOPLIST_KEY_NSLocationUsageDescription = "A program running within Lostty would like to access your location information.";
+				INFOPLIST_KEY_NSLocationUsageDescription = "Lostty reads Wi-Fi network names to find and join your iPhone hotspot when Wi-Fi drops. Programs running in Lostty may ask for your location too.";
 				INFOPLIST_KEY_NSMainNibFile = MainMenu;
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "A program running within Lostty would like to use your microphone.";
 				INFOPLIST_KEY_NSMotionUsageDescription = "A program running within Lostty would like to access motion data.";
@@ -1227,7 +1227,7 @@
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Lostty uses the local network to pair your iPhone. Programs running in Lostty may use it too.";
 				INFOPLIST_KEY_NSLocationTemporaryUsageDescriptionDictionary = "A program running within Lostty would like to use your location temporarily.";
-				INFOPLIST_KEY_NSLocationUsageDescription = "A program running within Lostty would like to access your location information.";
+				INFOPLIST_KEY_NSLocationUsageDescription = "Lostty reads Wi-Fi network names to find and join your iPhone hotspot when Wi-Fi drops. Programs running in Lostty may ask for your location too.";
 				INFOPLIST_KEY_NSMainNibFile = MainMenu;
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "A program running within Lostty would like to use your microphone.";
 				INFOPLIST_KEY_NSMotionUsageDescription = "A program running within Lostty would like to access motion data.";

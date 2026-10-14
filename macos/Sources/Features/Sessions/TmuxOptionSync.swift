@@ -15,8 +15,10 @@ enum TmuxOptionSync {
         let pid = ProcessInfo.processInfo.processIdentifier
         Task.detached(priority: .utility) {
             let client = TmuxClient()
+            let restarting = client.run(["show-option", "-gqv", Restarting.option]).flatMap(Restarting.init(tag:))
             let changes = args(
-                option: option, desired: desired, current: current, sessions: client.remoteSessions(), pid: pid)
+                option: option, desired: desired, current: current, sessions: client.remoteSessions(), pid: pid,
+                restarting: restarting)
             if !changes.isEmpty { client.run(changes) }
         }
     }
@@ -26,7 +28,8 @@ enum TmuxOptionSync {
     /// is keyed by pane (uuidString); a pane missing from it is unset.
     static func args(
         option: String, desired: [String: String], current: (RemoteSession) -> String?,
-        sessions: [RemoteSession], pid: Int32, isAlive: (Int32) -> Bool = ProcessLiveness.isAlive
+        sessions: [RemoteSession], pid: Int32, isAlive: (Int32) -> Bool = ProcessLiveness.isAlive,
+        restarting: Restarting? = nil, now: Date = Date()
     ) -> [String] {
         var args: [String] = []
         for session in sessions {
@@ -36,6 +39,8 @@ enum TmuxOptionSync {
                 want = desired[pane]
             } else if session.owner.map(isAlive) ?? false {
                 continue  // another running Lostty's
+            } else if let restarting, session.owner == restarting.pid, now < restarting.until {
+                continue  // its Lostty is restarting: the next one takes it over
             } else {
                 want = nil
             }
@@ -49,6 +54,32 @@ enum TmuxOptionSync {
         }
         if !args.isEmpty { args += [";"] + TmuxHooks.signalCommand }
         return args
+    }
+
+    /// Restart to Update (`LosttyRestart`): the restarting Lostty's pid and
+    /// when its tag lapses, as the server-wide `@lostty_restarting` holds
+    /// them ("77 2000000030"). Until then its sessions aren't abandoned.
+    struct Restarting: Equatable, Sendable {
+        static let option = "@lostty_restarting"
+        /// Long enough for the new Lostty's panes to reattach.
+        static let grace: TimeInterval = 30
+
+        var pid: Int32
+        var until: Date
+
+        init(pid: Int32, until: Date) {
+            self.pid = pid
+            self.until = until
+        }
+
+        init?(tag: String) {
+            let parts = tag.split(separator: " ")
+            guard parts.count == 2, let pid = Int32(parts[0]), let seconds = TimeInterval(parts[1].trimmingCharacters(in: .whitespacesAndNewlines))
+            else { return nil }
+            self.init(pid: pid, until: Date(timeIntervalSince1970: seconds))
+        }
+
+        var tag: String { "\(pid) \(Int(until.timeIntervalSince1970))" }
     }
 }
 #endif

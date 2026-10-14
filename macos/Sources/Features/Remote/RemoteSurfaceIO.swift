@@ -11,6 +11,14 @@ protocol RemoteAttacher: Sendable {
         onOpen: @escaping @Sendable (RemoteTerminal) -> Void,
         onOutput: @escaping @Sendable (Data) -> Void
     ) async throws -> AttachEnd
+
+    /// The session's last `lines` lines and its screen, read over the
+    /// current attach's connection; nil when not attached or unreadable.
+    func paneHistory(lines: Int) async -> PaneHistory?
+}
+
+extension RemoteAttacher {
+    func paneHistory(lines: Int) async -> PaneHistory? { nil }
 }
 
 /// Joins a remote surface to a remote tmux session: the core's writes and
@@ -159,6 +167,11 @@ final class RemoteSurfaceIO: Ghostty.RemoteIO, @unchecked Sendable {
             return terminal
         }
         open?.close()
+    }
+
+    /// The session's recent lines, for the phone to scroll them itself.
+    func paneHistory(lines: Int = PaneHistory.defaultLines) async -> PaneHistory? {
+        await attacher.paneHistory(lines: lines)
     }
 
     /// Waits for the session loop to end (tests).
@@ -350,6 +363,8 @@ struct SSHAttacher: RemoteAttacher {
     let knownHosts: KnownHosts
     let sessionID: String
     let sessionName: String
+    /// The current attach's connection, for reading history beside it.
+    private let current = CurrentConnection()
 
     func attach(
         cols: Int,
@@ -358,6 +373,12 @@ struct SSHAttacher: RemoteAttacher {
         onOutput: @escaping @Sendable (Data) -> Void
     ) async throws -> AttachEnd {
         let connection = try await RemoteConnection.connect(toFirstReachable: hosts, key: try await key(), knownHosts: knownHosts)
+        current.set(connection)
+        let heartbeat = Task { await connection.heartbeat() }
+        defer {
+            current.set(nil)
+            heartbeat.cancel()
+        }
         // Each attach owns its connection, so a local close closes the whole
         // connection: closing just the PTY channel waits for the peer's
         // CHANNEL_CLOSE, which on a dead path takes the TCP timeout.
@@ -370,4 +391,18 @@ struct SSHAttacher: RemoteAttacher {
         await connection.close()
         return end
     }
+
+    func paneHistory(lines: Int) async -> PaneHistory? {
+        guard let connection = current.get() else { return nil }
+        return try? await connection.paneHistory(sessionID, lines: lines)
+    }
+}
+
+@available(macOS 15, iOS 17, *)
+private final class CurrentConnection: @unchecked Sendable {
+    private let lock = NSLock()
+    private var connection: RemoteConnection?
+
+    func set(_ connection: RemoteConnection?) { lock.withLock { self.connection = connection } }
+    func get() -> RemoteConnection? { lock.withLock { connection } }
 }

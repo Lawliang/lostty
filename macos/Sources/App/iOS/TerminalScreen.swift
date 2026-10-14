@@ -1,5 +1,6 @@
 #if os(iOS)
 import Combine
+import CoreText
 import GhosttyKit
 import LosttyRemote
 import SwiftUI
@@ -112,7 +113,8 @@ struct TerminalScreen: View {
             ToolbarItem(placement: .principal) {
                 TerminalTitle(
                     name: title, detail: row.detail,
-                    color: TerminalLook.text(skin: current.skin), prompt: TerminalLook.prompt(skin: current.skin))
+                    color: TerminalLook.text(skin: current.skin), prompt: TerminalLook.prompt(skin: current.skin),
+                    context: current.context)
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
@@ -149,7 +151,11 @@ struct TerminalScreen: View {
         } message: {
             Text(renameError ?? "")
         }
-        .onAppear { surfaceView.showKeyboardWhenSettled() }
+        .onAppear {
+            // A warm terminal may predate a Text Size (Settings) or skin change.
+            applyLook()
+            surfaceView.showKeyboardWhenSettled()
+        }
         // Back keeps it warm for a quick return; not once it ended or is
         // being closed.
         .onDisappear {
@@ -170,6 +176,11 @@ struct TerminalScreen: View {
                 Task { await store.terminalClosedItself(session) }
             }
         }
+    }
+
+    private func applyLook() {
+        guard let surface = surfaceView.surface else { return }
+        TerminalLook.apply(skin: current.skin, to: surface, overlayDir: TerminalLook.overlayDir)
     }
 
     private func handle(_ status: RemoteLinkStatus) {
@@ -277,20 +288,54 @@ private struct TerminalOverlayCard: View {
 
 /// The terminal's top bar: its title, and "> repo/branch" under it, as
 /// its row in the list says them, small enough to fit between the buttons.
+/// While Claude runs there, it takes turns with the Mac's Context bar
+/// (`Context ▓▓░░░░░░░░ 50K`), every five seconds.
 struct TerminalTitle: View {
     var name: String
     var detail: String?
     var color: Color = LosttyTheme.textPrimary
     var prompt: Color = LosttyTheme.accent
+    var context: SessionContext?
+
+    static let turn: Duration = .seconds(5)
+
+    @State private var showingContext = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
+        ZStack {
+            if showingContext, let context {
+                TerminalContextBar(context: context, color: color, accent: prompt)
+                    .transition(turnTransition)
+            } else {
+                title.transition(turnTransition)
+            }
+        }
+        .clipped()
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityText)
+        // Restarts when Claude starts or stops there: no context, no turns.
+        .task(id: context != nil) {
+            guard context != nil else {
+                showingContext = false
+                return
+            }
+            while !Task.isCancelled {
+                try? await Task.sleep(for: Self.turn)
+                guard !Task.isCancelled else { return }
+                withAnimation(LosttyTheme.motion) { showingContext.toggle() }
+            }
+        }
+    }
+
+    private var title: some View {
         VStack(spacing: 1) {
             Text(name)
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(color)
             if let detail {
                 HStack(spacing: 4) {
-                    Text(">").fontWeight(.heavy).foregroundStyle(prompt).accessibilityHidden(true)
+                    Text(">").fontWeight(.heavy).foregroundStyle(prompt)
                     Text(detail).foregroundStyle(color.opacity(0.65))
                 }
                 .font(LosttyFont.mono(.caption2, size: 11))
@@ -298,7 +343,69 @@ struct TerminalTitle: View {
         }
         .lineLimit(1)
         .truncationMode(.middle)
-        .accessibilityElement(children: .combine)
+    }
+
+    /// The next one comes up from below as the last goes up and away.
+    private var turnTransition: AnyTransition {
+        reduceMotion
+            ? .opacity
+            : .asymmetric(
+                insertion: .move(edge: .bottom).combined(with: .opacity),
+                removal: .move(edge: .top).combined(with: .opacity))
+    }
+
+    private var accessibilityText: String {
+        var parts = [name]
+        if let detail { parts.append(detail) }
+        if let context { parts.append("context \(Int(context.percent.rounded())) percent full") }
+        return parts.joined(separator: ", ")
+    }
+}
+
+/// The Mac's Context bar, as its usage bar draws it: in the terminal's
+/// font, the label dimmed, the meter in the skin's accent (amber past 70%,
+/// red past 90%), then the tokens used.
+struct TerminalContextBar: View {
+    let context: SessionContext
+    var color: Color = LosttyTheme.textPrimary
+    var accent: Color = LosttyTheme.accent
+
+    var body: some View {
+        let percent = context.percent
+        let used = UsageMeter.filled(percent)
+        return (Text("Context ").foregroundColor(color.opacity(0.6))
+            + Text(String(repeating: "▓", count: used)).foregroundColor(fill(percent))
+            + Text(String(repeating: "░", count: UsageMeter.cells - used)).foregroundColor(color.opacity(0.28))
+            + Text(" " + UsageMeter.thousands(context.used)).foregroundColor(color.opacity(0.9)))
+            .font(TerminalFont.font(size: 12))
+            .lineLimit(1)
+    }
+
+    private func fill(_ percent: Double) -> Color {
+        switch UsageMeter.level(percent) {
+        case .critical: Color(red: 0.95, green: 0.33, blue: 0.30)
+        case .high: Color(red: 0.96, green: 0.68, blue: 0.25)
+        case .normal: accent
+        }
+    }
+}
+
+/// The terminal's font (JetBrains Mono, bundled), registered on first use;
+/// the system's monospaced font if that fails.
+enum TerminalFont {
+    private static let name: String? = {
+        guard let url = Bundle.main.url(forResource: "JetBrainsMonoNoNF-Regular", withExtension: "ttf"),
+              let descriptors = CTFontManagerCreateFontDescriptorsFromURL(url as CFURL) as? [CTFontDescriptor],
+              let first = descriptors.first,
+              let name = CTFontDescriptorCopyAttribute(first, kCTFontNameAttribute) as? String else { return nil }
+        if UIFont(name: name, size: 12) == nil {
+            CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
+        }
+        return UIFont(name: name, size: 12) == nil ? nil : name
+    }()
+
+    static func font(size: CGFloat) -> Font {
+        name.map { .custom($0, size: size) } ?? .system(size: size, design: .monospaced)
     }
 }
 #endif

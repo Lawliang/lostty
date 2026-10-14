@@ -16,12 +16,18 @@ struct SessionsScreen: View {
     @State private var open: (session: RemoteSession, view: Ghostty.SurfaceView, io: RemoteSurfaceIO, link: TerminalLink)?
     @State private var showPairing = false
     @State private var showNewTerminal = false
+    @State private var showNotifications = false
     /// A terminal asked of the Mac, shown being made until it opens.
     @State private var creating: NewTerminalRequest?
     @State private var confirmKill: RemoteSession?
-    @State private var renaming: RemoteSession?
     /// The Active filter pill tapped, if any.
     @State private var filter: ActiveState?
+    /// The project pill tapped, if any: only its terminals show.
+    @State private var projectFilter: String?
+    /// A row was held: every row jiggles with a delete badge until Done.
+    @State private var editing = false
+    /// Rows pulled to refresh, by session id, until the Mac has answered.
+    @State private var refreshing: Set<String> = []
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -32,18 +38,16 @@ struct SessionsScreen: View {
                     sessionList
                 }
             }
-            // A big title in the top bar, rather than a large title under it:
-            // the app's name, the axolotl peeking out from behind its L.
-            // In iOS's own large-title place, not the leading one, which
-            // would morph into the terminal's back button as an empty glass
-            // capsule. The plain title stays for VoiceOver and older iOS.
-            // Only over the list: the welcome has its own.
+            // The app's name centered in the top bar, the axolotl peeking out
+            // from behind its L; + at the left, the wave at the right. The
+            // plain title stays for VoiceOver. Only over the list: the
+            // welcome has its own.
             .navigationTitle(store.settings.remoteHost != nil ? "Lostty" : "")
-            .toolbarTitleDisplayMode(.inlineLarge)
+            .toolbarTitleDisplayMode(.inline)
             .losttyScreen()
             .toolbar {
-                if #available(iOS 26, *), store.settings.remoteHost != nil {
-                    ToolbarItem(placement: .largeTitle) {
+                if store.settings.remoteHost != nil {
+                    ToolbarItem(placement: .principal) {
                         HStack(spacing: 0) {
                             PeekingAxolotl()
                             Text("Lostty")
@@ -52,20 +56,36 @@ struct SessionsScreen: View {
                                 .accessibilityAddTraits(.isHeader)
                                 .fixedSize()
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        // Level with the + (its own toolbar item, so no
-                        // shared alignment): the large title sits lower.
-                        .offset(y: Self.titleLift)
                     }
                 }
-                // A new terminal, here and on the Mac.
-                if store.settings.remoteHost != nil && !showsProblem {
+                if editing {
                     ToolbarItem(placement: .topBarTrailing) {
+                        Button("Done") { withAnimation(LosttyTheme.motion) { editing = false } }
+                            .fontWeight(.semibold)
+                            .tint(.white)
+                    }
+                } else if store.settings.remoteHost != nil && !showsProblem {
+                    // A new terminal, here and on the Mac.
+                    ToolbarItem(placement: .topBarLeading) {
                         Button { showNewTerminal = true } label: {
                             Image(systemName: "plus").foregroundStyle(.white)
                         }
                         .tint(.white)
                         .accessibilityLabel("New Terminal")
+                    }
+                    // Notifications: the inbox, and how many are unread.
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button { showNotifications = true } label: {
+                            Image(systemName: "bell").foregroundStyle(.white)
+                                .overlay(alignment: .topTrailing) {
+                                    if store.unreadNotes > 0 {
+                                        NoteBadge(count: store.unreadNotes).offset(x: 11, y: -9)
+                                    }
+                                }
+                        }
+                        .tint(.white)
+                        .accessibilityLabel("Notifications")
+                        .accessibilityValue(store.unreadNotes > 0 ? "\(store.unreadNotes) unread" : "")
                     }
                 }
             }
@@ -82,19 +102,25 @@ struct SessionsScreen: View {
                     path = [Self.creatingRoute]
                 }
             }
+            .sheet(isPresented: $showNotifications) {
+                NotificationsInbox(openTerminal: openTerminal).environmentObject(store)
+            }
             .sheet(isPresented: $showPairing, onDismiss: { store.restartWatch() }) {
                 NavigationStack { PairingScreen() }
             }
             .confirmCloseSession($confirmKill) { session in
                 Task { await store.kill(session) }
             }
-            .renameSession($renaming)
+            .sensoryFeedback(.impact(weight: .medium), trigger: editing) { _, now in now }
+            // Nothing left to edit.
+            .onChange(of: store.sessions.isEmpty) { _, empty in if empty { editing = false } }
             .onAppear {
                 if path.isEmpty { store.listAppeared() }
                 if store.pendingPairingLink != nil { showPairing = true }
             }
             .onChange(of: store.pendingPairingLink) { _, link in if link != nil { showPairing = true } }
             .onChange(of: path) { _, newPath in
+                editing = false
                 if newPath.isEmpty {
                     // Back from the terminal: drop it (the store may keep it
                     // warm); the list resumes.
@@ -111,8 +137,17 @@ struct SessionsScreen: View {
         // Once a minute, so "5m ago" stays true.
         TimelineView(.periodic(from: .now, by: 60)) { context in
             let groups = SessionLabel.ordered(store.sessions)
-            let states = Dictionary(uniqueKeysWithValues: groups.active.map {
-                ($0.id, ActiveState(SessionLabel.row(for: $0, now: context.date).status))
+            let labels = Dictionary(uniqueKeysWithValues: (groups.active + groups.inactive).map {
+                ($0.id, SessionLabel.row(for: $0, now: context.date))
+            })
+            let projects = ProjectFilter.projects(groups.active.compactMap { labels[$0.id] })
+            // A project whose last open terminal closed shows everything again.
+            let project = projectFilter.flatMap { name in projects.contains { $0.name == name } ? name : nil }
+            let inProject = { (session: RemoteSession) in project == nil || labels[session.id]?.project == project }
+            let active = groups.active.filter(inProject)
+            let inactive = groups.inactive.filter(inProject)
+            let states = Dictionary(uniqueKeysWithValues: active.map {
+                ($0.id, labels[$0.id].map { ActiveState($0.status) } ?? nil)
             })
             let counts = Dictionary(grouping: states.values.compactMap { $0 }) { $0 }.mapValues(\.count)
             // A filter whose last terminal moved on shows everything again.
@@ -133,34 +168,39 @@ struct SessionsScreen: View {
                     .listRowSeparator(.hidden)
                     .listRowInsets(EdgeInsets(top: 6, leading: LosttyTheme.margin, bottom: 6, trailing: LosttyTheme.margin))
                 }
-                if !groups.active.isEmpty {
-                    Section {
-                        ForEach(groups.active.filter { shown == nil || states[$0.id] == shown }, id: \.id) { session in
-                            row(session, now: context.date)
-                        }
-                    } header: {
-                        VStack(alignment: .leading, spacing: 16) {
-                            sectionHeader("Connected", count: groups.active.count, tint: LosttyTheme.success)
-                            statePills(counts: counts, selected: shown)
-                        }
+                // Headings and pills are rows, not section headers: headers
+                // stay pinned over the rows scrolling under them.
+                if !active.isEmpty {
+                    sectionHeader("Open Terminals", count: active.count, tint: LosttyTheme.success)
+                        .listHeading(first: true)
+                    statePills(counts: counts, selected: shown).listPills()
+                    // Under the states, by project: only with two or more,
+                    // when picking one narrows anything.
+                    if projects.count >= 2 {
+                        projectPills(projects, total: groups.active.count, selected: project).listPills(first: false)
+                    }
+                    ForEach(active.filter { shown == nil || states[$0.id] == shown }, id: \.id) { session in
+                        row(session, now: context.date)
                     }
                 }
-                if !groups.inactive.isEmpty {
-                    Section {
-                        // No Mac window shows them: still there to open or
-                        // close, but quieter.
-                        ForEach(groups.inactive, id: \.id) { session in
-                            row(session, now: context.date).opacity(0.55)
-                        }
-                    } header: {
-                        sectionHeader("Disconnected", count: groups.inactive.count, tint: LosttyTheme.textSecondary)
+                if !inactive.isEmpty {
+                    sectionHeader("Disconnected", count: inactive.count, tint: LosttyTheme.textSecondary)
+                        .listHeading(first: active.isEmpty)
+                    // No Mac window shows them: still there to open or
+                    // close, but quieter.
+                    ForEach(inactive, id: \.id) { session in
+                        row(session, now: context.date).opacity(0.55)
                     }
                 }
             }
             .listStyle(.plain)
+            // Rows as tall as they are: a short heading padded to the
+            // default 44pt would sit further from its pills than another.
+            .environment(\.defaultMinListRowHeight, 0)
             // Forget a filter once its last terminal moves on, so it doesn't
             // come back by itself later.
             .onChange(of: shown) { _, now in if now == nil { filter = nil } }
+            .onChange(of: project) { _, now in if now == nil { projectFilter = nil } }
             .overlay {
                 if showsEmptyState {
                     // Let pulls reach the list underneath (pull to refresh).
@@ -187,9 +227,6 @@ struct SessionsScreen: View {
     }
 
     static let creatingRoute = "creating"
-    /// Measured: the title's capitals and the axolotl centered 8.5pt
-    /// below the + button's center.
-    static let titleLift: CGFloat = -8.5
 
     /// The terminal the Mac made: in place of the screen that waited for
     /// it, on the same stop of the path (replacing the path's last value
@@ -203,24 +240,49 @@ struct SessionsScreen: View {
         open = (session, terminal.view, terminal.io, terminal.link)
     }
 
+    /// Opens `session`'s terminal: a row's tap, or a note's.
+    private func openTerminal(_ session: RemoteSession) {
+        guard let app = ghostty.app, let terminal = store.terminal(for: session, app: app) else { return }
+        open = (session, terminal.view, terminal.io, terminal.link)
+        path = ["terminal"]
+    }
+
     private func row(_ session: RemoteSession, now: Date) -> some View {
-        Button {
-            guard let app = ghostty.app, let terminal = store.terminal(for: session, app: app) else { return }
-            open = (session, terminal.view, terminal.io, terminal.link)
-            path = ["terminal"]
-        } label: {
+        let label = SessionLabel.row(for: session, now: now)
+        return SessionRowGestures(
+            editing: editing,
+            refreshing: refreshing.contains(session.id),
+            phase: Double(abs(session.id.hashValue) % 100) / 100,
+            title: label.title,
+            tap: {
+                // Editing: a tap on a row ends it, as on the Home Screen.
+                if editing {
+                    withAnimation(LosttyTheme.motion) { editing = false }
+                    return
+                }
+                openTerminal(session)
+            },
+            refresh: { refreshRow(session) },
+            hold: { withAnimation(LosttyTheme.motion) { editing = true } },
+            delete: { confirmKill = session }
+        ) {
             SessionRowView(
-                row: SessionLabel.row(for: session, now: now),
+                row: label,
                 texture: session.skin.flatMap { TextureTile.image(for: $0, displayScale: displayScale) })
         }
-        .buttonStyle(.plain)
         .listRowBackground(Color.clear)
         .listRowSeparator(.hidden)
         // Edge to edge: each terminal is a full-width band.
         .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
-        .swipeActions {
-            Button("Close", role: .destructive) { confirmKill = session }.tint(LosttyTheme.danger)
-            Button("Rename") { renaming = session }.tint(LosttyTheme.accent)
+    }
+
+    /// Pulled to refresh: that terminal connects afresh next time it opens,
+    /// and the list is read again. The row stays slid out until then.
+    private func refreshRow(_ session: RemoteSession) {
+        refreshing.insert(session.id)
+        Task {
+            await store.refreshTerminal(session)
+            withAnimation(SessionRowMotion.settle) { _ = refreshing.remove(session.id) }
         }
     }
 
@@ -231,37 +293,78 @@ struct SessionsScreen: View {
             HStack(spacing: 8) {
                 ForEach(ActiveState.allCases.filter { counts[$0, default: 0] > 0 }, id: \.self) { state in
                     let on = state == selected
-                    Button {
+                    filterPill(on: on, count: counts[state, default: 0]) {
                         withAnimation(LosttyTheme.motion) { filter = on ? nil : state }
                     } label: {
-                        HStack(spacing: 6) {
-                            Text(state.title)
-                            // The count in a circle darker than the pill (a
-                            // capsule once it needs two digits).
-                            Text("\(counts[state, default: 0])")
-                                .monospacedDigit()
-                                .fontWeight(.heavy)
-                                .padding(.horizontal, 6)
-                                .frame(minWidth: 20, minHeight: 20)
-                                .background(Color.black.opacity(on ? 0.12 : 0.4), in: Capsule())
-                        }
-                        .font(LosttyFont.detail.weight(.semibold))
-                        .foregroundStyle(on ? Color.black : LosttyTheme.textPrimary)
-                        .padding(.leading, 12)
-                        .padding(.trailing, 4)
-                        .padding(.vertical, 4)
-                        .background(on ? Color.white : LosttyTheme.surfaceRaised, in: Capsule())
-                        .overlay(Capsule().strokeBorder(on ? Color.clear : LosttyTheme.hairline, lineWidth: 1))
+                        Text(state.title)
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityAddTraits(on ? .isSelected : [])
                 }
             }
-            .padding(.leading, 2)
+            .padding(.horizontal, LosttyTheme.margin)
         }
     }
 
-    /// "Connected (3)": the count in a soft pill tinted `tint`.
+    /// All (the default), then one pill per project with open terminals:
+    /// "> lostty" as the rows begin their project line, the ">" in its
+    /// first terminal's accent. A tap shows only its terminals; All, or
+    /// another tap, shows them all again.
+    private func projectPills(_ projects: [OpenProject], total: Int, selected: String?) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                // Every project: the default, and the way back from one.
+                filterPill(on: selected == nil, count: total) {
+                    withAnimation(LosttyTheme.motion) { projectFilter = nil }
+                } label: {
+                    Text("All")
+                }
+                ForEach(projects, id: \.name) { project in
+                    let on = project.name == selected
+                    filterPill(on: on, count: project.count) {
+                        withAnimation(LosttyTheme.motion) { projectFilter = on ? nil : project.name }
+                    } label: {
+                        HStack(spacing: 5) {
+                            Text(">")
+                                .fontWeight(.heavy)
+                                .foregroundStyle(project.skin.map { Color($0.accent) } ?? LosttyTheme.accent)
+                                .accessibilityHidden(true)
+                            Text(project.name)
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, LosttyTheme.margin)
+        }
+    }
+
+    /// A filter pill: its label, then its count in a circle darker than the
+    /// pill (a capsule once it needs two digits); tinted with the accent
+    /// while on.
+    private func filterPill<Label: View>(
+        on: Bool, count: Int, action: @escaping () -> Void, @ViewBuilder label: () -> Label
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                label()
+                Text("\(count)")
+                    .monospacedDigit()
+                    .fontWeight(.heavy)
+                    .padding(.horizontal, 6)
+                    .frame(minWidth: 20, minHeight: 20)
+                    .background(Color.black.opacity(0.4), in: Capsule())
+            }
+            .font(LosttyFont.detail.weight(.semibold))
+            .foregroundStyle(LosttyTheme.textPrimary)
+            .padding(.leading, 12)
+            .padding(.trailing, 4)
+            .padding(.vertical, 4)
+            .background(on ? LosttyTheme.accent.opacity(0.14) : LosttyTheme.surfaceRaised, in: Capsule())
+            .overlay(Capsule().strokeBorder(on ? LosttyTheme.accent.opacity(0.35) : LosttyTheme.hairline, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(on ? .isSelected : [])
+    }
+
+    /// "Open Terminals (3)": the count in a soft pill tinted `tint`.
     private func sectionHeader(_ title: String, count: Int, tint: Color) -> some View {
         HStack(spacing: 8) {
             Text(title)
@@ -277,8 +380,8 @@ struct SessionsScreen: View {
                 .background(tint.opacity(0.14), in: Capsule())
                 .overlay(Capsule().strokeBorder(tint.opacity(0.35), lineWidth: 1))
         }
-        .padding(.leading, 2)
         .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isHeader)
     }
 
     /// No sessions and nothing else to say: the friendly empty state.
@@ -290,6 +393,189 @@ struct SessionsScreen: View {
     private var showsProblem: Bool {
         store.sessions.isEmpty && !store.loading && store.message != nil && !showsEmptyState
     }
+}
+
+/// A row's gestures. Tap opens it. Drag it left and let go past
+/// `RowPull.threshold` to refresh that terminal: the row slides aside over a
+/// refresh arrow that fills as it goes, and stays slid out with a spinner
+/// until the Mac answers. Hold it to edit: every row jiggles with a delete
+/// badge, like the Home Screen.
+private struct SessionRowGestures<Content: View>: View {
+    /// How far a refreshing row stays slid out: room for the spinner.
+    static var held: CGFloat { 56 }
+    /// The jiggle: degrees either way, and swings a second.
+    static var wobble: Double { 0.7 }
+    static var wobbleRate: Double { 3.5 }
+
+    let editing: Bool
+    let refreshing: Bool
+    /// Where in its swing this row's jiggle starts, 0–1, so rows don't
+    /// move in step.
+    let phase: Double
+    /// The row's title, for VoiceOver.
+    let title: String
+    let tap: () -> Void
+    let refresh: () -> Void
+    let hold: () -> Void
+    let delete: () -> Void
+    @ViewBuilder let content: Content
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// The pull under way: its travel, negative to the left.
+    @State private var pull: Double = 0
+
+    var body: some View {
+        let dx = pull
+        let slid = refreshing ? -Self.held : CGFloat(RowPull.offset(dx: dx))
+        ZStack(alignment: .trailing) {
+            indicator(progress: RowPull.progress(dx: dx))
+                .frame(width: max(0, -slid))
+                .opacity(-slid > 8 ? 1 : 0)
+                // The row's own Refresh action says it for VoiceOver.
+                .accessibilityHidden(true)
+            jiggling
+                .offset(x: slid)
+        }
+        .sensoryFeedback(.impact(weight: .light), trigger: RowPull.refreshes(dx: dx)) { _, armed in armed }
+        .modifier(SidewaysPull(
+            changed: { dx in if !editing && !refreshing { pull = min(0, dx) } },
+            ended: { dx in
+                let refreshes = !editing && !refreshing && RowPull.refreshes(dx: dx)
+                withAnimation(SessionRowMotion.settle) {
+                    pull = 0
+                    if refreshes { refresh() }
+                }
+            }))
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction { tap() }
+        .accessibilityAction(named: "Refresh") { refresh() }
+        .accessibilityAction(named: "Close") { delete() }
+    }
+
+    /// The row, rocking gently while editing, its delete badge riding along.
+    private var jiggling: some View {
+        let shaking = editing && !reduceMotion
+        return TimelineView(.animation(minimumInterval: nil, paused: !shaking)) { context in
+            let swing = (context.date.timeIntervalSinceReferenceDate * Self.wobbleRate + phase) * 2 * .pi
+            content
+                .contentShape(Rectangle())
+                .onTapGesture(perform: tap)
+                // A finger that moves is dragging or scrolling, not holding.
+                .onLongPressGesture(minimumDuration: 0.45, maximumDistance: 6, perform: hold)
+                .overlay(alignment: .topLeading) {
+                    if editing {
+                        deleteBadge.transition(.scale.combined(with: .opacity))
+                    }
+                }
+                .rotationEffect(.degrees(shaking ? sin(swing) * Self.wobble : 0))
+        }
+    }
+
+    /// What the slid-aside row uncovers: an arrow that turns and fills as
+    /// the pull nears the threshold, then the spinner while refreshing.
+    @ViewBuilder
+    private func indicator(progress: Double) -> some View {
+        if refreshing {
+            BufferSpinner(color: LosttyTheme.accent).frame(width: 22, height: 22)
+        } else {
+            let armed = progress >= 1
+            ZStack {
+                Circle().stroke(LosttyTheme.hairline, lineWidth: 2.5)
+                Circle()
+                    .trim(from: 0, to: progress)
+                    .stroke(LosttyTheme.accent, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                Image(systemName: "arrow.clockwise")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(armed ? LosttyTheme.accent : LosttyTheme.textSecondary)
+                    .rotationEffect(.degrees(progress * 270))
+            }
+            .frame(width: 26, height: 26)
+            .scaleEffect(armed ? 1.12 : 1)
+            .animation(.spring(duration: 0.2), value: armed)
+        }
+    }
+
+    /// The Home Screen's minus badge, on the row's top-left corner.
+    private var deleteBadge: some View {
+        Button(action: delete) {
+            Image(systemName: "minus")
+                .font(.system(size: 13, weight: .heavy))
+                .foregroundStyle(.white)
+                .frame(width: 26, height: 26)
+                .background(.thinMaterial, in: Circle())
+                .environment(\.colorScheme, .dark)
+                .overlay(Circle().strokeBorder(Color.black.opacity(0.3), lineWidth: 1))
+                // A full-size touch target around the small badge.
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .offset(x: -4, y: -15)
+        .accessibilityLabel("Close \(title)")
+    }
+}
+
+/// A row's sideways pull, as a UIKit pan that only starts when the finger
+/// heads left (`RowPull.isSideways`), so a vertical swipe still scrolls the
+/// list. (SwiftUI's own drag gesture on a row takes those too.) `ended`
+/// also comes for a cancelled pan, so the row always springs home. Before
+/// iOS 18 there is no pull; the row's Refresh accessibility action remains.
+private struct SidewaysPull: ViewModifier {
+    let changed: (Double) -> Void
+    let ended: (Double) -> Void
+
+    func body(content: Content) -> some View {
+        if #available(iOS 18, *) {
+            content.gesture(SidewaysPan(changed: changed, ended: ended))
+        } else {
+            content
+        }
+    }
+}
+
+@available(iOS 18, *)
+private struct SidewaysPan: UIGestureRecognizerRepresentable {
+    let changed: (Double) -> Void
+    let ended: (Double) -> Void
+
+    func makeUIGestureRecognizer(context: Context) -> UIPanGestureRecognizer {
+        let pan = UIPanGestureRecognizer()
+        pan.delegate = context.coordinator
+        return pan
+    }
+
+    func handleUIGestureRecognizerAction(_ pan: UIPanGestureRecognizer, context: Context) {
+        let dx = Double(pan.translation(in: pan.view).x)
+        switch pan.state {
+        case .began, .changed: changed(dx)
+        case .ended: ended(dx)
+        case .cancelled, .failed: ended(0)
+        default: break
+        }
+    }
+
+    func makeCoordinator(converter: CoordinateSpaceConverter) -> Coordinator { Coordinator() }
+
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        func gestureRecognizerShouldBegin(_ gesture: UIGestureRecognizer) -> Bool {
+            guard let pan = gesture as? UIPanGestureRecognizer else { return false }
+            let velocity = pan.velocity(in: pan.view)
+            return RowPull.isSideways(dx: Double(velocity.x), dy: Double(velocity.y))
+        }
+
+        /// The list's scrolling waits for this to decide, so a pull takes
+        /// the touch for itself (a list being scrolled holds back redrawing
+        /// its rows), and a vertical swipe, which fails it at once, scrolls.
+        func gestureRecognizer(
+            _ gesture: UIGestureRecognizer, shouldBeRequiredToFailBy other: UIGestureRecognizer
+        ) -> Bool { other.view is UIScrollView }
+    }
+}
+
+/// How a pulled row springs back, and slides home after refreshing.
+private enum SessionRowMotion {
+    static let settle: Animation = .spring(duration: 0.35, bounce: 0.2)
 }
 
 /// What an Active terminal is doing, for the filter pills.
@@ -418,10 +704,10 @@ private struct SessionRowView: View {
         .background {
             ZStack {
                 // The skin's texture, as the Mac pane shows it.
-                if let tile = texture, let opacity = row.skin?.texture?.opacity {
+                if let tile = texture, let skinTexture = row.skin?.texture {
                     Image(decorative: tile, scale: displayScale)
                         .resizable(resizingMode: .tile)
-                        .opacity(opacity)
+                        .opacity(TerminalLook.textureOpacity(skinTexture))
                 }
                 // Waiting on you: the band slowly brightens and fades, in time.
                 if row.status == .waiting && !reduceMotion { WaitingFlash(color: colors.flash) }
@@ -663,7 +949,7 @@ private struct WaitingFlash: View {
 
 /// A row's colors: the skin's background, text and accent (as the pane
 /// looks on the Mac), else the plain card's.
-private struct RowColors {
+struct RowColors {
     var background = LosttyTheme.surface
     var primary = LosttyTheme.textPrimary
     var secondary = LosttyTheme.textSecondary
@@ -818,6 +1104,28 @@ private struct EmptySessions: View {
         }
         .multilineTextAlignment(.center)
         .padding(LosttyTheme.margin)
+    }
+}
+
+/// The list's headings and pill rows: on the screen's background, no
+/// separators, lined up with the rows' text.
+private extension View {
+    /// A group's heading, 36pt below what's above it: the last group's
+    /// pills (their 8 and its 28), or for the `first`, the top bar's
+    /// buttons (the list starts 10pt under them).
+    func listHeading(first: Bool) -> some View {
+        listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+            .listRowInsets(EdgeInsets(top: first ? 26 : 28, leading: LosttyTheme.margin, bottom: 6, trailing: LosttyTheme.margin))
+    }
+
+    /// A row of filter pills, scrolling sideways edge to edge; rows of
+    /// them stack 8pt apart, 12pt under the heading and 14pt over the
+    /// terminals.
+    func listPills(first: Bool = true) -> some View {
+        listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+            .listRowInsets(EdgeInsets(top: first ? 6 : 0, leading: 0, bottom: 8, trailing: 0))
     }
 }
 #endif

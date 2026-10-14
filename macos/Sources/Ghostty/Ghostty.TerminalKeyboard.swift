@@ -82,15 +82,33 @@ extension Ghostty.MobileInput {
         enum Swipe: Equatable, CaseIterable {
             case up, down, left, right
 
-            /// Travelled at least this far (points), a drag is a swipe.
-            static let minDistance: Double = 30
+            /// Travelled at least this far (points) its way, a swipe makes
+            /// its arrow (`SwipeTrack`).
+            static let minDistance: Double = 40
 
-            /// The swipe a drag of (`dx`, `dy`) makes: its longer axis, once
-            /// far enough; nil for a short or perfectly diagonal drag.
-            static func of(dx: Double, dy: Double) -> Swipe? {
-                guard max(abs(dx), abs(dy)) >= minDistance, abs(dx) != abs(dy) else { return nil }
+            /// Which way a drag of (`dx`, `dy`) mostly goes; nil when
+            /// perfectly diagonal.
+            static func way(dx: Double, dy: Double) -> Swipe? {
+                guard abs(dx) != abs(dy) else { return nil }
                 if abs(dx) > abs(dy) { return dx > 0 ? .right : .left }
                 return dy > 0 ? .down : .up
+            }
+
+            /// How far (`dx`, `dy`) has gone this way, and how far off to the side.
+            func along(dx: Double, dy: Double) -> Double {
+                switch self {
+                case .up: -dy
+                case .down: dy
+                case .left: -dx
+                case .right: dx
+                }
+            }
+
+            func across(dx: Double, dy: Double) -> Double {
+                switch self {
+                case .up, .down: abs(dx)
+                case .left, .right: abs(dy)
+                }
             }
 
             /// The arrow key it presses.
@@ -122,6 +140,59 @@ extension Ghostty.MobileInput {
                 case .left: (-1, 0)
                 case .right: (1, 0)
                 }
+            }
+        }
+
+        /// One finger's drag across the keyboard, judged as it goes. A tap
+        /// that wanders a little stays a tap: it only becomes a swipe past
+        /// `startDistance` (taps in a real log drifted under 24 pt; drags
+        /// while typing fast, up to 27). Then the way it was going is locked
+        /// in, and turning back or wandering off sideways gives it up: a
+        /// confusing drag types nothing rather than a surprising arrow.
+        struct SwipeTrack: Equatable {
+            enum Phase: Equatable {
+                case undecided
+                case going(Swipe)
+                /// Turned back or wandered off: no arrow, whatever follows.
+                case confused
+            }
+
+            static let startDistance: Double = 32
+            /// Coming back this share of the way travelled (at least
+            /// `minBacktrack`) is turning back.
+            static let backtrackShare: Double = 1.0 / 3
+            static let minBacktrack: Double = 16
+
+            private(set) var phase: Phase = .undecided
+            /// The furthest it got its way.
+            private var peak: Double = 0
+
+            init() {}
+
+            /// The finger is now (`dx`, `dy`) from where it touched down.
+            mutating func move(dx: Double, dy: Double) {
+                switch phase {
+                case .confused:
+                    return
+                case .undecided:
+                    guard (dx * dx + dy * dy).squareRoot() >= Self.startDistance, let way = Swipe.way(dx: dx, dy: dy) else { return }
+                    phase = .going(way)
+                    peak = way.along(dx: dx, dy: dy)
+                case .going(let way):
+                    let progress = way.along(dx: dx, dy: dy)
+                    peak = max(peak, progress)
+                    let turnedBack = peak - progress > max(Self.minBacktrack, peak * Self.backtrackShare)
+                    let wandered = way.across(dx: dx, dy: dy) > progress
+                    if turnedBack || wandered { phase = .confused }
+                }
+            }
+
+            /// The arrow, once the finger lifts at (`dx`, `dy`): its locked
+            /// way, if it went at least `Swipe.minDistance` that way.
+            mutating func end(dx: Double, dy: Double) -> Swipe? {
+                move(dx: dx, dy: dy)
+                guard case .going(let way) = phase, way.along(dx: dx, dy: dy) >= Swipe.minDistance else { return nil }
+                return way
             }
         }
 

@@ -53,6 +53,14 @@ struct SettingsScreen: View {
             }
             .scrollBounceBehavior(.basedOnSize)
         }
+        .safeAreaInset(edge: .bottom) {
+            VStack(spacing: 10) {
+                if store.settings.paired { NotificationsRow() }
+                TerminalTextSizeRow()
+            }
+            .padding(.horizontal, LosttyTheme.margin)
+            .padding(.bottom, 12)
+        }
         #if DEBUG
         // Setting up by hand: Debug builds only (the simulator can't
         // pair). Pairing fills all of this in, and pins the Mac's host
@@ -100,6 +108,54 @@ struct SettingsScreen: View {
                 }
             }
         }
+    }
+}
+
+/// Every terminal's text size: a step smaller or larger than the default.
+/// An open terminal picks it up when shown again.
+private struct TerminalTextSizeRow: View {
+    @AppStorage(TerminalTextSize.key) private var textSize: TerminalTextSize = .standard
+
+    var body: some View {
+        LosttyCard(padding: 0) {
+            HStack {
+                Text("Terminal Text Size")
+                    .font(LosttyFont.body)
+                    .foregroundStyle(LosttyTheme.textPrimary)
+                Spacer()
+                Picker("Terminal Text Size", selection: $textSize) {
+                    ForEach(TerminalTextSize.allCases) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.menu)
+                .labelsHidden()
+                .tint(LosttyTheme.textSecondary)
+            }
+            .padding(.leading, 16)
+            .padding(.trailing, 4)
+            .padding(.vertical, 6)
+        }
+    }
+}
+
+/// Opens Settings → Notifications.
+private struct NotificationsRow: View {
+    var body: some View {
+        NavigationLink { NotificationSettingsScreen() } label: {
+            LosttyCard(padding: 0) {
+                HStack {
+                    Text("Notifications")
+                        .font(LosttyFont.body)
+                        .foregroundStyle(LosttyTheme.textPrimary)
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(LosttyTheme.textSecondary)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
+            }
+        }
+        .buttonStyle(.plain)
     }
 }
 

@@ -41,6 +41,9 @@ final class LosttyStatusItem: NSObject, NSMenuDelegate {
         ClaudeRuntime.shared.$awaiting.sink { [weak self] _ in
             DispatchQueue.main.async { self?.updateIcon() }
         }.store(in: &watchers)
+        BundleWatch.shared.$updateReady.sink { [weak self] _ in
+            DispatchQueue.main.async { self?.updateIcon() }
+        }.store(in: &watchers)
     }
 
     func remove() {
@@ -50,13 +53,20 @@ final class LosttyStatusItem: NSObject, NSMenuDelegate {
     }
 
     private func updateIcon() {
-        item?.button?.image = StatusIcon.image(on: stayAwake.isOn, dot: !ClaudeRuntime.shared.awaiting.isEmpty)
+        item?.button?.image = StatusIcon.image(
+            on: stayAwake.isOn, dot: !ClaudeRuntime.shared.awaiting.isEmpty, update: BundleWatch.shared.updateReady)
     }
 
     // MARK: Menu
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
+        // A new build is installed: the first thing in the menu.
+        BundleWatch.shared.check()
+        if BundleWatch.shared.updateReady {
+            menu.addItem(action("Restart to Update (Keeps Terminals)", #selector(restartToUpdate)))
+            menu.addItem(.separator())
+        }
         stayAwake.refreshAvailability()
         if stayAwake.isOn { stayAwake.pollPower() }
 
@@ -79,6 +89,9 @@ final class LosttyStatusItem: NSObject, NSMenuDelegate {
         if let status = StayAwakeMenuText.status(stayAwake.model.state, power: stayAwake.power,
                                                  permissionInstalled: stayAwake.permissionInstalled, now: Date()) {
             menu.addItem(disabled("   " + status))
+        }
+        if let hotspot = HotswitchMenuText.status(Hotswitch.shared.status) {
+            menu.addItem(disabled("   " + hotspot))
         }
         if !stayAwake.available && !stayAwake.isOn {
             menu.addItem(action("Set Up Phone Access…", #selector(openPhoneAccess)))
@@ -111,6 +124,9 @@ final class LosttyStatusItem: NSObject, NSMenuDelegate {
         menu.addItem(action("New Window", #selector(newWindow)))
         menu.addItem(action("Phone Access…", #selector(openPhoneAccess)))
         menu.addItem(action("Pair a Phone…", #selector(pairPhone)))
+        if PreviousBuild.available {
+            menu.addItem(action("Go Back to Previous Build", #selector(goBackToPreviousBuild)))
+        }
         let floors = NSMenu()
         for floor in StayAwakeStore.floors {
             let f = NSMenuItem(title: "\(floor)%", action: #selector(setFloor(_:)), keyEquivalent: "")
@@ -166,6 +182,22 @@ final class LosttyStatusItem: NSObject, NSMenuDelegate {
 
     @objc private func openPhoneAccess() { PhoneAccessUI.show() }
 
+    @objc private func restartToUpdate() {
+        LosttyRestart.restart(reason: .menu)
+    }
+
+    @objc private func goBackToPreviousBuild() {
+        do {
+            try PreviousBuild.swap()
+            LosttyRestart.restart(reason: .menu)
+        } catch {
+            let alert = NSAlert()
+            alert.messageText = "Couldn't go back to the previous build"
+            alert.informativeText = error.localizedDescription
+            alert.runModal()
+        }
+    }
+
     @objc private func pairPhone() {
         PhoneAccessUI.show()
         PhoneAccessUI.startPairingWhenReady()
@@ -197,7 +229,7 @@ final class LosttyStatusItem: NSObject, NSMenuDelegate {
 /// (eyes cut out) when Stay Awake is on, a dot when a Claude is waiting.
 enum StatusIcon {
     @MainActor
-    static func image(on: Bool, dot: Bool) -> NSImage? {
+    static func image(on: Bool, dot: Bool, update: Bool = false) -> NSImage? {
         let line = StrokeStyle(lineWidth: 1.2, lineCap: .round, lineJoin: .round)
         let eyes = StrokeStyle(lineWidth: 1.4, lineCap: .round, lineJoin: .round)
         let view = ZStack(alignment: .topTrailing) {
@@ -222,6 +254,12 @@ enum StatusIcon {
             }
             .compositingGroup()
             if dot { Circle().fill(.black).frame(width: 5, height: 5) }
+        }
+        // A new build is installed: Restart to Update is in the menu.
+        .overlay(alignment: .bottomTrailing) {
+            if update {
+                Image(systemName: "arrow.up.circle.fill").font(.system(size: 7, weight: .bold))
+            }
         }
         .frame(width: 18, height: 18)
         let renderer = ImageRenderer(content: view)

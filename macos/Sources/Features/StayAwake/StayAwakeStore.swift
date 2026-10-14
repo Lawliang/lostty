@@ -91,9 +91,19 @@ final class StayAwakeStore: ObservableObject {
         set { defaults.set(newValue.rawValue, forKey: Self.durationKey) }
     }
 
-    /// At launch: put back whatever a crashed Lostty left changed.
+    /// At launch: put back whatever a crashed Lostty left changed. Not
+    /// after a restart that kept it on (`resume`).
     func start() {
+        guard !isOn else { return }
         send(.launch(StayAwakeRecordStore(defaults: defaults).load()))
+    }
+
+    /// Restart to Update: it was on in the Lostty before. Keeps it on as it
+    /// was, without touching the power settings: turning sleep back on,
+    /// even briefly, could put a closed-lid Mac to sleep.
+    func resume(until: Date?) {
+        send(.resume(StayAwakeRecordStore(defaults: defaults).load(), until: until))
+        if isOn { startPolling() }
     }
 
     func refreshAvailability() {

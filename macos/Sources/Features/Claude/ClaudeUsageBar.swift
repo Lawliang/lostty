@@ -1,6 +1,7 @@
 #if os(macOS)
 import AppKit
 import CoreText
+import LosttyRemote
 import SwiftUI
 
 /// The strip along the bottom of the window, as tall as the title bar and
@@ -105,21 +106,22 @@ struct ClaudeUsageBar: View {
 }
 
 /// A text meter of block characters: `▓` used, `░` free. The used part
-/// turns amber past 70% and red past 90%.
+/// turns amber past 70% and red past 90% (`UsageMeter`, which the phone
+/// draws too).
 enum ClaudeUsageBlocks {
-    static let cells = 10
+    static let cells = UsageMeter.cells
 
     /// Used cells for `percent`: any use shows at least one.
     static func filled(_ percent: Double, cells: Int = cells) -> Int {
-        let p = min(max(percent, 0), 100)
-        guard p > 0 else { return 0 }
-        return min(cells, max(1, Int((p / 100 * Double(cells)).rounded())))
+        UsageMeter.filled(percent, cells: cells)
     }
 
     static func fill(for percent: Double, accent: Color) -> Color {
-        if percent >= 90 { return Color(red: 0.95, green: 0.33, blue: 0.30) }
-        if percent >= 70 { return Color(red: 0.96, green: 0.68, blue: 0.25) }
-        return accent
+        switch UsageMeter.level(percent) {
+        case .critical: Color(red: 0.95, green: 0.33, blue: 0.30)
+        case .high: Color(red: 0.96, green: 0.68, blue: 0.25)
+        case .normal: accent
+        }
     }
 
     static func text(_ percent: Double, accent: Color, empty: Color) -> Text {

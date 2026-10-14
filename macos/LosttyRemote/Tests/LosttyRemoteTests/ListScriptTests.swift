@@ -47,7 +47,7 @@ struct ListScriptTests {
     ) throws -> (Int32, [RemoteSession]) {
         let lines = sessions.enumerated().map { i, session in
             let path = root.appendingPathComponent(session.folder).path
-            return "\(path)\t\(session.owner)\t$\(i)\tx\tPANE\t\(session.owner)\t\t\(claude)\t1\tzsh\t\(path)\t\t\tt\n"
+            return "\(path)\t\(session.owner)\t$\(i)\tx\tPANE\t\(session.owner)\t\t\(claude)\t1\tzsh\t\(path)\t\t\t\tt\n"
         }.joined()
         let input = root.appendingPathComponent("listing")
         try lines.write(to: input, atomically: true, encoding: .utf8)
@@ -76,7 +76,7 @@ struct ListScriptTests {
         let listing = root.appendingPathComponent("listing")
         let path = root.appendingPathComponent("home/notes").path
         try ["working", "agents", "waiting", ""].enumerated().map { i, claude in
-            "\(path)\t\t$\(i)\tx\tPANE\t\t\t\(claude)\t1\t2.1.296\t\(path)\t\t\tt\n"
+            "\(path)\t\t$\(i)\tx\tPANE\t\t\t\(claude)\t1\t2.1.296\t\(path)\t\t\t\tt\n"
         }.joined().write(to: listing, atomically: true, encoding: .utf8)
         // The working line sits just over the prompt; older ones scrolled up.
         let pane = """

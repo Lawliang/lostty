@@ -270,7 +270,21 @@ extension Ghostty {
             DispatchQueue.main.async { state.appTick() }
         }
 
-        static func action(_ app: ghostty_app_t, target: ghostty_target_s, action: ghostty_action_s) -> Bool { return false }
+        static func action(_ app: ghostty_app_t, target: ghostty_target_s, action: ghostty_action_s) -> Bool {
+            // Lostty Mobile: only links. A tap asks the core what is under
+            // the finger (SurfaceView.link(at:)), and the answer comes back
+            // as the link being hovered, during that same call.
+            guard action.tag == GHOSTTY_ACTION_MOUSE_OVER_LINK,
+                  target.tag == GHOSTTY_TARGET_SURFACE,
+                  let surface = target.target.surface,
+                  let userdata = ghostty_surface_userdata(surface) else { return false }
+            let view = Unmanaged<SurfaceView>.fromOpaque(userdata).takeUnretainedValue()
+            let link = action.action.mouse_over_link
+            view.hoveredLink = link.len > 0 && link.url != nil
+                ? String(data: Data(bytes: link.url, count: link.len), encoding: .utf8)
+                : nil
+            return true
+        }
         static func readClipboard(
             _ userdata: UnsafeMutableRawPointer?,
             location: ghostty_clipboard_e,
