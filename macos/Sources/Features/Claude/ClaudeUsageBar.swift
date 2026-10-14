@@ -155,6 +155,7 @@ enum ClaudeUsageFont {
 private struct ClaudeUsageDetails: View {
     @ObservedObject var usage: ClaudeUsageRuntime
     let accent: Color
+    @ObservedObject var breakdown: UsageBreakdownRuntime = .shared
     let dismiss: () -> Void
 
     var body: some View {
@@ -162,10 +163,19 @@ private struct ClaudeUsageDetails: View {
             ForEach(ClaudeUsageMetric.allCases) { metric in
                 row(metric)
             }
+            if ClaudeUsageMetric.allCases.contains(where: { breakdown.line($0, usage: usage) != nil }) {
+                Text(UsageBreakdownRuntime.footnote)
+                    .font(ClaudeUsageFont.font(size: 10))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 10)
+                    .padding(.top, 4)
+                    .padding(.bottom, 2)
+            }
         }
         .font(ClaudeUsageFont.font(size: 12))
         .padding(6)
         .frame(width: 320)
+        .onAppear { breakdown.refresh() }
     }
 
     private func row(_ metric: ClaudeUsageMetric) -> some View {
@@ -188,6 +198,11 @@ private struct ClaudeUsageDetails: View {
                 Text(subtitle(metric))
                     .font(ClaudeUsageFont.font(size: 10))
                     .foregroundStyle(.secondary)
+                if let line = breakdown.line(metric, usage: usage) {
+                    Text(line)
+                        .font(ClaudeUsageFont.font(size: 10))
+                        .foregroundStyle(.secondary)
+                }
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 7)
