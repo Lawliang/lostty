@@ -247,8 +247,8 @@ Add to `ClaudeCLITests` (before the closing brace of the struct):
         #expect(ClaudeCLI.interpret(broken, cancelled: false) == .success(#"{"type":"res"#))
         #expect(ClaudeCLI.usage(nil) == nil)
         // Another JSON object (the observer's notes, printed by a stand-in) is plain text.
-        let notes = ProcessResult(status: 0, stdout: #"{"so_far":[],"just_now":"hi"}"#, stderr: "")
-        #expect(ClaudeCLI.interpret(notes, cancelled: false) == .success(#"{"so_far":[],"just_now":"hi"}"#))
+        let notes = ProcessResult(status: 0, stdout: #"{"built":[],"just_now":"hi"}"#, stderr: "")
+        #expect(ClaudeCLI.interpret(notes, cancelled: false) == .success(#"{"built":[],"just_now":"hi"}"#))
         #expect(ClaudeCLI.usage(notes) == nil)
     }
 ```
@@ -649,11 +649,11 @@ Add to `SummarizerTests`:
     @Test func claudeRunsRecordTheirTokens() async throws {
         let claude = try script("claude", #"""
         cat > /dev/null
-        echo '{"type":"result","is_error":false,"result":"{\"so_far\":[],\"just_now\":\"hi\"}","modelUsage":{"claude-haiku-5-5":{"inputTokens":7,"outputTokens":3}}}'
+        echo '{"type":"result","is_error":false,"result":"{\"built\":[],\"just_now\":\"hi\"}","modelUsage":{"claude-haiku-5-5":{"inputTokens":7,"outputTokens":3}}}'
         """#)
         let ledger = tempLedger()
         let result = await Summarizer.run(.claude(claude), prompt: "x", handle: RunHandle(), ledger: ledger)
-        #expect(result == .success(#"{"so_far":[],"just_now":"hi"}"#))
+        #expect(result == .success(#"{"built":[],"just_now":"hi"}"#))
         #expect(ledger.runs().map(\.source) == [.observer])
         #expect(ledger.runs().first?.tokens == ["claude-haiku-5-5": TokenCounts(input: 7, output: 3)])
     }
@@ -664,7 +664,7 @@ Add to `SummarizerTests`:
         while [ $# -gt 0 ]; do if [ "$1" = "-o" ]; then out="$2"; fi; shift; done
         cat > /dev/null
         echo '{"type":"result","is_error":false,"result":"x","modelUsage":{"m":{"inputTokens":1}}}'
-        echo '{"so_far":["a"],"just_now":"b"}' > "$out"
+        echo '{"built":["a"],"just_now":"b"}' > "$out"
         """)
         let ledger = tempLedger()
         _ = await Summarizer.run(.codex(codex), prompt: "x", handle: RunHandle(), ledger: ledger)

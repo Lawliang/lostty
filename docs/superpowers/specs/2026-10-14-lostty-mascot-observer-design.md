@@ -22,9 +22,9 @@ suggesting better workflows.
 ### Success criteria
 
 - In a pane where Claude has finished a turn, tapping the mascot opens the
-  bubble at once (the observer already ran) with two parts: **So far**, bullets
-  of what's been done in this conversation, and **Just now**, the last reply
-  in plain words.
+  bubble at once (the observer already ran) with notes on this conversation
+  (**Why you started this**, **What we decided together**, **What's built**,
+  **What's left**) and **Just now**, the last reply in plain words.
 - Tapping while Claude works opens a "…" bubble that fills in a few seconds
   after Claude stops.
 - The same works in a Codex pane.
@@ -112,7 +112,9 @@ prompt.
 `TurnObserver` (main actor, app-wide) keeps, per conversation file, in memory
 only:
 
-- `soFar`: the bullet list,
+- the notes: `why` (a sentence or two) and `asked` (what you asked for),
+  `decided`, `built` with `progress` ("about two-thirds done", or empty when
+  unclear), and `left`,
 - `justNow`: the ELI5 of the last reply,
 - `offset`: how far the file has been read,
 - `turn`: an identity for the last reply summarized (the offset where it
@@ -126,13 +128,17 @@ the switch off, it runs only when a tap needs it.
 **What it sends.**
 - First run for a file (new conversation, or after Lostty restarts): every
   entry, cut from the oldest end to the newest 30,000 words.
-- Later runs: the current `soFar` bullets, the entries since `offset`, and
-  the last reply.
+- Later runs: the current notes, the entries since `offset`, and the last
+  reply.
 
-It asks for JSON, `{"so_far": ["…"], "just_now": "…"}`: `so_far` is the
-updated list (no length limit; merge or reword earlier bullets only when that
-makes the list clearer), and `just_now` explains the last reply in plain
-words, for someone who didn't read it. The prompt lives in `ObserverPrompt`,
+It asks for JSON with one key per note, `{"why": "…", "asked": ["…"],
+"decided": ["…"], "built": ["…"], "progress": "…", "left": ["…"],
+"just_now": "…"}`, written to the developer as "you" and to the developer
+and agent together as "we". The lists are the updated notes: no length
+limits, earlier bullets merged or reworded only when that makes a list
+clearer, and a decision may start with a short label ("Look: …"). `just_now`
+explains the last reply in plain words, for someone who didn't read it.
+Missing keys are empty; an empty `just_now` doesn't parse. The prompt lives in `ObserverPrompt`,
 like `SummaryPrompt`. A reply wrapped in a code fence still parses. A reply
 that doesn't parse is an error (§6), and the notes stay as they were.
 
@@ -159,7 +165,7 @@ again after a run fails with a sign-in error:
    -s read-only -c model_reasoning_effort=low -o <temp file>` with the
    prompt on stdin, on Codex's default model. `codex` is found like `claude`.
 3. **Apple's on-device model**, when available. Its input is cut to fit: the
-   `soFar` bullets plus the newest 1,500 words.
+   current notes plus the newest 1,500 words.
 4. **None:** the bubble says so (§6).
 
 Both CLIs run with PATH as their only environment, from the temp directory,
@@ -175,8 +181,14 @@ terminal, or focus moving to another pane closes it. The axolotl shows its
 `happy` pose while the bubble is open.
 
 **What it shows.**
-- Notes current for the last reply: **So far** (bullets) and **Just now**,
-  at once.
+- Notes current for the last reply, at once, in this order, each section
+  left out when empty:
+  - **Why you started this**: `why`, then `asked` as bullets;
+  - **What we decided together**: bullets;
+  - **What's built (about two-thirds done)**: bullets, the brackets holding
+    `progress` and dropped when it's empty;
+  - **What's left**: bullets;
+  - **Just now**: the plain-words last reply.
 - The agent is working, or a run for the last reply is under way: "…",
   filling in when the run finishes. With the switch off, a tap mid-turn
   waits for the turn to end and then starts the run.

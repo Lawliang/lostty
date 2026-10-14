@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Tapping the axolotl in the terminal's corner opens a speech bubble with "So far" bullets of this conversation and a plain-words "Just now" of the agent's last reply, kept up to date by an observer that runs when each turn ends.
+**Goal:** Tapping the axolotl in the terminal's corner opens a speech bubble with notes on this conversation (why you started it, what we decided, what's built, what's left) and a plain-words "Just now" of the agent's last reply, kept up to date by an observer that runs when each turn ends.
 
 **Architecture:** The `+claude-state idle` hook adds the conversation file's path (`transcript_path` from the Stop/Notification hook input) to the LOSTTY_CLAUDE user var. `ClaudeRuntime` hands each turn's end to a new app-wide `TurnObserver`, which checks the path against Claude's and Codex's own folders, reads only the new prompts and replies (`ConversationReader`), and asks a summarizer (Claude Haiku on the Claude subscription, then Codex on ChatGPT, then Apple's on-device model) to update its in-memory notes (`ObserverPrompt`). The mascot becomes a button whose popover shows `TurnObserver.content(pane:working:)`.
 
@@ -18,7 +18,7 @@
 - Never use an API key. Order: Claude subscription (`claude auth status` → `"loggedIn": true` and `"authMethod": "claude.ai"`) → ChatGPT sign-in (`codex login status` contains "Logged in using ChatGPT") → Apple's on-device model → none.
 - Claude run: `ClaudeCLI.arguments` (`-p --model haiku --tools "" --no-session-persistence --strict-mcp-config --setting-sources ""`), prompt on stdin. Codex run: `codex exec --ignore-user-config --skip-git-repo-check --ephemeral -s read-only -c model_reasoning_effort=low -o <temp file> -`, prompt on stdin, Codex's default model. Both from the temp directory, 60-second timeout (`ClaudeCLI.timeout`).
 - Limits: `transcript_max` 1,024 bytes; CLI prompts carry at most the newest 30,000 words; Apple prompts at most 1,500; at most 2 runs at once across all panes; bubble 340 points wide, at most half the terminal's height, then it scrolls.
-- Copy, exactly: "So far", "Just now", "Nothing to sum up yet.", "Sign in to Claude Code or Codex, or turn on Apple Intelligence, to get summaries.", "Summarize turns in the background".
+- Copy, exactly: "Why you started this", "What we decided together", "What's built", "What's built (<progress>)", "What's left", "Just now", "Nothing to sum up yet.", "Sign in to Claude Code or Codex, or turn on Apple Intelligence, to get summaries.", "Summarize turns in the background".
 - Settings key: `LosttyObserverBackground` in `UserDefaults.ghostty`, default on.
 - Commits: each task commits only its own files, staged by explicit path (`git add <paths>`), message prefixed `lostty: observer:` and ending with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Never stage `README.md` or `macos/ship-phone.sh`. The mascot-in-the-corner change (`SidebarMascot.swift`, `ExtensionSidebarLayout.swift`, `ExtensionSidebarView.swift`, `Axolotl.swift`, `SessionsScreen.swift`) is the user's uncommitted work: before Task 8, ask the user to commit it (or to approve committing it as its own commit); never fold it into a task commit. Never push.
 - Another Claude session may edit this working tree: re-read a file right before editing it, anchor edits on quoted text, never revert changes you didn't make.
@@ -816,8 +816,10 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 **Interfaces:**
 - Consumes: `ConversationEntry` (Task 3).
 - Produces:
-  - `struct ObserverNotes: Equatable, Sendable { var soFar: [String]; var justNow: String }`
-  - `enum ObserverPrompt { static let cliWords = 30_000; static let appleWords = 1_500; static func build(previous: [String], earlier: [ConversationEntry], lastReply: String, words: Int) -> String; static func parse(_ reply: String) -> ObserverNotes?; static func wordCount(_ text: String) -> Int }`
+  - `struct ObserverNotes: Encodable, Equatable, Sendable { var why: String; var asked: [String]; var decided: [String]; var built: [String]; var progress: String; var left: [String]; var justNow: String }`, with an initializer whose every argument but `justNow` defaults to empty (`ObserverNotes(built: ["a"], justNow: "b")`).
+  - `enum ObserverPrompt { static let cliWords = 30_000; static let appleWords = 1_500; static func build(previous: ObserverNotes?, earlier: [ConversationEntry], lastReply: String, words: Int) -> String; static func parse(_ reply: String) -> ObserverNotes?; static func wordCount(_ text: String) -> Int }`
+
+The notes follow the shape the user asked for (spec §4): **Why you started this** (a sentence or two, then what you asked for), **What we decided together**, **What's built** (with how far along, when clear), **What's left**, then **Just now**.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -836,28 +838,31 @@ struct ObserverPromptTests {
 
     @Test func aFirstRunHasNoNotesYet() {
         let prompt = ObserverPrompt.build(
-            previous: [],
+            previous: nil,
             earlier: [ConversationEntry(speaker: .you, text: "Fix the login bug")],
             lastReply: "Fixed it.", words: ObserverPrompt.cliWords)
-        #expect(prompt.contains("Notes so far:\n(none yet)"))
+        #expect(prompt.contains("Your notes so far:\n(none yet)"))
         #expect(prompt.contains("You: Fix the login bug"))
         #expect(prompt.contains("The agent's last reply:\nFixed it."))
-        #expect(prompt.contains(#""so_far""#))
-        #expect(prompt.contains(#""just_now""#))
+        for key in ["why", "asked", "decided", "built", "progress", "left", "just_now"] {
+            #expect(prompt.contains("\"\(key)\""))
+        }
     }
 
     @Test func laterRunsCarryTheNotes() {
+        let previous = ObserverNotes(why: "Login was broken.", built: ["Fixed the login bug"], justNow: "Fixed.")
         let prompt = ObserverPrompt.build(
-            previous: ["Fixed the login bug"],
+            previous: previous,
             earlier: [ConversationEntry(speaker: .you, text: "Now add tests"),
                       ConversationEntry(speaker: .agent, text: "Sure")],
             lastReply: "Added two tests.", words: ObserverPrompt.cliWords)
-        #expect(prompt.contains("Notes so far:\n- Fixed the login bug"))
+        #expect(prompt.contains(#""built":["Fixed the login bug"]"#))
+        #expect(prompt.contains(#""why":"Login was broken.""#))
         #expect(prompt.contains("You: Now add tests\n\nAgent: Sure"))
     }
 
     @Test func nothingNewSaysSo() {
-        let prompt = ObserverPrompt.build(previous: ["x"], earlier: [], lastReply: "", words: 100)
+        let prompt = ObserverPrompt.build(previous: ObserverNotes(justNow: "x"), earlier: [], lastReply: "", words: 100)
         #expect(prompt.contains("Conversation since then:\n(nothing new)"))
         #expect(prompt.contains("The agent's last reply:\n(none)"))
     }
@@ -865,7 +870,7 @@ struct ObserverPromptTests {
     @Test func theOldestEntriesGoFirst() {
         // 40 words: the reply takes 10, the context the newest 30.
         let earlier = (0..<4).map { ConversationEntry(speaker: .you, text: words("alpha\($0)", 10)) }
-        let prompt = ObserverPrompt.build(previous: [], earlier: earlier, lastReply: words("reply", 10), words: 40)
+        let prompt = ObserverPrompt.build(previous: nil, earlier: earlier, lastReply: words("reply", 10), words: 40)
         #expect(!prompt.contains("alpha0"))
         #expect(prompt.contains("alpha1") && prompt.contains("alpha2") && prompt.contains("alpha3"))
     }
@@ -873,14 +878,14 @@ struct ObserverPromptTests {
     @Test func anEntryThatDoesntFitKeepsItsEnd() {
         // Tokens that never appear in the prompt's own instructions.
         let entry = ConversationEntry(speaker: .agent, text: words("qqq", 5) + " " + words("zzz", 10))
-        let prompt = ObserverPrompt.build(previous: [], earlier: [entry], lastReply: "", words: 10)
+        let prompt = ObserverPrompt.build(previous: nil, earlier: [entry], lastReply: "", words: 10)
         #expect(prompt.contains("Agent: … " + words("zzz", 10)))
         #expect(!prompt.contains("qqq"))
     }
 
     @Test func aLongReplyTakesAtMostHalf() {
         let prompt = ObserverPrompt.build(
-            previous: [], earlier: [ConversationEntry(speaker: .you, text: "go")],
+            previous: nil, earlier: [ConversationEntry(speaker: .you, text: "go")],
             lastReply: words("start", 50) + " " + words("end", 50), words: 100)
         #expect(prompt.contains("The agent's last reply:\n… " + words("end", 50)))
         #expect(prompt.contains("You: go"))
@@ -888,9 +893,9 @@ struct ObserverPromptTests {
 
     @Test func aLongConversationIsCutToTheNewestWords() {
         let earlier = (0..<400).map { ConversationEntry(speaker: $0.isMultiple(of: 2) ? .you : .agent, text: words("w\($0)", 100)) }
-        let prompt = ObserverPrompt.build(previous: [], earlier: earlier, lastReply: words("reply", 100),
+        let prompt = ObserverPrompt.build(previous: nil, earlier: earlier, lastReply: words("reply", 100),
                                           words: ObserverPrompt.cliWords)
-        let header = ObserverPrompt.build(previous: [], earlier: [], lastReply: "", words: ObserverPrompt.cliWords)
+        let header = ObserverPrompt.build(previous: nil, earlier: [], lastReply: "", words: ObserverPrompt.cliWords)
         // Plus one "You:"/"Agent:" label per entry kept (at most 300) and the "…" of a cut.
         #expect(ObserverPrompt.wordCount(prompt) <= ObserverPrompt.cliWords + ObserverPrompt.wordCount(header) + 301)
         #expect(prompt.contains("w399"))
@@ -898,22 +903,27 @@ struct ObserverPromptTests {
     }
 
     @Test func parsesTheReply() {
-        #expect(ObserverPrompt.parse(#"{"so_far":["Fixed login"],"just_now":"It works now."}"#)
-            == ObserverNotes(soFar: ["Fixed login"], justNow: "It works now."))
+        let reply = #"""
+        {"why":"Login was broken.","asked":["Fix login"],"decided":["Look: keep the old screen"],
+         "built":["Fixed login"],"progress":"done","left":["Add tests"],"just_now":"It works now."}
+        """#
+        #expect(ObserverPrompt.parse(reply) == ObserverNotes(
+            why: "Login was broken.", asked: ["Fix login"], decided: ["Look: keep the old screen"],
+            built: ["Fixed login"], progress: "done", left: ["Add tests"], justNow: "It works now."))
     }
 
     @Test func parsesAFencedOrIntroducedReply() {
-        let fenced = "```json\n{\"so_far\": [\"- Fixed login\", \"  \"], \"just_now\": \" It works. \"}\n```"
-        #expect(ObserverPrompt.parse(fenced) == ObserverNotes(soFar: ["Fixed login"], justNow: "It works."))
-        #expect(ObserverPrompt.parse("Here you go: {\"so_far\":[],\"just_now\":\"Hi\"}")
-            == ObserverNotes(soFar: [], justNow: "Hi"))
+        // Missing keys are empty; list markers and blank bullets are dropped.
+        let fenced = "```json\n{\"built\": [\"- Fixed login\", \"  \"], \"just_now\": \" It works. \"}\n```"
+        #expect(ObserverPrompt.parse(fenced) == ObserverNotes(built: ["Fixed login"], justNow: "It works."))
+        #expect(ObserverPrompt.parse("Here you go: {\"just_now\":\"Hi\"}") == ObserverNotes(justNow: "Hi"))
     }
 
     @Test func rejectsAMalformedReply() {
         #expect(ObserverPrompt.parse("not json") == nil)
-        #expect(ObserverPrompt.parse(#"{"so_far":["a"]}"#) == nil)
-        #expect(ObserverPrompt.parse(#"{"so_far":["a"],"just_now":"  "}"#) == nil)
-        #expect(ObserverPrompt.parse(#"{"so_far":"a","just_now":"b"}"#) == nil)
+        #expect(ObserverPrompt.parse(#"{"built":["a"]}"#) == nil)
+        #expect(ObserverPrompt.parse(#"{"built":["a"],"just_now":"  "}"#) == nil)
+        #expect(ObserverPrompt.parse(#"{"built":"a","just_now":"b"}"#) == nil)
         #expect(ObserverPrompt.parse("") == nil)
     }
 }
@@ -933,12 +943,28 @@ Expected: FAIL to compile: cannot find `ObserverPrompt`, `ObserverNotes`.
 #if os(macOS)
 import Foundation
 
-/// What the observer knows about one conversation: the bubble's two parts.
-struct ObserverNotes: Equatable, Sendable {
-    /// What's been done or decided so far, oldest first. No length limit.
-    var soFar: [String]
+/// What the observer knows about one conversation, in the bubble's order.
+/// No list has a length limit.
+struct ObserverNotes: Encodable, Equatable, Sendable {
+    /// Why the session started, in a sentence or two.
+    var why = ""
+    /// What the developer asked for.
+    var asked: [String] = []
+    /// What the developer and the agent decided together.
+    var decided: [String] = []
+    /// What's done and working.
+    var built: [String] = []
+    /// How far along, in a few words ("about two-thirds done"); empty when unclear.
+    var progress = ""
+    /// What's still to do, and anything waiting on the developer.
+    var left: [String] = []
     /// The agent's last reply in plain words.
     var justNow: String
+
+    enum CodingKeys: String, CodingKey {
+        case why, asked, decided, built, progress, left
+        case justNow = "just_now"
+    }
 }
 
 /// The prompt for one observer run, and reading its JSON reply (spec §4).
@@ -952,26 +978,34 @@ enum ObserverPrompt {
     /// written, up to and including your latest prompt. `lastReply`: the
     /// agent's text since that prompt. The reply gets up to half of
     /// `words`; the newest of `earlier` gets the rest.
-    static func build(previous: [String], earlier: [ConversationEntry], lastReply: String, words: Int) -> String {
+    static func build(previous: ObserverNotes?, earlier: [ConversationEntry], lastReply: String, words: Int) -> String {
         let reply = keepingNewest(lastReply, words: words / 2)
         let context = cut(earlier, toWords: words - wordCount(reply))
-        let notes = previous.isEmpty ? "(none yet)" : previous.map { "- " + $0 }.joined(separator: "\n")
+        let notes = previous.flatMap(json) ?? "(none yet)"
         let conversation = context.isEmpty ? "(nothing new)" : context.map {
             ($0.speaker == .you ? "You: " : "Agent: ") + $0.text
         }.joined(separator: "\n\n")
         return """
-        You keep notes on a coding session in a terminal, for the developer running it. Below are your notes \
-        so far, the conversation since then (the developer's prompts and the coding agent's replies, with tool \
-        calls left out), and the agent's last reply.
+        You keep notes on a coding session in a terminal, for the developer running it. Call the developer \
+        "you", and the developer and the agent together "we". Below are your notes so far (JSON), the \
+        conversation since then (the developer's prompts and the coding agent's replies, with tool calls left \
+        out), and the agent's last reply.
 
-        Answer with JSON only, no code fence: {"so_far": ["…"], "just_now": "…"}
-        - so_far: everything done or decided in this session so far, one short bullet each, oldest first. \
-        Keep the earlier notes and add what's new; merge or reword earlier bullets only when that makes the \
-        list clearer. No length limit.
+        Answer with JSON only, no code fence:
+        {"why": "…", "asked": ["…"], "decided": ["…"], "built": ["…"], "progress": "…", "left": ["…"], "just_now": "…"}
+        - why: why the developer started this session, in a sentence or two.
+        - asked: what they asked for, one short bullet each.
+        - decided: what we decided together, one bullet each. Start a bullet with a short label and a colon \
+        when that helps ("Look: …").
+        - built: what's done and working, one bullet each.
+        - progress: how far along the work is, in a few words ("about two-thirds done"), or "" when unclear.
+        - left: what's still to do, and anything waiting on the developer.
         - just_now: the agent's last reply explained like the developer is five: plain words, short sentences, \
         what it means for them, and anything it needs from them.
+        Keep what your notes say unless the conversation changed it, and add what's new. Merge or reword \
+        bullets only when that makes a list clearer. No length limits. Leave a list empty when nothing fits it.
 
-        Notes so far:
+        Your notes so far:
         \(notes)
 
         Conversation since then:
@@ -983,15 +1017,17 @@ enum ObserverPrompt {
     }
 
     /// The notes in a reply, which may be wrapped in a code fence or follow
-    /// a sentence; nil when it isn't `{"so_far": [String], "just_now": String}`
-    /// with something in `just_now`.
+    /// a sentence. Missing keys are empty; nil when it isn't a JSON object,
+    /// a key has the wrong type, or `just_now` is empty.
     static func parse(_ reply: String) -> ObserverNotes? {
         guard let open = reply.firstIndex(of: "{"), let close = reply.lastIndex(of: "}"), open < close,
-              let wire = try? JSONDecoder().decode(Wire.self, from: Data(reply[open...close].utf8)) else { return nil }
-        let justNow = wire.justNow.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !justNow.isEmpty else { return nil }
-        let soFar = wire.soFar.map(bullet).filter { !$0.isEmpty }
-        return ObserverNotes(soFar: soFar, justNow: justNow)
+              let wire = try? JSONDecoder().decode(Wire.self, from: Data(reply[open...close].utf8)),
+              let justNow = wire.justNow.map(trimmed), !justNow.isEmpty else { return nil }
+        func list(_ items: [String]?) -> [String] { (items ?? []).map(bullet).filter { !$0.isEmpty } }
+        return ObserverNotes(
+            why: trimmed(wire.why ?? ""), asked: list(wire.asked), decided: list(wire.decided),
+            built: list(wire.built), progress: trimmed(wire.progress ?? ""), left: list(wire.left),
+            justNow: justNow)
     }
 
     static func wordCount(_ text: String) -> Int {
@@ -999,18 +1035,29 @@ enum ObserverPrompt {
     }
 
     private struct Wire: Decodable {
-        var soFar: [String]
-        var justNow: String
+        var why, progress, justNow: String?
+        var asked, decided, built, left: [String]?
 
         enum CodingKeys: String, CodingKey {
-            case soFar = "so_far"
+            case why, asked, decided, built, progress, left
             case justNow = "just_now"
         }
     }
 
+    /// Compact, sorted JSON, so the model sees its own format back.
+    private static func json(_ notes: ObserverNotes) -> String? {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+        return (try? encoder.encode(notes)).map { String(decoding: $0, as: UTF8.self) }
+    }
+
+    private static func trimmed(_ text: String) -> String {
+        text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     /// A bullet without the list marker a model sometimes adds.
     private static func bullet(_ text: String) -> String {
-        var line = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        var line = trimmed(text)
         for marker in ["- ", "• ", "* "] where line.hasPrefix(marker) {
             line = String(line.dropFirst(marker.count)).trimmingCharacters(in: .whitespaces)
         }
@@ -1173,9 +1220,9 @@ struct SummarizerTests {
     }
 
     @Test func claudesAnswerIsWhatItPrints() async throws {
-        let claude = try script("claude", "cat > /dev/null\necho '{\"so_far\":[],\"just_now\":\"hi\"}'")
+        let claude = try script("claude", "cat > /dev/null\necho '{\"built\":[],\"just_now\":\"hi\"}'")
         let result = await Summarizer.run(.claude(claude), prompt: "x", handle: RunHandle())
-        #expect(result == .success(#"{"so_far":[],"just_now":"hi"}"#))
+        #expect(result == .success(#"{"built":[],"just_now":"hi"}"#))
     }
 
     @Test func codexsAnswerIsItsOutputFile() async throws {
@@ -1184,10 +1231,10 @@ struct SummarizerTests {
         while [ $# -gt 0 ]; do if [ "$1" = "-o" ]; then out="$2"; fi; shift; done
         cat > /dev/null
         echo "progress noise"
-        echo '{"so_far":["a"],"just_now":"b"}' > "$out"
+        echo '{"built":["a"],"just_now":"b"}' > "$out"
         """)
         let result = await Summarizer.run(.codex(codex), prompt: "x", handle: RunHandle())
-        #expect(result == .success(#"{"so_far":["a"],"just_now":"b"}"#))
+        #expect(result == .success(#"{"built":["a"],"just_now":"b"}"#))
     }
 
     @Test func aFailingRunSaysWhy() async throws {
@@ -1566,8 +1613,8 @@ struct TurnObserverTests {
             maxRunning: maxRunning))
     }
 
-    func reply(_ soFar: [String], _ justNow: String) -> Result<String, SummaryError> {
-        let data = try? JSONSerialization.data(withJSONObject: ["so_far": soFar, "just_now": justNow])
+    func reply(_ built: [String], _ justNow: String) -> Result<String, SummaryError> {
+        let data = try? JSONSerialization.data(withJSONObject: ["built": built, "just_now": justNow])
         return .success(String(decoding: data ?? Data(), as: UTF8.self))
     }
 
@@ -1588,7 +1635,7 @@ struct TurnObserverTests {
         #expect(fake.prompts.first?.contains("You: Fix the login bug") == true)
         #expect(fake.prompts.first?.contains("The agent's last reply:\nFixed it.") == true)
         fake.answer(reply(["Fixed login"], "It works now."))
-        let notes = ObserverNotes(soFar: ["Fixed login"], justNow: "It works now.")
+        let notes = ObserverNotes(built: ["Fixed login"], justNow: "It works now.")
         await eventually { observer.content(pane: pane, working: false) == .notes(notes) }
         #expect(observer.content(pane: pane, working: false) == .notes(notes))
         // The agent working again: wait for its new reply.
@@ -1629,7 +1676,7 @@ struct TurnObserverTests {
         await eventually { fake.started == 2 }
         #expect(observer.content(pane: pane, working: false) == .waiting)
         fake.answer(reply(["a"], "c"))
-        await eventually { observer.content(pane: pane, working: false) == .notes(ObserverNotes(soFar: ["a"], justNow: "c")) }
+        await eventually { observer.content(pane: pane, working: false) == .notes(ObserverNotes(built: ["a"], justNow: "c")) }
         try? await Task.sleep(nanoseconds: 50_000_000)
         #expect(fake.started == 2)
     }
@@ -1719,7 +1766,7 @@ struct TurnObserverTests {
         observer.turnEnded(pane: pane, path: "/ok/a")
         await eventually { fake.started == 2 }
         fake.answer(.success("not json"))
-        let notes = ObserverNotes(soFar: ["Fixed login"], justNow: "It works now.")
+        let notes = ObserverNotes(built: ["Fixed login"], justNow: "It works now.")
         await eventually { observer.content(pane: pane, working: false) != .waiting }
         #expect(observer.content(pane: pane, working: false) == .failed(TurnObserver.garbled, notes))
     }
@@ -2090,7 +2137,7 @@ final class TurnObserver: ObservableObject {
         guard let location = locate(path), let chunk = read(location, conversation.offset) else {
             return .failed(.failed("Couldn't read this conversation."))
         }
-        let previous = chunk.restarted ? [] : (conversation.notes?.soFar ?? [])
+        let previous = chunk.restarted ? nil : conversation.notes
         let oldTail = chunk.restarted ? [] : conversation.tail
         if chunk.entries.isEmpty {
             return chunk.restarted || conversation.notes == nil ? .empty(offset: chunk.offset) : .nothingNew(offset: chunk.offset)
@@ -2358,38 +2405,56 @@ struct MascotBubble: View {
     }
 }
 
-/// "So far" bullets and "Just now".
+/// The notes in the order the user asked for (spec §6): why you started,
+/// what we decided, what's built, what's left, then the last reply in
+/// plain words. An empty section is left out.
 private struct NotesView: View {
     let notes: ObserverNotes
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            if !notes.soFar.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
-                    heading("So far")
-                    ForEach(Array(notes.soFar.enumerated()), id: \.offset) { _, item in
-                        HStack(alignment: .firstTextBaseline, spacing: 6) {
-                            Text("•")
-                            Text(item).fixedSize(horizontal: false, vertical: true)
-                        }
-                        .font(.system(size: 13))
-                    }
+            if !notes.why.isEmpty || !notes.asked.isEmpty {
+                section("Why you started this") {
+                    if !notes.why.isEmpty { paragraph(notes.why) }
+                    bullets(notes.asked)
                 }
             }
-            VStack(alignment: .leading, spacing: 4) {
-                heading("Just now")
-                Text(notes.justNow)
-                    .font(.system(size: 13))
-                    .fixedSize(horizontal: false, vertical: true)
+            if !notes.decided.isEmpty {
+                section("What we decided together") { bullets(notes.decided) }
             }
+            if !notes.built.isEmpty {
+                section(notes.progress.isEmpty ? "What's built" : "What's built (\(notes.progress))") {
+                    bullets(notes.built)
+                }
+            }
+            if !notes.left.isEmpty {
+                section("What's left") { bullets(notes.left) }
+            }
+            section("Just now") { paragraph(notes.justNow) }
         }
     }
 
-    private func heading(_ title: String) -> some View {
-        Text(title)
-            .font(.system(size: 11, weight: .semibold))
-            .foregroundStyle(.secondary)
-            .textCase(.uppercase)
+    private func section<Content: View>(_ title: String, @ViewBuilder _ content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title).font(.system(size: 12, weight: .semibold))
+            content()
+        }
+    }
+
+    private func paragraph(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 13))
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func bullets(_ items: [String]) -> some View {
+        ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text("•")
+                Text(item).fixedSize(horizontal: false, vertical: true)
+            }
+            .font(.system(size: 13))
+        }
     }
 }
 #endif
@@ -2579,7 +2644,7 @@ Run: `macos/install-skins.sh`, then ask the user to choose Lostty's menu bar →
 
 - [ ] **Step 2: Claude pane, after a turn**
 
-In a pane, the user starts `claude` and sends a tiny prompt ("say hi"). After it answers, a tap on the mascot opens the bubble at once (the observer already ran) with **So far** and **Just now**; the axolotl shows its happy pose.
+In a pane, the user starts `claude` and sends a tiny prompt ("say hi"). After it answers, a tap on the mascot opens the bubble at once (the observer already ran) with its sections (at least **Why you started this** and **Just now**); the axolotl shows its happy pose.
 
 - [ ] **Step 3: Mid-turn**
 
