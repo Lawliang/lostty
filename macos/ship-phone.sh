@@ -1,8 +1,9 @@
 #!/bin/sh
 # Builds the iPhone app (Release, development-signed for the team's phones)
-# and publishes it on this Mac's Tailscale address for an over-the-air
-# install: open https://<this Mac>.<tailnet>.ts.net/ on the phone, tap
-# Install. Needs HTTPS certificates on for the tailnet (Tailscale admin
+# and installs it on the phone over the cable. When the Mac can't reach the
+# phone, it publishes the build on this Mac's Tailscale address for an
+# over-the-air install instead: open https://<this Mac>.<tailnet>.ts.net/ on
+# the phone, tap Install. Needs HTTPS certificates on for the tailnet (Tailscale admin
 # console: DNS > HTTPS Certificates), and serves to the tailnet only.
 #
 #   macos/ship-phone.sh ["What's new line" ...]
@@ -52,8 +53,6 @@ if [ -n "${TMUX_PANE:-}" ]; then
   TERMINAL=$(tmux display-message -p -t "$TMUX_PANE" \
     '#{?@lostty_label,#{@lostty_label},#{pane_title}}' 2>/dev/null || true)
 fi
-HOST=$(tailscale status --json | python3 -I -c 'import json,sys; print(json.load(sys.stdin)["Self"]["DNSName"].rstrip("."))')
-URL="https://$HOST"
 
 # Stay awake while building, even with the lid closed on power.
 caffeinate -is -w $$ &
@@ -82,8 +81,36 @@ xcodebuild -exportArchive -archivePath "$OUT/Lostty.xcarchive" -exportPath "$OUT
   -exportOptionsPlist "$OUT/ExportOptions.plist" -allowProvisioningUpdates \
   > "$OUT/export.log" 2>&1 || { tail -20 "$OUT/export.log"; echo "Export failed; see $OUT/export.log" >&2; exit 1; }
 
+cp "$OUT/export/"*.ipa "$OUT/Lostty.ipa"
+
+# A phone the Mac can reach (its cable, or the same network) gets the build
+# now, and then there's no page to publish.
+if xcrun devicectl list devices --json-output "$OUT/devices.json" >/dev/null 2>&1; then
+  PHONE=$(python3 -I -c '
+import json, sys
+for d in json.load(open(sys.argv[1]))["result"]["devices"]:
+    if d["hardwareProperties"].get("deviceType") == "iPhone" \
+            and d["connectionProperties"].get("tunnelState") != "unavailable":
+        print(d["identifier"]); break' "$OUT/devices.json")
+  if [ -n "$PHONE" ]; then
+    if xcrun devicectl device install app --device "$PHONE" "$OUT/Lostty.ipa" \
+        > "$OUT/install.log" 2>&1; then
+      echo "Installed build $BUILD ($COMMIT) on the phone directly."
+      exit 0
+    fi
+    echo "Couldn't install on the phone directly (see $OUT/install.log); publishing it over Tailscale."
+  else
+    echo "The phone isn't connected; publishing it over Tailscale."
+  fi
+else
+  echo "Couldn't look for the phone; publishing it over Tailscale."
+fi
+
+HOST=$(tailscale status --json | python3 -I -c 'import json,sys; print(json.load(sys.stdin)["Self"]["DNSName"].rstrip("."))')
+URL="https://$HOST"
+
 # A new name per build, so neither iOS nor Safari reuses a cached one.
-cp "$OUT/export/"*.ipa "$WWW/Lostty-$BUILD.ipa"
+cp "$OUT/Lostty.ipa" "$WWW/Lostty-$BUILD.ipa"
 VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" \
   "$OUT/Lostty.xcarchive/Products/Applications/Lostty.app/Info.plist")
 ICON=macos/Assets.xcassets/LosttyPhoneIcon.appiconset/LosttyPhoneIcon-1024.png
@@ -105,29 +132,6 @@ fi
 tailscale serve --bg $PORT >/dev/null
 echo "Published build $BUILD ($COMMIT): $URL/"
 
-# A phone the Mac can reach (its cable, or the same network) gets the build
-# now; otherwise it waits on the page.
-INSTALLED=0
-if xcrun devicectl list devices --json-output "$OUT/devices.json" >/dev/null 2>&1; then
-  PHONE=$(python3 -I -c '
-import json, sys
-for d in json.load(open(sys.argv[1]))["result"]["devices"]:
-    if d["hardwareProperties"].get("deviceType") == "iPhone" \
-            and d["connectionProperties"].get("tunnelState") != "unavailable":
-        print(d["identifier"]); break' "$OUT/devices.json")
-  if [ -n "$PHONE" ]; then
-    if xcrun devicectl device install app --device "$PHONE" "$WWW/Lostty-$BUILD.ipa" \
-        > "$OUT/install.log" 2>&1; then
-      echo "Installed on the phone directly."
-      INSTALLED=1
-    else
-      echo "Couldn't install on the phone directly (see $OUT/install.log); install it from the page."
-    fi
-  else
-    echo "The phone isn't connected; install it from the page."
-  fi
-fi
-
 # Not on the phone yet: a note on it (🔔) carries the install link.
-[ "$INSTALLED" = 1 ] || note_build Lostty "$BUNDLE" "$BUILD" "$COMMIT" "$BRANCH" \
+note_build Lostty "$BUNDLE" "$BUILD" "$COMMIT" "$BRANCH" \
   "itms-services://?action=download-manifest&url=$URL/manifest-$BUILD.plist"
