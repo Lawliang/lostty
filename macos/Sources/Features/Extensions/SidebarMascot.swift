@@ -3,10 +3,10 @@ import Combine
 import LosttyRemote
 import SwiftUI
 
-/// The axolotl at the foot of the window's sidebar, doing what the focused
-/// pane's terminal is doing, as the phone's rows show it: waving while
-/// Claude waits on you, dancing while it works, wagging its tail when
-/// ready, asleep when idle. What it means, in words, above it.
+/// The axolotl standing in the terminal's bottom-right corner, doing what
+/// the focused pane's terminal is doing, as the phone's rows show it:
+/// waving while Claude waits on you, dancing while it works, wagging its
+/// tail when ready, asleep when idle.
 struct SidebarMascot: View {
     let surfaceID: UUID?
     @ObservedObject private var claude = ClaudeRuntime.shared
@@ -16,19 +16,11 @@ struct SidebarMascot: View {
         // Each half minute, so ready turns idle on time.
         TimelineView(.periodic(from: .now, by: 30)) { context in
             if let state = state(now: context.date) {
-                VStack(spacing: 4) {
-                    Text(state.title)
-                        .font(.system(size: 10, weight: .semibold))
-                        .multilineTextAlignment(.center)
-                        .foregroundStyle(state == .waiting || state == .working
-                            ? LosttyTheme.accent : Color.white.opacity(0.7))
-                        .fixedSize(horizontal: false, vertical: true)
-                    Axolotl(pose: Self.pose(state)).frame(width: 52, height: 52)
-                }
-                .frame(width: ExtensionSidebarView.width - 4)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(state.title)
-                .transition(.opacity)
+                Axolotl(pose: Self.pose(state)).frame(width: 56, height: 56)
+                    .background(alignment: .bottom) { MascotPlatform() }
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(state.title)
+                    .transition(.opacity)
             }
         }
         .animation(.easeInOut(duration: 0.2), value: surfaceID.flatMap { state(id: $0, now: Date()) })

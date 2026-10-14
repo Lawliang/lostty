@@ -286,3 +286,15 @@ enum AxolotlMotion {
         }
     }
 }
+
+/// The shadow an axolotl stands on: a soft dark oval under its feet.
+struct MascotPlatform: View {
+    var body: some View {
+        Ellipse()
+            .fill(RadialGradient(
+                colors: [.black.opacity(0.45), .black.opacity(0)], center: .center, startRadius: 0, endRadius: 22))
+            .frame(width: 46, height: 11)
+            .offset(y: -1)
+            .accessibilityHidden(true)
+    }
+}

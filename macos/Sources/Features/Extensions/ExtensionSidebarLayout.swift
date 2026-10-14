@@ -14,8 +14,8 @@ enum NotificationPlacement {
 }
 
 /// Puts the extensions sidebar beside the terminal content, so it narrows
-/// the terminal rather than covering it, and the Claude usage bar below
-/// both. An open overlay extension covers the terminal content; an open
+/// the terminal rather than covering it, the axolotl in the terminal's
+/// bottom-right corner, and the Claude usage bar below both. An open overlay extension covers the terminal content; an open
 /// sidebar extension grows out of the strip over the terminal's edge. With
 /// auto-hide on, the terminal takes the full width and the strip slides in
 /// over it from the right edge. The terminal never changes size for an
@@ -30,6 +30,14 @@ struct ExtensionSidebarLayout<Content: View>: View {
         VStack(spacing: 0) {
             HStack(spacing: 0) {
                 content()
+                    // Over the terminal's corner, under any open extension;
+                    // clicks and selection pass through to the terminal.
+                    .overlay(alignment: .bottomTrailing) {
+                        SidebarMascot(surfaceID: model.focusedSurfaceID)
+                            .padding(.trailing, 14)
+                            .padding(.bottom, 10)
+                            .allowsHitTesting(false)
+                    }
                     .overlay {
                         if let ext = model.active, ext.presentation == .overlay {
                             ExtensionContentView(ext: ext, model: model)
