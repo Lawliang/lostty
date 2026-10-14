@@ -52,5 +52,11 @@ struct ProcessRunnerTests {
     @Test func aMissingProgramIsNil() {
         #expect(ProcessRunner.run("/nonexistent/tool", [], timeout: 5) == nil)
     }
+
+    @Test func canReplaceTheWholeEnvironment() throws {
+        let result = try #require(ProcessRunner.run(
+            "/usr/bin/env", [], environment: ["ONLY": "1"], inheritEnvironment: false, timeout: 5))
+        #expect(result.stdout == "ONLY=1\n")
+    }
 }
 #endif

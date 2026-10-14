@@ -62,8 +62,8 @@ suggesting better workflows.
   `"authMethod": "claude.ai"`, `codex login status` prints "Logged in using
   ChatGPT".
 - `ClaudeCLI` and `BranchSummarizer` (`macos/Sources/Features/Branches/`)
-  already find `claude` through the login shell and run it headless, with an
-  environment of PATH only, so the run's own hooks can't report to Lostty.
+  already find `claude` through the login shell and run it headless, adding PATH to Lostty's own
+  environment (the observer replaces it instead, §5).
 - Apple's on-device model (FoundationModels) needs macOS 26 and Apple
   Intelligence on, and reads about 4,000 tokens. Lostty's deployment target is
   older, so it is used behind `#available`.
@@ -168,8 +168,10 @@ again after a run fails with a sign-in error:
    current notes plus the newest 1,500 words.
 4. **None:** the bubble says so (§6).
 
-Both CLIs run with PATH as their only environment, from the temp directory,
-with a 60-second timeout. An API key login (`authMethod` other than
+Both CLIs run from the temp directory with a 60-second timeout, and an
+environment of only HOME, USER, LOGNAME, TMPDIR, LANG, CLAUDE_CONFIG_DIR and
+CODEX_HOME (when set) plus a PATH that starts with the CLI's folder: never an
+API key or a pane variable from Lostty's own environment. An API key login (`authMethod` other than
 `claude.ai`, or Codex signed in with a key) counts as not signed in.
 
 ## 6. The bubble

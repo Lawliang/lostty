@@ -21,11 +21,14 @@ struct ProcessResult: Equatable, Sendable {
 enum ProcessRunner {
     /// nil when the program can't start or runs past `timeout`. `onStart`
     /// gets the pid, so a caller can kill a run it no longer wants.
+    /// `environment` is added to Lostty's own, or with `inheritEnvironment`
+    /// false is all the program gets.
     static func run(
         _ executable: String,
         _ args: [String],
         cwd: String? = nil,
         environment: [String: String] = [:],
+        inheritEnvironment: Bool = true,
         stdin: String? = nil,
         timeout: TimeInterval,
         onStart: ((Int32) -> Void)? = nil
@@ -34,7 +37,9 @@ enum ProcessRunner {
         process.executableURL = URL(fileURLWithPath: executable)
         process.arguments = args
         if let cwd { process.currentDirectoryURL = URL(fileURLWithPath: cwd) }
-        if !environment.isEmpty {
+        if !inheritEnvironment {
+            process.environment = environment
+        } else if !environment.isEmpty {
             process.environment = ProcessInfo.processInfo.environment.merging(environment) { _, new in new }
         }
 

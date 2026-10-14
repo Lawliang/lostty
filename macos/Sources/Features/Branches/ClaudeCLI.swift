@@ -36,10 +36,14 @@ enum ClaudeCLI {
             .last { $0.hasPrefix("/") }
     }
 
-    /// Where `claude` is, looked up through the user's login shell (Lostty
-    /// started from the Dock has a bare PATH). Blocking, up to 5 s.
-    static func locate(shell: String = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh") -> String? {
-        guard let result = ProcessRunner.run(shell, ["-lic", "command -v claude"], timeout: 5),
+    /// Where `command` (`claude`, or the observer's `codex`) is, looked up
+    /// through the user's login shell (Lostty started from the Dock has a
+    /// bare PATH). Blocking, up to 5 s.
+    static func locate(
+        command: String = "claude",
+        shell: String = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
+    ) -> String? {
+        guard let result = ProcessRunner.run(shell, ["-lic", "command -v \(command)"], timeout: 5),
               result.status == 0,
               let path = parseLocate(result.stdout),
               FileManager.default.isExecutableFile(atPath: path) else { return nil }

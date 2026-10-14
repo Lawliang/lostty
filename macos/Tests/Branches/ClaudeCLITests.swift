@@ -48,5 +48,9 @@ struct ClaudeCLITests {
         #expect(SummaryError.git.message == "Couldn't read this branch's changes.")
         #expect(SummaryError.failed("x").message == "x")
     }
+
+    @Test func locatesOtherCommandsToo() {
+        #expect(ClaudeCLI.locate(command: "sh", shell: "/bin/sh") == "/bin/sh")
+    }
 }
 #endif
