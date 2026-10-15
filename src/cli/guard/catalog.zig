@@ -73,18 +73,34 @@ fn operands(alloc: Allocator, argv: []const shell.Word) Error![]const shell.Word
     return out.toOwnedSlice(alloc);
 }
 
-/// Skips leading flags; `with_value` lists short flags that take a value.
-fn skipFlags(argv_in: []const shell.Word, with_value: []const u8) []const shell.Word {
+/// How many words the flag `t` uses: 2 when it takes its value from the
+/// next word, else 1. `shorts` are short flags that take a value (the last
+/// of a bundle like `-nu`), `longs` the long ones (`--user root`).
+fn flagWords(t: []const u8, shorts: []const u8, longs: []const []const u8) usize {
+    if (std.mem.startsWith(u8, t, "--")) {
+        if (std.mem.indexOfScalar(u8, t, '=') != null) return 1;
+        for (longs) |l| if (eq(t[2..], l)) return 2;
+        return 1;
+    }
+    if (t.len < 2 or t[0] != '-') return 1;
+    for (t[1..], 0..) |c, i| if (std.mem.indexOfScalar(u8, shorts, c) != null) {
+        return if (i == t.len - 2) 2 else 1; // else the value is attached
+    };
+    return 1;
+}
+
+/// Skips leading flags and their values.
+fn skipFlags(argv_in: []const shell.Word, shorts: []const u8, longs: []const []const u8) []const shell.Word {
     var argv = argv_in;
     while (argv.len > 0 and !argv[0].dynamic and argv[0].text.len > 0 and argv[0].text[0] == '-') {
         const t = argv[0].text;
         if (eq(t, "--")) return argv[1..];
-        if (t.len == 2 and t[1] != '-' and std.mem.indexOfScalar(u8, with_value, t[1]) != null) {
-            argv = argv[@min(2, argv.len)..];
-        } else argv = argv[1..];
+        argv = argv[@min(flagWords(t, shorts, longs), argv.len)..];
     }
     return argv;
 }
+
+const sudo_longs = [_][]const u8{ "user", "group", "chdir", "host", "prompt", "other-user", "role", "type", "close-from" };
 
 /// Where the project is: the repo around `cwd` (filesystem walk, no git
 /// process), or `cwd` itself when there is none.
@@ -116,27 +132,29 @@ fn command(ctx: Ctx, probe: anytype, argv_in: []const shell.Word) Error!?Finding
     while (argv.len > 0 and !argv[0].dynamic) {
         const name = base(argv[0].text);
         if (eq(name, "sudo")) {
-            argv = skipFlags(argv[1..], "ugChpUrtD");
+            argv = skipFlags(argv[1..], "ugChpUrtD", &sudo_longs);
         } else if (eq(name, "command") or eq(name, "nohup") or eq(name, "time")) {
-            argv = skipFlags(argv[1..], "");
+            argv = skipFlags(argv[1..], "", &.{});
         } else if (eq(name, "exec")) {
-            argv = skipFlags(argv[1..], "a");
+            argv = skipFlags(argv[1..], "a", &.{});
         } else if (eq(name, "nice")) {
-            argv = skipFlags(argv[1..], "n");
+            argv = skipFlags(argv[1..], "n", &.{"adjustment"});
         } else if (eq(name, "timeout")) {
-            argv = skipFlags(argv[1..], "sk");
+            argv = skipFlags(argv[1..], "sk", &.{ "signal", "kill-after" });
             if (argv.len > 0) argv = argv[1..]; // the duration
         } else if (eq(name, "env")) {
             argv = argv[1..];
             while (argv.len > 0 and !argv[0].dynamic) {
                 const t = argv[0].text;
-                if (eq(t, "-S") or eq(t, "--split-string")) {
-                    if (argv.len < 2 or argv[1].dynamic) return finding(.unreadable, "env runs a shell string Lostty can't read");
-                    return inner(ctx, probe, argv[1].text);
-                } else if (eq(t, "-u") or eq(t, "-C")) {
-                    argv = argv[@min(2, argv.len)..];
-                } else if (t.len > 0 and t[0] == '-') {
-                    argv = argv[1..];
+                if (t.len > 0 and t[0] == '-') {
+                    const n = flagWords(t, "uCS", &.{ "unset", "chdir", "split-string" });
+                    const splits = (eq(t, "--split-string") or (!std.mem.startsWith(u8, t, "--") and n == 2 and t[t.len - 1] == 'S'));
+                    if (splits) {
+                        if (argv.len < 2 or argv[1].dynamic) return finding(.unreadable, "env runs a shell string Lostty can't read");
+                        return inner(ctx, probe, argv[1].text);
+                    }
+                    if (std.mem.startsWith(u8, t, "--split-string=")) return inner(ctx, probe, t["--split-string=".len..]);
+                    argv = argv[@min(n, argv.len)..];
                 } else if (std.mem.indexOfScalar(u8, t, '=') != null) {
                     argv = argv[1..];
                 } else break;
@@ -205,11 +223,27 @@ fn command(ctx: Ctx, probe: anytype, argv_in: []const shell.Word) Error!?Finding
         if (has(args, "-delete")) return finding(.deleting, "find -delete removes whatever matches, which Lostty can't see");
         for (args, 0..) |w, i| if (!w.dynamic and (eq(w.text, "-exec") or eq(w.text, "-execdir") or eq(w.text, "-ok") or eq(w.text, "-okdir"))) {
             var sub: std.ArrayList(shell.Word) = .empty;
+            var cmd_words: std.ArrayList(shell.Word) = .empty;
             for (args[i + 1 ..]) |x| {
                 if (!x.dynamic and (eq(x.text, ";") or eq(x.text, "+"))) break;
-                if (!x.dynamic and eq(x.text, "{}")) {
-                    try sub.append(ctx.alloc, .{ .text = x.text, .dynamic = true });
-                } else try sub.append(ctx.alloc, x);
+                try cmd_words.append(ctx.alloc, x);
+            }
+            // Removers keep `{}` unknown. Anything else runs on what find
+            // starts from, so its write and guardrail checks see that folder.
+            var removes = false;
+            for (cmd_words.items) |x| if (!x.dynamic and mentionsRemover(x.text)) {
+                removes = true;
+            };
+            const start = findStart(args);
+            for (cmd_words.items) |x| {
+                if (x.dynamic or std.mem.indexOf(u8, x.text, "{}") == null) {
+                    try sub.append(ctx.alloc, x);
+                } else if (removes) {
+                    try sub.append(ctx.alloc, if (eq(x.text, "{}")) .{ .text = x.text, .dynamic = true } else x);
+                } else {
+                    const t = try std.mem.replaceOwned(u8, ctx.alloc, x.text, "{}", start);
+                    try sub.append(ctx.alloc, .{ .text = t, .dynamic = false });
+                }
             }
             if (try command(ctx, probe, sub.items)) |f| return f;
         };
@@ -280,6 +314,23 @@ fn mvSources(ctx: Ctx, probe: anytype, sources: []const shell.Word) Error!?Findi
     }
     if (outside.items.len > 0) return deletion(ctx, probe, outside.items);
     return null;
+}
+
+/// Any word of `s` (split on spaces and shell separators) names a remover.
+fn mentionsRemover(s: []const u8) bool {
+    var it = std.mem.tokenizeAny(u8, s, " \t\n;&|()`");
+    while (it.next()) |tok| if (isRemover(base(tok))) return true;
+    return false;
+}
+
+/// The first path find searches (before its first expression), or ".".
+fn findStart(args: []const shell.Word) []const u8 {
+    for (args) |w| {
+        if (w.dynamic) return ".";
+        if (w.text.len > 0 and (w.text[0] == '-' or w.text[0] == '(' or w.text[0] == '!')) return ".";
+        return w.text;
+    }
+    return ".";
 }
 
 fn isRemover(name: []const u8) bool {
@@ -845,4 +896,33 @@ test "guard catalog: rsync, git aliases and find -exec" {
     try std.testing.expectEqual(@as(?Group, .deleting), try group(a, .{}, "find . -exec sh -c 'rm {}' ';'"));
     try std.testing.expectEqual(@as(?Group, .leaving), try group(a, .{}, "find . -exec git push ';'"));
     try std.testing.expectEqual(@as(?Group, null), try group(a, .{}, "find . -name x -exec grep y {} +"));
+}
+
+test "guard catalog: long and bundled wrapper flags" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    for ([_][]const u8{
+        "sudo --user root rm -rf /Users/me/x",  "sudo -nu root rm -rf /Users/me/x",
+        "env --unset FOO rm -rf /Users/me/x",   "env --chdir /tmp rm -rf /Users/me/x",
+        "env -iu FOO rm -rf /Users/me/x",       "timeout --signal KILL 30 rm -rf /Users/me/x",
+        "sudo --chdir=/tmp rm -rf /Users/me/x", "env --split-string='rm -rf /Users/me/x'",
+        "env -iS 'rm -rf /Users/me/x'",
+    }) |src| {
+        if ((try group(a, .{}, src)) != .deleting) {
+            std.debug.print("missed: {s}\n", .{src});
+            return error.TestUnexpectedResult;
+        }
+    }
+}
+
+test "guard catalog: find -exec runs on find's start path" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    try std.testing.expectEqual(@as(?Group, null), try group(a, .{}, "find . -exec chmod +x {} ';'"));
+    try std.testing.expectEqual(@as(?Group, null), try group(a, .{}, "find . -type f -exec sed -i s/a/b/ {} ';'"));
+    try std.testing.expectEqual(@as(?Group, .guardrails), try group(a, .{}, "find ~/.ssh -exec chmod 600 {} ';'"));
+    try std.testing.expectEqual(@as(?Group, .deleting), try group(a, .{}, "find . -exec rm {} ';'"));
+    try std.testing.expectEqual(@as(?Group, .deleting), try group(a, .{}, "find . -exec sh -c 'rm {}' ';'"));
 }
