@@ -1378,7 +1378,7 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
     var ctx = cv.getContext('2d');
     var mcv = document.createElement('canvas'), mctx = mcv.getContext('2d', { willReadFrequently: true });
     var W = 0, H = 0, dpr = 1, fs = 14, cw = 8.4, chh = 17, cols = 0, rows = 0, N = 0;
-    var v, cls, prevT, nextT, swAt, rnd, masks = {}, qz = { c0: 0, c1: -1, r0: 0, r1: -1 };
+    var v, cls, prevT, nextT, swAt, rnd, masks = {}, qz = [];
     var center = { x: 0, y: 0 }, maxD = 1;
     var mouse = { x: -9999, y: -9999, on: false }, ripples = [];
     var running = false, inView = true, homeVisible = true, raf = 0;
@@ -1487,11 +1487,36 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
       masks.word = classify(mctx.getImageData(0, 0, cols, rows).data);
       masks.noise = null;
     }
+    // one quiet zone per block of hero copy (headline, description, buttons,
+    // requirements), each hugging its own content rather than the whole column
+    function hug(el) {
+      if (el.classList.contains('hero-cta')) {
+        var u = null;
+        Array.prototype.forEach.call(el.children, function (k) {
+          var b = k.getBoundingClientRect();
+          u = u ? { left: Math.min(u.left, b.left), top: Math.min(u.top, b.top), right: Math.max(u.right, b.right), bottom: Math.max(u.bottom, b.bottom) } : b;
+        });
+        return u;
+      }
+      var rg = document.createRange(); rg.selectNodeContents(el);
+      return rg.getBoundingClientRect();
+    }
     function quietZone() {
       if (!copy) return;
-      var hr = hero.getBoundingClientRect(), r = copy.getBoundingClientRect();
-      qz.c0 = Math.floor((r.left - hr.left - 18) / cw); qz.c1 = Math.ceil((r.right - hr.left + 18) / cw);
-      qz.r0 = Math.floor((r.top - hr.top - 12) / chh); qz.r1 = Math.ceil((r.bottom - hr.top + 12) / chh);
+      var hr = hero.getBoundingClientRect();
+      qz = [];
+      $$('h1, .lede, .hero-cta, .hero-meta', copy).forEach(function (el) {
+        var r = hug(el);
+        if (!r || !r.width) return;
+        qz.push({
+          c0: Math.floor((r.left - hr.left - 16) / cw), c1: Math.ceil((r.right - hr.left + 16) / cw),
+          r0: Math.floor((r.top - hr.top - 6) / chh), r1: Math.ceil((r.bottom - hr.top + 6) / chh)
+        });
+      });
+    }
+    function inQuiet(c, r) {
+      for (var z = 0; z < qz.length; z++) { var q = qz[z]; if (c >= q.c0 && c <= q.c1 && r >= q.r0 && r <= q.r1) return true; }
+      return false;
     }
     function resize() {
       W = hero.clientWidth; H = hero.clientHeight;
@@ -1566,7 +1591,7 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
         }
         var I = v[i] + boost * 0.9;
         if (I > 1) I = 1;
-        var inQ = c >= qz.c0 && c <= qz.c1 && r >= qz.r0 && r <= qz.r1;
+        var inQ = inQuiet(c, r);
         if (inQ && !dc) I *= 0.13;
         if (I < 0.07) continue;
         var colr, ch;
