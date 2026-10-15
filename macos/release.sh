@@ -60,6 +60,7 @@ step "Checking"
 git fetch -q origin main
 [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ] \
   || fail "this commit isn't GitHub's main. Push it to main (or check out origin/main) first."
+COMMIT=$(git rev-parse HEAD)
 gh auth status > /dev/null 2>&1 || fail "sign in to GitHub first: gh auth login"
 IDENTITY=$(security find-identity -v -p codesigning \
   | sed -n "s/.*\"\(Developer ID Application: .*($TEAM)\)\".*/\1/p" | head -1)
@@ -113,6 +114,17 @@ xcodebuild -exportArchive -archivePath "$OUT/Lostty.xcarchive" -exportPath "$OUT
   > "$OUT/export.log" 2>&1 || failed "$OUT/export.log" "signing it as Developer ID failed"
 APP="$OUT/export/Lostty.app"
 codesign --verify --deep --strict "$APP" 2> "$OUT/codesign.log" || failed "$OUT/codesign.log" "the signature doesn't verify"
+# Notarization needs every helper (Sparkle's Autoupdate, Updater.app, its
+# XPC services) signed as Developer ID with a timestamp, not just the app.
+# (Not the symlinks inside Sparkle.framework, nor resource bundles with no code.)
+{ echo "$APP"; find "$APP/Contents" ! -type l \( -name "*.app" -o -name "*.xpc" -o -name "*.framework" \
+  -o -name "*.plugin" -o -name "*.bundle" -o -name Autoupdate \) -print; } > "$OUT/signed-parts.txt"
+while read -r part; do
+  case "$part" in *.bundle | *.plugin) [ -d "$part/Contents/MacOS" ] || continue ;; esac
+  codesign -dvv "$part" > "$OUT/part.log" 2>&1
+  grep -q "^Authority=Developer ID Application" "$OUT/part.log" && grep -q "^Timestamp=" "$OUT/part.log" \
+    || failed "$OUT/part.log" "${part#"$OUT/export/"} isn't signed as Developer ID with a timestamp"
+done < "$OUT/signed-parts.txt"
 [ "$(/usr/libexec/PlistBuddy -c 'Print :LosttyUpdateFeed' "$APP/Contents/Info.plist")" = "$FEED" ] \
   || fail "the app doesn't carry the update feed $FEED"
 [ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")" = "$VERSION" ] \
@@ -161,9 +173,12 @@ if [ "$DRY_RUN" = 1 ]; then
 fi
 
 step "Publishing Lostty $VERSION"
-git tag -a "$TAG" -m "Lostty $VERSION"
-GIT_NO_REPLACE_OBJECTS=1 git push origin "refs/tags/$TAG" > "$OUT/push.log" 2>&1 \
-  || failed "$OUT/push.log" "couldn't push the tag $TAG; nothing was published"
+git tag -a "$TAG" -m "Lostty $VERSION" "$COMMIT"
+if ! GIT_NO_REPLACE_OBJECTS=1 git push origin "refs/tags/$TAG" > "$OUT/push.log" 2>&1; then
+  # It never reached GitHub, so it goes, and the next run can make it again.
+  git tag -d "$TAG" > /dev/null
+  failed "$OUT/push.log" "couldn't push the tag $TAG; nothing was published"
+fi
 gh release create "$TAG" "$OUT/Lostty.dmg" "$OUT/appcast.xml" --repo "$REPO" --verify-tag \
   --title "Lostty $VERSION" --notes-file "$NOTES" > "$OUT/gh.log" 2>&1 || {
   cat "$OUT/gh.log" >&2

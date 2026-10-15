@@ -462,9 +462,12 @@ class AppDelegate: NSObject,
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        // Restart to Update (and Sparkle's install-and-relaunch): keep every
-        // session, ask nothing (LosttyRestart).
-        if updateController.isInstalling { LosttyRestart.restart(reason: .sparkle) }
+        // Restart to Update (and Sparkle's install-and-relaunch, from the
+        // command palette, the update popover or Sparkle's window): keep
+        // every session, ask nothing (LosttyRestart).
+        if updateController.isInstalling || updateController.viewModel.state.relaunchesAfterInstall {
+            LosttyRestart.restart(reason: .sparkle)
+        }
         if LosttyRestart.isRestarting { return .terminateNow }
 
         // Lostty Mobile: quitting ends Stay Awake for Phone and this Mac's

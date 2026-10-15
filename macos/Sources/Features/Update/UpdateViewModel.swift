@@ -190,6 +190,14 @@ enum UpdateState: Equatable {
         return false
     }
 
+    /// Sparkle is installing and is about to quit Lostty to reopen it, so
+    /// the quit keeps every session (LosttyRestart). Not a background
+    /// install waiting for the user to quit: that one doesn't reopen.
+    var relaunchesAfterInstall: Bool {
+        if case .installing(let installing) = self { return !installing.isAutoUpdate }
+        return false
+    }
+
     /// This is true if we're in a state that can be force installed. 
     var isInstallable: Bool {
         switch self {
