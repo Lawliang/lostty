@@ -99,8 +99,8 @@ const Lexer = struct {
     heredocs: std.ArrayList(Heredoc) = .empty,
     /// The next word is a redirect target: .write, .read, or .heredoc.
     pending: enum { none, write, read, heredoc, heredoc_dash } = .none,
-    /// Inside `for … in …` up to `do`: words there aren't a command.
-    in_for: bool = false,
+    /// Inside a `for` header (up to its `;` or newline) words are not a command.
+    in_for: enum { none, header, after } = .none,
 
     fn run(self: *Lexer) Error!void {
         while (self.i < self.src.len) {
@@ -251,13 +251,13 @@ const Lexer = struct {
             const bare = !w.dynamic and !self.last_quoted;
             if (bare and std.mem.eql(u8, w.text, "case")) return error.Unparseable;
             if (bare and std.mem.eql(u8, w.text, "for")) {
-                self.in_for = true;
+                self.in_for = .header;
                 return;
             }
-            if (self.in_for) {
-                if (bare and std.mem.eql(u8, w.text, "do")) self.in_for = false;
-                return;
-            }
+            if (self.in_for == .header) return;
+            // The header ended; `do` and `{` are keywords below. Anything
+            // else is a real command and must not be swallowed.
+            self.in_for = .none;
             if (bare and (isOneOf(w.text, &reserved_lead) or isOneOf(w.text, &reserved_alone))) return;
             if (w.assignment) return;
         }
@@ -265,6 +265,8 @@ const Lexer = struct {
     }
 
     fn end(self: *Lexer) Error!void {
+        // A `;` or newline ends a for header (`for x in a b;`).
+        if (self.in_for == .header) self.in_for = .after;
         defer {
             self.argv = .empty;
             self.writes = .empty;
@@ -801,4 +803,29 @@ test "guard shell: groups, process substitution, nested quotes, continuations" {
     const c = try parseOk(&arena, "rm \\\n -rf x");
     try std.testing.expectEqual(@as(usize, 1), c.len);
     try expectArgv(c[0], &.{ "rm", "-rf", "x" });
+}
+
+test "guard shell: a for header never swallows later commands" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const brace = try parseOk(&arena, "for i in 1; { rm -rf /; }");
+    try std.testing.expectEqual(@as(usize, 1), brace.len);
+    try expectArgv(brace[0], &.{ "rm", "-rf", "/" });
+
+    const loop = try parseOk(&arena, "for f in a b; do rm \"$f\"; done");
+    try std.testing.expectEqual(@as(usize, 1), loop.len);
+    try expectArgv(loop[0], &.{ "rm", "" });
+    try std.testing.expect(loop[0].argv[1].dynamic);
+
+    const bare = try parseOk(&arena, "for x; do ls; done");
+    try std.testing.expectEqual(@as(usize, 1), bare.len);
+    try expectArgv(bare[0], &.{"ls"});
+
+    const nl = try parseOk(&arena, "for f in a b\ndo\nrm x\ndone");
+    try std.testing.expectEqual(@as(usize, 1), nl.len);
+    try expectArgv(nl[0], &.{ "rm", "x" });
+
+    // No `do` at all: the next command is still seen.
+    const none = try parseOk(&arena, "for x in a; rm -rf /");
+    try std.testing.expect(hasCommand(none, "rm"));
 }
