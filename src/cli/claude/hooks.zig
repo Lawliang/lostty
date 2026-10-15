@@ -8,7 +8,18 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Value = std.json.Value;
 
-pub const Event = struct { name: []const u8, state: []const u8 };
+pub const timeout_seconds = 5;
+pub const guard_timeout_seconds = 15;
+
+pub const Kind = enum { state, guard };
+
+pub const Event = struct {
+    name: []const u8,
+    /// The `+claude-state` argument (state hooks only).
+    state: []const u8 = "",
+    kind: Kind = .state,
+    timeout: u32 = timeout_seconds,
+};
 
 /// The coding agents whose hook files Lostty edits.
 pub const Agent = enum { claude, codex };
@@ -25,14 +36,17 @@ const claude_events = [_]Event{
     .{ .name = "Notification", .state = "idle" },
     .{ .name = "SessionEnd", .state = "exit" },
     .{ .name = "PreToolUse", .state = "tool" },
+    .{ .name = "PreToolUse", .kind = .guard, .timeout = guard_timeout_seconds },
 };
 
 /// Codex hook events (same hooks.json names). Codex has no session-end
 /// event (Lostty sees the process exit anyway), and PermissionRequest is
-/// left out: a hook there could count as an approval decision.
+/// left out: a hook there could count as an approval decision. Codex gets the
+/// guard on PreToolUse too (a deny holds in every approval mode).
 const codex_events = [_]Event{
     .{ .name = "UserPromptSubmit", .state = "busy" },
     .{ .name = "Stop", .state = "idle" },
+    .{ .name = "PreToolUse", .kind = .guard, .timeout = guard_timeout_seconds },
 };
 
 pub fn eventsFor(agent: Agent) []const Event {
@@ -41,8 +55,6 @@ pub fn eventsFor(agent: Agent) []const Event {
         .codex => &codex_events,
     };
 }
-
-pub const timeout_seconds = 5;
 
 pub const Status = enum {
     installed,
@@ -62,20 +74,30 @@ pub const Status = enum {
 
 pub const EditError = error{Malformed} || Allocator.Error;
 
-/// The hook command for `state`. It is a no-op outside Lostty (no
-/// LOSTTY_SURFACE) and when the binary is gone, and always exits 0.
-pub fn command(alloc: Allocator, state: []const u8) Allocator.Error![]u8 {
-    return std.fmt.allocPrint(
-        alloc,
-        "[ -n \"$LOSTTY_SURFACE\" ] && [ -x \"$LOSTTY_BIN\" ] && \"$LOSTTY_BIN\" +claude-state {s}; exit 0",
-        .{state},
-    );
+/// The hook command for event `e`. A state hook is a no-op outside Lostty
+/// (no LOSTTY_SURFACE) and when the binary is gone, and always exits 0. The
+/// guard hook is a no-op in the same cases but otherwise `exec`s the guard,
+/// so its exit code (2 blocks a Codex call) reaches the agent.
+pub fn command(alloc: Allocator, agent: Agent, e: Event) Allocator.Error![]u8 {
+    return switch (e.kind) {
+        .state => std.fmt.allocPrint(
+            alloc,
+            "[ -n \"$LOSTTY_SURFACE\" ] && [ -x \"$LOSTTY_BIN\" ] && \"$LOSTTY_BIN\" +claude-state {s}; exit 0",
+            .{e.state},
+        ),
+        .guard => std.fmt.allocPrint(
+            alloc,
+            "[ -n \"$LOSTTY_SURFACE\" ] && [ -x \"$LOSTTY_BIN\" ] || exit 0; exec \"$LOSTTY_BIN\" +guard --agent={s}",
+            .{@tagName(agent)},
+        ),
+    };
 }
 
-/// Lostty's entries, in any version, mention both of these.
+/// Lostty's entries, in any version, mention LOSTTY_SURFACE and one of its
+/// commands.
 pub fn isLosttyCommand(cmd: []const u8) bool {
-    return std.mem.indexOf(u8, cmd, "+claude-state") != null and
-        std.mem.indexOf(u8, cmd, "LOSTTY_SURFACE") != null;
+    if (std.mem.indexOf(u8, cmd, "LOSTTY_SURFACE") == null) return false;
+    return std.mem.indexOf(u8, cmd, "+claude-state") != null or std.mem.indexOf(u8, cmd, "+guard") != null;
 }
 
 /// Claude Code's status line runs this to feed the window's usage bar.
@@ -106,12 +128,23 @@ fn hookCommand(hook: Value) ?[]const u8 {
     return if (c == .string) c.string else null;
 }
 
-fn isTimeout(v: Value) bool {
+fn isTimeout(v: Value, want: u32) bool {
     return switch (v) {
-        .integer => |i| i == timeout_seconds,
-        .number_string => |s| std.mem.eql(u8, s, "5"),
+        .integer => |i| i == want,
+        .number_string => |n| (std.fmt.parseInt(u32, n, 10) catch 0) == want,
         else => false,
     };
+}
+
+/// Whether `cmd` (with `timeout`) is exactly one of Lostty's current
+/// entries for `event_name`.
+fn isCurrent(alloc: Allocator, agent: Agent, event_name: []const u8, cmd: []const u8, timeout: Value) Allocator.Error!bool {
+    for (eventsFor(agent)) |e| {
+        if (!std.mem.eql(u8, e.name, event_name)) continue;
+        const exp = try command(alloc, agent, e);
+        if (std.mem.eql(u8, cmd, exp) and isTimeout(timeout, e.timeout)) return true;
+    }
+    return false;
 }
 
 /// Checks `hooks.<event>` has Claude Code's documented shape: an array of
@@ -125,13 +158,6 @@ fn checkEvent(event_value: Value) EditError!void {
     }
 }
 
-fn expectedFor(alloc: Allocator, agent: Agent, event_name: []const u8) Allocator.Error!?[]const u8 {
-    for (eventsFor(agent)) |e| {
-        if (std.mem.eql(u8, e.name, event_name)) return try command(alloc, e.state);
-    }
-    return null;
-}
-
 pub fn status(alloc: Allocator, agent: Agent, root: Value) Allocator.Error!Status {
     if (root != .object) return .unreadable;
     var current: usize = 0;
@@ -142,14 +168,12 @@ pub fn status(alloc: Allocator, agent: Agent, root: Value) Allocator.Error!Statu
         var it = hooks.object.iterator();
         while (it.next()) |entry| {
             checkEvent(entry.value_ptr.*) catch return .unreadable;
-            const expected = try expectedFor(alloc, agent, entry.key_ptr.*);
             for (entry.value_ptr.array.items) |group_value| {
                 for (group_value.object.get("hooks").?.array.items) |hook| {
                     const cmd = hookCommand(hook) orelse continue;
                     if (!isLosttyCommand(cmd)) continue;
                     ours += 1;
-                    const exp = expected orelse continue;
-                    if (std.mem.eql(u8, cmd, exp) and isTimeout(hook.object.get("timeout") orelse .null)) current += 1;
+                    if (try isCurrent(alloc, agent, entry.key_ptr.*, cmd, hook.object.get("timeout") orelse .null)) current += 1;
                 }
             }
         }
@@ -214,11 +238,11 @@ fn strip(hooks: *std.json.ObjectMap) EditError!bool {
     return changed;
 }
 
-fn group(alloc: Allocator, state: []const u8) Allocator.Error!Value {
+fn group(alloc: Allocator, agent: Agent, e: Event) Allocator.Error!Value {
     var hook = std.json.ObjectMap.init(alloc);
     try hook.put("type", .{ .string = "command" });
-    try hook.put("command", .{ .string = try command(alloc, state) });
-    try hook.put("timeout", .{ .integer = timeout_seconds });
+    try hook.put("command", .{ .string = try command(alloc, agent, e) });
+    try hook.put("timeout", .{ .integer = e.timeout });
     var list = std.json.Array.init(alloc);
     try list.append(.{ .object = hook });
     var g = std.json.ObjectMap.init(alloc);
@@ -239,7 +263,7 @@ pub fn install(alloc: Allocator, agent: Agent, root: *Value) EditError!bool {
     for (eventsFor(agent)) |e| {
         const ev = try hooks.getOrPut(e.name);
         if (!ev.found_existing) ev.value_ptr.* = .{ .array = std.json.Array.init(alloc) };
-        try ev.value_ptr.array.append(try group(alloc, e.state));
+        try ev.value_ptr.array.append(try group(alloc, agent, e));
     }
     if (agent == .claude and statusLineState(root.*) != .foreign) {
         try root.object.put("statusLine", try statusLineValue(alloc));
@@ -271,9 +295,9 @@ pub fn remove(root: *Value) EditError!bool {
 pub fn preview(alloc: Allocator, agent: Agent) Allocator.Error!Value {
     var hooks = std.json.ObjectMap.init(alloc);
     for (eventsFor(agent)) |e| {
-        var list = std.json.Array.init(alloc);
-        try list.append(try group(alloc, e.state));
-        try hooks.put(e.name, .{ .array = list });
+        const gop = try hooks.getOrPut(e.name);
+        if (!gop.found_existing) gop.value_ptr.* = .{ .array = std.json.Array.init(alloc) };
+        try gop.value_ptr.array.append(try group(alloc, agent, e));
     }
     var root = std.json.ObjectMap.init(alloc);
     try root.put("hooks", .{ .object = hooks });
@@ -382,7 +406,7 @@ test "claude hooks: remove keeps a user's hook in a shared group" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const ours = try std.json.Stringify.valueAlloc(a, Value{ .string = try command(a, "idle") }, .{});
+    const ours = try std.json.Stringify.valueAlloc(a, Value{ .string = try command(a, .claude, .{ .name = "Stop", .state = "idle" }) }, .{});
     const text = try std.fmt.allocPrint(a,
         \\{{"hooks":{{"Stop":[{{"matcher":"","hooks":[{{"type":"command","command":"say done"}},{{"type":"command","command":{s}}}]}}]}}}}
     , .{ours});
@@ -419,7 +443,7 @@ test "claude hooks: command and detection" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const cmd = try command(a, "busy");
+    const cmd = try command(a, .claude, .{ .name = "Stop", .state = "busy" });
     try std.testing.expectEqualStrings(
         "[ -n \"$LOSTTY_SURFACE\" ] && [ -x \"$LOSTTY_BIN\" ] && \"$LOSTTY_BIN\" +claude-state busy; exit 0",
         cmd,
@@ -477,7 +501,7 @@ test "claude hooks: a user's own status line is kept" {
     try std.testing.expect(std.mem.indexOf(u8, out, "+claude-usage") == null);
 }
 
-test "codex hooks: install adds only the busy and idle events" {
+test "codex hooks: install adds busy, idle and the guard" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -487,6 +511,7 @@ test "codex hooks: install adds only the busy and idle events" {
     const out = try stringify(a, root);
     try std.testing.expect(std.mem.indexOf(u8, out, "\"UserPromptSubmit\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "\"Stop\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"PreToolUse\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "Notification") == null);
     try std.testing.expect(std.mem.indexOf(u8, out, "SessionEnd") == null);
     // PermissionRequest stays out: a hook there might count as an approval.
@@ -497,12 +522,66 @@ test "codex hooks: install adds only the busy and idle events" {
     try std.testing.expectEqual(Status.not_installed, try status(a, .codex, root));
 }
 
-test "codex hooks: preview lists the two events" {
+test "codex hooks: preview lists the three events" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
     const out = try stringify(a, try preview(a, .codex));
     try std.testing.expect(std.mem.indexOf(u8, out, "UserPromptSubmit") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"PreToolUse\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "+guard --agent=codex") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "Notification") == null);
     try std.testing.expect(std.mem.indexOf(u8, out, "statusLine") == null);
+}
+
+test "claude hooks: install adds the guard for Claude and Codex" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var c = try parseFixture(a, "{}");
+    try std.testing.expect(try install(a, .claude, &c));
+    const cout = try stringify(a, c);
+    try std.testing.expect(std.mem.indexOf(u8, cout, "+guard --agent=claude") != null);
+    try std.testing.expect(std.mem.indexOf(u8, cout, "\"timeout\": 15") != null);
+    try std.testing.expectEqual(Status.installed, try status(a, .claude, c));
+
+    var x = try parseFixture(a, "{}");
+    try std.testing.expect(try install(a, .codex, &x));
+    const xout = try stringify(a, x);
+    try std.testing.expect(std.mem.indexOf(u8, xout, "+guard --agent=codex") != null);
+    try std.testing.expect(std.mem.indexOf(u8, xout, "\"PreToolUse\"") != null);
+    try std.testing.expectEqual(Status.installed, try status(a, .codex, x));
+}
+
+test "claude hooks: older hooks without the guard are partial" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var root = try parseFixture(a,
+        \\{"hooks":{"UserPromptSubmit":[{"hooks":[{"type":"command","command":"[ -n \"$LOSTTY_SURFACE\" ] && [ -x \"$LOSTTY_BIN\" ] && \"$LOSTTY_BIN\" +claude-state busy; exit 0","timeout":5}]}],
+        \\"Stop":[{"hooks":[{"type":"command","command":"[ -n \"$LOSTTY_SURFACE\" ] && [ -x \"$LOSTTY_BIN\" ] && \"$LOSTTY_BIN\" +claude-state idle; exit 0","timeout":5}]}]}}
+    );
+    try std.testing.expectEqual(Status.partial, try status(a, .codex, root));
+    try std.testing.expect(try install(a, .codex, &root));
+    try std.testing.expectEqual(Status.installed, try status(a, .codex, root));
+}
+
+test "claude hooks: the guard command keeps its exit code" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const cmd = try command(a, .codex, .{ .name = "PreToolUse", .kind = .guard, .timeout = guard_timeout_seconds });
+    try std.testing.expect(std.mem.indexOf(u8, cmd, "exec \"$LOSTTY_BIN\" +guard --agent=codex") != null);
+    try std.testing.expect(!std.mem.endsWith(u8, cmd, "exit 0"));
+    try std.testing.expect(isLosttyCommand(cmd));
+}
+
+test "claude hooks: remove takes out the guard too" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var root = try parseFixture(a, "{}");
+    _ = try install(a, .codex, &root);
+    try std.testing.expect(try remove(&root));
+    try std.testing.expect(std.mem.indexOf(u8, try stringify(a, root), "+guard") == null);
 }
