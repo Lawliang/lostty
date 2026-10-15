@@ -234,7 +234,9 @@ fn command(ctx: Ctx, probe: anytype, argv_in: []const shell.Word) Error!?Finding
             for (cmd_words.items) |x| if (!x.dynamic and mentionsRemover(x.text)) {
                 removes = true;
             };
-            const start = findStart(args);
+            const start_opt = findStart(args);
+            if (start_opt == null) removes = true; // keep `{}` unknown
+            const start = start_opt orelse ".";
             for (cmd_words.items) |x| {
                 if (x.dynamic or std.mem.indexOf(u8, x.text, "{}") == null) {
                     try sub.append(ctx.alloc, x);
@@ -324,9 +326,9 @@ fn mentionsRemover(s: []const u8) bool {
 }
 
 /// The first path find searches (before its first expression), or ".".
-fn findStart(args: []const shell.Word) []const u8 {
+fn findStart(args: []const shell.Word) ?[]const u8 {
     for (args) |w| {
-        if (w.dynamic) return ".";
+        if (w.dynamic) return null; // a variable folder: unknown
         if (w.text.len > 0 and (w.text[0] == '-' or w.text[0] == '(' or w.text[0] == '!')) return ".";
         return w.text;
     }
@@ -925,4 +927,21 @@ test "guard catalog: find -exec runs on find's start path" {
     try std.testing.expectEqual(@as(?Group, .guardrails), try group(a, .{}, "find ~/.ssh -exec chmod 600 {} ';'"));
     try std.testing.expectEqual(@as(?Group, .deleting), try group(a, .{}, "find . -exec rm {} ';'"));
     try std.testing.expectEqual(@as(?Group, .deleting), try group(a, .{}, "find . -exec sh -c 'rm {}' ';'"));
+}
+
+test "guard catalog: a find from a variable folder stays unknown" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    for ([_][]const u8{
+        "find $HOME/.ssh -exec chmod 600 {} ';'",
+        "find \"$D\" -exec chmod 600 {} ';'",
+        "find $HOME -exec chmod 600 {} ';'",
+    }) |src| {
+        if ((try group(a, .{}, src)) == null) {
+            std.debug.print("missed: {s}\n", .{src});
+            return error.TestUnexpectedResult;
+        }
+    }
+    try std.testing.expectEqual(@as(?Group, null), try group(a, .{}, "find . -exec chmod +x {} ';'"));
 }
