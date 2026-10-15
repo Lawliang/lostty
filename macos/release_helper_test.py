@@ -87,5 +87,54 @@ class Appcast(unittest.TestCase):
                          "<ul><li>Fix &lt;tab&gt; &amp; ]]&gt; parsing</li></ul>")
 
 
+class Betas(unittest.TestCase):
+    TAGS = ["beta", "v0.4-beta.2", "v0.4-beta.1", "v0.4", "v0.3-beta.7", "v0.3", "nightly"]
+
+    def test_the_first_beta_of_a_stable_is_1(self):
+        self.assertEqual(helper.next_beta("v0.5", self.TAGS), 1)
+        self.assertEqual(helper.next_beta("v0.4", []), 1)
+
+    def test_each_beta_is_one_more(self):
+        self.assertEqual(helper.next_beta("v0.4", self.TAGS), 3)
+
+    def test_an_older_stables_betas_dont_count(self):
+        self.assertEqual(helper.next_beta("v0.3", ["v0.4-beta.9", "v0.3"]), 1)
+
+    def test_the_newest_tag_of_either_kind(self):
+        self.assertEqual(helper.newest_tag(self.TAGS), "v0.4-beta.2")
+        self.assertEqual(helper.newest_tag(["v0.4", "v0.4-beta.1"]), "v0.4-beta.1")
+        self.assertEqual(helper.newest_tag(["v0.5", "v0.4-beta.2"]), "v0.5")
+        self.assertEqual(helper.newest_tag(["beta", "nightly"]), "")
+        self.assertEqual(helper.newest_tag([]), "")
+
+    def test_the_fixed_beta_tag_isnt_a_version(self):
+        self.assertIsNone(helper.parse_tag("beta"))
+        self.assertEqual(helper.parse_tag("v0.4-beta.2"), (0, 4, 2))
+        self.assertEqual(helper.parse_tag("v0.4"), (0, 4, 0))
+
+
+class BetaAppcast(unittest.TestCase):
+    def test_a_beta_item_names_its_number(self):
+        xml = helper.appcast(
+            "0.4", "202610151200", "14.0", ["- Mascot"],
+            "https://github.com/Lawliang/lostty/releases/download/v0.4-beta.2/Lostty-Beta.dmg",
+            "sig==", 5678, datetime(2026, 10, 15, 12, 0, tzinfo=timezone.utc), beta=2)
+        root = ET.fromstring(xml)
+        self.assertEqual(root.find("channel/title").text, "Lostty Beta")
+        item = root.find("channel/item")
+        self.assertEqual(item.find("title").text, "Lostty 0.4 beta 2")
+        self.assertEqual(item.find(SPARKLE + "shortVersionString").text, "0.4 beta 2")
+        self.assertEqual(item.find(SPARKLE + "version").text, "202610151200")
+        self.assertEqual(item.find("enclosure").get("url"),
+                         "https://github.com/Lawliang/lostty/releases/download/v0.4-beta.2/Lostty-Beta.dmg")
+
+    def test_stable_is_unchanged(self):
+        root = ET.fromstring(helper.appcast(
+            "0.4", "1", "14.0", [], "https://x/Lostty.dmg", "s", 1,
+            datetime(2026, 10, 15, tzinfo=timezone.utc)))
+        self.assertEqual(root.find("channel/title").text, "Lostty")
+        self.assertEqual(root.find("channel/item/" + SPARKLE + "shortVersionString").text, "0.4")
+
+
 if __name__ == "__main__":
     unittest.main()
