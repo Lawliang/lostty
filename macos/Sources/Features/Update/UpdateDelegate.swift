@@ -3,15 +3,10 @@ import Cocoa
 
 extension UpdateDriver: SPUUpdaterDelegate {
     func feedURLString(for updater: SPUUpdater) -> String? {
-        // Ghostty Skins: this fork does not publish its own appcast, and
-        // must never point at upstream Ghostty's feed — doing so would let
-        // "Check for Updates…" offer to replace this fork with official
-        // Ghostty. Returning nil here (with no `SUFeedURL` in
-        // Lostty-Info.plist to fall back to) leaves Sparkle with no feed
-        // URL at all, so a manual check surfaces a "no update information"
-        // error instead of silently reaching for the real ghostty.org feed.
-        // See UPGRADING.md.
-        return nil
+        // Lostty's own feed, in release builds only (UpdateFeed). Never
+        // upstream Ghostty's: with no `SUFeedURL` in Lostty-Info.plist, nil
+        // leaves Sparkle with no feed at all.
+        UpdateFeed.current
     }
 
     /// Called when an update is scheduled to install silently,

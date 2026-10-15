@@ -112,6 +112,8 @@
 	<false/>
 	<key>SUPublicEDKey</key>
 	<string>wsNcGf5hirwtdXMVnYoxRIX/SqZQLMOsYlD3q3imeok=</string>
+	<key>LosttyUpdateFeed</key>
+	<string>$(LOSTTY_UPDATE_FEED)</string>
 	<key>UTExportedTypeDeclarations</key>
 	<array>
 		<dict>
