@@ -28,6 +28,18 @@ the shape before you spend the time.
 
 How to build, test and debug Lostty.
 
+### Build from source
+
+To build Lostty from this repo instead of downloading it:
+
+```sh
+git clone https://github.com/Lawliang/lostty.git
+cd lostty
+macos/setup.sh
+```
+
+`setup.sh` installs the prerequisites below, then builds Lostty into `/Applications`. A copy built this way never checks for updates. To update it, `git pull`, run `macos/install.sh`, then choose **Restart to Update** in Lostty's menu bar. Don't Quit Lostty to update: quitting ends every terminal session.
+
 ### Prerequisites
 
 - macOS with **Xcode 26** (macOS 26 SDK and iOS SDK). You can run Xcode 26
@@ -136,3 +148,22 @@ The `GHOSTTY_LOG` environment variable picks where logs go: `stderr`,
   shell function breaks in every new pane.
 - For memory leaks (Zig can't see leaks in the engine's C libraries), run
   the Debug app under Instruments' Leaks template.
+
+### Release
+
+Releases are made on the owner's Mac with `macos/release.sh`. It builds Lostty, signs it as Developer ID, has Apple notarize `Lostty.dmg`, and publishes it with Sparkle's `appcast.xml` as a GitHub release. Installed copies find it through that feed.
+
+One-time setup, for team K85Z63QH48:
+
+1. **Developer ID Application certificate:** Xcode → Settings → Accounts → Manage Certificates → **+** → Developer ID Application. Only the Account Holder can make it.
+2. **Notarization login:** make an app-specific password at [account.apple.com](https://account.apple.com), then run `xcrun notarytool store-credentials lostty-notary --apple-id <your Apple ID> --team-id K85Z63QH48`.
+3. **Update-signing key:** `macos/release.sh --make-key` puts the key in your login keychain and its public half in `macos/Lostty-Info.plist`. Commit that and push it to main.
+
+Then, from a clean checkout of GitHub's `main`:
+
+```sh
+macos/release.sh --dry-run   # everything but publishing
+macos/release.sh             # 0.2, 0.3, …; --version 1.0 to jump
+```
+
+It opens the release notes in `$EDITOR` first; an empty file stops it.
