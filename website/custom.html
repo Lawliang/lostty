@@ -1517,16 +1517,25 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
       if (!copy) return;
       var hr = hero.getBoundingClientRect();
       qz = [];
-      $$('h1, .lede, .hero-cta, .hero-meta', copy).forEach(function (el) {
+      var blocks = $$('h1, .lede, .hero-cta, .hero-meta', copy);
+      blocks.forEach(function (el) { el.style.transform = ''; });
+      blocks.forEach(function (el) {
         var r = hug(el);
         if (!r || !r.width) return;
-        // the field stops G px from the ink on every side, give or take half a
-        // cell: each edge snaps to the cell boundary nearest that gap
+        // Sideways, the field stops about G px from the ink: each edge snaps to
+        // the nearest column. Rows are too tall to snap the same way, so the
+        // block is nudged down (less than one row) until the gap above and
+        // below its ink is equal and as close as rows allow to the side gap.
         var G = 14, x0 = r.left - hr.left, x1 = r.right - hr.left, y0 = r.top - hr.top, y1 = r.bottom - hr.top;
+        var c0 = Math.round((x0 - G) / cw), c1 = Math.round((x1 + G) / cw) - 1;
+        var side = ((x0 - c0 * cw) + ((c1 + 1) * cw - x1)) / 2;
+        var h = y1 - y0, n = Math.max(1, Math.round((h + 2 * side) / chh));
+        if ((n * chh - h) / 2 < 6) n++;
+        var gap = (n * chh - h) / 2, k = Math.ceil((y0 - gap) / chh), d = k * chh + gap - y0;
+        if (d > 0.5) el.style.transform = 'translateY(' + d.toFixed(2) + 'px)';
         qz.push({
-          c0: Math.round((x0 - G) / cw), c1: Math.round((x1 + G) / cw) - 1,
-          r0: Math.round((y0 - G) / chh), r1: Math.round((y1 + G) / chh) - 1,
-          t0: Math.floor((r.top - hr.top) / chh), t1: Math.floor((r.bottom - hr.top) / chh)
+          c0: c0, c1: c1, r0: k, r1: k + n - 1,
+          t0: Math.floor((y0 + d) / chh), t1: Math.floor((y1 + d) / chh)
         });
       });
       // keep at least one row of field between stacked blocks: where two
