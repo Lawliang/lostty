@@ -3,7 +3,7 @@
 <meta name="description" content="Lostty: a fast, native Mac terminal with an iPhone companion app for people running coding agents.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,400..800&family=JetBrains+Mono:ital,wght@0,300..800;1,400&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,400..800&family=JetBrains+Mono:ital,wght@0,300..800;1,400&family=Onest:wght@700&display=swap">
 <style>
 /* Layout: everything sits on a visible character grid (1ch x 1 line), left-aligned in a 1240px frame.
    Sections open with a shell prompt; product screens stay dark in both themes. */
@@ -229,9 +229,11 @@ p { margin: 0; }
 #field { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .hero-in { position: relative; min-height: 620px; display: flex; align-items: center; padding-block: 64px 72px; pointer-events: none; }
 .hero-copy { max-width: 40rem; pointer-events: auto; }
+/* headline type from Aurora Glass's section titles: Onest 700, tight tracking */
 .hero h1 {
-  font-size: clamp(50px, 8.4vw, 116px); line-height: .88; font-weight: 800; letter-spacing: -.02em;
-  max-width: 9.5ch; margin-top: 18px;
+  font-family: "Onest", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-stretch: normal; font-size: clamp(44px, 6.2vw, 84px); line-height: 1.02; font-weight: 700; letter-spacing: -.04em;
+  max-width: 12ch; margin-top: 18px;
 }
 .hero .lede { font-size: 16px; color: var(--ink); max-width: 46ch; margin-top: 24px; }
 .hero-cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; }
