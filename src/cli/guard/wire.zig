@@ -73,24 +73,30 @@ pub fn outputUnreachable(alloc: Allocator, agent: Agent, c: decide.Critical) All
     };
 }
 
+fn setTimeouts(handle: std.posix.socket_t, ms: u32) ?void {
+    const tv: std.posix.timeval = .{ .sec = @intCast(ms / 1000), .usec = @intCast((ms % 1000) * 1000) };
+    std.posix.setsockopt(handle, std.posix.SOL.SOCKET, std.posix.SO.RCVTIMEO, std.mem.asBytes(&tv)) catch return null;
+    std.posix.setsockopt(handle, std.posix.SOL.SOCKET, std.posix.SO.SNDTIMEO, std.mem.asBytes(&tv)) catch return null;
+}
+
 /// Sends one request line and reads one reply line. Null when the app
 /// can't be reached, times out, or answers nonsense: the caller fails
 /// closed.
 pub fn ask(alloc: Allocator, path: []const u8, request: []const u8, timeout_ms: u32) ?Reply {
     const stream = std.net.connectUnixSocket(path) catch return null;
     defer stream.close();
-    const tv: std.posix.timeval = .{ .sec = @intCast(timeout_ms / 1000), .usec = @intCast((timeout_ms % 1000) * 1000) };
-    std.posix.setsockopt(stream.handle, std.posix.SOL.SOCKET, std.posix.SO.RCVTIMEO, std.mem.asBytes(&tv)) catch return null;
-    std.posix.setsockopt(stream.handle, std.posix.SOL.SOCKET, std.posix.SO.SNDTIMEO, std.mem.asBytes(&tv)) catch return null;
+    var timer = std.time.Timer.start() catch return null;
+    setTimeouts(stream.handle, timeout_ms) orelse return null;
     // One write, so a peer that reads once sees the whole line.
     const line_out = std.fmt.allocPrint(alloc, "{s}\n", .{request}) catch return null;
     stream.writeAll(line_out) catch return null;
     var buf: [4096]u8 = undefined;
     var len: usize = 0;
-    // The socket timeout is per read; this bounds the whole wait.
-    const deadline = std.time.milliTimestamp() + timeout_ms;
+    // The socket timeout is per read, so each read gets only what is left.
     while (len < buf.len) {
-        if (std.time.milliTimestamp() >= deadline) return null;
+        const used_ms = timer.read() / std.time.ns_per_ms;
+        if (used_ms >= timeout_ms) return null;
+        setTimeouts(stream.handle, @intCast(@max(1, timeout_ms - used_ms))) orelse return null;
         const n = stream.read(buf[len..]) catch return null;
         if (n == 0) break;
         len += n;
@@ -188,4 +194,34 @@ test "guard wire: ask talks to a socket, and an absent one is unreachable" {
     const r = ask(a, path, "{\"v\":1}", 2000);
     th.join();
     try std.testing.expectEqual(@as(u32, 7), r.?.deny);
+}
+
+test "guard wire: a peer that trickles one byte then stalls hits the deadline" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const dir = try tmp.dir.realpathAlloc(a, ".");
+    const path = try std.fs.path.join(a, &.{ dir, "g.sock" });
+    const addr = try std.net.Address.initUnix(path);
+    var server = try addr.listen(.{});
+    defer server.deinit();
+    const T = struct {
+        fn serve(s: *std.net.Server) void {
+            const conn = s.accept() catch return;
+            defer conn.stream.close();
+            var buf: [256]u8 = undefined;
+            _ = conn.stream.read(&buf) catch return;
+            _ = conn.stream.writeAll("{") catch return;
+            std.Thread.sleep(1200 * std.time.ns_per_ms);
+        }
+    };
+    const th = try std.Thread.spawn(.{}, T.serve, .{&server});
+    var timer = try std.time.Timer.start();
+    const r = ask(a, path, "{\"v\":1}", 300);
+    const took = timer.read() / std.time.ns_per_ms;
+    th.join();
+    try std.testing.expect(r == null);
+    try std.testing.expect(took < 1000);
 }
