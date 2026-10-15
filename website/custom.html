@@ -233,7 +233,7 @@ p { margin: 0; }
 .hero h1 {
   font-family: "Onest", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   font-stretch: normal; font-size: clamp(38px, 5.3vw, 72px); line-height: 1.02; font-weight: 700; letter-spacing: -.04em;
-  max-width: none; margin-top: 18px;
+  max-width: none; margin-top: 0;
 }.hero .lede { font-size: 16px; color: var(--ink); max-width: 46ch; margin-top: 24px; }
 .hero-cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; }
 .hero-meta { margin-top: 28px; font-size: 13px; color: var(--ink-2); display: flex; flex-wrap: wrap; gap: 4px 22px; }
@@ -688,7 +688,6 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
     <canvas id="field" aria-hidden="true"></canvas>
     <div class="wrap hero-in">
       <div class="hero-copy" id="hero-copy">
-        <p class="prompt"><span class="pr">~</span> <span class="pr-c">❯</span> <span class="cmd">open -a Lostty</span></p>
         <h1>Go touch grass,<br>with Lostty.</h1>
         <p class="lede">A fast, native Mac terminal with an iPhone app, for people who run Claude Code and Codex. Every terminal keeps running on your Mac. Your phone shows you which one needs you, and you answer it right there.</p>
         <div class="hero-cta">
@@ -1880,9 +1879,6 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
       var txt = el.textContent; el.textContent = '';
       for (var i = 0; i < txt.length; i++) { var s = document.createElement('span'); s.className = 'ch'; s.textContent = txt[i]; el.appendChild(s); }
     });
-    // the hero prompt holds the caret at rest
-    var heroCmd = $('.hero .cmd');
-    if (heroCmd) heroCmd.after(caret);
     if (reduce || !('IntersectionObserver' in window)) return;
     var GL = '!<>-_\\/[]{}=+*^?#%$01';
     function decode(h) {
