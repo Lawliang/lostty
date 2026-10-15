@@ -354,4 +354,5 @@ test {
     _ = @import("guard/paths.zig");
     _ = @import("guard/config.zig");
     _ = @import("guard/git.zig");
+    _ = @import("guard/catalog.zig");
 }
