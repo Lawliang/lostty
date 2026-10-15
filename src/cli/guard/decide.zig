@@ -45,12 +45,12 @@ pub fn decide(alloc: Allocator, e: Env, probe: anytype, input_json: []const u8) 
     var input: []const u8 = "";
     var found: ?catalog.Finding = null;
     const is_mcp = std.mem.startsWith(u8, tool, "mcp__");
-    if (std.mem.eql(u8, tool, "Bash") or (!is_mcp and str(ti, "command") != null)) {
-        input = str(ti, "command") orelse return unreadable(tool, input_json, cwd);
-        found = try bashFinding(ctx, probe, input);
-    } else if (isFileTool(tool)) {
+    if (isFileTool(tool)) {
         input = str(ti, "file_path") orelse str(ti, "notebook_path") orelse return unreadable(tool, input_json, cwd);
         found = try catalog.write(ctx, probe, .{ .text = input, .dynamic = false });
+    } else if (std.mem.eql(u8, tool, "Bash") or (!is_mcp and str(ti, "command") != null)) {
+        input = str(ti, "command") orelse return unreadable(tool, input_json, cwd);
+        found = try bashFinding(ctx, probe, input);
     } else if (is_mcp and mcpLooksCritical(alloc, tool)) {
         input = tool;
         found = .{ .group = .leaving, .why = "an MCP tool named like it deletes, publishes or merges" };
@@ -392,4 +392,22 @@ test "guard decide: other shell tools and mcp before patch" {
     try std.testing.expectEqual(catalog.Group.leaving, (try decide(a, env(a), Fake{}, push)).critical.group);
     try std.testing.expect(try decide(a, env(a), Fake{}, ls) == .harmless);
     try std.testing.expectEqual(catalog.Group.leaving, (try decide(a, env(a), Fake{}, mcp)).critical.group);
+}
+
+test "guard decide: file tools win over a command field; more cd forms" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const e = env(a);
+    const w =
+        \\{"tool_name":"Write","tool_input":{"file_path":"/Users/me/.ssh/x","command":"ls"},"cwd":"/r"}
+    ;
+    try std.testing.expectEqual(catalog.Group.guardrails, (try decide(a, e, Fake{}, w)).critical.group);
+    // No target after flags goes home, which is outside the repo.
+    try std.testing.expect(try decide(a, e, Fake{}, try bash(a, "cd -P && rm x", "/r")) == .critical);
+    // `--` ends the flags: the next word is the directory, even if it starts with `-`.
+    try std.testing.expect(try decide(a, e, Fake{}, try bash(a, "cd -- -weird-dir && rm x", "/r")) == .harmless);
+    try std.testing.expect(try decide(a, e, Fake{}, try bash(a, "cd -- /elsewhere/-d && rm x", "/r")) == .critical);
+    // A lone `-` is unknown.
+    try std.testing.expect(try decide(a, e, Fake{}, try bash(a, "cd - && rm x", "/r")) == .critical);
 }
