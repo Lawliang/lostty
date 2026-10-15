@@ -234,7 +234,8 @@ p { margin: 0; }
   font-family: "Onest", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   font-stretch: normal; font-size: clamp(38px, 5.3vw, 72px); line-height: 1.02; font-weight: 700; letter-spacing: -.04em;
   max-width: none; margin-top: 0;
-}.hero .lede { font-size: 16px; color: var(--ink); max-width: 46ch; margin-top: 24px; }
+}
+.hero .lede { font-size: 16px; color: var(--ink); max-width: 46ch; margin-top: 44px; }
 .hero-cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; }
 .hero-meta { margin-top: 28px; font-size: 13px; color: var(--ink-2); display: flex; flex-wrap: wrap; gap: 4px 22px; }
 .hero-meta span b { color: var(--ink); font-weight: 600; }
@@ -1508,9 +1509,11 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
       $$('h1, .lede, .hero-cta, .hero-meta', copy).forEach(function (el) {
         var r = hug(el);
         if (!r || !r.width) return;
+        // cells are drawn from their top-left corner, so a box covers the
+        // cells whose span touches it: floor at both ends, not ceil
         qz.push({
-          c0: Math.floor((r.left - hr.left - 16) / cw), c1: Math.ceil((r.right - hr.left + 16) / cw),
-          r0: Math.floor((r.top - hr.top - 6) / chh), r1: Math.ceil((r.bottom - hr.top + 6) / chh)
+          c0: Math.floor((r.left - hr.left - 16) / cw), c1: Math.floor((r.right - hr.left + 16) / cw),
+          r0: Math.floor((r.top - hr.top - 4) / chh), r1: Math.floor((r.bottom - hr.top + 4) / chh)
         });
       });
     }
