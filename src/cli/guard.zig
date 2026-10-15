@@ -33,12 +33,29 @@ pub fn run(gpa: Allocator) !u8 {
     const alloc = arena_state.allocator();
 
     const pane = std.posix.getenv("LOSTTY_SURFACE") orelse return 0;
-    var agent: wire.Agent = .claude;
-    const argv = std.process.argsAlloc(alloc) catch return failClosed(alloc, agent);
-    for (argv) |arg| {
-        if (std.mem.eql(u8, arg, "--agent=codex")) agent = .codex;
-    }
+    const argv = std.process.argsAlloc(alloc) catch return failClosed(alloc, .codex);
+    const agent = agentFromArgs(argv);
     return runFor(alloc, pane, agent) catch failClosed(alloc, agent);
+}
+
+/// Only an exact `--agent=claude` gets Claude's JSON answer. Anything else
+/// (a missing or mistyped flag) gets the stderr and exit 2 form, which
+/// blocks in both agents: a wrong guess must never let a call through.
+fn agentFromArgs(argv: []const []const u8) wire.Agent {
+    for (argv) |arg| {
+        if (std.mem.eql(u8, arg, "--agent=claude")) return .claude;
+    }
+    return .codex;
+}
+
+test "guard args: only an exact --agent=claude is Claude" {
+    try std.testing.expectEqual(wire.Agent.claude, agentFromArgs(&.{ "lostty", "+guard", "--agent=claude" }));
+    try std.testing.expectEqual(wire.Agent.codex, agentFromArgs(&.{ "lostty", "+guard", "--agent=codex" }));
+    try std.testing.expectEqual(wire.Agent.codex, agentFromArgs(&.{ "lostty", "+guard", "--agent", "codex" }));
+    try std.testing.expectEqual(wire.Agent.codex, agentFromArgs(&.{ "lostty", "+guard", "--agent", "claude" }));
+    try std.testing.expectEqual(wire.Agent.codex, agentFromArgs(&.{ "lostty", "+guard", "--agent=Codex" }));
+    try std.testing.expectEqual(wire.Agent.codex, agentFromArgs(&.{ "lostty", "+guard", "--agent=" }));
+    try std.testing.expectEqual(wire.Agent.codex, agentFromArgs(&.{ "lostty", "+guard" }));
 }
 
 fn runFor(alloc: Allocator, pane: []const u8, agent: wire.Agent) !u8 {

@@ -87,7 +87,10 @@ pub fn ask(alloc: Allocator, path: []const u8, request: []const u8, timeout_ms: 
     stream.writeAll(line_out) catch return null;
     var buf: [4096]u8 = undefined;
     var len: usize = 0;
+    // The socket timeout is per read; this bounds the whole wait.
+    const deadline = std.time.milliTimestamp() + timeout_ms;
     while (len < buf.len) {
+        if (std.time.milliTimestamp() >= deadline) return null;
         const n = stream.read(buf[len..]) catch return null;
         if (n == 0) break;
         len += n;
