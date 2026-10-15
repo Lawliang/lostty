@@ -44,18 +44,21 @@ pub fn decide(alloc: Allocator, e: Env, probe: anytype, input_json: []const u8) 
 
     var input: []const u8 = "";
     var found: ?catalog.Finding = null;
-    if (std.mem.eql(u8, tool, "Bash")) {
+    const is_mcp = std.mem.startsWith(u8, tool, "mcp__");
+    if (std.mem.eql(u8, tool, "Bash") or (!is_mcp and str(ti, "command") != null)) {
         input = str(ti, "command") orelse return unreadable(tool, input_json, cwd);
         found = try bashFinding(ctx, probe, input);
     } else if (isFileTool(tool)) {
         input = str(ti, "file_path") orelse str(ti, "notebook_path") orelse return unreadable(tool, input_json, cwd);
         found = try catalog.write(ctx, probe, .{ .text = input, .dynamic = false });
+    } else if (is_mcp and mcpLooksCritical(alloc, tool)) {
+        input = tool;
+        found = .{ .group = .leaving, .why = "an MCP tool named like it deletes, publishes or merges" };
     } else if (patchText(ti)) |patch| {
         input = patch;
         found = try patchFinding(ctx, probe, patch);
-    } else if (std.mem.startsWith(u8, tool, "mcp__")) {
+    } else if (is_mcp) {
         input = tool;
-        if (mcpLooksCritical(alloc, tool)) found = .{ .group = .leaving, .why = "an MCP tool named like it deletes, publishes or merges" };
     }
     const f = found orelse return .harmless;
     const repo = probe.repoRoot(cwd);
@@ -98,21 +101,49 @@ fn bashFinding(ctx_in: catalog.Ctx, probe: anytype, src: []const u8) Allocator.E
             depth -= 1;
             ctx.cwd = saved[depth];
         }
-        if (c.argv.len > 0 and !c.argv[0].dynamic and
-            (std.mem.eql(u8, c.argv[0].text, "cd") or std.mem.eql(u8, c.argv[0].text, "pushd")))
-        {
-            if (c.argv.len == 1) {
-                ctx.cwd = ctx.home;
-            } else if (c.argv[1].dynamic or std.mem.eql(u8, c.argv[1].text, "-")) {
-                ctx.cwd = null;
-            } else if (ctx.cwd) |cur| {
-                ctx.cwd = try paths.resolve(ctx.alloc, cur, c.argv[1].text);
+        if (cdTarget(c.argv)) |t| {
+            switch (t) {
+                .home => ctx.cwd = ctx.home,
+                .unknown => ctx.cwd = null,
+                .dir => |d| if (ctx.cwd) |cur| {
+                    ctx.cwd = try paths.resolve(ctx.alloc, cur, d);
+                },
             }
             continue;
         }
         if (try catalog.classify(ctx, probe, c)) |f| return f;
     }
     return null;
+}
+
+const CdTarget = union(enum) { home, unknown, dir: []const u8 };
+
+/// Where a `cd`/`pushd` (maybe wrapped in `builtin`/`command`) goes, or
+/// null when argv isn't one.
+fn cdTarget(argv: []const shell.Word) ?CdTarget {
+    var i: usize = 0;
+    while (i < argv.len) {
+        const w = argv[i];
+        if (w.dynamic) return null;
+        if (std.mem.eql(u8, w.text, "builtin") or std.mem.eql(u8, w.text, "command")) {
+            i += 1;
+            while (i < argv.len and !argv[i].dynamic and argv[i].text.len > 1 and argv[i].text[0] == '-') : (i += 1) {}
+            continue;
+        }
+        break;
+    }
+    if (i >= argv.len or argv[i].dynamic) return null;
+    const name = argv[i].text;
+    if (!std.mem.eql(u8, name, "cd") and !std.mem.eql(u8, name, "pushd")) return null;
+    i += 1;
+    while (i < argv.len and !argv[i].dynamic and argv[i].text.len > 1 and argv[i].text[0] == '-') {
+        const is_dd = std.mem.eql(u8, argv[i].text, "--");
+        i += 1;
+        if (is_dd) break;
+    }
+    if (i >= argv.len) return .home;
+    if (argv[i].dynamic or std.mem.eql(u8, argv[i].text, "-")) return .unknown;
+    return .{ .dir = argv[i].text };
 }
 
 /// A Codex patch: the tool_input string that starts with "*** Begin Patch".
@@ -327,4 +358,38 @@ test "guard decide: harmless calls never touch git" {
         ,
     };
     for (inputs) |i| try std.testing.expect(try decide(a, e, NoGit{}, i) == .harmless);
+}
+
+test "guard decide: cd flags and wrapped cd" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const e = env(a);
+    const crit = [_][]const u8{
+        "cd -P /elsewhere && rm x",
+        "cd -- /elsewhere && rm x",
+        "builtin cd /elsewhere && rm x",
+        "command cd /elsewhere && rm x",
+        "command -p cd /elsewhere && rm x",
+    };
+    for (crit) |c| try std.testing.expect(try decide(a, e, Fake{}, try bash(a, c, "/r")) == .critical);
+    try std.testing.expect(try decide(a, e, Fake{}, try bash(a, "cd -L sub && rm x", "/r")) == .harmless);
+}
+
+test "guard decide: other shell tools and mcp before patch" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const push =
+        \\{"tool_name":"shell","tool_input":{"command":"git push"},"cwd":"/r"}
+    ;
+    const ls =
+        \\{"tool_name":"shell","tool_input":{"command":"ls"},"cwd":"/r"}
+    ;
+    const mcp =
+        \\{"tool_name":"mcp__x__delete_branch","tool_input":{"p":"*** Begin Patch\n*** Update File: a\n*** End Patch"},"cwd":"/r"}
+    ;
+    try std.testing.expectEqual(catalog.Group.leaving, (try decide(a, env(a), Fake{}, push)).critical.group);
+    try std.testing.expect(try decide(a, env(a), Fake{}, ls) == .harmless);
+    try std.testing.expectEqual(catalog.Group.leaving, (try decide(a, env(a), Fake{}, mcp)).critical.group);
 }
