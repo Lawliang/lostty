@@ -1,5 +1,5 @@
 <p>
-  <img src="images/lostty/mascot-waving.png" alt="Lostty's mascot, a pink axolotl with terminal-prompt eyes, waving hello" width="200">
+  <img src="images/lostty/mascot-sleeping.png" alt="Lostty's mascot, a pink axolotl, fast asleep" width="200">
 </p>
 
 # Lostty — Leave Your Desk, Not Your Terminal
