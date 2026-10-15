@@ -91,6 +91,20 @@ struct ObserverPromptTests {
         #expect(ObserverPrompt.parse("Here you go: {\"just_now\":\"Hi\"}") == ObserverNotes(justNow: "Hi"))
     }
 
+    @Test func asksForShortNotesInPlainWords() {
+        let prompt = ObserverPrompt.build(previous: nil, earlier: [], lastReply: "Done.", words: 100)
+        #expect(ObserverPrompt.maxBullets == 3)
+        #expect(prompt.contains("at most 3 bullets"))
+        #expect(prompt.contains("plain words"))
+        #expect(prompt.contains("no file names"))
+        #expect(!prompt.contains("No length limits"))
+    }
+
+    @Test func keepsTheFirstThreeBulletsOfAList() {
+        let reply = #"{"built":["a","b","c","d","e"],"left":["x"],"just_now":"Hi"}"#
+        #expect(ObserverPrompt.parse(reply) == ObserverNotes(built: ["a", "b", "c"], left: ["x"], justNow: "Hi"))
+    }
+
     @Test func rejectsAMalformedReply() {
         #expect(ObserverPrompt.parse("not json") == nil)
         #expect(ObserverPrompt.parse(#"{"built":["a"]}"#) == nil)

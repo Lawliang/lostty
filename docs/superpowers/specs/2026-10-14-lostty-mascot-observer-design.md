@@ -112,7 +112,7 @@ prompt.
 `TurnObserver` (main actor, app-wide) keeps, per conversation file, in memory
 only:
 
-- the notes: `why` (a sentence or two) and `asked` (what you asked for),
+- the notes: `why` (one short sentence) and `asked` (what you asked for),
   `decided`, `built` with `progress` ("about two-thirds done", or empty when
   unclear), and `left`,
 - `justNow`: the ELI5 of the last reply,
@@ -134,10 +134,15 @@ the switch off, it runs only when a tap needs it.
 It asks for JSON with one key per note, `{"why": "…", "asked": ["…"],
 "decided": ["…"], "built": ["…"], "progress": "…", "left": ["…"],
 "just_now": "…"}`, written to the developer as "you" and to the developer
-and agent together as "we". The lists are the updated notes: no length
-limits, earlier bullets merged or reworded only when that makes a list
-clearer, and a decision may start with a short label ("Look: …"). `just_now`
-explains the last reply in plain words, for someone who didn't read it.
+and agent together as "we". The lists are the updated notes, kept short
+so the bubble reads at a glance (the first hand check found long, codey
+notes confusing): at most 3 bullets per list, the ones that matter most,
+each a short line of about 12 words; earlier bullets merged, reworded or
+dropped freely; and a decision may start with a short label ("Look: …").
+Everything is in plain words, with no file or function names, commands,
+flags, commit hashes or code terms. `just_now` explains the last reply in
+at most 3 short sentences, for someone who didn't read it. Parsing keeps
+each list's first 3 bullets.
 Missing keys are empty; an empty `just_now` doesn't parse. The prompt lives in `ObserverPrompt`,
 like `SummaryPrompt`. A reply wrapped in a code fence still parses. A reply
 that doesn't parse is an error (§6), and the notes stay as they were.

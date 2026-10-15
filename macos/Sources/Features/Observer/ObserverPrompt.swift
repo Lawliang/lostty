@@ -2,9 +2,9 @@
 import Foundation
 
 /// What the observer knows about one conversation, in the bubble's order.
-/// No list has a length limit.
+/// Each list has at most `ObserverPrompt.maxBullets` bullets.
 struct ObserverNotes: Encodable, Equatable, Sendable {
-    /// Why the session started, in a sentence or two.
+    /// Why the session started, in one short sentence.
     var why = ""
     /// What the developer asked for.
     var asked: [String] = []
@@ -31,6 +31,8 @@ enum ObserverPrompt {
     static let cliWords = 30_000
     /// Apple's on-device model reads about 4,000 tokens.
     static let appleWords = 1_500
+    /// The most bullets a section shows, so the bubble reads at a glance.
+    static let maxBullets = 3
 
     /// `previous`: the notes so far. `earlier`: what's new since they were
     /// written, up to and including your latest prompt. `lastReply`: the
@@ -51,17 +53,20 @@ enum ObserverPrompt {
 
         Answer with JSON only, no code fence:
         {"why": "…", "asked": ["…"], "decided": ["…"], "built": ["…"], "progress": "…", "left": ["…"], "just_now": "…"}
-        - why: why the developer started this session, in a sentence or two.
-        - asked: what they asked for, one short bullet each.
-        - decided: what we decided together, one bullet each. Start a bullet with a short label and a colon \
-        when that helps ("Look: …").
-        - built: what's done and working, one bullet each.
+        - why: why the developer started this session, in one short sentence.
+        - asked: what they asked for.
+        - decided: what we decided together. Start a bullet with a short label and a colon when that helps \
+        ("Look: …").
+        - built: what's done and working.
         - progress: how far along the work is, in a few words ("about two-thirds done"), or "" when unclear.
         - left: what's still to do, and anything waiting on the developer.
-        - just_now: the agent's last reply explained like the developer is five: plain words, short sentences, \
-        what it means for them, and anything it needs from them.
-        Keep what your notes say unless the conversation changed it, and add what's new. Merge or reword \
-        bullets only when that makes a list clearer. No length limits. Leave a list empty when nothing fits it.
+        - just_now: the agent's last reply explained like the developer is five: at most 3 short sentences \
+        on what it means for them and anything it needs from them.
+        Keep it short: at most 3 bullets per list, the ones that matter most, each one short line of about \
+        12 words. Write in plain words, the way you'd tell a friend who isn't looking at the code: no file \
+        names, function names, commands, flags, commit hashes or code terms. Rewrite your notes freely to \
+        stay short and current: merge, reword or drop bullets that no longer matter. Leave a list empty when \
+        nothing fits it.
 
         Your notes so far:
         \(notes)
@@ -75,13 +80,16 @@ enum ObserverPrompt {
     }
 
     /// The notes in a reply, which may be wrapped in a code fence or follow
-    /// a sentence. Missing keys are empty; nil when it isn't a JSON object,
+    /// a sentence. Missing keys are empty, and a list keeps its first
+    /// `maxBullets` bullets; nil when it isn't a JSON object,
     /// a key has the wrong type, or `just_now` is empty.
     static func parse(_ reply: String) -> ObserverNotes? {
         guard let open = reply.firstIndex(of: "{"), let close = reply.lastIndex(of: "}"), open < close,
               let wire = try? JSONDecoder().decode(Wire.self, from: Data(reply[open...close].utf8)),
               let justNow = wire.justNow.map(trimmed), !justNow.isEmpty else { return nil }
-        func list(_ items: [String]?) -> [String] { (items ?? []).map(bullet).filter { !$0.isEmpty } }
+        func list(_ items: [String]?) -> [String] {
+            Array((items ?? []).map(bullet).filter { !$0.isEmpty }.prefix(maxBullets))
+        }
         return ObserverNotes(
             why: trimmed(wire.why ?? ""), asked: list(wire.asked), decided: list(wire.decided),
             built: list(wire.built), progress: trimmed(wire.progress ?? ""), left: list(wire.left),
