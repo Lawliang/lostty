@@ -1,0 +1,1370 @@
+<title>Lostty Neon Signal</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700&family=JetBrains+Mono:wght@400;500;700&family=Unbounded:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: one left-aligned 1180px column; the hero is a wide stage (Mac window + iPhone joined by a signal path);
+   sections below are quiet two-column rows on an aubergine ground. Glow is reserved for live state only. */
+@property --ang { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+:root {
+  color-scheme: dark;
+  --ground: #0b0614;
+  --ground-2: #100919;
+  --panel: #150c26;
+  --panel-2: #1c1131;
+  --line: #2a1c43;
+  --line-2: #3d2a5c;
+  --ink: #f3ecff;
+  --muted: #b4a7cf;
+  --dim: #7d6fa0;
+  --magenta: #e5199c;
+  --magenta-hi: #ff3df2;
+  --cyan: #28e7ff;
+  --mint: #3dffb0;
+  --amber: #ffd84d;
+  --red: #ff4f7b;
+  --arcade-bg: #120a2a;
+  --f-display: "Unbounded", "Avenir Next", "Helvetica Neue", system-ui, sans-serif;
+  --f-body: "Bricolage Grotesque", "Avenir Next", "Helvetica Neue", system-ui, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --wrap: 1180px;
+  --r-win: 12px;
+  --ease: cubic-bezier(.2, .7, .2, 1);
+}
+*, *::before, *::after { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--f-body);
+  font-size: 17px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+a { color: inherit; }
+::selection { background: color-mix(in srgb, var(--magenta) 45%, transparent); color: var(--ink); }
+:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; border-radius: 6px; }
+code, kbd, pre { font-family: var(--f-mono); }
+h1, h2, h3 { text-wrap: balance; margin: 0; }
+p { margin: 0; }
+
+.wrap {
+  max-width: var(--wrap);
+  margin-inline: auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+@media (min-width: 720px) { .wrap { padding-left: max(32px, env(safe-area-inset-left, 0px)); padding-right: max(32px, env(safe-area-inset-right, 0px)); } }
+
+/* The cursor motif: the mascot's right eye is a blinking em-dash cursor. */
+.cur {
+  display: inline-block; width: .55em; height: .11em; border-radius: 1px;
+  background: var(--magenta-hi); vertical-align: baseline; margin-left: .12em;
+  box-shadow: 0 0 10px color-mix(in srgb, var(--magenta-hi) 70%, transparent);
+  animation: blink 1.1s steps(1) infinite;
+}
+@keyframes blink { 50% { opacity: 0; } }
+.eye-blink { animation: blink 1.1s steps(1) infinite; }
+
+/* ---------- Nav ---------- */
+.nav {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 50;
+  background: color-mix(in srgb, var(--ground) 78%, transparent);
+  backdrop-filter: blur(14px) saturate(1.3); -webkit-backdrop-filter: blur(14px) saturate(1.3);
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+}
+.nav .wrap { display: flex; align-items: center; gap: 28px; height: 64px; }
+.brand { display: flex; align-items: center; gap: 10px; text-decoration: none; font-family: var(--f-display); font-weight: 600; font-size: 19px; letter-spacing: -.01em; }
+.brand svg { width: 34px; height: 34px; flex: none; }
+.nav-links { display: flex; gap: 22px; margin-left: 8px; }
+.nav-links a, .nav-gh { text-decoration: none; color: var(--muted); font-size: 15px; font-weight: 500; transition: color .2s; }
+.nav-links a:hover, .nav-gh:hover, .nav-links a[aria-current="page"] { color: var(--ink); }
+.nav-right { margin-left: auto; display: flex; align-items: center; gap: 18px; }
+.nav-gh { display: inline-flex; align-items: center; gap: 7px; }
+.nav-gh svg { width: 18px; height: 18px; }
+@media (max-width: 760px) {
+  .nav .wrap { gap: 14px; }
+  .nav-links a.hide-sm { display: none; }
+  .nav-gh span { display: none; }
+  .nav-links { margin-left: 0; gap: 16px; }
+}
+@media (max-width: 420px) { .nav-right .btn { display: none; } }
+
+/* ---------- Buttons ---------- */
+.btn {
+  --b: var(--line-2);
+  display: inline-flex; align-items: center; gap: 10px;
+  font: 600 15px/1 var(--f-body); letter-spacing: .005em;
+  padding: 13px 20px; border-radius: 10px; text-decoration: none; cursor: pointer;
+  border: 1px solid var(--b); background: transparent; color: var(--ink);
+  transition: background .2s, border-color .2s, box-shadow .25s, transform .2s var(--ease);
+}
+.btn:hover { border-color: var(--muted); }
+.btn:active { transform: translateY(1px); }
+.btn-sm { padding: 9px 14px; font-size: 14px; border-radius: 8px; }
+.btn-hot { background: var(--magenta); border-color: var(--magenta); color: #fff; }
+.btn-hot:hover { background: #f02aa9; border-color: #f02aa9; box-shadow: 0 0 0 1px var(--magenta), 0 8px 30px -6px color-mix(in srgb, var(--magenta) 70%, transparent); }
+.btn .pr { font-family: var(--f-mono); font-weight: 700; opacity: .85; }
+
+/* ---------- Hero ---------- */
+.hero { position: relative; padding-block: 72px 40px; isolation: isolate; }
+.hero::before {
+  content: ""; position: absolute; inset: 0 0 -10%; z-index: -1; pointer-events: none;
+  background:
+    radial-gradient(60% 45% at 30% 70%, color-mix(in srgb, var(--magenta) 16%, transparent), transparent 70%),
+    radial-gradient(35% 35% at 85% 72%, color-mix(in srgb, var(--cyan) 10%, transparent), transparent 70%);
+}
+.hero-head { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr); gap: 40px 56px; align-items: end; }
+.hero h1 {
+  font-family: var(--f-display); font-weight: 600; font-size: clamp(2.15rem, 6.2vw, 4.9rem);
+  line-height: 1.02; letter-spacing: -.035em;
+}
+.hero-copy { display: grid; gap: 22px; padding-bottom: 6px; }
+.hero-copy p { color: var(--muted); font-size: 18px; max-width: 46ch; }
+.hero-copy p strong { color: var(--ink); font-weight: 600; }
+.hero-cta { display: flex; flex-wrap: wrap; gap: 12px; }
+.hero-meta { font-family: var(--f-mono); font-size: 12.5px; color: var(--dim); }
+@media (max-width: 900px) { .hero-head { grid-template-columns: minmax(0, 1fr); } .hero { padding-block: 48px 32px; } }
+
+/* Stage */
+.stage { position: relative; margin-top: 56px; display: flex; align-items: center; gap: 88px; }
+.stage-signal { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; z-index: 3; }
+.stage-signal .rail { fill: none; stroke: var(--line-2); stroke-width: 1.2; stroke-dasharray: 2 6; }
+.stage-signal .node { fill: var(--ground); stroke: var(--line-2); stroke-width: 1.2; }
+.stage-signal .trail { fill: none; stroke-width: 2.4; stroke-linecap: round; opacity: 0; }
+.stage-signal .trail.glow { stroke-width: 9; filter: url(#bloom); }
+.stage-signal .head { opacity: 0; }
+.stage-caption {
+  margin-top: 22px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  font-family: var(--f-mono); font-size: 13px; color: var(--muted);
+}
+.cap-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 10px var(--cyan); transition: background .3s, box-shadow .3s; flex: none; }
+.stage[data-phase="wait"] ~ .stage-caption .cap-dot { background: var(--magenta-hi); box-shadow: 0 0 10px var(--magenta-hi); }
+.cap-text { min-width: 0; flex: 1 1 260px; }
+.cap-ctrl { font: 500 12.5px var(--f-mono); color: var(--muted); background: none; border: 1px solid var(--line-2); border-radius: 6px; padding: 5px 10px; cursor: pointer; }
+.cap-ctrl:hover { color: var(--ink); border-color: var(--muted); }
+.stage.paused *, .stage.paused *::before, .stage.paused *::after { animation-play-state: paused !important; }
+
+/* Mac window */
+.mac {
+  position: relative; flex: 1 1 0; min-width: 0; max-width: 700px;
+  border-radius: var(--r-win); background: var(--arcade-bg);
+  box-shadow: 0 0 0 1px #2c1d4f, 0 40px 80px -30px #000, 0 0 120px -40px color-mix(in srgb, var(--magenta) 45%, transparent);
+  z-index: 2;
+}
+.mac-bar { height: 38px; display: flex; align-items: center; gap: 12px; padding-inline: 14px; border-bottom: 1px solid #241743; background: #170e33; border-radius: var(--r-win) var(--r-win) 0 0; position: relative; }
+.lights { display: flex; gap: 7px; }
+.lights i { width: 11px; height: 11px; border-radius: 50%; background: #ff5f57; }
+.lights i:nth-child(2) { background: #febc2e; } .lights i:nth-child(3) { background: #28c840; }
+.mac-title { position: absolute; left: 50%; transform: translateX(-50%); font: 500 12.5px var(--f-body); color: #b9a9e3; white-space: nowrap; }
+.mac-status {
+  margin-left: auto; display: inline-flex; align-items: center; gap: 7px; white-space: nowrap;
+  font: 500 11.5px var(--f-mono); color: #d9ccff; padding: 3px 9px; border-radius: 999px; background: #22164a;
+  transition: background .3s, color .3s, box-shadow .3s; position: relative; z-index: 1;
+}
+.mac-status .sg { color: var(--magenta-hi); width: 1ch; text-align: center; }
+.stage[data-phase="wait"] .mac-status { background: color-mix(in srgb, var(--magenta) 30%, #22164a); color: #fff; box-shadow: 0 0 0 1px var(--magenta); }
+.term {
+  position: relative; height: 410px; overflow: hidden; border-radius: 0 0 var(--r-win) var(--r-win);
+  padding: 16px 18px; display: flex; flex-direction: column; justify-content: flex-end; gap: 1px;
+  font: 400 12.75px/1.62 var(--f-mono); color: #f3ecff;
+  background-color: var(--arcade-bg);
+  background-image: linear-gradient(#ff3df20d 1px, transparent 1px), linear-gradient(90deg, #ff3df20d 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+.term::after { /* soft CRT phosphor */
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: repeating-linear-gradient(0deg, #00000022 0 1px, transparent 1px 3px);
+  mix-blend-mode: multiply; opacity: .6;
+}
+.term > * { flex-shrink: 0; }
+.ln { white-space: pre-wrap; word-break: break-word; min-height: 1.62em; }
+.ln.in { animation: lnIn .32s var(--ease) both; }
+@keyframes lnIn { from { opacity: 0; transform: translateY(4px); } }
+.c-dim { color: #8a7cb3; } .c-mag { color: #ff3df2; } .c-cy { color: #28e7ff; } .c-ok { color: #3dffb0; } .c-yel { color: #ffd84d; } .c-red { color: #ff4f7b; }
+.c-b { font-weight: 700; }
+.tbox { border: 1px solid #6f6197; border-radius: 7px; padding: 6px 12px; margin-block: 4px; }
+.tbox.welcome { border-color: #ff7af6; display: inline-block; align-self: flex-start; }
+.tbox.ask { border-color: #ff7af6; background: #1a0f36; box-shadow: 0 0 0 1px #ff3df233, 0 0 28px -8px #ff3df2aa; }
+.diff { display: block; padding-inline: 4px; border-radius: 3px; }
+.diff.rm { background: #ff4f7b24; } .diff.add { background: #3dffb01f; }
+.opt { display: block; border-radius: 4px; padding-inline: 4px; margin-inline: -4px; transition: background .2s; }
+.opt.pick { background: #3dffb033; color: #fff; }
+.spin { color: #ff7af6; }
+.spin .g { display: inline-block; width: 1.2ch; color: #ff3df2; }
+
+/* Claude trace: a comet ray running round the window edge */
+.trace, .trace-bloom {
+  position: absolute; inset: -1px; border-radius: calc(var(--r-win) + 1px); pointer-events: none;
+  --t1: var(--magenta-hi); --t2: var(--cyan);
+  background: conic-gradient(from var(--ang), transparent 0 64%, color-mix(in srgb, var(--t2) 70%, transparent) 80%, var(--t1) 93%, #fff 95%, transparent 96%);
+  animation: orbit 3.2s linear infinite; transition: opacity .5s;
+}
+.trace { padding: 1.6px; -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0); z-index: 3; }
+.trace-bloom { inset: -6px; border-radius: calc(var(--r-win) + 6px); filter: blur(12px); opacity: .55; z-index: -1; }
+@keyframes orbit { to { --ang: 360deg; } }
+.off .trace, .off .trace-bloom, .off > .trace, .off > .trace-bloom { opacity: 0; }
+
+/* iPhone */
+.phone {
+  position: relative; flex: none; width: 258px; aspect-ratio: 258 / 540; max-width: 100%;
+  border-radius: 44px; padding: 9px; background: #050308;
+  box-shadow: 0 0 0 1.5px #3b2d55, 0 0 0 5px #0a0610, 0 0 0 6px #2a1f3b, 0 40px 80px -24px #000, 0 0 90px -30px color-mix(in srgb, var(--cyan) 35%, transparent);
+  z-index: 2; margin-top: 40px;
+}
+.screen { position: relative; height: 100%; border-radius: 36px; overflow: hidden; background: #000; color: #f3f1f7; padding: 10px 12px 0; font-family: -apple-system, "SF Pro Text", var(--f-body); }
+.island { position: absolute; left: 50%; top: 9px; width: 78px; height: 22px; background: #000; border-radius: 12px; transform: translateX(-50%); box-shadow: 0 0 0 1px #111; z-index: 4; }
+.sbar { display: flex; justify-content: space-between; align-items: center; height: 22px; padding-inline: 12px 8px; font-size: 12px; font-weight: 600; }
+.sbar .ic { display: flex; gap: 4px; align-items: center; }
+.sbar .bat { width: 20px; height: 9px; border: 1px solid #9ea; border-radius: 3px; position: relative; } .sbar .bat::after { content: ""; position: absolute; inset: 1px 3px 1px 1px; background: #3dd68c; border-radius: 1px; }
+.p-head { display: flex; align-items: center; gap: 6px; margin-top: 10px; }
+.p-head svg { width: 26px; height: 26px; }
+.p-head b { font-size: 21px; font-weight: 700; letter-spacing: -.01em; }
+.p-icons { margin-left: auto; display: flex; gap: 6px; }
+.p-btn { width: 30px; height: 30px; border-radius: 50%; background: #1c1b20; display: grid; place-items: center; position: relative; color: #fff; }
+.p-btn svg { width: 14px; height: 14px; }
+.badge { position: absolute; top: -3px; right: -3px; min-width: 14px; height: 14px; padding-inline: 3px; border-radius: 7px; background: var(--magenta); color: #fff; font: 700 9px/14px -apple-system, var(--f-body); text-align: center; transform: scale(0); transition: transform .35s var(--ease); }
+.badge.on { transform: scale(1); }
+.p-conn { display: flex; align-items: center; gap: 6px; margin-top: 10px; font-size: 12px; color: #9a98a3; font-weight: 600; }
+.p-conn span { font-size: 10px; color: #3dd68c; border: 1px solid #2e6b4c; background: #10291d; border-radius: 999px; padding: 0 6px; }
+.chips { display: flex; gap: 5px; margin-top: 8px; overflow: hidden; white-space: nowrap; }
+.chip { flex: none; font-size: 10px; font-weight: 600; padding: 4px 4px 4px 8px; border-radius: 999px; background: #17161b; border: 1px solid #2a2930; display: inline-flex; gap: 5px; align-items: center; color: #e9e7ef; }
+.chip i { font-style: normal; background: #000; border-radius: 999px; padding: 0 5px; font-size: 9px; transition: color .3s; }
+.chip.hot { border-color: var(--magenta); color: #fff; }
+.chip.hot i { color: var(--magenta-hi); }
+.cards { position: relative; display: flex; flex-direction: column; gap: 7px; margin-top: 10px; }
+.card {
+  --cbg: #1b1530; --cacc: #c89bff; --cline: #3a2c62;
+  position: relative; border-radius: 13px; padding: 9px 40px 9px 11px; background: var(--cbg);
+  border: 1px solid var(--cline); min-height: 74px; will-change: transform;
+}
+.card h4 { margin: 0; font-size: 12.5px; font-weight: 600; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card .path { font: 10px/1.5 var(--f-mono); color: #9b97ad; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card .path b { color: var(--cacc); font-weight: 700; }
+.card .what { font: 9.6px/1.5 var(--f-mono); color: #a7a3b8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+.card .st { font: 600 9.6px/1.5 var(--f-mono); color: var(--cacc); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card .axo { position: absolute; right: 22px; top: 8px; width: 40px; height: 40px; }
+.card .chev { position: absolute; right: 6px; top: 50%; translate: 0 -50%; width: 18px; height: 18px; border-radius: 50%; background: #00000066; display: grid; place-items: center; color: #ccc; font-size: 10px; }
+.card.ready { --cbg: #d9d3cb; --cline: #e9e4dd; --cacc: #3a2f28; color: #2b2622; }
+.card.ready .path { color: #6c645c; } .card.ready .path b { color: #c56a1b; } .card.ready .chev { background: #0000001a; color: #555; }
+.card.idle { --cbg: #19181d; --cline: #2b2a31; --cacc: #e8e6ee; }
+.card.idle .path b { color: var(--magenta-hi); }
+.card .ask-row { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .45s var(--ease); }
+.card .ask-row > div { overflow: hidden; display: flex; gap: 6px; }
+.card .ask-row button { flex: 1; margin-top: 7px; font: 600 10.5px/1 -apple-system, var(--f-body); padding: 7px 0; border-radius: 8px; border: 0; color: #fff; background: #ffffff1a; cursor: default; transition: background .2s, transform .15s; }
+.card .ask-row button.allow { background: var(--magenta); }
+.card .ask-row button.allow.pressed { background: #ff5cc0; transform: scale(.95); }
+.card.waiting .ask-row { grid-template-rows: 1fr; }
+.card::after { content: ""; position: absolute; inset: -1px; border-radius: 13px; pointer-events: none; opacity: 0; transition: opacity .45s; box-shadow: 0 0 0 1.5px var(--magenta-hi), 0 0 22px 2px color-mix(in srgb, var(--magenta) 60%, transparent); }
+.card.waiting::after { opacity: 1; animation: cardPulse 1.6s ease-in-out infinite; }
+@keyframes cardPulse { 50% { opacity: .55; } }
+.card.waiting .st { color: var(--magenta-hi); }
+.card.waiting .axo { animation: wave .9s ease-in-out infinite; transform-origin: 50% 80%; }
+@keyframes wave { 0%, 100% { transform: rotate(-7deg); } 50% { transform: rotate(7deg) translateY(-1px); } }
+.card.working .axo { animation: bob 2.2s ease-in-out infinite; }
+@keyframes bob { 50% { transform: translateY(-2px); } }
+.tap { position: absolute; width: 34px; height: 34px; margin: -17px 0 0 -17px; border-radius: 50%; pointer-events: none; z-index: 5; background: #ffffff40; box-shadow: 0 0 0 1px #ffffff80; opacity: 0; transform: scale(.6); }
+.tap.go { animation: tap .7s var(--ease) forwards; }
+@keyframes tap { 0% { opacity: 0; transform: scale(1.3); } 30% { opacity: 1; transform: scale(.8); } 100% { opacity: 0; transform: scale(1.6); } }
+.home-ind { position: absolute; bottom: 7px; left: 50%; width: 92px; height: 4px; border-radius: 3px; background: #ffffffcc; transform: translateX(-50%); }
+
+@media (max-width: 860px) {
+  .stage { flex-direction: column; align-items: stretch; gap: 64px; }
+  .mac { max-width: none; }
+  .term { height: 360px; font-size: 11px; padding: 12px; }
+  .phone { align-self: flex-end; margin: 0 6% 0 0; width: 236px; }
+  .mac-title { display: none; }
+}
+@media (max-width: 480px) {
+  .phone { align-self: center; margin: 0; }
+}
+
+/* ---------- Sections ---------- */
+section { scroll-margin-top: 72px; }
+.sec { padding-block: 112px; border-top: 1px solid var(--line); }
+.sec-head { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px 56px; align-items: end; margin-bottom: 56px; }
+.sec-head h2, .h2 { font-family: var(--f-display); font-weight: 500; font-size: clamp(1.65rem, 3.6vw, 2.75rem); line-height: 1.08; letter-spacing: -.03em; }
+.sec-head p { color: var(--muted); max-width: 52ch; }
+@media (max-width: 820px) { .sec { padding-block: 80px; } .sec-head { grid-template-columns: minmax(0, 1fr); margin-bottom: 40px; } }
+
+/* Why: four problems and fixes */
+.why-list { display: grid; }
+.why {
+  display: grid; grid-template-columns: 110px minmax(0, 1fr) minmax(0, 1.05fr); gap: 24px 48px;
+  padding-block: 44px; border-top: 1px solid var(--line);
+}
+.why:last-child { border-bottom: 1px solid var(--line); }
+.why-n { font-family: var(--f-display); font-weight: 400; font-size: 44px; line-height: 1; color: transparent; -webkit-text-stroke: 1px var(--line-2); letter-spacing: -.04em; }
+.why h3 { font-family: var(--f-display); font-weight: 500; font-size: 22px; line-height: 1.2; letter-spacing: -.02em; margin-bottom: 16px; }
+.why .prob { color: var(--dim); font-size: 16px; }
+.why .prob b, .why .fix b.lab { font-family: var(--f-mono); font-size: 12px; font-weight: 500; letter-spacing: .02em; display: block; margin-bottom: 4px; }
+.why .prob b { color: var(--dim); }
+.why .fix { display: grid; gap: 18px; align-content: start; }
+.why .fix p { color: var(--ink); max-width: 56ch; }
+.why .fix b.lab { color: var(--cyan); }
+@media (max-width: 960px) {
+  .why { grid-template-columns: 64px minmax(0, 1fr); }
+  .why .fix { grid-column: 2; }
+  .why-n { font-size: 32px; }
+}
+@media (max-width: 560px) { .why { grid-template-columns: minmax(0, 1fr); padding-block: 36px; } .why .fix { grid-column: 1; } }
+
+.vig { border: 1px solid var(--line); border-radius: 12px; background: var(--ground-2); padding: 16px; font-family: var(--f-mono); font-size: 12px; color: var(--muted); }
+.vig-chips { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.vig-chips span { border: 1px solid var(--line-2); border-radius: 999px; padding: 4px 10px; display: inline-flex; gap: 7px; align-items: center; }
+.vig-chips span em { font-style: normal; color: var(--ink); }
+.vig-chips span.hot { border-color: var(--magenta); color: var(--ink); box-shadow: 0 0 16px -6px var(--magenta); }
+.vig-chips .bell { margin-left: auto; position: relative; width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--line-2); display: grid; place-items: center; padding: 0; }
+.vig-chips .bell::after { content: "2"; position: absolute; top: -5px; right: -5px; background: var(--magenta); color: #fff; border-radius: 99px; font-size: 9.5px; padding: 0 5px; line-height: 15px; }
+.keys { display: flex; gap: 6px; justify-content: center; }
+.key { width: 38px; height: 46px; border-radius: 7px; background: #241a37; display: grid; place-items: center; color: var(--ink); font: 500 17px -apple-system, var(--f-body); position: relative; }
+.key.hit { background: color-mix(in srgb, var(--cyan) 28%, #241a37); box-shadow: 0 0 0 1px var(--cyan); }
+.keys .gap-tap { position: absolute; left: calc(100% + 1px); top: 70%; width: 10px; height: 10px; margin-left: -2px; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 0 5px color-mix(in srgb, var(--cyan) 25%, transparent); z-index: 1; }
+.vig-row { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; justify-content: space-between; }
+.vig-note { color: var(--dim); font-size: 11.5px; }
+.minis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.mini { position: relative; height: 82px; border-radius: 8px; padding: 9px; font-size: 10px; line-height: 1.5; overflow: visible; --r-win: 8px; }
+.mini .mbody { position: absolute; inset: 0; border-radius: 8px; z-index: 0; }
+.mini > span { position: relative; z-index: 1; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mini .trace { padding: 1.3px; }
+.mini .trace-bloom { filter: blur(8px); }
+.sheet { display: grid; gap: 10px; }
+.sheet-row { display: flex; justify-content: space-between; gap: 10px; align-items: center; border-bottom: 1px solid var(--line); padding-bottom: 9px; }
+.sheet-row:last-child { border-bottom: 0; padding-bottom: 0; }
+.seg { display: inline-flex; border: 1px solid var(--line-2); border-radius: 7px; overflow: hidden; }
+.seg span { padding: 3px 9px; } .seg span.on { background: var(--magenta); color: #fff; }
+.plus { width: 26px; height: 26px; border-radius: 50%; background: var(--ink); color: var(--ground); display: grid; place-items: center; font: 600 18px/1 var(--f-body); }
+.tip { border-left: 2px solid var(--cyan); padding: 4px 0 4px 14px; color: var(--muted); font-size: 15.5px; }
+.tip b { color: var(--ink); font-weight: 600; }
+
+/* Skins */
+.skins-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 48px; align-items: start; }
+@media (max-width: 900px) { .skins-grid { grid-template-columns: minmax(0, 1fr); } }
+.pack { display: grid; gap: 10px; }
+.pack + .pack { margin-top: 26px; }
+.pack h3 { font: 500 13px var(--f-mono); color: var(--dim); }
+.pack-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.skin-btn {
+  display: flex; align-items: center; gap: 11px; text-align: left; padding: 9px 11px; border-radius: 9px;
+  border: 1px solid transparent; background: none; color: var(--ink); cursor: pointer; font: inherit; min-width: 0;
+  transition: background .2s, border-color .2s;
+}
+.skin-btn:hover { background: var(--panel); }
+.skin-btn[aria-pressed="true"] { background: var(--panel); border-color: var(--line-2); }
+.sw { width: 26px; height: 26px; border-radius: 7px; flex: none; position: relative; box-shadow: inset 0 0 0 1px #ffffff14; }
+.sw::after { content: ""; position: absolute; right: 4px; bottom: 4px; width: 7px; height: 7px; border-radius: 50%; background: var(--sa); box-shadow: -6px -6px 0 -1px var(--sb); }
+.skin-btn .nm { font: 500 13.5px var(--f-mono); display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.skin-btn .rr { font-size: 12px; color: var(--dim); display: block; }
+.skin-btn > span:last-child { min-width: 0; }
+.preview { position: sticky; top: 92px; display: grid; gap: 18px; }
+.pv-win { position: relative; border-radius: 12px; background: var(--sbg); transition: background-color .5s; box-shadow: 0 0 0 1px #ffffff12, 0 30px 70px -30px #000; }
+.pv-bar { height: 34px; display: flex; align-items: center; gap: 10px; padding-inline: 12px; border-bottom: 1px solid #ffffff10; background: #00000033; border-radius: 12px 12px 0 0; }
+.pv-bar .t { font: 500 12px var(--f-mono); color: var(--sfg); opacity: .8; }
+.rar { margin-left: auto; font: 600 10.5px var(--f-mono); letter-spacing: .06em; padding: 2px 8px; border-radius: 999px; border: 1px solid currentColor; text-transform: uppercase; }
+.pv-body {
+  position: relative; padding: 18px; min-height: 290px; font: 12.5px/1.7 var(--f-mono); color: var(--sfg);
+  border-radius: 0 0 12px 12px; background-image: var(--tex); transition: color .4s; overflow: hidden;
+}
+.pv-body .ln { min-height: 1.7em; }
+.pal { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 4px; margin-block: 10px; max-width: 360px; }
+.pal i { aspect-ratio: 1.6; border-radius: 3px; transition: background .4s; }
+.pv-foot { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 18px; align-items: center; }
+.pv-foot p { color: var(--muted); font-size: 15.5px; }
+.pv-card { width: 250px; max-width: 100%; }
+.pv-card .card { min-height: 0; }
+@media (max-width: 560px) { .pv-foot { grid-template-columns: minmax(0, 1fr); } .pv-body { font-size: 11.5px; padding: 14px; } .pack-list { grid-template-columns: minmax(0, 1fr); } }
+
+/* How it works */
+.flow { display: grid; grid-template-columns: minmax(0, 1fr) minmax(120px, 1.3fr) minmax(0, 1fr); align-items: center; gap: 0; margin-bottom: 64px; }
+.flow-node { border: 1px solid var(--line-2); border-radius: 14px; padding: 20px; background: var(--panel); display: grid; gap: 6px; }
+.flow-node h3 { font-family: var(--f-display); font-weight: 500; font-size: 18px; letter-spacing: -.02em; }
+.flow-node p { color: var(--muted); font-size: 14.5px; }
+.flow-node .k { font: 500 12px var(--f-mono); color: var(--cyan); }
+.flow-mid { position: relative; height: 150px; display: grid; align-items: center; }
+.tunnel { position: relative; height: 34px; margin-inline: -1px; border-block: 1px solid color-mix(in srgb, var(--cyan) 40%, transparent); background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--cyan) 8%, transparent), transparent); container-type: inline-size; overflow: hidden; }
+.tunnel .lbl { position: absolute; left: 50%; top: -30px; transform: translateX(-50%); white-space: nowrap; font: 500 12px var(--f-mono); color: var(--cyan); }
+.pk { position: absolute; top: 50%; width: 22px; height: 3px; margin-top: -1.5px; border-radius: 2px; left: -22px; animation: pk 2.6s linear infinite; }
+.pk.out { background: linear-gradient(90deg, transparent, var(--magenta-hi)); box-shadow: 0 0 8px var(--magenta-hi); margin-top: -6px; }
+.pk.back { background: linear-gradient(270deg, transparent, var(--cyan)); box-shadow: 0 0 8px var(--cyan); margin-top: 4px; animation-name: pkBack; }
+.pk:nth-child(3) { animation-delay: -1.3s; } .pk:nth-child(5) { animation-delay: -.6s; }
+@keyframes pk { to { transform: translateX(calc(100cqw + 44px)); } }
+@keyframes pkBack { from { transform: translateX(calc(100cqw + 44px)); } to { transform: translateX(0); } }
+.ghost { position: absolute; left: 50%; bottom: -6px; transform: translateX(-50%); border: 1px dashed var(--line-2); border-radius: 10px; padding: 7px 12px; font: 500 12px var(--f-mono); color: var(--dim); white-space: nowrap; text-align: center; }
+.ghost s { color: var(--muted); }
+.facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 32px; }
+.fact h3 { font-family: var(--f-body); font-weight: 600; font-size: 18px; margin-bottom: 6px; }
+.fact p { color: var(--muted); font-size: 15.5px; }
+@media (max-width: 900px) { .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 720px) {
+  .flow { grid-template-columns: minmax(0, 1fr); }
+  .flow-mid { height: 130px; justify-items: center; }
+  .tunnel { width: 34px; height: 100%; border-block: 0; border-inline: 1px solid color-mix(in srgb, var(--cyan) 40%, transparent); background: linear-gradient(transparent, color-mix(in srgb, var(--cyan) 8%, transparent), transparent); }
+  .tunnel .pk { display: none; }
+  .tunnel .lbl { left: 46px; top: 50%; transform: translateY(-50%); }
+  .ghost { left: auto; right: 0; transform: none; bottom: 50%; translate: 0 50%; display: none; }
+  .ghost-sm { display: block !important; }
+}
+@media (max-width: 520px) { .facts { grid-template-columns: minmax(0, 1fr); gap: 24px; } }
+.ghost-sm { display: none; margin-top: 12px; font: 500 12.5px var(--f-mono); color: var(--dim); }
+
+/* Ghostty credit */
+.credit { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 24px 56px; align-items: start; }
+.credit p { color: var(--muted); max-width: 58ch; }
+.credit p + p { margin-top: 14px; }
+.credit a { color: var(--ink); text-decoration-color: var(--magenta); text-underline-offset: 3px; }
+@media (max-width: 820px) { .credit { grid-template-columns: minmax(0, 1fr); } }
+
+/* Get started */
+.start { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 48px; }
+@media (max-width: 900px) { .start { grid-template-columns: minmax(0, 1fr); } }
+.reqs { list-style: none; padding: 0; margin: 0 0 28px; display: grid; gap: 12px; }
+.reqs li { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 10px; color: var(--muted); }
+.reqs li::before { content: ">"; font: 700 14px/1.75 var(--f-mono); color: var(--magenta-hi); }
+.reqs b { color: var(--ink); font-weight: 600; }
+.code {
+  position: relative; border-radius: 12px; background: #0e0820; border: 1px solid var(--line-2); overflow: hidden;
+}
+.code-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 8px 8px 16px; border-bottom: 1px solid var(--line); font: 500 12px var(--f-mono); color: var(--dim); }
+.copy { font: 600 12px var(--f-mono); color: var(--ink); background: var(--panel-2); border: 1px solid var(--line-2); border-radius: 6px; padding: 6px 11px; cursor: pointer; transition: border-color .2s, color .2s; }
+.copy:hover { border-color: var(--muted); }
+.copy.done { color: var(--mint); border-color: color-mix(in srgb, var(--mint) 50%, transparent); }
+.code pre { margin: 0; padding: 16px; overflow-x: auto; font-size: 13.5px; line-height: 1.75; color: var(--ink); }
+.code pre .p { color: var(--magenta-hi); user-select: none; }
+.steps { list-style: none; padding: 0; margin: 28px 0 0; counter-reset: s 2; display: grid; gap: 16px; }
+.steps li { counter-increment: s; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 12px; color: var(--muted); }
+.steps li::before { content: counter(s); font: 500 13px/26px var(--f-mono); width: 26px; height: 26px; text-align: center; border-radius: 50%; border: 1px solid var(--line-2); color: var(--ink); }
+.steps b { color: var(--ink); font-weight: 600; }
+.steps code, .doc code:not(pre code), .tip code { font-size: .86em; background: var(--panel-2); border: 1px solid var(--line); padding: 1px 6px; border-radius: 5px; color: var(--ink); }
+.walk { margin-top: 36px; display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+.walk svg { width: 64px; height: 64px; flex: none; }
+.walk b { font-family: var(--f-display); font-weight: 500; font-size: 20px; letter-spacing: -.02em; display: block; }
+.walk span { color: var(--muted); font-size: 15px; }
+
+/* ---------- Docs view ---------- */
+.docs { padding-block: 40px 96px; }
+.docs-grid { display: grid; grid-template-columns: 220px minmax(0, 1fr) 200px; gap: 48px; align-items: start; }
+.dside, .dtoc { position: sticky; top: 92px; font-size: 14.5px; }
+.dside h4, .dtoc h4 { margin: 0 0 10px; font: 500 12px var(--f-mono); color: var(--dim); }
+.dside nav { display: grid; gap: 2px; }
+.dside button { text-align: left; font: inherit; color: var(--muted); background: none; border: 0; border-radius: 7px; padding: 7px 10px; cursor: pointer; display: flex; align-items: center; gap: 8px; }
+.dside button:hover { color: var(--ink); background: var(--panel); }
+.dside button[aria-current="page"] { color: var(--ink); background: var(--panel); }
+.dside button[aria-current="page"]::before { content: ""; width: 9px; height: 2px; border-radius: 1px; background: var(--magenta-hi); box-shadow: 0 0 6px var(--magenta-hi); animation: blink 1.1s steps(1) infinite; }
+.dside .side-foot { margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--line); font-size: 13.5px; color: var(--dim); }
+.dside .side-foot a { color: var(--muted); }
+.dtoc a { display: block; text-decoration: none; color: var(--dim); padding: 4px 0 4px 12px; border-left: 1px solid var(--line); transition: color .2s, border-color .2s; }
+.dtoc a:hover { color: var(--ink); }
+.dtoc a.on { color: var(--ink); border-left-color: var(--magenta-hi); }
+.doc { min-width: 0; max-width: 720px; }
+.crumb { font: 500 12.5px var(--f-mono); color: var(--dim); margin-bottom: 14px; }
+.doc h1 { font-family: var(--f-display); font-weight: 600; font-size: clamp(1.9rem, 4vw, 2.7rem); letter-spacing: -.035em; line-height: 1.08; margin-bottom: 16px; }
+.doc .lede { color: var(--muted); font-size: 18.5px; margin-bottom: 8px; }
+.doc h2 { font-family: var(--f-display); font-weight: 500; font-size: 22px; letter-spacing: -.02em; margin: 52px 0 14px; scroll-margin-top: 84px; padding-top: 20px; border-top: 1px solid var(--line); }
+.doc h3 { font-family: var(--f-body); font-weight: 600; font-size: 18px; margin: 28px 0 8px; display: flex; gap: 10px; align-items: baseline; }
+.doc h3 .n { font: 500 13px var(--f-mono); color: var(--magenta-hi); }
+.doc p, .doc li { color: #d6cceb; }
+.doc p + p, .doc p + ul, .doc ul + p, .doc .code + p, .doc p + .code, .doc .callout + p, .doc p + .callout { margin-top: 14px; }
+.doc ul, .doc ol { padding-left: 22px; margin: 12px 0 0; display: grid; gap: 6px; }
+.doc a { color: var(--ink); text-decoration-color: var(--magenta); text-underline-offset: 3px; }
+.doc b { color: var(--ink); font-weight: 600; }
+.doc .code { margin-top: 14px; }
+.callout { border-radius: 10px; padding: 14px 16px; border: 1px solid color-mix(in srgb, var(--cyan) 35%, transparent); background: color-mix(in srgb, var(--cyan) 6%, var(--ground)); margin-top: 18px; }
+.callout .ct { font: 600 13px var(--f-mono); color: var(--cyan); display: block; margin-bottom: 4px; }
+.callout.warn { border-color: color-mix(in srgb, var(--amber) 40%, transparent); background: color-mix(in srgb, var(--amber) 6%, var(--ground)); }
+.callout.warn .ct { color: var(--amber); }
+.callout p { color: var(--ink); }
+.doc-next { margin-top: 56px; display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+@media (max-width: 1100px) { .docs-grid { grid-template-columns: 200px minmax(0, 1fr); } .dtoc { display: none; } }
+@media (max-width: 760px) {
+  .docs-grid { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+  .dside { position: static; }
+  .dside nav { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 6px; }
+  .dside button { white-space: nowrap; border: 1px solid var(--line); flex: none; }
+  .dside .side-foot { display: none; }
+}
+
+/* Footer */
+footer { border-top: 1px solid var(--line); padding-block: 48px; color: var(--dim); font-size: 14.5px; }
+.foot { display: flex; flex-wrap: wrap; gap: 24px 48px; justify-content: space-between; align-items: flex-start; }
+.foot .brand { color: var(--ink); }
+.foot p { margin-top: 10px; max-width: 46ch; }
+.foot nav { display: flex; gap: 22px; flex-wrap: wrap; }
+.foot nav a { color: var(--muted); text-decoration: none; }
+.foot nav a:hover { color: var(--ink); }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
+  .cur, .eye-blink { animation: none !important; }
+  .trace, .trace-bloom { background: none; box-shadow: 0 0 0 1.5px var(--t1) inset; }
+  .trace-bloom { display: none; }
+  .pk { display: none; }
+}
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <symbol id="axo" viewBox="0 0 100 100">
+      <path d="M60 82 C70 86 80 84 84 76 C86 72 82 70 80 73 C77 78 70 79 63 76 Z" fill="#EC97C6"/>
+      <ellipse cx="50" cy="76" rx="15" ry="12" fill="#EC97C6"/><ellipse cx="50" cy="79" rx="8" ry="6" fill="#F7B2D8"/>
+      <ellipse cx="39" cy="80" rx="4.2" ry="3.2" fill="#F7B2D8"/><ellipse cx="61" cy="80" rx="4.2" ry="3.2" fill="#F7B2D8"/>
+      <ellipse cx="43" cy="88" rx="5" ry="3" fill="#F7B2D8"/><ellipse cx="57" cy="88" rx="5" ry="3" fill="#F7B2D8"/>
+      <ellipse cx="14" cy="21" rx="9" ry="4.6" transform="rotate(-42 14 21)" fill="#E5199C"/><ellipse cx="86" cy="21" rx="9" ry="4.6" transform="rotate(42 86 21)" fill="#E5199C"/>
+      <ellipse cx="9" cy="34" rx="9" ry="4.6" transform="rotate(-12 9 34)" fill="#E5199C"/><ellipse cx="91" cy="34" rx="9" ry="4.6" transform="rotate(12 91 34)" fill="#E5199C"/>
+      <ellipse cx="11" cy="47" rx="8.5" ry="4.3" transform="rotate(18 11 47)" fill="#E5199C"/><ellipse cx="89" cy="47" rx="8.5" ry="4.3" transform="rotate(-18 89 47)" fill="#E5199C"/>
+      <path d="M50 15 C76.4 15 83 26.7 83 42.3 C83 60.5 69.8 67 50 67 C30.2 67 17 60.5 17 42.3 C17 26.7 23.6 15 50 15 Z" fill="#F7B2D8"/>
+      <ellipse cx="34" cy="24" rx="7" ry="3.2" fill="#FFFFFF" opacity="0.35" transform="rotate(-18 34 24)"/>
+      <path d="M46 53 Q48 56 50 53.5 Q52 56 54 53" fill="none" stroke="#3A1530" stroke-width="2.42" stroke-linecap="round" stroke-linejoin="round"/>
+      <ellipse cx="26" cy="55" rx="5" ry="3" fill="#E5199C" opacity="0.45"/><ellipse cx="75" cy="55" rx="5" ry="3" fill="#E5199C" opacity="0.45"/>
+    </symbol>
+    <symbol id="eyes-open" viewBox="0 0 100 100">
+      <path d="M33 36 L42 43 L33 50" fill="none" stroke="#3A1530" stroke-width="4.4" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="eyes-shut" viewBox="0 0 100 100">
+      <path d="M32 43 Q37.5 48 43 43 M56 43 Q62 48 68 43" fill="none" stroke="#3A1530" stroke-width="3.6" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="i-gh" viewBox="0 0 16 16"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></symbol>
+  </defs>
+</svg>
+
+<header class="nav">
+  <div class="wrap">
+    <a class="brand" href="#home" aria-label="Lostty home">
+      <svg viewBox="0 0 100 100" aria-hidden="true"><use href="#axo"/><use href="#eyes-open"/><path class="eye-blink" d="M56 43 H68" stroke="#3A1530" stroke-width="4.4" stroke-linecap="round"/></svg>
+      lostty
+    </a>
+    <nav class="nav-links" aria-label="Main">
+      <a class="hide-sm" href="#why">Features</a>
+      <a class="hide-sm" href="#skins">Skins</a>
+      <a class="hide-sm" href="#how">How it works</a>
+      <a href="#docs" data-nav="docs">Docs</a>
+    </nav>
+    <div class="nav-right">
+      <a class="nav-gh" href="https://github.com/Lawliang/lostty" target="_blank" rel="noopener"><svg aria-hidden="true"><use href="#i-gh"/></svg><span>GitHub</span></a>
+      <a class="btn btn-hot btn-sm" href="#start">Get Lostty</a>
+    </div>
+  </div>
+</header>
+
+<!-- ======================= HOME ======================= -->
+<main id="home">
+  <section class="hero" aria-labelledby="hero-title">
+    <div class="wrap">
+      <div class="hero-head">
+        <h1 id="hero-title">Leave your desk, not your terminal.<span class="cur" aria-hidden="true"></span></h1>
+        <div class="hero-copy">
+          <p>A fast, native Mac terminal with an iPhone app, for running <strong>Claude Code</strong> and <strong>Codex</strong>. Every terminal keeps running on your Mac. Your phone shows you which one needs you, and you answer it right there.</p>
+          <div class="hero-cta">
+            <a class="btn btn-hot" href="#start"><span class="pr" aria-hidden="true">&gt;</span>Get started</a>
+            <a class="btn" href="#docs">Read the docs</a>
+          </div>
+          <div class="hero-meta">macOS 15+ and iOS 17+. Free, MIT licensed, built on Ghostty.</div>
+        </div>
+      </div>
+
+      <div class="stage" id="stage" data-phase="work">
+        <svg class="stage-signal" id="signal" aria-hidden="true">
+          <defs>
+            <filter id="bloom" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5"/></filter>
+            <radialGradient id="headGlow"><stop offset="0" stop-color="#fff"/><stop offset=".35" stop-color="currentColor"/><stop offset="1" stop-color="currentColor" stop-opacity="0"/></radialGradient>
+          </defs>
+          <path class="rail" id="rail" d=""/>
+          <circle class="node" id="n1" r="4"/><circle class="node" id="n2" r="4"/>
+          <path class="trail glow" id="trailGlow" d=""/>
+          <path class="trail" id="trail" d=""/>
+          <circle class="head" id="head" r="13" fill="url(#headGlow)"/>
+        </svg>
+
+        <div class="mac" id="mac" role="img" aria-label="A Lostty window on the Mac where Claude Code is editing App.swift, then stops to ask permission">
+          <div class="trace" aria-hidden="true"></div>
+          <div class="trace-bloom" aria-hidden="true"></div>
+          <div class="mac-bar">
+            <div class="lights" aria-hidden="true"><i></i><i></i><i></i></div>
+            <div class="mac-title">onboarding — claude</div>
+            <div class="mac-status" id="macStatus"><span class="sg" id="statusGlyph">✳</span><span id="statusText">Editing App.swift</span></div>
+          </div>
+          <div class="term" id="term" aria-hidden="true">
+            <div class="ln"><span class="c-cy">~/code/lostty/onboarding</span> <span class="c-mag">❯</span> claude</div>
+            <div class="tbox welcome"><span class="c-mag">✻</span> Welcome to <span class="c-b">Claude Code</span></div>
+            <div class="ln"><span class="c-dim">&gt;</span> Make the pairing screen say what Tailscale is for, in one line</div>
+            <div class="ln"><span class="c-ok">⏺</span> I'll update the pairing copy in App.swift and check the pairing view.</div>
+            <div class="ln"><span class="c-ok">⏺</span> <span class="c-b">Read</span>(Sources/PairView.swift)</div>
+            <div class="ln c-dim">  ⎿  Read 142 lines</div>
+            <div class="ln"><span class="c-ok">⏺</span> <span class="c-b">Update</span>(Sources/App.swift)</div>
+            <div class="ln spin" id="spin"><span class="g" id="spinG">✳</span>Working… <span class="c-dim">(<span id="spinT">14</span>s · esc to interrupt)</span></div>
+          </div>
+        </div>
+
+        <div class="phone" id="phone" role="img" aria-label="The Lostty iPhone app listing four sessions; the Mac session moves to the top as Waiting on You, and Allow is tapped">
+          <div class="screen" id="screen" aria-hidden="true">
+            <div class="island"></div>
+            <div class="sbar"><span>9:41</span><span class="ic"><svg width="15" height="10" viewBox="0 0 15 10"><rect x="0" y="6" width="3" height="4" rx="1" fill="#fff"/><rect x="4" y="4" width="3" height="6" rx="1" fill="#fff"/><rect x="8" y="2" width="3" height="8" rx="1" fill="#fff"/><rect x="12" y="0" width="3" height="10" rx="1" fill="#fff"/></svg><span class="bat"></span></span></div>
+            <div class="p-head">
+              <svg viewBox="0 0 100 100"><use href="#axo"/><use href="#eyes-open"/><path class="eye-blink" d="M56 43 H68" stroke="#3A1530" stroke-width="4.4" stroke-linecap="round"/></svg>
+              <b>Lostty</b>
+              <div class="p-icons">
+                <span class="p-btn"><svg viewBox="0 0 16 16"><path d="M8 1.5a4 4 0 0 0-4 4v2.8L2.6 11h10.8L12 8.3V5.5a4 4 0 0 0-4-4ZM6.3 12.5a1.8 1.8 0 0 0 3.4 0" fill="none" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/></svg><span class="badge" id="bell">1</span></span>
+                <span class="p-btn"><svg viewBox="0 0 16 16"><path d="M8 2v12M2 8h12" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/></svg></span>
+              </div>
+            </div>
+            <div class="p-conn">Connected <span>4</span></div>
+            <div class="chips">
+              <span class="chip" id="chipWait">Waiting on You <i id="cWait">0</i></span>
+              <span class="chip">Working <i id="cWork">2</i></span>
+              <span class="chip">Ready <i>1</i></span>
+              <span class="chip">Idle <i>1</i></span>
+            </div>
+            <div class="cards" id="cards">
+              <div class="card working" data-id="b" style="--cbg:#251b3e;--cline:#3b2d63;--cacc:#c9a0ff">
+                <h4>Fix the login bug</h4>
+                <div class="path"><b>&gt;</b> lostty/stay-awake</div>
+                <div class="what">Editing StayAwakeController.swift</div>
+                <div class="st">✽ Incubating… (3m 52s)</div>
+                <svg class="axo" viewBox="0 0 100 100"><use href="#axo"/><use href="#eyes-open"/><path class="eye-blink" d="M56 43 H68" stroke="#3A1530" stroke-width="4.4" stroke-linecap="round"/></svg>
+                <span class="chev">›</span>
+              </div>
+              <div class="card working" data-id="a" id="cardA" style="--cbg:#1d0f3a;--cline:#45207a;--cacc:#ff7af6">
+                <h4>Ship the onboarding</h4>
+                <div class="path"><b>&gt;</b> lostty/onboarding</div>
+                <div class="what" id="aWhat">Editing App.swift</div>
+                <div class="st" id="aSt">✳ Working… (14s)</div>
+                <svg class="axo" viewBox="0 0 100 100"><use href="#axo"/><use href="#eyes-open"/><path class="eye-blink" d="M56 43 H68" stroke="#3A1530" stroke-width="4.4" stroke-linecap="round"/></svg>
+                <span class="chev">›</span>
+                <div class="ask-row"><div><button class="allow" id="allowBtn" tabindex="-1">Allow</button><button tabindex="-1">Don't allow</button></div></div>
+              </div>
+              <div class="card ready" data-id="c">
+                <h4>Deploy watch</h4>
+                <div class="path"><b>&gt;</b> home</div>
+                <div class="st">Ready.</div>
+                <svg class="axo" viewBox="0 0 100 100"><use href="#axo"/><use href="#eyes-open"/><path class="eye-blink" d="M56 43 H68" stroke="#3A1530" stroke-width="4.4" stroke-linecap="round"/></svg>
+                <span class="chev">›</span>
+              </div>
+              <div class="card idle" data-id="d">
+                <h4>api-server</h4>
+                <div class="path"><b>&gt;</b> api-server/main</div>
+                <div class="st">Idle. 2h ago</div>
+                <svg class="axo" viewBox="0 0 100 100"><use href="#axo"/><use href="#eyes-shut"/></svg>
+                <span class="chev">›</span>
+              </div>
+            </div>
+            <span class="tap" id="tap"></span>
+            <span class="home-ind"></span>
+          </div>
+        </div>
+      </div>
+      <div class="stage-caption">
+        <span class="cap-dot" aria-hidden="true"></span>
+        <span class="cap-text" id="capText">Claude is working on your Mac. A glow traces the window while it works.</span>
+        <button class="cap-ctrl" id="pauseBtn" type="button" aria-pressed="false">Pause</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- WHY -->
+  <section class="sec" id="why" aria-labelledby="why-title">
+    <div class="wrap">
+      <div class="sec-head">
+        <h2 id="why-title">Why Lostty exists<span class="cur" aria-hidden="true"></span></h2>
+        <p>Coding agents work best when you let them run. They don't run for long before they need you: they stop to ask for permission, or a question, and then they wait. Lostty fixes the four things that kept going wrong whenever I walked away.</p>
+      </div>
+      <div class="why-list">
+        <article class="why">
+          <div class="why-n" aria-hidden="true">#1</div>
+          <div>
+            <h3>The agent stopped, and I didn't know</h3>
+            <p class="prob"><b>The problem</b>You start Claude on something big and go make a coffee. Twenty minutes later it has been sitting on a permission prompt for nineteen of them.</p>
+          </div>
+          <div class="fix">
+            <p><b class="lab">The fix</b>Lostty knows what every terminal is doing. Your phone sorts them into Waiting on you, Working, Ready and Idle, so the one that needs you is always first. Anything that waited while you were busy lands in the inbox under the bell.</p>
+            <div class="vig vig-chips" aria-label="Session states on the phone">
+              <span class="hot">Waiting on you <em>1</em></span><span>Working <em>2</em></span><span>Ready <em>1</em></span><span>Idle <em>1</em></span>
+              <span class="bell" aria-label="Inbox, 2 items"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5a4 4 0 0 0-4 4v2.8L2.6 11h10.8L12 8.3V5.5a4 4 0 0 0-4-4ZM6.3 12.5a1.8 1.8 0 0 0 3.4 0" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg></span>
+            </div>
+          </div>
+        </article>
+        <article class="why">
+          <div class="why-n" aria-hidden="true">#2</div>
+          <div>
+            <h3>My phone got a tiny, useless Mac</h3>
+            <p class="prob"><b>The problem</b>Screen sharing works, technically. But you're pinching around a 27-inch screen on a 6-inch phone, and typing into it is miserable.</p>
+          </div>
+          <div class="fix">
+            <p><b class="lab">The fix</b>The phone app is a real terminal on the same session that's running on your Mac: same output, same prompt, same half-typed command. Come back to your desk and carry on. Nothing restarts.</p>
+            <div class="vig vig-row">
+              <div class="keys" aria-label="A tap between the G and H keys types the nearest one, H">
+                <span class="key">F</span><span class="key">G</span><span class="key hit">H<span class="gap-tap" style="left:-6px"></span></span><span class="key">J</span>
+              </div>
+              <span class="vig-note">A tap in the gap types<br>the nearest key.</span>
+            </div>
+            <p class="tip">Turn on <b>Stay Awake</b> before you leave. Your Mac keeps working with the lid closed, even on battery, and if its Wi-Fi drops it hops onto your iPhone's hotspot.</p>
+          </div>
+        </article>
+        <article class="why">
+          <div class="why-n" aria-hidden="true">#3</div>
+          <div>
+            <h3>Ten terminals, all the same black box</h3>
+            <p class="prob"><b>The problem</b>Once you've got a few agents going, every terminal looks the same. Sooner or later, you type into the wrong one.</p>
+          </div>
+          <div class="fix">
+            <p><b class="lab">The fix</b>Each project gets its own colors and texture, and the terminal changes to match when you move into it. Each one says what Claude is doing in plain words, like <i>Editing App.swift</i>, and a soft glow traces the window while Claude works, so you can tell from across the room.</p>
+            <div class="minis" id="minis" aria-label="Three skinned terminals; the middle one is working"></div>
+          </div>
+        </article>
+        <article class="why">
+          <div class="why-n" aria-hidden="true">#4</div>
+          <div>
+            <h3>Starting anything meant going back to my desk</h3>
+            <p class="prob"><b>The problem</b>You're out, and you think of the next thing. Now you either wait until you're back, or you go back.</p>
+          </div>
+          <div class="fix">
+            <p><b class="lab">The fix</b>Tap + on your phone and pick a project folder on your Mac. Choose what starts there: Claude, Codex or a plain shell, and which model. It opens on your Mac and on your phone at the same time.</p>
+            <div class="vig sheet" aria-label="The new session sheet on the phone">
+              <div class="sheet-row"><span>New session</span><span class="plus" aria-hidden="true">+</span></div>
+              <div class="sheet-row"><span>Folder</span><span style="color:var(--ink)">~/code/lostty</span></div>
+              <div class="sheet-row"><span>Start</span><span class="seg"><span class="on">Claude</span><span>Codex</span><span>Shell</span></span></div>
+              <div class="sheet-row"><span>Model</span><span style="color:var(--ink)">Opus</span></div>
+            </div>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- SKINS -->
+  <section class="sec" id="skins" aria-labelledby="skins-title">
+    <div class="wrap">
+      <div class="sec-head">
+        <h2 id="skins-title">Twelve skins, so you never type into the wrong one<span class="cur" aria-hidden="true"></span></h2>
+        <p>Each skin restyles the background, text, texture, the 16-color palette, the cursor and the Claude trace. <code style="font-size:.85em">cd</code> into a project and the pane re-skins; leave and it reverts. Hover or pick one to try it.</p>
+      </div>
+      <div class="skins-grid">
+        <div>
+          <div class="pack"><h3>The arcade pack</h3><div class="pack-list" id="packArcade"></div></div>
+          <div class="pack"><h3>The Olympian boon pack</h3><div class="pack-list" id="packBoon"></div></div>
+        </div>
+        <div class="preview" id="preview" style="--sbg:#120a2a;--sfg:#f3ecff;--sa:#ff3df2;--sb:#28e7ff">
+          <div class="pv-win" id="pvWin">
+            <div class="trace" style="--t1:var(--sa);--t2:var(--sb)" aria-hidden="true"></div>
+            <div class="trace-bloom" style="--t1:var(--sa);--t2:var(--sb)" aria-hidden="true"></div>
+            <div class="pv-bar"><div class="lights" aria-hidden="true"><i></i><i></i><i></i></div><span class="t" id="pvTitle">neon-arcade</span><span class="rar" id="pvRar" style="color:#ffd84d">legendary</span></div>
+            <div class="pv-body" id="pvBody">
+              <div class="ln"><span style="color:var(--sb)">~/code/lostty</span> <span style="color:var(--sa)">❯</span> skins set <span id="pvCmd">neon-arcade</span></div>
+              <div class="ln"><span style="color:var(--sa)">✓</span> Equipped <span id="pvName">neon-arcade</span> <span style="opacity:.6">(<span id="pvRar2">legendary</span>)</span></div>
+              <div class="ln" id="pvBlurb" style="opacity:.75">Bright magenta and cyan on a dark purple grid.</div>
+              <div class="pal" id="pvPal" aria-label="The skin's 16-color palette"></div>
+              <div class="ln"><span style="color:var(--sb)">~/code/lostty</span> <span style="color:var(--sa)">❯</span> claude</div>
+              <div class="ln"><span style="color:var(--sa)">✳</span> Working… <span style="opacity:.6">Editing App.swift</span></div>
+            </div>
+          </div>
+          <div class="pv-foot">
+            <p>Your phone shows the same colors, so the list reads at a glance. Make your own in <code style="font-size:.85em">skins.toml</code>, or set a color with <code style="font-size:.85em">skins color</code>.</p>
+            <div class="pv-card"><div class="card working" id="pvCard"><h4>Ship the onboarding</h4><div class="path"><b>&gt;</b> lostty/onboarding</div><div class="what">Editing App.swift</div><div class="st">✳ Working… (2m 10s)</div><svg class="axo" viewBox="0 0 100 100" aria-hidden="true"><use href="#axo"/><use href="#eyes-open"/><path class="eye-blink" d="M56 43 H68" stroke="#3A1530" stroke-width="4.4" stroke-linecap="round"/></svg><span class="chev" aria-hidden="true">›</span></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- HOW -->
+  <section class="sec" id="how" aria-labelledby="how-title">
+    <div class="wrap">
+      <div class="sec-head">
+        <h2 id="how-title">Your Mac, your phone, and nothing in between<span class="cur" aria-hidden="true"></span></h2>
+        <p>The phone talks to the Mac directly, over SSH, inside your own private Tailscale network. There's no Lostty account and no Lostty server. There isn't one.</p>
+      </div>
+      <div class="flow" aria-label="Diagram: Lostty on the Mac connects to Lostty on the iPhone over SSH inside your tailnet, with no Lostty server">
+        <div class="flow-node">
+          <span class="k">Mac</span>
+          <h3>Lostty on your Mac</h3>
+          <p>Every terminal runs here, in tmux, and keeps running when you leave.</p>
+        </div>
+        <div class="flow-mid">
+          <div class="tunnel">
+            <span class="lbl">SSH over your tailnet</span>
+            <span class="pk out"></span><span class="pk out"></span><span class="pk back"></span><span class="pk back"></span>
+          </div>
+          <div class="ghost"><s>Lostty server</s><br>there isn't one</div>
+        </div>
+        <div class="flow-node">
+          <span class="k">iPhone</span>
+          <h3>Lostty on your iPhone</h3>
+          <p>Opens the same sessions. Its SSH key never leaves the phone.</p>
+        </div>
+      </div>
+      <p class="ghost-sm">No Lostty server sits in the middle. There isn't one.</p>
+      <div class="facts">
+        <div class="fact"><h3>Paired with a QR code</h3><p>Open Lostty → Phone Access… on the Mac, click Pair a Phone…, and scan the code with the phone. Click Allow on the Mac.</p></div>
+        <div class="fact"><h3>Key logins only</h3><p>Phone Access turns on Remote Login with one admin prompt and can switch password logins off, so only paired keys get in.</p></div>
+        <div class="fact"><h3>Works with the lid closed</h3><p>Stay Awake keeps the Mac working on battery, and stops at your battery floor (15% by default) or if it gets too hot.</p></div>
+        <div class="fact"><h3>Lost your phone?</h3><p>Open Phone Access on the Mac and click Remove next to it. Its key stops working right away.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- GHOSTTY -->
+  <section class="sec" id="ghostty" aria-labelledby="gh-title">
+    <div class="wrap credit">
+      <h2 class="h2" id="gh-title">Built on Ghostty</h2>
+      <div>
+        <p>Lostty started from <a href="https://ghostty.org" target="_blank" rel="noopener">Ghostty</a>, the fast, native terminal by Mitchell Hashimoto and the Ghostty contributors. Every character you see is drawn by Ghostty's engine, which does the hard part quickly and correctly. Lostty adds the Mac and iPhone side on top.</p>
+        <p>If you love how fast Lostty feels, that's Ghostty. Go give it a star. Lostty is MIT licensed, like Ghostty before it.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- START -->
+  <section class="sec" id="start" aria-labelledby="start-title">
+    <div class="wrap">
+      <div class="sec-head">
+        <h2 id="start-title">Set it up once. Then go take a walk.<span class="cur" aria-hidden="true"></span></h2>
+        <p>Lostty builds from source on your Mac with Xcode, then installs the phone app over the cable. The first build takes a while.</p>
+      </div>
+      <div class="start">
+        <div>
+          <ul class="reqs">
+            <li><span>A Mac on <b>macOS 15</b> or later, with <b>Xcode 26</b> and <a href="https://brew.sh" target="_blank" rel="noopener">Homebrew</a></span></li>
+            <li><span>An iPhone on <b>iOS 17</b> or later, and its cable</span></li>
+            <li><span>A free <b>Apple Account</b>, added to Xcode</span></li>
+            <li><span><b>Tailscale</b> on both, signed in to the same account</span></li>
+          </ul>
+          <div class="hero-cta">
+            <a class="btn btn-hot" href="#docs">Read the full guide</a>
+            <a class="btn" href="https://github.com/Lawliang/lostty" target="_blank" rel="noopener"><svg width="16" height="16" aria-hidden="true"><use href="#i-gh"/></svg>View on GitHub</a>
+          </div>
+        </div>
+        <div>
+          <div class="code">
+            <div class="code-bar"><span>Terminal, on your Mac</span><button class="copy" type="button" data-copy="cmd-install">Copy</button></div>
+            <pre id="cmd-install"><span class="p" aria-hidden="true">$ </span>git clone https://github.com/Lawliang/lostty.git
+<span class="p" aria-hidden="true">$ </span>cd lostty
+<span class="p" aria-hidden="true">$ </span>macos/setup.sh</pre>
+          </div>
+          <ol class="steps">
+            <li><span>Plug in your iPhone, tap <b>Trust</b>, and run <code>macos/install-phone.sh</code>.</span></li>
+            <li><span>Install <b>Tailscale</b> on the Mac and the iPhone, with the same account.</span></li>
+            <li><span>On the Mac, open <b>Lostty → Phone Access… → Pair a Phone…</b> and scan the code with the phone.</span></li>
+          </ol>
+          <div class="walk">
+            <svg viewBox="0 0 100 100" aria-hidden="true"><use href="#axo"/><use href="#eyes-shut"/></svg>
+            <div><b>That's it.</b><span>Your phone reaches the Mac while it's awake and Lostty is open.</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- ======================= DOCS ======================= -->
+<main id="docs" class="docs" hidden>
+  <div class="wrap docs-grid">
+    <aside class="dside" aria-label="Documentation">
+      <h4>Docs</h4>
+      <nav id="dsideNav">
+        <button type="button" data-page="docs-getting-started" aria-current="page">Getting Started</button>
+        <button type="button" data-page="docs-phone">Phone Access</button>
+        <button type="button" data-page="docs-skins">Skins</button>
+        <button type="button" data-page="docs-manual">Manual Mac setup</button>
+        <button type="button" data-page="docs-contributing">Contributing</button>
+      </nav>
+      <div class="side-foot">Something wrong here? <a href="https://github.com/Lawliang/lostty/issues" target="_blank" rel="noopener">Open an issue</a>.</div>
+    </aside>
+
+    <div class="doc" id="docArticles">
+      <article id="docs-getting-started" data-doc>
+        <div class="crumb">Docs / Getting Started</div>
+        <h1>Getting Started</h1>
+        <p class="lede">Install Lostty on your Mac, put the app on your iPhone, and pair them. You build both from source, so you'll need Xcode.</p>
+
+        <h2 id="gs-need">What you'll need</h2>
+        <ul>
+          <li>A Mac on macOS 15 or later.</li>
+          <li>An iPhone on iOS 17 or later, with its cable.</li>
+          <li>A free <a href="https://account.apple.com" target="_blank" rel="noopener">Apple Account</a>.</li>
+        </ul>
+
+        <h2 id="gs-mac">On your Mac</h2>
+        <h3><span class="n">1</span>Install Xcode 26</h3>
+        <p>Get it from the <a href="https://apps.apple.com/app/xcode/id497799835" target="_blank" rel="noopener">App Store</a> and open it once. You'll also need <a href="https://brew.sh" target="_blank" rel="noopener">Homebrew</a>.</p>
+        <h3><span class="n">2</span>Install Lostty</h3>
+        <p>In Terminal:</p>
+        <div class="code">
+          <div class="code-bar"><span>sh</span><button class="copy" type="button" data-copy="d-cmd-1">Copy</button></div>
+          <pre id="d-cmd-1">git clone https://github.com/Lawliang/lostty.git
+cd lostty
+macos/setup.sh</pre>
+        </div>
+        <p>It installs what the build needs (it may ask for your password), then builds Lostty, puts it in <code>/Applications</code> and opens it. The first build takes a while.</p>
+
+        <h2 id="gs-phone">On your iPhone</h2>
+        <h3><span class="n">3</span>Add your Apple Account to Xcode</h3>
+        <p>In Xcode: <b>Settings → Accounts</b>, click <b>+</b>, and sign in.</p>
+        <h3><span class="n">4</span>Install the app</h3>
+        <p>Plug your iPhone into the Mac, unlock it, and tap <b>Trust</b>. Then, in the <code>lostty</code> folder:</p>
+        <div class="code">
+          <div class="code-bar"><span>sh</span><button class="copy" type="button" data-copy="d-cmd-2">Copy</button></div>
+          <pre id="d-cmd-2">macos/install-phone.sh</pre>
+        </div>
+        <p>The first time, the phone may ask you to:</p>
+        <ul>
+          <li>turn on <b>Settings → Privacy &amp; Security → Developer Mode</b> (the phone restarts);</li>
+          <li>trust your Apple Account in <b>Settings → General → VPN &amp; Device Management</b>.</li>
+        </ul>
+        <p>Then run the command again.</p>
+        <div class="callout"><span class="ct">With a free Apple Account</span><p>The app stops opening after 7 days. Run <code>macos/install-phone.sh</code> again to renew it. A paid developer account makes it last a year.</p></div>
+
+        <h2 id="gs-pair">Pair them</h2>
+        <h3><span class="n">5</span>Install Tailscale on both</h3>
+        <p>Install <a href="https://tailscale.com/download" target="_blank" rel="noopener">Tailscale</a> on the Mac and the iPhone, and sign in to both with the same account.</p>
+        <div class="callout"><span class="ct">Why Tailscale?</span><p>Your phone talks to your Mac directly, over SSH, inside your own private Tailscale network. There's no Lostty server in the middle. There isn't one. And the phone's SSH key never leaves the phone.</p></div>
+        <h3><span class="n">6</span>Pair</h3>
+        <p>On the Mac, open <b>Lostty → Phone Access…</b> and fix any row without a ✓. Each row says what to click. Then click <b>Pair a Phone…</b>, and on the iPhone open Lostty, tap <b>Pair with Mac</b> and scan the code. Click <b>Allow</b> on the Mac.</p>
+        <p>That's it. Go take a walk. Your phone reaches the Mac while it's awake and Lostty is open. To keep it reachable with the lid closed, see <a href="#docs-phone">Phone Access</a>.</p>
+
+        <h2 id="gs-update">Updating later</h2>
+        <div class="code">
+          <div class="code-bar"><span>sh</span><button class="copy" type="button" data-copy="d-cmd-3">Copy</button></div>
+          <pre id="d-cmd-3">git pull
+macos/install.sh</pre>
+        </div>
+        <p>Then choose <b>Restart to Update</b> in Lostty's menu bar.</p>
+        <div class="callout warn"><span class="ct">Don't Quit to update</span><p>Quitting Lostty ends every terminal session. Restart to Update keeps them.</p></div>
+
+        <div class="doc-next"><span></span><a class="btn" href="#docs-phone">Next: Phone Access</a></div>
+      </article>
+
+      <article id="docs-phone" data-doc hidden>
+        <div class="crumb">Docs / Phone Access</div>
+        <h1>Lostty on your iPhone</h1>
+        <p class="lede">Open your Mac's Lostty sessions from your iPhone, anywhere, over your own Tailscale. Nothing goes through a Lostty server; there isn't one.</p>
+        <h2 id="ph-setup">Set up (once)</h2>
+        <p>On the Mac, open Lostty → <b>Phone Access…</b> and fix any row that isn't ✓:</p>
+        <ul>
+          <li><b>tmux</b>: <code>brew install tmux</code>.</li>
+          <li><b>Remote Login</b> and <b>Password logins off</b>: one admin password prompt turns on Remote Login and allows only key logins.</li>
+          <li><b>Terminal definition</b>: click Install.</li>
+          <li><b>Folder access</b> (optional): click Grant Now, so commands from your phone never wait on a macOS prompt.</li>
+        </ul>
+        <h2 id="ph-awake">Lid closed</h2>
+        <p>Install the <b>Stay-awake permission</b> in Phone Access, then choose <b>Stay Awake for Phone</b> from Lostty's menu bar icon. It turns itself off at your battery floor (15% by default) or if the Mac gets too hot.</p>
+        <h2 id="ph-using">Using it</h2>
+        <p>A Claude Code session shows its task, with <b>Waiting</b> when it's waiting for you or <b>Working</b> while it works. Waiting sessions come first. Opening one on the phone counts as seeing it, on the Mac too.</p>
+        <h2 id="ph-lost">Lost phone</h2>
+        <p>Open Lostty → Phone Access on the Mac and click <b>Remove</b> next to it.</p>
+        <div class="doc-next"><a class="btn" href="#docs-getting-started">Back: Getting Started</a><a class="btn" href="#docs-skins">Next: Skins</a></div>
+      </article>
+
+      <article id="docs-skins" data-doc hidden>
+        <div class="crumb">Docs / Skins</div>
+        <h1>Skins</h1>
+        <p class="lede">Lostty gives every pane a background color and texture based on the project it is in.</p>
+        <h2 id="sk-how">How it works</h2>
+        <ul>
+          <li><code>cd</code> into a project and the pane re-skins; leave and it reverts.</li>
+          <li>Split panes are skinned independently.</li>
+          <li>Git repos you haven't configured get a stable automatic skin.</li>
+        </ul>
+        <h2 id="sk-cmd">Override a pane</h2>
+        <div class="code">
+          <div class="code-bar"><span>sh</span><button class="copy" type="button" data-copy="d-cmd-4">Copy</button></div>
+          <pre id="d-cmd-4">skins set neon-arcade
+skins color '#3a0f14'
+skins texture grid
+skins reset</pre>
+        </div>
+        <h2 id="sk-trace">Claude Trace</h2>
+        <p>While Claude Code is working in a pane, a light ray races around that pane's edge. The moment Claude finishes, or asks for permission, the ray disappears. Each preset has its own trace.</p>
+        <div class="doc-next"><a class="btn" href="#docs-phone">Back: Phone Access</a><a class="btn" href="#docs-manual">Next: Manual Mac setup</a></div>
+      </article>
+
+      <article id="docs-manual" data-doc hidden>
+        <div class="crumb">Docs / Manual Mac setup</div>
+        <h1>Manual Mac setup</h1>
+        <p class="lede">Phone Access sets up your Mac for you. If you'd rather do it by hand, these are the steps it automates.</p>
+        <h2 id="mn-what">What Phone Access changes</h2>
+        <ul>
+          <li>Installs tmux and the terminal definition.</li>
+          <li>Turns on Remote Login and, if you agree, turns password logins off with <code>/etc/ssh/sshd_config.d/000-lostty.conf</code>.</li>
+          <li>Adds each paired phone's key to <code>~/.ssh/authorized_keys</code>, on a line ending in <code>lostty-phone:&lt;id&gt;</code>.</li>
+        </ul>
+        <p>The full walkthrough is in <a href="https://github.com/Lawliang/lostty/blob/main/docs/lostty-mobile-host-setup.md" target="_blank" rel="noopener">docs/lostty-mobile-host-setup.md</a>.</p>
+        <div class="doc-next"><a class="btn" href="#docs-skins">Back: Skins</a><a class="btn" href="#docs-contributing">Next: Contributing</a></div>
+      </article>
+
+      <article id="docs-contributing" data-doc hidden>
+        <div class="crumb">Docs / Contributing</div>
+        <h1>Contributing</h1>
+        <p class="lede">Bug reports, ideas and changes are all welcome. Lostty has two halves: the terminal engine (Zig, in <code>src/</code>) and the apps (Swift, in <code>macos/</code>).</p>
+        <h2 id="ct-pre">Prerequisites</h2>
+        <ul>
+          <li>Xcode 26 and the Metal Toolchain: <code>xcodebuild -downloadComponent MetalToolchain</code></li>
+          <li>Zig 0.15.2 and Nushell: <code>brew install zig@0.15 nushell</code></li>
+          <li>tmux, for the phone features</li>
+        </ul>
+        <h2 id="ct-build">Build</h2>
+        <div class="code">
+          <div class="code-bar"><span>sh</span><button class="copy" type="button" data-copy="d-cmd-5">Copy</button></div>
+          <pre id="d-cmd-5">zig build -Demit-macos-app=false
+macos/build.nu</pre>
+        </div>
+        <p>If a bug also happens in plain Ghostty (rendering, fonts, escape sequences, input), it belongs <a href="https://github.com/ghostty-org/ghostty" target="_blank" rel="noopener">upstream</a>.</p>
+        <div class="doc-next"><a class="btn" href="#docs-manual">Back: Manual Mac setup</a><span></span></div>
+      </article>
+    </div>
+
+    <aside class="dtoc" aria-label="On this page">
+      <h4>On this page</h4>
+      <nav id="tocNav"></nav>
+    </aside>
+  </div>
+</main>
+
+<footer>
+  <div class="wrap foot">
+    <div>
+      <a class="brand" href="#home"><svg viewBox="0 0 100 100" aria-hidden="true"><use href="#axo"/><use href="#eyes-shut"/></svg>lostty</a>
+      <p>Leave your desk, not your terminal. MIT licensed. Built on Ghostty by Mitchell Hashimoto and the Ghostty contributors.</p>
+    </div>
+    <nav aria-label="Footer">
+      <a href="#why">Features</a><a href="#skins">Skins</a><a href="#how">How it works</a><a href="#docs">Docs</a>
+      <a href="https://github.com/Lawliang/lostty" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://ghostty.org" target="_blank" rel="noopener">Ghostty</a>
+    </nav>
+  </div>
+</footer>
+
+<script>
+(() => {
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ---------------- Skins data (from SkinPresets.swift) ---------------- */
+  const SKINS = [
+    ['neon-arcade','legendary','#120a2a','#f3ecff','#ff3df2','#28e7ff','grid','Bright magenta and cyan on a dark purple grid.',['#1d1240','#ff4f7b','#3dffb0','#ffd84d','#7b8cff','#ff3df2','#28e7ff','#d9ccff','#6f6197','#ff7a9c','#7dffcb','#ffe68a','#a5b1ff','#ff7af6','#7af0ff','#f3ecff'],'a'],
+    ['sunset-drive','epic','#1c0b24','#ffe9f5','#ff7a3d','#ff4fa3','scanlines','Warm orange and pink on a dark plum with scanlines.',['#2b1436','#ff4f5e','#9dff6a','#ffb347','#8f7bff','#ff4fa3','#5ee7ff','#f0d4e6','#7d5f84','#ff7a86','#bfff96','#ffcf7f','#b3a6ff','#ff85c0','#8ff0ff','#ffe9f5'],'a'],
+    ['mint-protocol','rare','#04140f','#d8ffe9','#2cff9a','#b6ff3b','dots','Neon green and yellow on a dark teal.',['#0b2219','#ff5c7a','#2cff9a','#b6ff3b','#3fb8ff','#d38bff','#3dffe0','#bfe8d2','#4b7161','#ff8aa0','#7dffc0','#d4ff85','#7fd1ff','#e3b3ff','#8affec','#d8ffe9'],'a'],
+    ['deep-dive','rare','#041a2e','#dff4ff','#25c4ff','#9b87ff','waves','Bright cyan and purple on a dark blue.',['#0b2a45','#ff5c8a','#3dffa8','#ffd166','#25c4ff','#9b87ff','#3de8ff','#c4e4f5','#4f728e','#ff8aac','#85ffc8','#ffe199','#7ad8ff','#bfb3ff','#8af0ff','#dff4ff'],'a'],
+    ['lava-rush','epic','#1d0806','#fff0e8','#ff5a2c','#ffc53d','diagonal','Warm orange and yellow on a dark brown.',['#2e110c','#ff5a2c','#b8ff4d','#ffc53d','#6fa8ff','#ff5fb0','#4de3ff','#f2d9cc','#856056','#ff8a66','#d2ff8a','#ffd97f','#9cc4ff','#ff8fca','#8aecff','#fff0e8'],'a'],
+    ['bubble-pop','common','#230a24','#ffeefe','#ff6ad5','#ffd84d','sparkle','Hot pink and yellow on a purple with sparkles.',['#36143a','#ff5c8a','#6dffb3','#ffd84d','#7ea8ff','#ff6ad5','#5cf2ff','#f2d6f0','#855f86','#ff8aab','#9dffcc','#ffe68a','#a8c4ff','#ff9be4','#92f6ff','#ffeefe'],'a'],
+    ['thunderhead','epic','#0b1430','#dfe7ff','#ffd84a','#7fc8ff','lightning','Storm navy laced with forked lightning; cursor strikes in thunder gold.',['#16224a','#ff5d6c','#8be38a','#ffd84a','#7fc8ff','#c9a0ff','#7fe9ff','#c8d2ee','#6f7ea8','#ff8a95','#b3f0b2','#ffe68a','#a8dbff','#ddc2ff','#a8f2ff','#dfe7ff'],'b','Zeus'],
+    ['undertow','rare','#04212b','#d6f6f2','#3fe0d0','#59b8ff','tide','Abyssal teal rolling with slow tide lines; prompts surface in sea-foam.',['#0b3440','#ff7a6b','#5fe3a1','#f2e48a','#59b8ff','#b49cff','#3fe0d0','#bfe3df','#5f8f93','#ff9d92','#93edc0','#f7eeb0','#8ccfff','#cdbdff','#7debe0','#d6f6f2'],'b','Poseidon'],
+    ['bloodrite','heroic','#1c0506','#f3dcd8','#ff3b3f','#ffb547','blades','A dried-blood ground crossed with blade marks; cursor in battle red.',['#2e0c0d','#ff3b3f','#a8d672','#ffb547','#8fb0d9','#e07ab0','#9fd4d0','#e2c8c3','#8a5a57','#ff6e6f','#c6e89c','#ffcd80','#b4cbe8','#eda2c8','#c0e6e3','#f3dcd8'],'b','Ares'],
+    ['heartsease','common','#260b1e','#ffe3f0','#ff7ab8','#ffd59a','petals','Dusk rose scattered with drifting petals; selection blooms rose pink.',['#3a1530','#ff6b8a','#9be7b0','#ffd59a','#a9b8ff','#ff7ab8','#9ee8e8','#f0cfe0','#9a6f86','#ff95ab','#bff0cc','#ffe3bb','#c6d0ff','#ffa3cd','#c0f0f0','#ffe3f0'],'b','Aphrodite'],
+    ['silverbow','legendary','#06160f','#e4f2e6','#8ff08a','#c9d6e8','starfield','Night-forest green under a starfield and crescent moon; cursor in hunter green.',['#0f2a1e','#ff7b6e','#8ff08a','#e8f0a0','#9cc8ff','#d6b3ff','#a8f0d8','#cfe0d2','#5e8a70','#ff9f95','#b5f5b1','#f0f5c0','#bddbff','#e4ccff','#c6f5e6','#e4f2e6'],'b','Artemis'],
+    ['stormsurge','duo','#061a26','#def4f6','#ffd84a','#3fe0d0','tempest','Lightning over open water: gold strikes above teal swells, layered.',['#0e2c3c','#ff6b6b','#6fe3a8','#ffd84a','#6fbaff','#c2a0ff','#3fe0d0','#c3dfe4','#5a8396','#ff9393','#9cedc4','#ffe68a','#9cd0ff','#d8c2ff','#7debe0','#def4f6'],'b','Zeus & Poseidon'],
+  ].map(([id, rarity, bg, fg, a, b, tex, blurb, pal, pack, patron]) => ({ id, rarity, bg, fg, a, b, tex, blurb, pal, pack, patron }));
+  const RARITY = { common: '#b8b0c8', rare: '#5eb6ff', epic: '#c084ff', heroic: '#ff7a5c', legendary: '#ffd84d', duo: '#3fe0d0' };
+
+  function texture(s) {
+    const { a, b, fg, tex } = s;
+    let w = 24, h = 24, body = '';
+    const st = (c, o, sw = 1) => `stroke="${c}" stroke-opacity="${o}" stroke-width="${sw}" fill="none"`;
+    switch (tex) {
+      case 'grid': body = `<path d="M24 0V24M0 24H24" ${st(a, .14)}/>`; break;
+      case 'scanlines': w = 4; h = 4; body = `<rect width="4" height="1.2" fill="${fg}" fill-opacity=".05"/>`; break;
+      case 'dots': w = h = 14; body = `<circle cx="7" cy="7" r="1.1" fill="${a}" fill-opacity=".32"/>`; break;
+      case 'waves': w = 60; h = 22; body = `<path d="M0 11 Q15 3 30 11 T60 11" ${st(a, .2)}/>`; break;
+      case 'diagonal': w = h = 16; body = `<path d="M-4 4L4-4M0 16L16 0M12 20L20 12" ${st(a, .14)}/>`; break;
+      case 'sparkle': w = h = 90; body = [[14,18,a],[60,10,b],[40,52,a],[78,66,b],[20,76,a]].map(([x,y,c],i)=>`<path d="M${x} ${y-4}L${x+1} ${y-1}L${x+4} ${y}L${x+1} ${y+1}L${x} ${y+4}L${x-1} ${y+1}L${x-4} ${y}L${x-1} ${y-1}Z" fill="${c}" fill-opacity="${i%2?.35:.45}"/>`).join(''); break;
+      case 'lightning': w = h = 140; body = `<path d="M30 0L22 30L36 34L18 70M110 60L100 86L114 90L96 130" ${st(a, .2, 1.4)}/>`; break;
+      case 'tide': w = 80; h = 28; body = `<path d="M0 8 Q20 2 40 8 T80 8" ${st(a, .18)}/><path d="M0 20 Q20 14 40 20 T80 20" ${st(b, .12)}/>`; break;
+      case 'blades': w = h = 70; body = `<path d="M10 40L26 18M44 64L58 46M50 14L62 4" ${st(a, .18, 1.2)}/>`; break;
+      case 'petals': w = h = 80; body = `<ellipse cx="18" cy="20" rx="6" ry="3" transform="rotate(30 18 20)" fill="${a}" fill-opacity=".2"/><ellipse cx="58" cy="54" rx="5" ry="2.6" transform="rotate(-40 58 54)" fill="${b}" fill-opacity=".18"/><ellipse cx="66" cy="14" rx="4" ry="2" transform="rotate(70 66 14)" fill="${a}" fill-opacity=".16"/>`; break;
+      case 'starfield': w = h = 100; body = [[8,12,1],[40,30,.7],[72,8,1.2],[90,50,.6],[20,64,.9],[56,80,.7],[84,90,1]].map(([x,y,r])=>`<circle cx="${x}" cy="${y}" r="${r}" fill="${fg}" fill-opacity=".55"/>`).join(''); break;
+      case 'tempest': w = h = 120; body = `<path d="M0 90 Q30 80 60 90 T120 90" ${st(b, .2)}/><path d="M0 106 Q30 96 60 106 T120 106" ${st(b, .14)}/><path d="M80 0L70 26L84 30L66 62" ${st(a, .22, 1.4)}/>`; break;
+    }
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">${body}</svg>`;
+    return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+  }
+
+  /* ---------------- Skins section ---------------- */
+  const preview = $('#preview');
+  const pvPal = $('#pvPal');
+  for (let i = 0; i < 16; i++) pvPal.appendChild(document.createElement('i'));
+  let selected = 'neon-arcade';
+  function applySkin(s) {
+    preview.style.setProperty('--sbg', s.bg); preview.style.setProperty('--sfg', s.fg);
+    preview.style.setProperty('--sa', s.a); preview.style.setProperty('--sb', s.b);
+    $('#pvBody').style.setProperty('--tex', texture(s));
+    $('#pvTitle').textContent = s.patron ? `${s.id}  (${s.patron})` : s.id;
+    $('#pvCmd').textContent = s.id; $('#pvName').textContent = s.id;
+    $('#pvRar').textContent = s.rarity; $('#pvRar').style.color = RARITY[s.rarity]; $('#pvRar2').textContent = s.rarity;
+    $('#pvBlurb').textContent = s.blurb;
+    [...pvPal.children].forEach((el, i) => el.style.background = s.pal[i]);
+    const c = $('#pvCard');
+    c.style.setProperty('--cbg', s.pal[0]); c.style.setProperty('--cacc', s.a);
+    c.style.setProperty('--cline', `color-mix(in srgb, ${s.a} 30%, ${s.pal[0]})`); c.style.color = s.fg;
+  }
+  for (const s of SKINS) {
+    const btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'skin-btn'; btn.dataset.skin = s.id;
+    btn.setAttribute('aria-pressed', String(s.id === selected));
+    btn.innerHTML = `<span class="sw" style="background:${s.bg};--sa:${s.a};--sb:${s.b}"></span><span><span class="nm">${s.id}</span><span class="rr">${s.rarity}${s.patron ? ', ' + s.patron : ''}</span></span>`;
+    btn.addEventListener('mouseenter', () => applySkin(s));
+    btn.addEventListener('focus', () => applySkin(s));
+    btn.addEventListener('blur', () => applySkin(SKINS.find(x => x.id === selected)));
+    btn.addEventListener('mouseleave', () => applySkin(SKINS.find(x => x.id === selected)));
+    btn.addEventListener('click', () => {
+      selected = s.id; applySkin(s);
+      $$('.skin-btn').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.skin === selected)));
+    });
+    (s.pack === 'a' ? $('#packArcade') : $('#packBoon')).appendChild(btn);
+  }
+  applySkin(SKINS[0]);
+
+  /* Mini skinned terminals for problem #3 */
+  const minis = $('#minis');
+  [['mint-protocol', 'api-server', 'Ready.', false], ['neon-arcade', 'onboarding', '✳ Editing App.swift', true], ['lava-rush', 'deploy', 'Idle.', false]].forEach(([id, name, st, on]) => {
+    const s = SKINS.find(x => x.id === id);
+    const d = document.createElement('div');
+    d.className = 'mini' + (on ? '' : ' off');
+    d.style.cssText = `color:${s.fg};--t1:${s.a};--t2:${s.b}`;
+    d.innerHTML = `<div class="mbody" style="background:${s.bg};background-image:${texture(s)}"></div><div class="trace" style="--t1:${s.a};--t2:${s.b}"></div><div class="trace-bloom" style="--t1:${s.a};--t2:${s.b}"></div><span style="color:${s.b}">~/${name}</span><span style="color:${s.a}">${st}</span><span style="opacity:.6">${id}</span>`;
+    minis.appendChild(d);
+  });
+
+  /* ---------------- Copy buttons ---------------- */
+  document.addEventListener('click', e => {
+    const btn = e.target.closest('.copy'); if (!btn) return;
+    const pre = document.getElementById(btn.dataset.copy);
+    const text = [...pre.childNodes].filter(n => !(n.classList && n.classList.contains('p'))).map(n => n.textContent).join('').trim();
+    const done = ok => { btn.textContent = ok ? 'Copied' : 'Selected'; btn.classList.toggle('done', ok); setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('done'); }, 1800); };
+    const fallback = () => { const r = document.createRange(); r.selectNodeContents(pre); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); done(false); };
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(() => done(true), fallback);
+      else fallback();
+    } catch (_) { fallback(); }
+  });
+
+  /* ---------------- Router: Home <-> Docs ---------------- */
+  const home = $('#home'), docs = $('#docs');
+  const pages = $$('[data-doc]');
+  let tocObs;
+  function showPage(id) {
+    pages.forEach(p => p.hidden = p.id !== id);
+    $$('#dsideNav button').forEach(b => { if (b.dataset.page === id) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
+    const art = document.getElementById(id);
+    const toc = $('#tocNav'); toc.innerHTML = '';
+    const hs = $$('h2[id]', art);
+    hs.forEach(h => { const a = document.createElement('a'); a.href = '#' + h.id; a.textContent = h.textContent; toc.appendChild(a); });
+    if (tocObs) tocObs.disconnect();
+    if ('IntersectionObserver' in window) {
+      tocObs = new IntersectionObserver(es => es.forEach(en => { if (en.isIntersecting) $$('#tocNav a').forEach(a => a.classList.toggle('on', a.getAttribute('href') === '#' + en.target.id)); }), { rootMargin: '-80px 0px -70% 0px' });
+      hs.forEach(h => tocObs.observe(h));
+    }
+  }
+  function route() {
+    const h = decodeURIComponent(location.hash.slice(1));
+    const target = h ? document.getElementById(h) : null;
+    const inDocs = h === 'docs' || (target && docs.contains(target));
+    home.hidden = inDocs; docs.hidden = !inDocs;
+    const dn = $('[data-nav="docs"]'); if (inDocs) dn.setAttribute('aria-current', 'page'); else dn.removeAttribute('aria-current');
+    if (inDocs) {
+      const page = h === 'docs' ? 'docs-getting-started' : (target.matches('[data-doc]') ? target.id : target.closest('[data-doc]').id);
+      showPage(page);
+      if (h === 'docs' || target.matches('[data-doc]')) scrollTo({ top: 0 });
+      else target.scrollIntoView();
+    } else if (target && h !== 'home') {
+      requestAnimationFrame(() => target.scrollIntoView());
+    } else if (h === 'home') scrollTo({ top: 0 });
+    if (!inDocs) requestAnimationFrame(layoutSignal);
+  }
+  $$('#dsideNav button').forEach(b => b.addEventListener('click', () => { location.hash = b.dataset.page; }));
+  addEventListener('hashchange', route);
+
+  /* ---------------- Hero: work -> ask -> phone -> allow -> resume ---------------- */
+  const stage = $('#stage'), mac = $('#mac'), phone = $('#phone'), term = $('#term');
+  const cardsEl = $('#cards'), cardA = $('#cardA');
+  const statusText = $('#statusText'), statusGlyph = $('#statusGlyph'), cap = $('#capText');
+  const rail = $('#rail'), trail = $('#trail'), trailGlow = $('#trailGlow'), head = $('#head');
+  const signal = $('#signal');
+  let paused = false;
+  let geo = { len: 0, vertical: false };
+
+  function layoutSignal() {
+    if (home.hidden) return;
+    const s = stage.getBoundingClientRect(), m = mac.getBoundingClientRect(), p = phone.getBoundingClientRect();
+    if (!s.width) return;
+    const side = p.left >= m.right - 4;
+    let x1, y1, x2, y2, d;
+    const listTop = cardsEl.getBoundingClientRect().top - s.top + 34;
+    if (side) {
+      x1 = m.right - s.left; y1 = m.top - s.top + m.height * .66;
+      x2 = p.left - s.left; y2 = listTop;
+      const dx = (x2 - x1) * .55;
+      d = `M${x1} ${y1} C${x1 + dx} ${y1} ${x2 - dx} ${y2} ${x2} ${y2}`;
+    } else {
+      x1 = m.left - s.left + m.width * .72; y1 = m.bottom - s.top;
+      x2 = p.left - s.left + p.width * .5; y2 = p.top - s.top;
+      const dy = (y2 - y1) * .6;
+      d = `M${x1} ${y1} C${x1} ${y1 + dy} ${x2} ${y2 - dy} ${x2} ${y2}`;
+    }
+    signal.setAttribute('viewBox', `0 0 ${s.width} ${s.height}`);
+    [rail, trail, trailGlow].forEach(el => el.setAttribute('d', d));
+    $('#n1').setAttribute('cx', x1); $('#n1').setAttribute('cy', y1);
+    $('#n2').setAttribute('cx', x2); $('#n2').setAttribute('cy', y2);
+    geo.len = trail.getTotalLength();
+  }
+  addEventListener('resize', layoutSignal);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(layoutSignal);
+
+  function wait(ms) {
+    return new Promise(res => {
+      let left = ms, last = performance.now();
+      const tick = now => { if (!paused) left -= now - last; last = now; left <= 0 ? res() : requestAnimationFrame(tick); };
+      requestAnimationFrame(tick);
+    });
+  }
+  function pulse(dir, color) {
+    if (home.hidden || !geo.len) layoutSignal();
+    if (home.hidden || !geo.len) return wait(1050);
+    const len = geo.len, seg = Math.min(140, len * .45);
+    [trail, trailGlow].forEach(el => { el.style.stroke = color; el.style.strokeDasharray = `${seg} ${len + seg}`; el.style.opacity = 1; });
+    head.style.color = color; head.style.opacity = 1;
+    return new Promise(res => {
+      let t = 0, last = performance.now();
+      const dur = 1050;
+      const tick = now => {
+        if (!paused) t += now - last; last = now;
+        const k = Math.min(1, t / dur), e = k < .5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+        const pos = dir > 0 ? e * len : (1 - e) * len;
+        [trail, trailGlow].forEach(el => el.style.strokeDashoffset = dir > 0 ? (seg - pos) : -pos);
+        const pt = trail.getPointAtLength(Math.max(0, Math.min(len, pos)));
+        head.setAttribute('cx', pt.x); head.setAttribute('cy', pt.y);
+        if (k < 1) requestAnimationFrame(tick);
+        else { [trail, trailGlow, head].forEach(el => el.style.transition = 'opacity .35s'); [trail, trailGlow, head].forEach(el => el.style.opacity = 0); setTimeout(() => [trail, trailGlow, head].forEach(el => el.style.transition = ''), 400); res(); }
+      };
+      requestAnimationFrame(tick);
+    });
+  }
+  function flipOrder(ids) {
+    const cards = $$('.card', cardsEl);
+    const first = new Map(cards.map(c => [c, c.getBoundingClientRect().top]));
+    ids.forEach(id => cardsEl.appendChild(cards.find(c => c.dataset.id === id)));
+    cards.forEach(c => {
+      const dy = first.get(c) - c.getBoundingClientRect().top;
+      if (!dy) return;
+      c.style.transition = 'none'; c.style.transform = `translateY(${dy}px)`;
+      c.getBoundingClientRect();
+      c.style.transition = 'transform .6s cubic-bezier(.2,.75,.2,1)'; c.style.transform = '';
+    });
+  }
+  function addLine(html, cls = '') {
+    const d = document.createElement('div'); d.className = 'ln in dyn ' + cls; d.innerHTML = html;
+    term.insertBefore(d, $('#spin')); return d;
+  }
+
+  // Spinner (Claude Code's glyph cycle) and elapsed seconds
+  const glyphs = ['·', '✢', '✳', '✶', '✻', '✽', '✻', '✶', '✳', '✢'];
+  let gi = 0, secs = 14, spinOn = true, tickAcc = 0, lastT = performance.now();
+  function spinLoop(now) {
+    const dt = now - lastT; lastT = now;
+    if (!paused && spinOn && !reduce) {
+      tickAcc += dt;
+      if (tickAcc > 1000) { tickAcc -= 1000; secs++; $('#spinT').textContent = secs; $('#aSt').textContent = `✳ Working… (${secs}s)`; }
+      const g = glyphs[Math.floor(now / 130) % glyphs.length];
+      if (g !== $('#spinG').textContent) { $('#spinG').textContent = g; statusGlyph.textContent = g; }
+    }
+    requestAnimationFrame(spinLoop);
+  }
+
+  const ASK = `<div class="c-b">Edit file</div><div class="c-dim">Sources/App.swift</div>` +
+    `<span class="diff"><span class="c-dim"> 41 </span>   Section {</span>` +
+    `<span class="diff rm"><span class="c-red"> 42 -</span>    Text("Pair")</span>` +
+    `<span class="diff add"><span class="c-ok"> 42 +</span>    Text("Pair with your Mac over Tailscale")</span>` +
+    `<div style="margin-top:6px">Do you want to make this edit to <span class="c-b">App.swift</span>?</div>` +
+    `<span class="opt" id="opt1"><span class="c-mag">❯</span> 1. Yes</span>` +
+    `<span class="opt c-dim">  2. Yes, allow all edits during this session (shift+tab)</span>` +
+    `<span class="opt c-dim">  3. No, and tell Claude what to do differently (esc)</span>`;
+
+  function setWorking(text) {
+    stage.dataset.phase = 'work'; mac.classList.remove('off');
+    spinOn = true; $('#spin').hidden = false;
+    statusText.textContent = text;
+  }
+  function setPhoneWaiting(on) {
+    cardA.classList.toggle('waiting', on); cardA.classList.toggle('working', !on);
+    $('#aWhat').textContent = on ? 'Allow? Edit App.swift' : $('#aWhat').dataset.next || 'Editing App.swift';
+    if (on) $('#aSt').textContent = 'Waiting on You.';
+    $('#cWait').textContent = on ? 1 : 0; $('#cWork').textContent = on ? 1 : 2;
+    $('#chipWait').classList.toggle('hot', on);
+    $('#bell').classList.toggle('on', on);
+  }
+
+  function showStaticWaiting() {
+    // Reduced motion: one still frame of the key moment.
+    $('#spin').hidden = true; mac.classList.add('off'); stage.dataset.phase = 'wait';
+    statusText.textContent = 'Waiting on you'; statusGlyph.textContent = '●';
+    const box = document.createElement('div'); box.className = 'tbox ask dyn'; box.innerHTML = ASK; term.appendChild(box);
+    flipOrder(['a', 'b', 'c', 'd']); setPhoneWaiting(true);
+    cap.textContent = 'Claude stopped on a permission prompt. Your phone shows it first, as Waiting on You.';
+    $('#pauseBtn').hidden = true;
+    rail.style.opacity = 1;
+  }
+
+  async function loop() {
+    for (;;) {
+      // Work
+      setWorking('Editing App.swift');
+      cap.textContent = 'Claude is working on your Mac. A glow traces the window while it works.';
+      await wait(4200);
+      // Ask
+      spinOn = false; $('#spin').hidden = true; mac.classList.add('off');
+      stage.dataset.phase = 'wait'; statusText.textContent = 'Waiting on you'; statusGlyph.textContent = '●';
+      const box = document.createElement('div'); box.className = 'tbox ask dyn ln in'; box.innerHTML = ASK;
+      term.insertBefore(box, $('#spin'));
+      cap.textContent = 'Claude stopped to ask permission. Lostty tells your phone.';
+      await wait(700);
+      await pulse(1, '#ff3df2');
+      flipOrder(['a', 'b', 'c', 'd']); setPhoneWaiting(true);
+      cap.textContent = 'Your phone puts it first: Waiting on You. Tap Allow, right there.';
+      await wait(2000);
+      // Tap Allow
+      const allow = $('#allowBtn'), tap = $('#tap');
+      const sr = $('#screen').getBoundingClientRect(), ar = allow.getBoundingClientRect();
+      tap.style.left = (ar.left - sr.left + ar.width / 2) + 'px'; tap.style.top = (ar.top - sr.top + ar.height / 2) + 'px';
+      tap.classList.remove('go'); void tap.offsetWidth; tap.classList.add('go');
+      await wait(220); allow.classList.add('pressed');
+      await wait(300);
+      cap.textContent = 'Allowed from the phone. The answer goes straight to the Mac.';
+      setPhoneWaiting(false); allow.classList.remove('pressed');
+      $('#aWhat').textContent = 'Running swift test';
+      flipOrder(['b', 'a', 'c', 'd']);
+      await pulse(-1, '#28e7ff');
+      // Resume
+      $('#opt1').classList.add('pick');
+      await wait(450);
+      box.remove();
+      addLine('<span class="c-dim">  ⎿  Updated Sources/App.swift with 1 addition and 1 removal</span>');
+      await wait(250);
+      addLine('<span class="c-ok">⏺</span> <span class="c-b">Bash</span>(swift test --filter Pairing)');
+      setWorking('Running swift test');
+      statusGlyph.textContent = '✳';
+      cap.textContent = 'Claude carries on. The phone goes back in your pocket.';
+      await wait(3600);
+      // Reset
+      term.style.transition = 'opacity .35s'; term.style.opacity = 0;
+      await wait(380);
+      $$('.dyn', term).forEach(n => n.remove());
+      secs = 14; $('#spinT').textContent = secs; $('#aWhat').textContent = 'Editing App.swift'; $('#aSt').textContent = `✳ Working… (${secs}s)`;
+      term.style.opacity = 1;
+      await wait(350);
+      term.style.transition = '';
+    }
+  }
+
+  $('#pauseBtn').addEventListener('click', e => {
+    paused = !paused;
+    stage.classList.toggle('paused', paused);
+    e.currentTarget.textContent = paused ? 'Play' : 'Pause';
+    e.currentTarget.setAttribute('aria-pressed', String(paused));
+  });
+
+  route();
+  layoutSignal();
+  if (reduce) showStaticWaiting();
+  else { requestAnimationFrame(spinLoop); loop(); }
+})();
+</script>

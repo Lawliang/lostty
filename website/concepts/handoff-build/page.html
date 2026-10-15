@@ -1,0 +1,364 @@
+<title>Lostty Handoff</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Lostty is a fast, native Mac terminal with an iPhone app for people running coding agents. Leave your desk, not your terminal.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wdth,wght@0,75..100,400..700;1,75..100,400..700&family=JetBrains+Mono:wght@400;500;700&display=swap">
+<script>document.documentElement.classList.add("js");</script>
+<style>
+%%CSS%%
+</style>
+
+<header class="nav">
+  <div class="wrap">
+    <a class="brand" href="#top" data-nav="home">%%LOGO%%Lostty</a>
+    <nav class="navlinks" aria-label="Main">
+      <a class="hide-sm" href="#why" data-nav="home">Features</a>
+      <a class="hide-sm" href="#skins" data-nav="home">Skins</a>
+      <a href="#docs" data-nav="docs">Docs</a>
+      <a class="gh" href="%%REPO%%" target="_blank" rel="noopener">%%GH%%<span>GitHub</span></a>
+    </nav>
+    <button type="button" class="themebtn" id="themebtn" aria-label="Switch light or dark theme">%%SUN%%</button>
+  </div>
+</header>
+
+<main class="home" id="top">
+
+  <section class="hero">
+    <div class="wrap hero-grid">
+      <div class="hero-copy">
+        <h1 class="display">Leave your desk, not your terminal.<span class="cur blink" aria-hidden="true"></span></h1>
+        <p class="lede">A fast, native Mac terminal with an iPhone app, built for running Claude Code and Codex. Every terminal keeps running on your Mac. Your phone shows you which one needs you, and you answer it right there.</p>
+        <div class="ctas">
+          <a class="btn btn-primary" href="#start">Get started</a>
+          <a class="btn btn-ghost" href="#docs">Read the docs</a>
+        </div>
+        <p class="hero-meta">Free and open source under MIT. Built on <a href="https://ghostty.org" target="_blank" rel="noopener">Ghostty</a>'s engine. For macOS 15 and iOS 17 or later.</p>
+      </div>
+      <div class="hero-stage">
+        <div id="hero-rig">%%HERO_RIG%%</div>
+        <p class="hero-caption" id="hero-caption" data-k="wait"><span class="dot" aria-hidden="true"></span><span class="txt">Your phone puts it first: Waiting on you.</span></p>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec band" id="why">
+    <div class="wrap">
+      <div class="sec-head">
+        <h2 class="h2">Why Lostty exists</h2>
+        <p class="lede">Coding agents work best when you let them run. The trouble is, they don't run for long before they need you. I built Lostty to fix the things that kept going wrong whenever I left an agent running and walked away.</p>
+      </div>
+
+      <div class="story-grid">
+        <div class="chapters">
+
+          <article class="ch" id="ch-1">
+            <div class="ch-text">
+              <span class="ch-num">#1</span>
+              <h3 class="h3">The agent stopped, and I didn't know.</h3>
+              <p class="ch-problem"><span class="ch-label">The problem</span>You start Claude on something big. You go make a coffee. Twenty minutes later you come back, and it's been sitting on a permission prompt for nineteen of them.</p>
+              <p class="ch-fix"><span class="ch-label">The fix</span>Lostty knows what every terminal is doing. Your phone sorts them into <strong>Waiting on you</strong>, <strong>Working</strong>, <strong>Ready</strong> and <strong>Idle</strong>, so the one that needs you is always first. Tap in, answer, and Claude carries on. Anything that waited on you while you were busy lands in the inbox under the bell.</p>
+              <div class="legend" aria-label="Session states">
+                <span class="chip wait"><span class="m mi-wait"></span>Waiting on you</span>
+                <span class="chip work"><span class="m mi-happy"></span>Working</span>
+                <span class="chip ready"><span class="m mi-ready"></span>Ready</span>
+                <span class="chip idle"><span class="m mi-sleep"></span>Idle</span>
+              </div>
+            </div>
+            <div class="ch-fig">%%FIG1%%</div>
+          </article>
+
+          <article class="ch" id="ch-2">
+            <div class="ch-text">
+              <span class="ch-num">#2</span>
+              <h3 class="h3">My phone got a tiny, useless Mac.</h3>
+              <p class="ch-problem"><span class="ch-label">The problem</span>Screen sharing works, technically. But you're pinching around a 27-inch screen on a 6-inch phone, and typing into it is miserable.</p>
+              <p class="ch-fix"><span class="ch-label">The fix</span>The phone app is a real terminal. It opens the same session that's running on your Mac: same output, same prompt, same half-typed command. Come back to your Mac and carry on. Nothing restarts. The keyboard is made for it, too: <strong>a tap that lands in the gap between two keys types the nearest one</strong>, instead of nothing.</p>
+              <div class="tip">
+                <b>Turn on Stay Awake before you leave</b>
+                <ul>
+                  <li>Your Mac keeps working with the lid closed, even on battery.</li>
+                  <li>If its Wi-Fi drops, it hops onto your iPhone's hotspot, so you can still reach it.</li>
+                </ul>
+              </div>
+            </div>
+            <div class="ch-fig">%%FIG2%%</div>
+          </article>
+
+          <article class="ch" id="ch-3">
+            <div class="ch-text">
+              <span class="ch-num">#3</span>
+              <h3 class="h3">Ten terminals, all the same black box.</h3>
+              <p class="ch-problem"><span class="ch-label">The problem</span>Once you've got a few agents going, every terminal looks the same. Sooner or later, you type into the wrong one.</p>
+              <p class="ch-fix"><span class="ch-label">The fix</span>Skins. Each project gets its own colors and texture, and the terminal changes to match when you move into a project. Your phone shows the same colors, so the list reads at a glance. Each terminal also says what Claude is doing right now, like <strong>Editing App.swift</strong>, with its live <strong>&#10035; Working&#8230;</strong> line. A soft glow traces the window while Claude works, so you can tell from across the room.</p>
+            </div>
+            <div class="ch-fig">%%FIG3%%</div>
+          </article>
+
+          <article class="ch" id="ch-4">
+            <div class="ch-text">
+              <span class="ch-num">#4</span>
+              <h3 class="h3">Starting anything meant going back to my desk.</h3>
+              <p class="ch-problem"><span class="ch-label">The problem</span>You're out, and you think of the next thing. Now you either wait until you're back, or you go back.</p>
+              <p class="ch-fix"><span class="ch-label">The fix</span>Tap <strong>+</strong> on your phone and pick a project folder on your Mac (browse for it, or search). Choose what starts there: Claude, Codex or a plain shell, and which model. <strong>It opens on your Mac and on your phone at the same time.</strong></p>
+            </div>
+            <div class="ch-fig">%%FIG4%%</div>
+          </article>
+
+        </div>
+
+        <div class="stage-col" aria-hidden="false">
+          <div class="stage">
+            <div id="stage-rig">%%STAGE_RIG%%</div>
+            <div class="prog" aria-hidden="true">
+              <div class="seg"><span class="bar"><i></i></span>Waiting on you</div>
+              <div class="seg"><span class="bar"><i></i></span>A real terminal</div>
+              <div class="seg"><span class="bar"><i></i></span>Skins</div>
+              <div class="seg"><span class="bar"><i></i></span>Start from the phone</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="skins">
+    <div class="wrap">
+      <div class="sec-head">
+        <h2 class="h2">Every project gets its own look</h2>
+        <p class="lede">Twelve built-in skins restyle the background, text, texture, ANSI palette, cursor and selection. <code>cd</code> into a project and the pane re-skins; leave and it reverts. Pick one below, or make your own in <code>skins.toml</code>.</p>
+      </div>
+      <div class="skins-grid">
+        <div class="preview-wrap">
+          <div class="preview sk-neon" id="preview">
+            <div class="texture tx-grid"></div>
+            <div class="pv-bar"><span class="lights"><i></i><i></i><i></i></span><span class="pv-pill"><b>&gt;</b> <span id="pv-pill">lostty/skins</span></span></div>
+<pre><span class="a">~/code/lostty</span> <span class="m">on</span> <span class="b">skins</span>
+<span class="a">&gt;</span> skins set <span id="pv-cmd">neon-arcade</span>
+<span class="m">equipped for this pane</span>
+
+<span class="a">&gt;</span> claude
+<span class="b">&#9210;</span> Read(SkinPicker.swift)
+<span class="b">&#9210;</span> Update(App.swift) <span class="m">+18 &#8722;4</span>
+<span class="a">&#10035;</span> Working&#8230; <span class="m">(0m 41s &middot; esc to interrupt)</span>
+
+<span class="a">&gt;</span> <span class="caret"></span></pre>
+            <span class="preview-glow" aria-hidden="true"></span>
+          </div>
+          <div class="pv-meta" aria-live="polite">
+            <span class="nm" id="pv-name">neon-arcade</span>
+            <span class="rar legendary" id="pv-rar">legendary</span>
+            <span class="desc" id="pv-desc">Bright magenta and cyan on a dark purple.</span>
+          </div>
+        </div>
+        <div class="picker" role="group" aria-label="Choose a skin to preview">
+%%PICKER%%
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec band" id="how">
+    <div class="wrap">
+      <div class="sec-head">
+        <h2 class="h2">Your phone talks straight to your Mac</h2>
+        <p class="lede">Over SSH, inside your own private Tailscale network. There's no Lostty server in the middle. There isn't one.</p>
+      </div>
+      <div class="flow">
+        <div class="node">
+          <svg class="ic" viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="8" width="26" height="18" rx="2.5"/><path d="M3 31h34l-2 2.5H5Z"/></svg>
+          <h3>Your Mac</h3>
+          <p>Lostty runs every terminal here. Sessions keep going when you walk away, with the lid closed if Stay Awake is on.</p>
+          <span class="tag">macOS 15 or later</span>
+        </div>
+        <div class="wire">
+          <span class="line" aria-hidden="true"></span>
+          <span class="pkt" aria-hidden="true"></span><span class="pkt back" aria-hidden="true"></span>
+          <div class="wire-in">
+            <span class="noserver">Lostty server</span>
+            <span class="tunnel">SSH inside your tailnet<small>Mac &#8644; iPhone, direct</small></span>
+          </div>
+        </div>
+        <div class="node">
+          <svg class="ic" viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><rect x="11" y="3" width="18" height="34" rx="4"/><path d="M17 7h6"/></svg>
+          <h3>Your iPhone</h3>
+          <p>The Lostty app opens the same sessions, sorted by who needs you. Its SSH key is made on the phone and never leaves it.</p>
+          <span class="tag">iOS 17 or later</span>
+        </div>
+      </div>
+      <div class="facts">
+        <div class="fact"><b>No account, no relay</b><span>Nothing about your sessions passes through anyone else's machine.</span></div>
+        <div class="fact"><b>Paired with a QR code</b><span>Lostty &#8594; Phone Access&#8230; &#8594; Pair a Phone&#8230;, then scan it with the iPhone and click Allow on the Mac.</span></div>
+        <div class="fact"><b>Reachable when you're out</b><span>Your phone reaches the Mac while it's awake and Lostty is open, from wherever Tailscale reaches.</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="ghostty">
+    <div class="wrap ghostty">
+<pre class="gh-art" aria-hidden="true"><span class="a">$</span> lostty --version
+Lostty
+  engine   Ghostty (Zig core, Metal renderer)
+  mac app  Lostty for Mac
+  phone    Lostty for iPhone
+  license  MIT
+
+<span class="a">$</span> <span class="caret"></span></pre>
+      <div class="gh-copy">
+        <h2 class="h2">Built on Ghostty</h2>
+        <p>Lostty started from <a href="https://ghostty.org" target="_blank" rel="noopener">Ghostty</a>, the fast, native terminal by Mitchell Hashimoto and the Ghostty contributors. Every character you see is drawn by Ghostty's engine, which does the hard part quickly and correctly. Lostty adds the Mac and iPhone side on top.</p>
+        <p>If you love how fast Lostty feels, that's Ghostty. Go give it a star.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec band" id="start">
+    <div class="wrap start-grid">
+      <div>
+        <div class="sec-head">
+          <h2 class="h2">Get started</h2>
+          <p class="lede">Lostty builds from source on your Mac with one command, then installs on your iPhone over its cable.</p>
+        </div>
+        <ul class="reqs">
+          <li><b>Mac</b><span>macOS 15 or later, with Xcode 26 and Homebrew</span></li>
+          <li><b>iPhone</b><span>iOS 17 or later, and its cable</span></li>
+          <li><b>Accounts</b><span>A free Apple Account, and Tailscale on both devices</span></li>
+        </ul>
+      </div>
+      <div>
+        <div class="code">
+          <div class="code-top"><span>Terminal on your Mac</span><button type="button" class="copy" data-copy="clone-cmd">Copy</button></div>
+          <pre id="clone-cmd" data-text="git clone https://github.com/Lawliang/lostty.git&#10;cd lostty&#10;macos/setup.sh"><span class="p">$ </span>git clone https://github.com/Lawliang/lostty.git
+<span class="p">$ </span>cd lostty
+<span class="p">$ </span>macos/setup.sh</pre>
+        </div>
+        <ol class="steps">
+          <li><span><b>Install Xcode 26</b> from the App Store and open it once.</span></li>
+          <li><span><b>Install Lostty</b> with the commands above. The first build takes a while.</span></li>
+          <li><span><b>Add your Apple Account to Xcode</b> in Settings &#8594; Accounts.</span></li>
+          <li><span><b>Install the app</b> on your plugged-in iPhone with <code>macos/install-phone.sh</code>.</span></li>
+          <li><span><b>Install Tailscale</b> on the Mac and the iPhone, signed in to the same account.</span></li>
+          <li><span><b>Pair</b> from Lostty &#8594; Phone Access&#8230; &#8594; Pair a Phone&#8230;, and scan the code.</span></li>
+        </ol>
+        <div class="walk"><span class="mi mi-sleep" aria-hidden="true"></span><p>That's it. Go take a walk. <a href="#docs">Read the full guide</a></p></div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<section class="docs" id="docs" aria-label="Documentation">
+  <div class="wrap docs-grid">
+    <aside class="dside">
+      <nav aria-label="Docs">
+        <span class="grp">Start here</span>
+        <a href="#docs" aria-current="page">Getting Started</a>
+        <a href="%%REPO%%/blob/main/docs/lostty-mobile-phone-access.md" target="_blank" rel="noopener">Phone Access %%EXT%%</a>
+        <span class="grp">Using Lostty</span>
+        <a href="%%REPO%%/blob/main/SKINS.md" target="_blank" rel="noopener">Skins %%EXT%%</a>
+        <a href="%%REPO%%/blob/main/docs/lostty-mobile-host-setup.md" target="_blank" rel="noopener">Manual Mac setup %%EXT%%</a>
+        <span class="grp">Project</span>
+        <a href="%%REPO%%/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">Contributing %%EXT%%</a>
+      </nav>
+    </aside>
+
+    <article class="article">
+      <div class="crumbs">Docs / Start here</div>
+      <h1>Getting Started</h1>
+      <p>Lostty is a Mac terminal with an iPhone app. You build it on your Mac, install the phone app over the cable, and pair the two inside your own Tailscale network. Plan on an hour, most of it waiting for the first build.</p>
+      <p><strong>You'll need:</strong> a Mac on macOS 15 or later, an iPhone on iOS 17 or later with its cable, and a free Apple Account.</p>
+
+      <h2 id="docs-mac">On your Mac</h2>
+      <h3><span class="n">1</span>Install Xcode 26</h3>
+      <p>Get it from the App Store and open it once. You'll also need <a href="https://brew.sh" target="_blank" rel="noopener">Homebrew</a>.</p>
+      <h3><span class="n">2</span>Install Lostty</h3>
+      <p>In Terminal:</p>
+      <div class="code">
+        <div class="code-top"><span>Terminal</span><button type="button" class="copy" data-copy="docs-clone">Copy</button></div>
+        <pre id="docs-clone" data-text="git clone https://github.com/Lawliang/lostty.git&#10;cd lostty&#10;macos/setup.sh">git clone https://github.com/Lawliang/lostty.git
+cd lostty
+macos/setup.sh</pre>
+      </div>
+      <p>It installs what the build needs (it may ask for your password), then builds Lostty, puts it in <code>/Applications</code> and opens it. The first build takes a while.</p>
+      <div class="callout">
+        <span class="mi mi-wait" aria-hidden="true"></span>
+        <p><b>Updating later</b>Run <code>git pull</code>, then <code>macos/install.sh</code>, then choose <strong>Restart to Update</strong> in Lostty's menu bar. Don't Quit Lostty to update: quitting ends every terminal session.</p>
+      </div>
+
+      <h2 id="docs-iphone">On your iPhone</h2>
+      <h3><span class="n">3</span>Add your Apple Account to Xcode</h3>
+      <p>In Xcode: <strong>Settings &#8594; Accounts</strong>, click <strong>+</strong>, and sign in.</p>
+      <h3><span class="n">4</span>Install the app</h3>
+      <p>Plug your iPhone into the Mac, unlock it, and tap <strong>Trust</strong>. Then, in the <code>lostty</code> folder:</p>
+      <div class="code">
+        <div class="code-top"><span>Terminal</span><button type="button" class="copy" data-copy="docs-phone">Copy</button></div>
+        <pre id="docs-phone">macos/install-phone.sh</pre>
+      </div>
+      <p>The first time, the phone may ask you to:</p>
+      <ul>
+        <li>turn on <strong>Settings &#8594; Privacy &amp; Security &#8594; Developer Mode</strong> (the phone restarts);</li>
+        <li>trust your Apple Account in <strong>Settings &#8594; General &#8594; VPN &amp; Device Management</strong>.</li>
+      </ul>
+      <p>Then run the command again.</p>
+      <div class="callout note">
+        <span class="mi mi-ready" aria-hidden="true"></span>
+        <p><b>With a free Apple Account, the app stops opening after 7 days</b>Run the command again to renew it. A paid developer account makes it last a year.</p>
+      </div>
+
+      <h2 id="docs-pair">Pair them</h2>
+      <h3><span class="n">5</span>Install Tailscale on both</h3>
+      <p>Install <a href="https://tailscale.com/download" target="_blank" rel="noopener">Tailscale</a> on the Mac and the iPhone, and sign in to both with the same account. Your phone talks to your Mac directly, over SSH, inside your own private Tailscale network. There's no Lostty server in the middle, and the phone's SSH key never leaves the phone.</p>
+      <h3><span class="n">6</span>Pair</h3>
+      <p>On the Mac, open <strong>Lostty &#8594; Phone Access&#8230;</strong> and fix any row without a &#10003;. Each row says what to click. Then click <strong>Pair a Phone&#8230;</strong>, and on the iPhone open Lostty, tap <strong>Pair with Mac</strong> and scan the code. Click <strong>Allow</strong> on the Mac.</p>
+
+      <h2 id="docs-done">That's it. Go take a walk.</h2>
+      <p>Your phone reaches the Mac while it's awake and Lostty is open. To keep it reachable with the lid closed, turn on <strong>Stay Awake</strong> in Lostty's menu bar, and see <a href="%%REPO%%/blob/main/docs/lostty-mobile-phone-access.md" target="_blank" rel="noopener">Lostty on your iPhone</a>.</p>
+
+      <div class="dnext">
+        <a href="#top" data-nav="home"><span>Back to</span>The Lostty home page</a>
+        <a href="%%REPO%%/blob/main/docs/lostty-mobile-phone-access.md" target="_blank" rel="noopener"><span>Next</span>Phone Access</a>
+      </div>
+    </article>
+
+    <aside class="dtoc">
+      <div class="t">On this page</div>
+      <nav aria-label="On this page">
+        <a href="#docs-mac">On your Mac</a>
+        <a href="#docs-iphone">On your iPhone</a>
+        <a href="#docs-pair">Pair them</a>
+        <a href="#docs-done">Go take a walk</a>
+      </nav>
+    </aside>
+  </div>
+</section>
+
+<footer class="foot">
+  <div class="wrap">
+    <div class="about">
+      <a class="brand" href="#top" data-nav="home">%%LOGO2%%Lostty</a>
+      <p>Leave your desk, not your terminal. MIT licensed. Built on Ghostty by Mitchell Hashimoto and the Ghostty contributors.</p>
+    </div>
+    <div>
+      <h4>Lostty</h4>
+      <ul>
+        <li><a href="#why" data-nav="home">Features</a></li>
+        <li><a href="#skins" data-nav="home">Skins</a></li>
+        <li><a href="#how" data-nav="home">How it works</a></li>
+        <li><a href="#docs" data-nav="docs">Docs</a></li>
+      </ul>
+    </div>
+    <div>
+      <h4>Elsewhere</h4>
+      <ul>
+        <li><a href="%%REPO%%" target="_blank" rel="noopener">GitHub</a></li>
+        <li><a href="%%REPO%%/blob/main/LICENSE" target="_blank" rel="noopener">License (MIT)</a></li>
+        <li><a href="%%REPO%%/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">Contributing</a></li>
+        <li><a href="https://ghostty.org" target="_blank" rel="noopener">Ghostty</a></li>
+      </ul>
+    </div>
+  </div>
+</footer>
+
+<script>
+%%JS%%
+</script>

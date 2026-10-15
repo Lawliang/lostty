@@ -1,0 +1,1560 @@
+<title>Lostty Handoff</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Lostty is a fast, native Mac terminal with an iPhone app for people running coding agents. Leave your desk, not your terminal.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wdth,wght@0,75..100,400..700;1,75..100,400..700&family=JetBrains+Mono:wght@400;500;700&display=swap">
+<script>document.documentElement.classList.add("js");</script>
+<style>
+@property --halo { syntax: "<color>"; inherits: true; initial-value: rgba(124, 77, 220, 0.5); }
+@property --ang { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+
+/* Layout: left-aligned editorial copy beside a sticky device stage (Mac window + iPhone) that acts out each fix as you scroll */
+:root {
+  --bg: #F4F4F7;
+  --bg-2: #ECEBF0;
+  --surface: #FFFFFF;
+  --ink: #16121B;
+  --ink-2: #4C4555;
+  --ink-3: #847D8D;
+  --line: #E0DCE5;
+  --accent: #E5199C;
+  --accent-ink: #B80E7B;
+  --accent-soft: #FCE3F2;
+  --on-accent: #FFFFFF;
+
+  /* status palette: semantic, separate from the accent */
+  --wait: #12955A;
+  --work: #7448DC;
+  --ready: #A88C5C;
+  --idle: #8A8693;
+  --wait-soft: #DCF3E6;
+  --work-soft: #ECE4FD;
+  --ready-soft: #F3ECDE;
+  --idle-soft: #EAE9EE;
+
+  --win: #F2F0F5;
+  --win-edge: #D6D1DC;
+  --win-title: #5C5565;
+  --win-gutter: #2A2730;
+  --lift: 0 1px 0 rgba(22, 18, 27, 0.04), 0 28px 60px -28px rgba(60, 20, 70, 0.32);
+  --lift-sm: 0 1px 0 rgba(22, 18, 27, 0.05), 0 10px 26px -14px rgba(60, 20, 70, 0.3);
+  --code-bg: #1A1620;
+  --code-ink: #F1ECF5;
+  --code-mute: #9C94A6;
+  --nav-bg: rgba(244, 244, 247, 0.78);
+
+  /* the phone app is dark in both site themes, like the real app */
+  --k-bg: #0E0D11;
+  --k-ink: #F3F0F6;
+  --k-mute: #8E8897;
+  --k-raise: #1F1D24;
+  --k-line: #2C2932;
+  --k-wait: #24452F;
+  --k-wait-edge: #3E7652;
+  --k-wait-ink: #7BE3A5;
+  --k-work: #2A2142;
+  --k-work-edge: #4E3A82;
+  --k-work-ink: #BBA3FF;
+  --k-ready: #DCD3C4;
+  --k-ready-ink: #3A3227;
+  --k-idle: #1B1A1F;
+  --k-idle-ink: #D8D4DE;
+  --term-bg: #141317;
+  --term-ink: #D3CED9;
+  --term-mute: #7E7886;
+
+  --f-sans: "Instrument Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-io: cubic-bezier(0.7, 0, 0.2, 1);
+  --navh: 60px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0F0E12; --bg-2: #15131A; --surface: #1A1820; --ink: #F3F0F6; --ink-2: #B9B2C2; --ink-3: #7F7889; --line: #2A2731;
+    --accent: #EC2EA6; --accent-ink: #FF6FC4; --accent-soft: #3A1230; --on-accent: #FFFFFF;
+    --wait: #4BD98C; --work: #A78BFF; --ready: #D6C29C; --idle: #9A96A3;
+    --wait-soft: #15301F; --work-soft: #231B3A; --ready-soft: #2C2619; --idle-soft: #212026;
+    --win: #25222B; --win-edge: #3A3641; --win-title: #A9A2B2; --win-gutter: #0B0A0D;
+    --lift: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 30px 70px -30px rgba(0, 0, 0, 0.8);
+    --lift-sm: 0 12px 28px -14px rgba(0, 0, 0, 0.7);
+    --code-bg: #0A090C; --code-ink: #F1ECF5; --code-mute: #8A8394; --nav-bg: rgba(15, 14, 18, 0.74);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0F0E12; --bg-2: #15131A; --surface: #1A1820; --ink: #F3F0F6; --ink-2: #B9B2C2; --ink-3: #7F7889; --line: #2A2731;
+  --accent: #EC2EA6; --accent-ink: #FF6FC4; --accent-soft: #3A1230; --on-accent: #FFFFFF;
+  --wait: #4BD98C; --work: #A78BFF; --ready: #D6C29C; --idle: #9A96A3;
+  --wait-soft: #15301F; --work-soft: #231B3A; --ready-soft: #2C2619; --idle-soft: #212026;
+  --win: #25222B; --win-edge: #3A3641; --win-title: #A9A2B2; --win-gutter: #0B0A0D;
+  --lift: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 30px 70px -30px rgba(0, 0, 0, 0.8);
+  --lift-sm: 0 12px 28px -14px rgba(0, 0, 0, 0.7);
+  --code-bg: #0A090C; --code-ink: #F1ECF5; --code-mute: #8A8394; --nav-bg: rgba(15, 14, 18, 0.74);
+  color-scheme: dark;
+}
+
+/* ---------- base ---------- */
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: calc(var(--navh) + 16px); }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--f-sans);
+  font-size: 17px;
+  line-height: 1.6;
+  font-variation-settings: "wdth" 100;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+a { color: var(--accent-ink); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+a:hover { text-decoration-thickness: 2px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 6px; }
+h1, h2, h3, h4 { margin: 0; text-wrap: balance; font-weight: 600; }
+p { margin: 0; }
+code, kbd, pre { font-family: var(--f-mono); }
+.vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+.wrap {
+  max-width: 1240px;
+  margin-inline: auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+@media (min-width: 700px) { .wrap { padding-left: max(32px, env(safe-area-inset-left, 0px)); padding-right: max(32px, env(safe-area-inset-right, 0px)); } }
+
+.display {
+  font-size: clamp(2.6rem, 6.2vw, 5.4rem);
+  line-height: 0.96;
+  letter-spacing: -0.03em;
+  font-weight: 640;
+  font-variation-settings: "wdth" 86;
+}
+.h2 {
+  font-size: clamp(2rem, 4.2vw, 3.4rem);
+  line-height: 1.02;
+  letter-spacing: -0.03em;
+  font-weight: 620;
+  font-variation-settings: "wdth" 88;
+}
+.h3 { font-size: clamp(1.45rem, 2.4vw, 1.95rem); line-height: 1.12; letter-spacing: -0.02em; font-variation-settings: "wdth" 92; }
+.lede { font-size: clamp(1.08rem, 1.5vw, 1.25rem); color: var(--ink-2); max-width: 36em; line-height: 1.55; }
+.kicker { font-size: 0.95rem; font-weight: 600; color: var(--ink-3); }
+
+.btn {
+  display: inline-flex; align-items: center; gap: 0.5em;
+  padding: 0.78em 1.25em; border-radius: 999px;
+  font: 600 1rem/1 var(--f-sans);
+  text-decoration: none; border: 1px solid transparent; cursor: pointer;
+  transition: transform 0.2s var(--ease), background-color 0.2s, box-shadow 0.2s;
+}
+.btn:active { transform: scale(0.97); }
+.btn-primary { background: var(--accent); color: var(--on-accent); box-shadow: 0 8px 22px -10px rgba(229, 25, 156, 0.7); }
+.btn-primary:hover { background: var(--accent-ink); text-decoration: none; }
+.btn-ghost { background: var(--surface); color: var(--ink); border-color: var(--line); }
+.btn-ghost:hover { border-color: var(--ink-3); }
+
+/* ---------- nav ---------- */
+.nav {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 50;
+  background: var(--nav-bg);
+  -webkit-backdrop-filter: saturate(1.6) blur(16px); backdrop-filter: saturate(1.6) blur(16px);
+  border-bottom: 1px solid var(--line);
+}
+.nav .wrap { display: flex; align-items: center; gap: 12px; height: var(--navh); }
+.brand { display: inline-flex; align-items: center; gap: 9px; text-decoration: none; color: var(--ink); font-weight: 650; font-size: 1.2rem; letter-spacing: -0.02em; margin-right: auto; }
+.brand svg { width: 34px; height: 34px; }
+.navlinks { display: flex; align-items: center; gap: 4px; }
+.navlinks a { color: var(--ink-2); text-decoration: none; font-size: 0.95rem; font-weight: 500; padding: 7px 11px; border-radius: 999px; }
+.navlinks a:hover { color: var(--ink); background: var(--bg-2); }
+.navlinks a[aria-current="page"] { color: var(--ink); background: var(--bg-2); }
+.navlinks .gh { color: var(--ink); border: 1px solid var(--line); display: inline-flex; gap: 6px; align-items: center; }
+.navlinks .gh svg { width: 16px; height: 16px; }
+.themebtn { width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); color: var(--ink-2); display: grid; place-items: center; cursor: pointer; }
+.themebtn svg { width: 16px; height: 16px; }
+@media (max-width: 640px) { .navlinks .hide-sm { display: none; } .navlinks a { padding: 7px 8px; } }
+
+.blink { animation: blink 1.1s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+
+/* ---------- hero ---------- */
+.hero { padding-block: clamp(36px, 7vw, 88px) clamp(40px, 6vw, 72px); }
+.hero-grid { display: grid; gap: clamp(28px, 4vw, 56px); align-items: center; }
+@media (min-width: 1000px) { .hero-grid { grid-template-columns: minmax(0, 4.6fr) minmax(0, 7.4fr); } }
+.hero-copy { display: flex; flex-direction: column; gap: 22px; min-width: 0; }
+.hero-copy .display .cur { display: inline-block; width: 0.42em; height: 0.075em; background: var(--accent); vertical-align: 0.14em; margin-left: 0.08em; border-radius: 2px; }
+.ctas { display: flex; flex-wrap: wrap; gap: 10px; }
+.hero-meta { font-size: 0.93rem; color: var(--ink-3); }
+.hero-meta a { color: var(--ink-2); }
+.hero-stage { position: relative; min-width: 0; }
+.hero-caption {
+  display: flex; align-items: center; gap: 10px; margin-top: 18px;
+  font-size: 0.95rem; color: var(--ink-2); min-height: 1.6em;
+}
+.hero-caption .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--wait); box-shadow: 0 0 0 4px var(--wait-soft); flex: none; transition: background-color 0.4s, box-shadow 0.4s; }
+.hero-caption[data-k="work"] .dot { background: var(--work); box-shadow: 0 0 0 4px var(--work-soft); }
+.hero-caption[data-k="tap"] .dot { background: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
+
+/* ---------- section scaffolding ---------- */
+.sec { padding-block: clamp(64px, 10vw, 128px); }
+.sec-head { display: grid; gap: 16px; max-width: 780px; margin-bottom: clamp(32px, 5vw, 56px); }
+.band { background: var(--bg-2); }
+.hero, .sec { overflow-x: clip; }
+
+/* ---------- story (scroll stage) ---------- */
+.story-grid { display: grid; gap: 40px; }
+.chapters { display: grid; gap: clamp(56px, 9vw, 96px); min-width: 0; }
+.ch { display: grid; gap: 22px; min-width: 0; transition: opacity 0.5s; }
+.ch-text { display: grid; gap: 16px; align-content: start; min-width: 0; max-width: 34em; }
+.ch-num { font: 600 0.9rem/1 var(--f-mono); color: var(--accent-ink); }
+.ch-label { font-weight: 650; font-size: 0.92rem; color: var(--ink); margin-right: 0.35em; }
+.ch-problem { color: var(--ink-3); }
+.ch-fix { color: var(--ink-2); }
+.ch-fix strong { color: var(--ink); font-weight: 600; }
+.ch-fig { min-width: 0; padding: 18px 10px; border-radius: 22px; background: var(--bg-2); }
+
+.legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.chip { display: inline-flex; align-items: center; gap: 7px; padding: 5px 12px 5px 6px; border-radius: 999px; font-size: 0.88rem; font-weight: 600; }
+.chip .m { width: 26px; height: 26px; background-size: contain; background-repeat: no-repeat; background-position: center; }
+.chip.wait { background: var(--wait-soft); color: var(--wait); }
+.chip.work { background: var(--work-soft); color: var(--work); }
+.chip.ready { background: var(--ready-soft); color: var(--ready); }
+.chip.idle { background: var(--idle-soft); color: var(--idle); }
+
+.tip {
+  display: grid; gap: 6px; padding: 16px 18px; border-radius: 16px;
+  background: var(--surface); border: 1px solid var(--line); font-size: 0.95rem; color: var(--ink-2);
+}
+.tip b { color: var(--ink); }
+.tip ul { margin: 0; padding-left: 1.1em; }
+
+.stage-col { display: none; }
+.stage { position: sticky; top: calc(env(safe-area-inset-top, 0px) + var(--navh)); min-height: calc(100vh - var(--navh) - env(safe-area-inset-top, 0px)); display: grid; align-content: center; gap: 26px; padding-block: 40px 3vh; }
+.prog { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.seg { display: grid; gap: 8px; font-size: 0.8rem; color: var(--ink-3); font-weight: 600; }
+.seg .bar { height: 3px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.seg .bar i { display: block; height: 100%; width: 100%; background: var(--accent); transform-origin: 0 50%; transform: scaleX(var(--p, 0)); }
+.seg.on { color: var(--ink); }
+
+@media (min-width: 960px) {
+  .ch:not(.js .ch) { grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); align-items: center; gap: 48px; }
+  .js .story-grid { grid-template-columns: minmax(0, 4.6fr) minmax(0, 7.4fr); gap: clamp(32px, 4vw, 64px); }
+  .js .stage-col { display: block; }
+  .js .ch-fig { display: none; }
+  .js .chapters { gap: 0; }
+  .js .ch { min-height: 92vh; align-content: center; padding-block: 8vh; opacity: 0.38; }
+  .js .ch.is-active { opacity: 1; }
+  .js .ch:first-child { min-height: 80vh; }
+}
+
+/* ---------- the rig (Mac + phone illustration, em-based so it scales as one) ---------- */
+.rig { container-type: inline-size; width: 100%; }
+.scene {
+  --sw: 50; --sh: 31.5;
+  position: relative;
+  width: calc(var(--sw) * 1em);
+  height: calc(var(--sh) * 1em);
+  font-size: min(calc(100cqw / var(--sw)), var(--cap, 17px));
+  margin-inline: auto;
+  --halo: rgba(124, 77, 220, 0.5);
+  transition: --halo 0.9s ease;
+}
+.scene::before {
+  content: ""; position: absolute; inset: -10% -8%;
+  background: radial-gradient(42% 46% at 66% 48%, color-mix(in srgb, var(--halo) 42%, transparent), transparent 72%),
+              radial-gradient(40% 40% at 28% 60%, color-mix(in srgb, var(--halo) 16%, transparent), transparent 70%);
+  pointer-events: none;
+}
+.scene.stop { --halo: rgba(30, 190, 110, 0.55); }
+.scene.answered { --halo: rgba(124, 77, 220, 0.5); }
+.scene.s2 { --halo: rgba(255, 120, 80, 0.5); }
+.scene.s4 { --halo: rgba(229, 25, 156, 0.5); }
+.scene.spawn { --halo: rgba(255, 79, 184, 0.55); }
+
+/* Mac window */
+.mac {
+  position: absolute; left: 0; top: 3.2em; width: 37em; height: 25.5em;
+  border-radius: 0.8em; background: var(--win);
+  box-shadow: 0 0 0 0.07em var(--win-edge), 0 1.8em 3.4em -1.4em rgba(40, 14, 52, 0.42);
+  display: flex; flex-direction: column;
+  transition: opacity 0.7s var(--ease), transform 0.9s var(--ease), filter 0.7s;
+}
+.mac::after {
+  content: ""; position: absolute; inset: -0.16em; border-radius: 0.95em; padding: 0.16em;
+  background: conic-gradient(from var(--ang), transparent 0 62%, #FF2BD6 74%, #19E6FF 86%, transparent 94%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  opacity: 0; transition: opacity 0.8s; pointer-events: none;
+  filter: drop-shadow(0 0 0.4em rgba(229, 25, 156, 0.7));
+  animation: trace 3.2s linear infinite;
+}
+.trace .mac::after { opacity: 1; }
+@keyframes trace { to { --ang: 360deg; } }
+
+.mac-bar { height: 2.3em; flex: none; display: flex; align-items: center; gap: 0.6em; padding: 0 0.9em; position: relative; }
+.lights { display: flex; gap: 0.42em; }
+.lights i { width: 0.66em; height: 0.66em; border-radius: 50%; background: #FF5F57; box-shadow: inset 0 0 0 0.04em rgba(0, 0, 0, 0.12); }
+.lights i:nth-child(2) { background: #FEBC2E; }
+.lights i:nth-child(3) { background: #28C840; }
+.mac-title { position: absolute; left: 50%; transform: translateX(-50%); font-size: 0.74em; font-weight: 600; color: var(--win-title); }
+.pill {
+  margin-left: auto; font: 500 0.62em/1 var(--f-mono); padding: 0.45em 0.8em; border-radius: 1em;
+  background: var(--term-bg); color: var(--term-ink); transition: background-color 0.8s, color 0.8s;
+}
+.pill b { color: var(--term-mute); font-weight: 700; transition: color 0.8s; }
+.s1 .pill { background: #1B0B33; color: #F6E9FF; box-shadow: 0 0 0 0.1em #FF2BD6 inset; }
+.s1 .pill b { color: #FF2BD6; }
+
+.mac-body { flex: 1; display: flex; gap: 0.12em; background: var(--win-gutter); margin: 0 0.12em; border-radius: 0.2em; overflow: hidden; min-height: 0; }
+.col { display: flex; flex-direction: column; gap: 0.12em; flex: 1 1 0%; min-width: 0; transition: flex-grow 0.9s var(--ease); }
+.col-e { flex: 0 0 0%; }
+.spawn .col-e { flex: 0.95 1 0%; }
+.mac-usage {
+  height: 1.7em; flex: none; display: flex; align-items: center; gap: 1.2em; padding: 0 0.9em;
+  font: 500 0.54em/1 var(--f-mono); color: var(--win-title);
+}
+.mac-usage span { white-space: nowrap; }
+.mac-usage .meter { letter-spacing: -0.05em; color: var(--accent); }
+
+/* terminal pane */
+.pane {
+  position: relative; flex: 1 1 0%; min-height: 0; overflow: hidden;
+  background: var(--term-bg);
+  --tfg: var(--term-ink); --ta: #9C96A3; --tb: #C9C4CF;
+  color: var(--tfg); font-size: 0.56em;
+  transition: color 0.8s, box-shadow 0.5s;
+}
+.pane .skin {
+  position: absolute; inset: 0; background-color: var(--sbg);
+  clip-path: inset(0 100% 0 0); transition: clip-path 1s var(--ease-io);
+}
+.pane > .ph, .pane > .pt { position: relative; }
+.ph { display: flex; justify-content: space-between; align-items: center; gap: 1em; padding: 0.7em 0.9em 0.3em; white-space: nowrap; }
+.pp { font-family: var(--f-mono); font-weight: 500; }
+.pp b, .pt .a { color: var(--ta); transition: color 0.8s; }
+.pt .b { color: var(--tb); transition: color 0.8s; }
+.pt .m { opacity: 0.6; }
+.pst { font-family: var(--f-sans); font-weight: 600; opacity: 0.85; overflow: hidden; text-overflow: ellipsis; }
+.pst .star { display: inline-block; color: var(--ta); animation: spin 2.4s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.pt { margin: 0; padding: 0.2em 0.9em; font: 400 1em/1.55 var(--f-mono); white-space: pre; }
+.pt .q { display: inline-block; border: 0.1em solid color-mix(in srgb, var(--ta) 70%, transparent); border-radius: 0.4em; padding: 0.2em 0.7em; margin-top: 0.2em; }
+.st-stop, .st-ans { display: none; }
+.stop .p-a .st-base, .answered .p-a .st-base { display: none; }
+.stop .p-a .st-stop { display: block; animation: popin 0.5s var(--ease); }
+.answered .p-a .st-ans { display: block; animation: popin 0.5s var(--ease); }
+.stop .p-a .pst { color: #4BD98C; }
+@keyframes popin { from { opacity: 0; transform: translateY(0.6em); } }
+.same { position: absolute; right: 0.9em; bottom: 0.8em; font: 700 0.95em/1 var(--f-sans); padding: 0.45em 0.8em; border-radius: 1em; background: var(--accent); color: #fff; opacity: 0; transform: translateY(0.4em); transition: opacity 0.4s, transform 0.4s var(--ease); }
+.term .p-a { box-shadow: inset 0 0 0 0.22em var(--accent); }
+.term .p-a .same { opacity: 1; transform: none; }
+
+/* skins (vars used by the panes, the preview and the picker) */
+.sk-neon { --sbg: #1B0B33; --sfg: #F6E9FF; --sa: #FF2BD6; --sb: #19E6FF; }
+.sk-sunset { --sbg: #2B0F2A; --sfg: #FFE7D6; --sa: #FF8A3D; --sb: #FF4F9A; }
+.sk-mint { --sbg: #062A2A; --sfg: #E2FFF0; --sa: #39FF9C; --sb: #F2FF5A; }
+.sk-deep { --sbg: #071A3A; --sfg: #DDF6FF; --sa: #2FD8FF; --sb: #A487FF; }
+.sk-lava { --sbg: #2A140B; --sfg: #FFEBD6; --sa: #FF7A1A; --sb: #FFD23F; }
+.sk-bubble { --sbg: #3A1259; --sfg: #FFF0FA; --sa: #FF4FB8; --sb: #FFD84A; }
+.sk-thunder { --sbg: #0E1630; --sfg: #EEF1FF; --sa: #F5C542; --sb: #9DB4FF; }
+.sk-undertow { --sbg: #05282B; --sfg: #E3FFF8; --sa: #7FF5D6; --sb: #2BB3A3; }
+.sk-blood { --sbg: #2A0A0C; --sfg: #FFE6E3; --sa: #FF3B3B; --sb: #C9A27A; }
+.sk-hearts { --sbg: #3A1A26; --sfg: #FFEEF4; --sa: #FF8FB5; --sb: #FFD1DF; }
+.sk-silver { --sbg: #0C1E16; --sfg: #E3F2E6; --sa: #48C978; --sb: #CFE8D2; }
+.sk-storm { --sbg: #082A30; --sfg: #EAFBF8; --sa: #F5C542; --sb: #3FD6C8; }
+
+.tx-grid { background-image: linear-gradient(color-mix(in srgb, var(--sa) 16%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--sb) 12%, transparent) 1px, transparent 1px); background-size: 2.2em 2.2em; }
+.tx-scan { background-image: repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.05) 0 1px, transparent 1px 3px), radial-gradient(120% 70% at 50% 125%, color-mix(in srgb, var(--sa) 45%, transparent), transparent 62%); }
+.tx-dots { background-image: radial-gradient(color-mix(in srgb, var(--sa) 26%, transparent) 1px, transparent 1.6px); background-size: 1.4em 1.4em; }
+.tx-bubbles { background-image: radial-gradient(circle at 18% 28%, color-mix(in srgb, var(--sa) 22%, transparent) 0 0.35em, transparent 0.42em), radial-gradient(circle at 70% 64%, color-mix(in srgb, var(--sb) 22%, transparent) 0 0.6em, transparent 0.68em), radial-gradient(circle at 44% 86%, color-mix(in srgb, var(--sa) 16%, transparent) 0 0.22em, transparent 0.3em); background-size: 7em 7em; }
+.tx-diag { background-image: repeating-linear-gradient(45deg, color-mix(in srgb, var(--sa) 14%, transparent) 0 2px, transparent 2px 12px); }
+.tx-sparkle { background-image: radial-gradient(circle, color-mix(in srgb, var(--sb) 75%, transparent) 0 1px, transparent 1.6px), radial-gradient(circle, color-mix(in srgb, var(--sa) 60%, transparent) 0 1.4px, transparent 2px); background-size: 3.1em 2.7em, 4.3em 3.9em; background-position: 0 0, 1.6em 1.2em; }
+.tx-bolt { background-image: linear-gradient(115deg, transparent 47%, color-mix(in srgb, var(--sa) 34%, transparent) 47.6% 48.4%, transparent 49%), radial-gradient(80% 60% at 80% 0%, color-mix(in srgb, var(--sb) 18%, transparent), transparent 70%); background-size: 8em 11em, 100% 100%; }
+.tx-tide { background-image: repeating-radial-gradient(ellipse at 50% 150%, transparent 0 1.3em, color-mix(in srgb, var(--sa) 16%, transparent) 1.3em 1.42em); }
+.tx-blade { background-image: linear-gradient(135deg, transparent 48.5%, color-mix(in srgb, var(--sa) 30%, transparent) 49% 50%, transparent 50.5%); background-size: 6em 6em; }
+.tx-petal { background-image: radial-gradient(0.55em 0.28em at 30% 40%, color-mix(in srgb, var(--sa) 34%, transparent) 98%, transparent), radial-gradient(0.4em 0.22em at 75% 78%, color-mix(in srgb, var(--sb) 28%, transparent) 98%, transparent); background-size: 5em 5em; }
+.tx-stars { background-image: radial-gradient(1px 1px at 12% 22%, rgba(255, 255, 255, 0.8) 98%, transparent), radial-gradient(1px 1px at 68% 14%, rgba(255, 255, 255, 0.55) 98%, transparent), radial-gradient(1.4px 1.4px at 40% 70%, color-mix(in srgb, var(--sb) 80%, transparent) 98%, transparent), radial-gradient(1px 1px at 86% 58%, rgba(255, 255, 255, 0.6) 98%, transparent); background-size: 8em 8em; }
+.tx-surge { background-image: linear-gradient(115deg, transparent 47%, color-mix(in srgb, var(--sa) 34%, transparent) 47.6% 48.4%, transparent 49%), repeating-radial-gradient(ellipse at 50% 150%, transparent 0 1.3em, color-mix(in srgb, var(--sb) 16%, transparent) 1.3em 1.42em); background-size: 8em 11em, 100% 100%; }
+
+.s1 .p-a, .s2 .p-b, .s3 .p-c, .s4 .p-d, .p-e { --tfg: var(--sfg); --ta: var(--sa); --tb: var(--sb); }
+.s1 .p-a .skin, .s2 .p-b .skin, .s3 .p-c .skin, .s4 .p-d .skin, .p-e .skin { clip-path: inset(0 0 0 0); }
+
+/* phone */
+.phone {
+  position: absolute; left: 35.4em; top: 0; width: 14.4em; height: 29.8em;
+  border-radius: 2.5em; background: #0A090C; padding: 0.42em;
+  box-shadow: inset 0 0 0 0.09em #3B3741, 0 0 0 0.07em #C9C3D0, 0 2.2em 3.6em -1.4em rgba(30, 8, 40, 0.55);
+  transform-origin: 50% 100%;
+  transition: transform 1s var(--ease);
+  z-index: 2;
+}
+.term .phone { transform: translateX(-12.5em) scale(1.06); }
+.term .mac { opacity: 0.5; transform: scale(0.97); }
+.screen {
+  position: relative; width: 100%; height: 100%; border-radius: 2.1em; overflow: hidden;
+  background: var(--k-bg); color: var(--k-ink); font-size: 0.5em; line-height: 1.3;
+}
+.island { position: absolute; top: 1.05em; left: 50%; width: 8.2em; height: 2.4em; margin-left: -4.1em; border-radius: 1.3em; background: #000; z-index: 9; }
+.sbar { position: absolute; top: 0; left: 0; right: 0; height: 4.4em; display: flex; justify-content: space-between; align-items: center; padding: 0.3em 2.3em 0; font-weight: 650; font-size: 1.15em; z-index: 8; }
+.sicons { display: flex; gap: 0.35em; align-items: center; }
+.sicons i { display: block; background: var(--k-ink); border-radius: 0.12em; }
+.sicons .bat { width: 1.9em; height: 0.9em; border-radius: 0.3em; background: transparent; box-shadow: inset 0 0 0 0.12em var(--k-mute); position: relative; }
+.sicons .bat::after { content: ""; position: absolute; inset: 0.22em 0.5em 0.22em 0.22em; background: #4BD98C; border-radius: 0.12em; }
+.sicons .sig { width: 1.1em; height: 0.8em; background: linear-gradient(90deg, var(--k-ink) 0 20%, transparent 20% 27%, var(--k-ink) 27% 47%, transparent 47% 54%, var(--k-ink) 54% 74%, transparent 74% 80%, var(--k-ink) 80%); clip-path: polygon(0 75%, 100% 0, 100% 100%, 0 100%); }
+
+.view { position: absolute; left: 0; right: 0; top: 4.4em; bottom: 0; transition: transform 0.75s var(--ease), opacity 0.6s; }
+.term .view-list { transform: translateX(-28%); opacity: 0; }
+.view-term { transform: translateX(102%); display: flex; flex-direction: column; background: var(--k-bg); }
+.term .view-term { transform: none; }
+
+.k-head { display: flex; align-items: center; gap: 0.7em; padding: 0.6em 1.4em 0; height: 4em; }
+.k-head .logo { width: 3em; height: 3em; flex: none; }
+.k-head h5 { margin: 0 auto 0 0; font-size: 2.15em; font-weight: 700; letter-spacing: -0.02em; }
+.kbtn { width: 3em; height: 3em; border-radius: 50%; background: var(--k-raise); display: grid; place-items: center; position: relative; flex: none; transition: background-color 0.3s, transform 0.3s; }
+.kbtn svg { width: 1.45em; height: 1.45em; }
+.kbtn .badge { position: absolute; top: -0.25em; right: -0.25em; min-width: 1.45em; height: 1.45em; border-radius: 0.8em; background: var(--accent); color: #fff; font-size: 0.85em; font-weight: 700; display: grid; place-items: center; transform: scale(0); transition: transform 0.4s var(--ease); }
+.stop .kbtn .badge { transform: scale(1); }
+.plus .kb-plus, .sheet .kb-plus { background: var(--accent); transform: scale(0.94); }
+.conn { display: flex; align-items: center; gap: 0.6em; padding: 1em 1.6em 0; font-size: 1.25em; color: var(--k-mute); font-weight: 600; }
+.conn b { font-size: 0.85em; color: var(--k-wait-ink); background: var(--k-wait); border: 0.08em solid var(--k-wait-edge); border-radius: 0.8em; padding: 0.08em 0.6em; }
+.conn .n5 { display: none; }
+.spawn .conn .n4 { display: none; }
+.spawn .conn .n5 { display: inline; }
+
+.list { position: relative; margin-top: 1.3em; height: 44em; }
+.card {
+  --slot: 0;
+  position: absolute; left: 1.1em; right: 1.1em; top: 0; height: 9.2em;
+  border-radius: 1.6em; padding: 1.05em 1.3em;
+  background: var(--k-work); box-shadow: inset 0 0 0 0.1em var(--k-work-edge);
+  --ci: var(--k-work-ink); color: var(--k-ink);
+  transform: translateY(calc(var(--slot) * 10em));
+  transition: transform 0.85s var(--ease), background-color 0.6s, box-shadow 0.6s, opacity 0.6s;
+}
+.c-b { --slot: 0; }
+.c-a { --slot: 1; }
+.c-c { --slot: 2; background: var(--k-ready); box-shadow: none; color: var(--k-ready-ink); --ci: #8A5A12; }
+.c-d { --slot: 3; background: var(--k-idle); box-shadow: inset 0 0 0 0.1em var(--k-line); color: var(--k-idle-ink); --ci: #E5199C; }
+.c-e { --slot: 0; opacity: 0; transform: translateY(-1.5em) scale(0.92); }
+.rise .c-a { --slot: 0; }
+.rise .c-b { --slot: 1; }
+.spawn .c-e { --slot: 0; opacity: 1; transform: translateY(0) scale(1); }
+.spawn .c-a { --slot: 1; }
+.spawn .c-b { --slot: 2; }
+.spawn .c-c { --slot: 3; }
+.spawn .c-d { --slot: 4; }
+.stop .c-a { background: var(--k-wait); box-shadow: inset 0 0 0 0.1em var(--k-wait-edge), 0 0 2.4em -0.4em rgba(75, 217, 140, 0.55); --ci: var(--k-wait-ink); }
+.rise.stop .c-a { z-index: 2; }
+.c-body { position: relative; z-index: 1; width: 64%; display: grid; gap: 0.18em; }
+.c-t { font-size: 1.32em; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 0.4em; }
+.c-p { font: 400 1.05em/1.3 var(--f-mono); opacity: 0.72; white-space: nowrap; }
+.c-p b { color: var(--ci); opacity: 1; }
+.c-d-line { font: 400 1em/1.3 var(--f-mono); opacity: 0.6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.c-s { font-size: 1.08em; font-weight: 650; color: var(--ci); white-space: nowrap; }
+.c-c .c-s, .c-d .c-s { color: inherit; }
+.v-stop, .v-ans { display: none; }
+.stop .c-a .v-base, .answered .c-a .v-base { display: none; }
+.stop .c-a .v-stop, .answered .c-a .v-ans { display: inline; }
+.c-m { position: absolute; right: 3.3em; top: 50%; width: 6.4em; height: 6.4em; margin-top: -3.4em; background-size: contain; background-repeat: no-repeat; background-position: center; }
+.c-m.alt { opacity: 0; }
+.stop .c-a .c-m.base { opacity: 0; }
+.stop .c-a .c-m.alt { opacity: 1; }
+.wave .c-a .c-m.alt { animation: wave 0.9s ease-in-out infinite; transform-origin: 50% 90%; }
+@keyframes wave { 0%, 100% { transform: rotate(-6deg); } 50% { transform: rotate(7deg) translateY(-0.2em); } }
+.chev { position: absolute; right: 0.9em; top: 50%; width: 2.3em; height: 2.3em; margin-top: -1.15em; border-radius: 50%; background: rgba(0, 0, 0, 0.35); display: grid; place-items: center; font-size: 1.2em; color: rgba(255, 255, 255, 0.8); }
+.c-c .chev { background: rgba(58, 50, 39, 0.25); color: var(--k-ready-ink); }
+.sw { width: 0.8em; height: 0.8em; border-radius: 0.25em; flex: none; background: linear-gradient(135deg, var(--sa) 50%, var(--sb) 50%); box-shadow: 0 0 0 0.12em var(--sbg); transform: scale(0); width: 0; transition: transform 0.5s var(--ease), width 0.5s var(--ease); }
+.s1 .c-a .sw, .s2 .c-b .sw, .s3 .c-c .sw, .s4 .c-d .sw, .c-e .sw { transform: scale(1); width: 0.8em; }
+
+/* phone terminal view */
+.t-head { display: flex; align-items: center; gap: 0.6em; padding: 0.4em 1.2em 0.8em; border-bottom: 0.08em solid var(--k-line); flex: none; }
+.t-head .back { font-size: 2em; line-height: 1; color: var(--accent); margin-top: -0.15em; }
+.t-head .tt { font-size: 1.25em; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.t-head .tp { margin-left: auto; font: 500 0.95em/1 var(--f-mono); padding: 0.45em 0.7em; border-radius: 1em; background: var(--k-raise); white-space: nowrap; }
+.t-head .tp b { color: var(--accent); }
+.s1 .t-head .tp { background: #1B0B33; }
+.t-body { flex: 1; min-height: 0; overflow: hidden; padding: 0.9em 1.2em; background: #121116; font: 400 1em/1.5 var(--f-mono); white-space: pre; color: var(--term-ink); }
+.t-body .a { color: #FF5DB8; }
+.t-body .g { color: #7BE3A5; }
+.t-body .m { color: var(--term-mute); }
+.t-body .q { display: inline-block; border: 0.1em solid #5B5263; border-radius: 0.5em; padding: 0.3em 0.8em; margin: 0.2em 0; }
+.t-body .sel { color: #FF5DB8; }
+.t-ans { display: none; }
+.answered .t-ans { display: block; animation: popin 0.5s var(--ease); }
+.answered .t-q { display: none; }
+.caret { display: inline-block; width: 0.6em; height: 1.1em; background: #FF5DB8; vertical-align: -0.2em; animation: blink 1.1s steps(1) infinite; }
+
+.kbd { flex: none; font-size: 1.12em; background: #1C1A21; padding: 0.5em 0.4em 2em; display: grid; gap: 0.5em; position: relative; }
+.krow { display: flex; justify-content: center; gap: 0.26em; position: relative; }
+.k { width: 2.1em; height: 2.9em; flex: none; border-radius: 0.42em; background: #3B3842; display: grid; place-items: center; color: #EDEAF0; box-shadow: 0 0.12em 0 rgba(0, 0, 0, 0.5); transition: background-color 0.25s, transform 0.25s; }
+.krow.acc .k { width: auto; padding: 0 0.7em; height: 2.4em; font: 500 0.95em/1 var(--f-mono); background: #2A2830; color: #CFCAD5; }
+.k.wide { width: 12.6em; }
+.k.mod { width: 2.6em; background: #2A2830; }
+.k.ret { width: 4.4em; background: #2A2830; font-size: 0.85em; }
+.snap .k1 { background: var(--accent); transform: translateY(-0.3em) scale(1.12); }
+.ktap { position: absolute; top: 50%; left: 2.2em; width: 2.3em; height: 2.3em; margin: -1.15em 0 0 -1.15em; border-radius: 50%; background: rgba(255, 255, 255, 0.22); box-shadow: 0 0 0 0.18em rgba(255, 255, 255, 0.9); opacity: 0; transform: scale(1.7); transition: opacity 0.35s, transform 0.45s var(--ease), left 0.55s var(--ease); pointer-events: none; z-index: 2; }
+.tap .ktap { opacity: 1; transform: scale(1); }
+.snap .ktap { opacity: 1; transform: scale(0.85); left: 1.085em; }
+.ktap::after { content: ""; position: absolute; left: 50%; top: 50%; width: 0.35em; height: 0.35em; margin: -0.175em; border-radius: 50%; background: #fff; }
+.gapmark { position: absolute; top: -1.9em; left: 2.2em; transform: translateX(-22%); font: 600 0.82em/1 var(--f-sans); color: #fff; background: rgba(255, 255, 255, 0.14); padding: 0.35em 0.6em; border-radius: 0.6em; white-space: nowrap; opacity: 0; transition: opacity 0.3s, left 0.55s var(--ease); }
+.tap .gapmark { opacity: 1; }
+.snap .gapmark { opacity: 1; left: 1.085em; background: var(--accent); }
+.gapmark .s2t, .snap .gapmark .s1t { display: none; }
+.snap .gapmark .s2t { display: inline; }
+
+/* sheets */
+.screen::after { content: ""; position: absolute; inset: 0; background: rgba(0, 0, 0, 0.55); opacity: 0; transition: opacity 0.5s; pointer-events: none; z-index: 3; }
+.sheet .screen::after, .approve .screen::after { opacity: 1; }
+.sh { position: absolute; left: 0; right: 0; bottom: 0; z-index: 4; background: #1C1A21; border-radius: 2.3em 2.3em 0 0; padding: 1em 1.6em 3em; transform: translateY(104%); transition: transform 0.7s var(--ease); display: grid; gap: 0.9em; box-shadow: 0 -1em 3em rgba(0, 0, 0, 0.5); }
+.sh .grab { width: 4em; height: 0.45em; border-radius: 0.3em; background: #4A4651; margin: 0 auto 0.4em; }
+.sheet .sh-new, .approve .sh-ok { transform: none; }
+.sh h6 { margin: 0; font-size: 1.7em; font-weight: 700; letter-spacing: -0.01em; }
+.sh .lbl { font-size: 1em; color: var(--k-mute); font-weight: 600; margin-bottom: -0.4em; }
+.field { display: flex; align-items: center; gap: 0.6em; padding: 0.85em 1em; border-radius: 1em; background: #2A2830; font: 400 1.1em/1 var(--f-mono); }
+.field svg { width: 1.1em; height: 1.1em; flex: none; }
+.folders { display: grid; gap: 0.15em; font: 400 1.05em/1 var(--f-mono); }
+.folders div { padding: 0.75em 1em; border-radius: 0.9em; color: #CFCAD5; }
+.folders .on { background: rgba(229, 25, 156, 0.2); color: #fff; box-shadow: inset 0 0 0 0.1em rgba(229, 25, 156, 0.6); }
+.seg3 { display: grid; grid-template-columns: repeat(3, 1fr); padding: 0.25em; border-radius: 1em; background: #2A2830; font-size: 1.1em; font-weight: 650; text-align: center; }
+.seg3 span { padding: 0.65em 0; border-radius: 0.8em; color: #CFCAD5; }
+.seg3 .on { background: #4A4552; color: #fff; }
+.models { display: flex; gap: 0.5em; }
+.models span { padding: 0.6em 1em; border-radius: 1em; background: #2A2830; font-size: 1.05em; font-weight: 600; color: #CFCAD5; }
+.models .on { background: #fff; color: #16121B; }
+.bigbtn { height: 3.8em; border-radius: 1.2em; background: var(--accent); color: #fff; display: grid; place-items: center; font-size: 1.3em; font-weight: 700; transition: transform 0.3s; }
+.ok-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.7em; }
+.ok-row span { height: 3.8em; border-radius: 1.2em; display: grid; place-items: center; font-size: 1.3em; font-weight: 700; background: #2E2B34; color: #E8E4EC; transition: transform 0.3s, background-color 0.3s; }
+.ok-row .allow { background: #2D8A57; color: #fff; }
+.allowtap .ok-row .allow { transform: scale(0.95); background: #37A86A; }
+.wait-tag { display: inline-flex; gap: 0.5em; align-items: center; font-weight: 700; color: var(--k-wait-ink); font-size: 1.1em; }
+.wait-tag i { width: 0.7em; height: 0.7em; border-radius: 50%; background: var(--k-wait-ink); box-shadow: 0 0 0 0.3em rgba(123, 227, 165, 0.2); }
+.sh-ok .cmd { font: 400 1.05em/1.4 var(--f-mono); padding: 0.8em 1em; border-radius: 0.9em; background: #121116; color: var(--term-ink); white-space: nowrap; overflow: hidden; }
+
+.tapr { position: absolute; width: 3.8em; height: 3.8em; margin: -1.9em 0 0 -1.9em; border-radius: 50%; background: rgba(255, 255, 255, 0.2); box-shadow: 0 0 0 0.2em rgba(255, 255, 255, 0.9); opacity: 0; transform: scale(1.8); transition: opacity 0.35s, transform 0.45s var(--ease); z-index: 6; pointer-events: none; }
+.tap-plus { left: 24.2em; top: 6.7em; }
+.tap-start { left: 14em; top: 52.6em; }
+.tap-allow { left: 19.6em; top: 52.6em; }
+.plus .tap-plus, .sheet .tap-start, .allowtap .tap-allow { opacity: 1; transform: scale(1); }
+
+/* mascot moments */
+.mb {
+  position: absolute; z-index: 3; display: flex; align-items: center; gap: 0.35em;
+  padding: 0.25em 0.95em 0.25em 0.25em; border-radius: 2em;
+  background: var(--surface); color: var(--ink); box-shadow: var(--lift-sm), 0 0 0 0.06em var(--line);
+  font-size: 0.82em; font-weight: 650; white-space: nowrap;
+  opacity: 0; transform: translateY(0.8em) scale(0.86); transform-origin: 100% 100%;
+  transition: opacity 0.4s, transform 0.55s cubic-bezier(0.3, 1.5, 0.5, 1);
+  pointer-events: none;
+}
+.mb .mi { width: 3.2em; height: 3.2em; background-size: contain; background-repeat: no-repeat; background-position: center; }
+.mb .d { width: 0.55em; height: 0.55em; border-radius: 50%; margin-right: 0.15em; }
+.mb-wait { right: 15.4em; top: -1.4em; }
+.mb-wait .d { background: var(--wait); }
+.mb-wait .mi { animation: wave 0.9s ease-in-out infinite; transform-origin: 50% 90%; }
+.mb-snap { right: 29.6em; top: -1.4em; }
+.mb-snap .d { background: var(--accent); }
+.mb-skin { right: 15.4em; top: -1.4em; }
+.mb-skin .d { background: var(--work); }
+.mb-spawn { right: 15.4em; top: -1.4em; }
+.mb-spawn .d { background: var(--accent); }
+.mb-cheer { right: 15.4em; top: -1.4em; }
+.mb-cheer .d { background: var(--work); }
+.wave .mb-wait, .snap .mb-snap, .trace:not(.plus):not(.sheet):not(.spawn) .mb-skin, .spawn .mb-spawn, .cheer .mb-cheer { opacity: 1; transform: none; }
+
+/* solo variants for the stacked panels */
+.solo-phone .scene { --sw: 17; --sh: 31.5; }
+.solo-phone .mac, .solo-phone .mb { display: none; }
+.solo-phone .phone { left: 1.3em; transform: none; }
+.solo-phone .mac { transform: none; }
+.solo-mac .scene { --sw: 38.4; --sh: 29.6; }
+.solo-mac .phone, .solo-mac .mb { display: none; }
+.solo-mac .mac { left: 0.7em; top: 1.6em; }
+.ch-fig .scene { --cap: 15px; }
+
+/* ---------- skins showcase ---------- */
+.skins-grid { display: grid; gap: clamp(24px, 3vw, 40px); }
+@media (min-width: 980px) { .skins-grid { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); align-items: start; } }
+.preview-wrap { position: relative; min-width: 0; }
+.preview {
+  position: relative; border-radius: 16px; overflow: hidden;
+  background: var(--sbg); color: var(--sfg);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--sa) 40%, transparent), var(--lift);
+  transition: background-color 0.6s, color 0.6s, box-shadow 0.6s;
+}
+.preview .texture { position: absolute; inset: 0; transition: opacity 0.4s; font-size: 14px; }
+.preview .pv-bar { position: relative; display: flex; align-items: center; gap: 10px; padding: 12px 14px; background: color-mix(in srgb, var(--sbg) 82%, #000); }
+.preview .pv-bar .lights i { width: 11px; height: 11px; }
+.preview .pv-pill { margin-left: auto; font: 500 12px/1 var(--f-mono); padding: 6px 10px; border-radius: 99px; background: var(--sbg); box-shadow: inset 0 0 0 1px var(--sa); }
+.preview .pv-pill b { color: var(--sa); }
+.preview pre {
+  position: relative; margin: 0; padding: 18px 20px 22px; min-height: 300px;
+  font: 400 clamp(11.5px, 1.3vw, 14px)/1.65 var(--f-mono); white-space: pre; overflow-x: auto;
+}
+.preview .a { color: var(--sa); }
+.preview .b { color: var(--sb); }
+.preview .m { opacity: 0.6; }
+.preview .caret { background: var(--sa); width: 0.6em; height: 1.1em; }
+.preview-glow { position: absolute; inset: -1px; border-radius: 17px; pointer-events: none; padding: 2px; background: conic-gradient(from var(--ang), transparent 0 64%, var(--sa) 78%, var(--sb) 88%, transparent 95%); -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0); animation: trace 3.6s linear infinite; }
+.pv-meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; margin-top: 16px; }
+.pv-meta .nm { font: 600 1.15rem/1.2 var(--f-mono); }
+.pv-meta .desc { color: var(--ink-2); font-size: 0.98rem; flex-basis: 100%; }
+.rar { font-size: 0.78rem; font-weight: 700; padding: 3px 9px; border-radius: 99px; background: var(--bg-2); color: var(--ink-2); }
+.rar.legendary { background: linear-gradient(90deg, #FFE08A, #FFB86B); color: #5A3500; }
+.rar.epic { background: var(--work-soft); color: var(--work); }
+.rar.rare { background: #DDEBFF; color: #1F5FBF; }
+.rar.heroic { background: #FFE0DE; color: #B42318; }
+.rar.duo { background: linear-gradient(90deg, #FFE7A0, #BFF3EC); color: #234; }
+:root[data-theme="dark"] .rar.rare { background: #14243F; color: #8DB8FF; }
+:root[data-theme="dark"] .rar.heroic { background: #3A1614; color: #FF8C82; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .rar.rare { background: #14243F; color: #8DB8FF; } :root:not([data-theme="light"]) .rar.heroic { background: #3A1614; color: #FF8C82; } }
+
+.picker { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 160px), 1fr)); gap: 10px; min-width: 0; }
+.pk-group { grid-column: 1 / -1; font-size: 0.9rem; font-weight: 650; color: var(--ink-3); margin-top: 6px; }
+.pk {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 10px; align-items: center; text-align: left;
+  padding: 10px; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+  cursor: pointer; font: inherit; transition: border-color 0.2s, transform 0.2s var(--ease), box-shadow 0.2s;
+}
+.pk:hover { transform: translateY(-2px); box-shadow: var(--lift-sm); }
+.pk[aria-pressed="true"] { border-color: var(--sa); box-shadow: 0 0 0 2px color-mix(in srgb, var(--sa) 55%, transparent); }
+.pk .sws { grid-row: span 2; width: 38px; height: 38px; border-radius: 10px; background: var(--sbg); position: relative; overflow: hidden; font-size: 8px; }
+.pk .sws::before { content: ""; position: absolute; left: 7px; bottom: 7px; width: 10px; height: 10px; border-radius: 50%; background: var(--sa); box-shadow: 13px 0 0 var(--sb); }
+.pk .n { font: 600 0.84rem/1.2 var(--f-mono); overflow-wrap: anywhere; }
+.pk .r { font-size: 0.76rem; color: var(--ink-3); font-weight: 600; }
+
+/* ---------- how it works ---------- */
+.flow { display: grid; gap: 18px; align-items: stretch; position: relative; }
+@media (min-width: 860px) { .flow { grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1fr); gap: 0; } }
+.node { background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 22px; display: grid; gap: 10px; align-content: start; position: relative; z-index: 1; box-shadow: var(--lift-sm); }
+.node svg.ic { width: 40px; height: 40px; color: var(--ink); }
+.node h3 { font-size: 1.2rem; }
+.node p { color: var(--ink-2); font-size: 0.96rem; }
+.node .tag { font: 500 0.8rem/1.3 var(--f-mono); color: var(--ink-3); }
+.wire { position: relative; display: grid; place-items: center; min-height: 120px; padding: 18px; }
+.wire .line { position: absolute; left: 0; right: 0; top: 50%; height: 2px; background: repeating-linear-gradient(90deg, var(--ink-3) 0 6px, transparent 6px 12px); opacity: 0.5; }
+.wire .pkt { position: absolute; top: 50%; width: 10px; height: 10px; margin-top: -5px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 12px var(--accent); animation: flowR 3s linear infinite; left: 0; }
+.wire .pkt.back { background: var(--wait); box-shadow: 0 0 12px var(--wait); animation-name: flowL; animation-delay: -1.5s; }
+@keyframes flowR { from { left: 0%; } to { left: 100%; } }
+@keyframes flowL { from { left: 100%; } to { left: 0%; } }
+.tunnel { position: relative; z-index: 1; background: var(--bg); border: 1px solid var(--line); border-radius: 999px; padding: 10px 18px; text-align: center; font-size: 0.92rem; font-weight: 600; display: grid; gap: 2px; }
+.tunnel small { font: 500 0.78rem/1.2 var(--f-mono); color: var(--ink-3); }
+.noserver { position: relative; z-index: 1; margin-bottom: 70px; display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 10px; border: 1px dashed var(--ink-3); color: var(--ink-3); font-size: 0.85rem; font-weight: 600; text-decoration: line-through; text-decoration-color: var(--accent); text-decoration-thickness: 2px; }
+.wire-in { display: grid; justify-items: center; gap: 6px; position: relative; z-index: 1; }
+.wire-in .ns-note { font-size: 0.85rem; color: var(--accent-ink); font-weight: 600; margin-top: 64px; }
+@media (max-width: 859px) {
+  .wire { min-height: 150px; }
+  .wire .line { left: 50%; right: auto; top: 0; bottom: 0; width: 2px; height: auto; background: repeating-linear-gradient(180deg, var(--ink-3) 0 6px, transparent 6px 12px); }
+  .wire .pkt { left: 50%; margin-left: -5px; animation-name: flowD; }
+  .wire .pkt.back { animation-name: flowU; }
+  .noserver { margin-bottom: 0; }
+  .wire-in .ns-note { margin-top: 0; }
+}
+@keyframes flowD { from { top: 0%; } to { top: 100%; } }
+@keyframes flowU { from { top: 100%; } to { top: 0%; } }
+.facts { display: grid; gap: 14px; margin-top: 28px; }
+@media (min-width: 760px) { .facts { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.fact { display: grid; gap: 6px; padding-top: 14px; border-top: 1px solid var(--line); }
+.fact b { font-size: 1.02rem; }
+.fact span { color: var(--ink-2); font-size: 0.95rem; }
+
+/* ---------- ghostty ---------- */
+.ghostty { display: grid; gap: 28px; align-items: center; }
+@media (min-width: 860px) { .ghostty { grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); } }
+.gh-art { font: 500 clamp(11px, 1.3vw, 13px)/1.35 var(--f-mono); color: var(--ink-3); white-space: pre; overflow-x: auto; padding: 22px; border-radius: 20px; background: var(--surface); border: 1px solid var(--line); }
+.gh-art .a { color: var(--accent-ink); }
+.ghostty p { color: var(--ink-2); max-width: 36em; }
+.ghostty .gh-copy { display: grid; gap: 16px; min-width: 0; }
+
+/* ---------- start ---------- */
+.start-grid { display: grid; gap: 28px; }
+.start-grid > *, .ghostty > *, .flow > *, .skins-grid > *, .hero-grid > *, .docs-grid > * { min-width: 0; }
+@media (min-width: 940px) { .start-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); align-items: start; } }
+.reqs { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.reqs li { display: flex; gap: 12px; align-items: baseline; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.reqs li b { min-width: 6.5em; font-weight: 650; }
+.reqs li span { color: var(--ink-2); }
+.code {
+  position: relative; border-radius: 16px; background: var(--code-bg); color: var(--code-ink);
+  font: 400 0.92rem/1.7 var(--f-mono); box-shadow: var(--lift-sm); min-width: 0;
+}
+.code pre { margin: 0; padding: 18px 20px; overflow-x: auto; }
+.code .c { color: var(--code-mute); }
+.code .p { color: #FF6FC4; user-select: none; }
+.code-top { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px 0 20px; font: 600 0.8rem/1 var(--f-sans); color: var(--code-mute); }
+.copy { font: 600 0.8rem/1 var(--f-sans); padding: 7px 11px; border-radius: 99px; border: 1px solid rgba(255, 255, 255, 0.16); background: rgba(255, 255, 255, 0.06); color: var(--code-ink); cursor: pointer; transition: background-color 0.2s; }
+.copy:hover { background: rgba(255, 255, 255, 0.14); }
+.copy.done { background: #1E7A4A; border-color: #1E7A4A; }
+.steps { display: grid; gap: 0; margin: 22px 0 0; padding: 0; list-style: none; counter-reset: s; }
+.steps li { counter-increment: s; display: grid; grid-template-columns: 2.2em minmax(0, 1fr); gap: 10px; padding: 10px 0; color: var(--ink-2); font-size: 0.97rem; }
+.steps li::before { content: counter(s); width: 1.8em; height: 1.8em; border-radius: 50%; display: grid; place-items: center; font: 600 0.82rem/1 var(--f-mono); background: var(--accent-soft); color: var(--accent-ink); }
+.steps li b { color: var(--ink); font-weight: 600; }
+.walk { display: flex; align-items: center; gap: 14px; margin-top: 18px; color: var(--ink-2); }
+.walk .mi { width: 64px; height: 64px; background-size: contain; background-repeat: no-repeat; flex: none; }
+
+/* ---------- docs ---------- */
+.docs { padding-block: 32px 96px; }
+.docs-grid { display: grid; gap: 28px; }
+@media (min-width: 900px) { .docs-grid { grid-template-columns: 220px minmax(0, 1fr); } }
+@media (min-width: 1180px) { .docs-grid { grid-template-columns: 220px minmax(0, 1fr) 200px; } }
+.dside { position: relative; }
+.dside nav { display: grid; gap: 2px; }
+@media (min-width: 900px) { .dside nav, .dtoc nav { position: sticky; top: calc(env(safe-area-inset-top, 0px) + var(--navh) + 24px); } }
+.dside .grp { font-size: 0.82rem; font-weight: 650; color: var(--ink-3); margin: 14px 0 6px 10px; }
+.dside .grp:first-child { margin-top: 0; }
+.dside a { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 10px; border-radius: 9px; color: var(--ink-2); text-decoration: none; font-size: 0.95rem; }
+.dside a:hover { background: var(--bg-2); color: var(--ink); }
+.dside a[aria-current="page"] { background: var(--accent-soft); color: var(--accent-ink); font-weight: 600; }
+.dside a svg { width: 13px; height: 13px; opacity: 0.6; flex: none; }
+@media (max-width: 899px) { .dside nav { display: flex; flex-wrap: wrap; gap: 6px; } .dside .grp { display: none; } .dside a { border: 1px solid var(--line); border-radius: 99px; padding: 6px 12px; font-size: 0.88rem; } }
+.article { min-width: 0; max-width: 46em; display: grid; gap: 18px; }
+.article .crumbs { font-size: 0.88rem; color: var(--ink-3); }
+.article h1 { font-size: clamp(2.2rem, 4vw, 3rem); letter-spacing: -0.03em; line-height: 1.05; font-variation-settings: "wdth" 88; }
+.article h2 { font-size: 1.55rem; letter-spacing: -0.02em; margin-top: 26px; padding-top: 10px; }
+.article h3 { font-size: 1.12rem; margin-top: 8px; display: flex; align-items: center; gap: 10px; }
+.article h3 .n { width: 1.7em; height: 1.7em; border-radius: 50%; display: inline-grid; place-items: center; font: 600 0.8rem/1 var(--f-mono); background: var(--accent-soft); color: var(--accent-ink); flex: none; }
+.article p, .article li { color: var(--ink-2); }
+.article ul { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; }
+.article code:not(pre code) { font-size: 0.88em; padding: 0.12em 0.4em; border-radius: 6px; background: var(--bg-2); color: var(--ink); }
+.article strong { color: var(--ink); font-weight: 600; }
+.callout { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; padding: 16px 18px; border-radius: 14px; background: var(--accent-soft); color: var(--ink); }
+.callout.note { background: var(--wait-soft); }
+.callout .mi { width: 44px; height: 44px; background-size: contain; background-repeat: no-repeat; }
+.callout p { color: var(--ink); font-size: 0.97rem; }
+.callout b { display: block; margin-bottom: 2px; }
+.dtoc { font-size: 0.88rem; display: none; }
+@media (min-width: 1180px) { .dtoc { display: block; } }
+.dtoc .t { font-weight: 650; color: var(--ink); margin-bottom: 8px; }
+.dtoc nav { display: grid; gap: 2px; border-left: 1px solid var(--line); }
+.dtoc a { color: var(--ink-3); text-decoration: none; padding: 5px 12px; margin-left: -1px; border-left: 2px solid transparent; }
+.dtoc a:hover { color: var(--ink); }
+.dtoc a.on { color: var(--accent-ink); border-left-color: var(--accent); }
+.dnext { display: grid; gap: 10px; margin-top: 24px; }
+@media (min-width: 600px) { .dnext { grid-template-columns: 1fr 1fr; } }
+.dnext a { display: grid; gap: 2px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 14px; text-decoration: none; color: var(--ink); background: var(--surface); }
+.dnext a span { font-size: 0.82rem; color: var(--ink-3); }
+.dnext a:hover { border-color: var(--accent); }
+
+/* view toggle: with scripts, #docs swaps the page; without, docs simply follow the landing page */
+.js body.view-docs .home { display: none; }
+.js body:not(.view-docs) .docs { display: none; }
+
+/* ---------- footer ---------- */
+.foot { border-top: 1px solid var(--line); padding-block: 40px 56px; }
+.foot .wrap { display: grid; gap: 22px; }
+@media (min-width: 760px) { .foot .wrap { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1fr); } }
+.foot .about { display: grid; gap: 10px; color: var(--ink-3); font-size: 0.92rem; }
+.foot .about .brand { margin: 0; }
+.foot h4 { font-size: 0.9rem; margin-bottom: 8px; }
+.foot ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 0.93rem; }
+.foot a { color: var(--ink-2); text-decoration: none; }
+.foot a:hover { color: var(--accent-ink); }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
+  .blink, .caret { animation: none; }
+}
+
+.mi-wait { background-image: url("data:image/png;base64,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"); }
+.mi-ready { background-image: url("data:image/png;base64,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"); }
+.mi-sleep { background-image: url("data:image/png;base64,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"); }
+.mi-happy { background-image: url("data:image/png;base64,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"); }
+
+</style>
+
+<header class="nav">
+  <div class="wrap">
+    <a class="brand" href="#top" data-nav="home"><svg viewBox="0 0 100 100" aria-hidden="true" class="axo"><path d="M60 82 C70 86 80 84 84 76 C86 72 82 70 80 73 C77 78 70 79 63 76 Z" fill="#EC97C6"/><ellipse cx="50" cy="76" rx="15" ry="12" fill="#EC97C6"/><ellipse cx="50" cy="79" rx="8" ry="6" fill="#F7B2D8"/><ellipse cx="39" cy="80" rx="4.2" ry="3.2" fill="#F7B2D8"/><ellipse cx="61" cy="80" rx="4.2" ry="3.2" fill="#F7B2D8"/><ellipse cx="43" cy="88" rx="5" ry="3" fill="#F7B2D8"/><ellipse cx="57" cy="88" rx="5" ry="3" fill="#F7B2D8"/><ellipse cx="14" cy="21" rx="9" ry="4.6" transform="rotate(-42 14 21)" fill="#E5199C"/><ellipse cx="86" cy="21" rx="9" ry="4.6" transform="rotate(42 86 21)" fill="#E5199C"/><ellipse cx="9" cy="34" rx="9" ry="4.6" transform="rotate(-12 9 34)" fill="#E5199C"/><ellipse cx="91" cy="34" rx="9" ry="4.6" transform="rotate(12 91 34)" fill="#E5199C"/><ellipse cx="11" cy="47" rx="8.5" ry="4.3" transform="rotate(18 11 47)" fill="#E5199C"/><ellipse cx="89" cy="47" rx="8.5" ry="4.3" transform="rotate(-18 89 47)" fill="#E5199C"/><path d="M50 15 C76.4 15 83 26.7 83 42.3 C83 60.5 69.8 67 50 67 C30.2 67 17 60.5 17 42.3 C17 26.7 23.6 15 50 15 Z" fill="#F7B2D8"/><ellipse cx="34" cy="24" rx="7" ry="3.2" fill="#FFFFFF" opacity="0.35" transform="rotate(-18 34 24)"/><path d="M33 36 L42 43 L33 50" fill="none" stroke="#3A1530" stroke-width="4.4" stroke-linecap="round" stroke-linejoin="round"/><path class="blink" d="M56 43 H68" stroke="#3A1530" stroke-width="4.4" stroke-linecap="round"/><path d="M46 53 Q48 56 50 53.5 Q52 56 54 53" fill="none" stroke="#3A1530" stroke-width="2.42" stroke-linecap="round" stroke-linejoin="round"/><ellipse cx="26" cy="55" rx="5" ry="3" fill="#E5199C" opacity="0.45"/><ellipse cx="75" cy="55" rx="5" ry="3" fill="#E5199C" opacity="0.45"/></svg>Lostty</a>
+    <nav class="navlinks" aria-label="Main">
+      <a class="hide-sm" href="#why" data-nav="home">Features</a>
+      <a class="hide-sm" href="#skins" data-nav="home">Skins</a>
+      <a href="#docs" data-nav="docs">Docs</a>
+      <a class="gh" href="https://github.com/Lawliang/lostty" target="_blank" rel="noopener"><svg viewBox="0 0 16 16" aria-hidden="true" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg><span>GitHub</span></a>
+    </nav>
+    <button type="button" class="themebtn" id="themebtn" aria-label="Switch light or dark theme"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></button>
+  </div>
+</header>
+
+<main class="home" id="top">
+
+  <section class="hero">
+    <div class="wrap hero-grid">
+      <div class="hero-copy">
+        <h1 class="display">Leave your desk, not your terminal.<span class="cur blink" aria-hidden="true"></span></h1>
+        <p class="lede">A fast, native Mac terminal with an iPhone app, built for running Claude Code and Codex. Every terminal keeps running on your Mac. Your phone shows you which one needs you, and you answer it right there.</p>
+        <div class="ctas">
+          <a class="btn btn-primary" href="#start">Get started</a>
+          <a class="btn btn-ghost" href="#docs">Read the docs</a>
+        </div>
+        <p class="hero-meta">Free and open source under MIT. Built on <a href="https://ghostty.org" target="_blank" rel="noopener">Ghostty</a>'s engine. For macOS 15 and iOS 17 or later.</p>
+      </div>
+      <div class="hero-stage">
+        <div id="hero-rig"><div class="rig " role="img" aria-label="A Mac window running four Claude sessions, and an iPhone listing them. One session has stopped on a permission prompt; on the phone it rises to the top as Waiting on you."><div class="scene stop rise wave" aria-hidden="true"><div class="mac"><div class="mac-bar"><span class="lights"><i></i><i></i><i></i></span><span class="mac-title">Lostty</span><span class="pill"><b>&gt;</b> lostty/skins</span></div><div class="mac-body"><div class="col"><div class="pane p-a sk-neon"><div class="skin tx-grid"></div><div class="ph"><span class="pp"><b>&gt;</b> lostty/skins</span><span class="pst"><span class="st-base"><span class="star">&#10035;</span> Editing App.swift</span><span class="st-stop">Waiting on you</span><span class="st-ans"><span class="star">&#10035;</span> Running tests</span></span></div><pre class="pt st-base"><span class="a">&gt;</span> make the skin picker remember
+  the last pane
+<span class="b">&#9210;</span> Read(SkinPicker.swift)
+<span class="b">&#9210;</span> Update(App.swift) <span class="m">+18 &#8722;4</span>
+<span class="a">&#10035;</span> Working&#8230; <span class="m">(1m 12s)</span></pre><pre class="pt st-stop"><span class="b">&#9210;</span> Bash(xcodebuild test
+    -scheme LosttyRemote)
+<span class="q">Do you want to proceed?
+<span class="a">&#10095; 1. Yes</span>
+  2. Yes, and don&#8217;t ask again
+  3. No</span></pre><pre class="pt st-ans"><span class="b">&#9210;</span> Bash(xcodebuild test
+    -scheme LosttyRemote)
+  <span class="a">&#10095; 1. Yes</span> <span class="m">from iPhone</span>
+<span class="a">&#10035;</span> Running tests&#8230; <span class="m">128 passed</span></pre><span class="same">Same session as the phone</span></div><div class="pane p-b sk-sunset"><div class="skin tx-scan"></div><div class="ph"><span class="pp"><b>&gt;</b> lostty/stay-awake</span><span class="pst"><span class="star">&#10035;</span> Editing StayAwakeController.swift</span></div><pre class="pt"><span class="a">&gt;</span> fix the login bug
+<span class="b">&#9210;</span> Read(LoginView.swift)
+<span class="b">&#9210;</span> Update(StayAwakeController.swift)
+<span class="a">&#10035;</span> Incubating&#8230; <span class="m">(3m 52s)</span></pre></div></div><div class="col"><div class="pane p-c sk-deep"><div class="skin tx-bubbles"></div><div class="ph"><span class="pp"><b>&gt;</b> home</span><span class="pst">Ready</span></div><pre class="pt"><span class="a">$</span> tail -f deploy.log
+<span class="b">&#10003;</span> build 4312 healthy
+<span class="b">&#10003;</span> watch ready
+<span class="a">$</span> </pre></div><div class="pane p-d sk-silver"><div class="skin tx-stars"></div><div class="ph"><span class="pp"><b>&gt;</b> api-server/main</span><span class="pst">Idle &middot; 2h</span></div><pre class="pt"><span class="a">$</span> npm run dev
+<span class="m">listening on :8080</span>
+<span class="m">^C</span>
+<span class="a">$</span> </pre></div></div><div class="col col-e"><div class="pane p-e sk-bubble"><div class="skin tx-sparkle"></div><div class="ph"><span class="pp"><b>&gt;</b> lostty/website</span><span class="pst">Started from iPhone</span></div><pre class="pt"><span class="a">&#10043;</span> Welcome to Claude Code
+  <span class="m">cwd</span> ~/code/lostty/website
+  <span class="m">model</span> Opus
+
+<span class="a">&gt;</span> <span class="caret"></span></pre></div></div></div><div class="mac-usage"><span>Opus</span><span>ctx <span class="meter">&#9632;&#9632;&#9632;&#9633;&#9633;</span> 50K</span><span>5h <span class="meter">&#9632;&#9633;&#9633;&#9633;&#9633;</span> 22%</span></div></div><div class="phone"><div class="screen"><div class="island"></div><div class="sbar"><span>9:41</span><span class="sicons"><i class="sig"></i><i class="bat"></i></span></div><div class="view view-list"><div class="k-head"><svg viewBox="0 0 100 100" aria-hidden="true" class="axo logo"><path d="M60 82 C70 86 80 84 84 76 C86 72 82 70 80 73 C77 78 70 79 63 76 Z" fill="#EC97C6"/><ellipse cx="50" cy="76" rx="15" ry="12" fill="#EC97C6"/><ellipse cx="50" cy="79" rx="8" ry="6" fill="#F7B2D8"/><ellipse cx="39" cy="80" rx="4.2" ry="3.2" fill="#F7B2D8"/><ellipse cx="61" cy="80" rx="4.2" ry="3.2" fill="#F7B2D8"/><ellipse cx="43" cy="88" rx="5" ry="3" fill="#F7B2D8"/><ellipse cx="57" cy="88" rx="5" ry="3" fill="#F7B2D8"/><ellipse cx="14" cy="21" rx="9" ry="4.6" transform="rotate(-42 14 21)" fill="#E5199C"/><ellipse cx="86" cy="21" rx="9" ry="4.6" transform="rotate(42 86 21)" fill="#E5199C"/><ellipse cx="9" cy="34" rx="9" ry="4.6" transform="rotate(-12 9 34)" fill="#E5199C"/><ellipse cx="91" cy="34" rx="9" ry="4.6" transform="rotate(12 91 34)" fill="#E5199C"/><ellipse cx="11" cy="47" rx="8.5" ry="4.3" transform="rotate(18 11 47)" fill="#E5199C"/><ellipse cx="89" cy="47" rx="8.5" ry="4.3" transform="rotate(-18 89 47)" fill="#E5199C"/><path d="M50 15 C76.4 15 83 26.7 83 42.3 C83 60.5 69.8 67 50 67 C30.2 67 17 60.5 17 42.3 C17 26.7 23.6 15 50 15 Z" fill="#F7B2D8"/><ellipse cx="34" cy="24" rx="7" ry="3.2" fill="#FFFFFF" opacity="0.35" transform="rotate(-18 34 24)"/><path d="M33 36 L42 43 L33 50" fill="none" stroke="#3A1530" stroke-width="4.4" stroke-linecap="round" stroke-linejoin="round"/><path  d="M56 43 H68" stroke="#3A1530" stroke-width="4.4" stroke-linecap="round"/><path d="M46 53 Q48 56 50 53.5 Q52 56 54 53" fill="none" stroke="#3A1530" stroke-width="2.42" stroke-linecap="round" stroke-linejoin="round"/><ellipse cx="26" cy="55" rx="5" ry="3" fill="#E5199C" opacity="0.45"/><ellipse cx="75" cy="55" rx="5" ry="3" fill="#E5199C" opacity="0.45"/></svg><h5>Lostty</h5><span class="kbtn"><svg viewBox="0 0 24 24" fill="none" stroke="#F3F0F6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg><span class="badge">1</span></span><span class="kbtn kb-plus"><svg viewBox="0 0 24 24" fill="none" stroke="#F3F0F6" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></div><div class="conn">Connected <b><span class="n4">4</span><span class="n5">5</span></b></div><div class="list"><div class="card c-e sk-bubble"><div class="c-body"><div class="c-t"><i class="sw"></i>Website copy pass</div><div class="c-p"><b>&gt;</b> lostty/website</div><div class="c-d-line">Starting Claude &middot; Opus</div><div class="c-s"><span>&#10035; Starting&#8230;</span></div></div><span class="c-m base mi-happy"></span><span class="chev">&#8250;</span></div><div class="card c-a sk-neon"><div class="c-body"><div class="c-t"><i class="sw"></i>Lostty UI redesign plan</div><div class="c-p"><b>&gt;</b> lostty/skins</div><div class="c-d-line"><span class="v-base">Editing App.swift</span><span class="v-stop">Allow? Run the iOS tests</span><span class="v-ans">xcodebuild test</span></div><div class="c-s"><span class="v-base">&#10035; Working&#8230; (1m 12s)</span><span class="v-stop">Waiting on You.</span><span class="v-ans">&#10035; Running tests&#8230;</span></div></div><span class="c-m base mi-happy"></span><span class="c-m alt mi-wait"></span><span class="chev">&#8250;</span></div><div class="card c-b sk-sunset"><div class="c-body"><div class="c-t"><i class="sw"></i>Fix the login bug</div><div class="c-p"><b>&gt;</b> lostty/stay-awake</div><div class="c-d-line">Editing StayAwakeController.swift</div><div class="c-s">&#10035; Incubating&#8230; (3m 52s)</div></div><span class="c-m base mi-happy"></span><span class="chev">&#8250;</span></div><div class="card c-c sk-deep"><div class="c-body"><div class="c-t"><i class="sw"></i>Deploy watch</div><div class="c-p"><b>&gt;</b> home</div><div class="c-d-line">Watching deploy.log</div><div class="c-s">Ready.</div></div><span class="c-m base mi-ready"></span><span class="chev">&#8250;</span></div><div class="card c-d sk-silver"><div class="c-body"><div class="c-t"><i class="sw"></i>api-server</div><div class="c-p"><b>&gt;</b> api-server/main</div><div class="c-d-line">2h ago</div><div class="c-s">Idle.</div></div><span class="c-m base mi-sleep"></span><span class="chev">&#8250;</span></div></div></div><div class="view view-term"><div class="t-head"><span class="back">&#8249;</span><span class="tt">Lostty UI redesign plan</span><span class="tp"><b>&gt;</b> lostty/skins</span></div><div class="t-body"><span class="a">&gt;</span> make the skin picker remember
+  the last pane
+<span class="g">&#9210;</span> Update(App.swift) <span class="m">+18 &#8722;4</span>
+<span class="g">&#9210;</span> Bash(xcodebuild test
+    -scheme LosttyRemote)
+<span class="t-q"><span class="q">Do you want to proceed?
+<span class="sel">&#10095; 1. Yes</span>
+  2. Yes, and don&#8217;t ask again
+  3. No</span>
+<span class="a">&gt;</span> <span class="caret"></span></span><span class="t-ans">  <span class="sel">&#10095; 1. Yes</span>
+<span class="a">&#10035;</span> Running tests&#8230; <span class="m">(0m 04s)</span>
+<span class="m">  Test Suite LosttyRemoteTests started</span></span></div><div class="kbd"><div class="krow acc"><span class="k">esc</span><span class="k">tab</span><span class="k">ctrl</span><span class="k">&#8593;</span><span class="k">&#8595;</span><span class="k">&#8592;</span><span class="k">&#8594;</span></div><div class="krow num"><span class="k k1">1</span><span class="k">2</span><span class="k">3</span><span class="k">4</span><span class="k">5</span><span class="k">6</span><span class="k">7</span><span class="k">8</span><span class="k">9</span><span class="k">0</span><span class="ktap"></span><span class="gapmark"><span class="s1t">Between 1 and 2</span><span class="s2t">Typed 1</span></span></div><div class="krow "><span class="k">q</span><span class="k">w</span><span class="k">e</span><span class="k">r</span><span class="k">t</span><span class="k">y</span><span class="k">u</span><span class="k">i</span><span class="k">o</span><span class="k">p</span></div><div class="krow "><span class="k">a</span><span class="k">s</span><span class="k">d</span><span class="k">f</span><span class="k">g</span><span class="k">h</span><span class="k">j</span><span class="k">k</span><span class="k">l</span></div><div class="krow"><span class="k mod">&#8679;</span><span class="k">z</span><span class="k">x</span><span class="k">c</span><span class="k">v</span><span class="k">b</span><span class="k">n</span><span class="k">m</span><span class="k mod">&#9003;</span></div><div class="krow"><span class="k mod">&#8963;</span><span class="k wide">space</span><span class="k ret">return</span></div></div></div><div class="sh sh-ok"><div class="grab"></div><span class="wait-tag"><i></i>Waiting on you</span><h6>Lostty UI redesign plan</h6><div class="lbl">Allow? Run the iOS tests</div><div class="cmd">$ xcodebuild test -scheme LosttyRemote</div><div class="ok-row"><span>Deny</span><span class="allow">Allow</span></div></div><div class="sh sh-new"><div class="grab"></div><h6>New session</h6><div class="lbl">Project folder on your Mac</div><div class="field"><svg viewBox="0 0 24 24" fill="none" stroke="#8E8897" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg> website</div><div class="folders"><div class="on">~/code/lostty/website</div><div>~/code/lostty</div><div>~/code/api-server</div></div><div class="lbl">Start</div><div class="seg3"><span class="on">Claude</span><span>Codex</span><span>Shell</span></div><div class="lbl">Model</div><div class="models"><span class="on">Opus</span><span>Sonnet</span><span>Haiku</span></div><div class="bigbtn">Start</div></div><span class="tapr tap-plus"></span><span class="tapr tap-start"></span><span class="tapr tap-allow"></span></div></div><div class="mb mb-wait"><span class="mi mi-wait"></span><i class="d"></i>Waiting on you</div><div class="mb mb-snap"><span class="mi mi-happy"></span><i class="d"></i>Answered from the phone</div><div class="mb mb-skin"><span class="mi mi-ready"></span><i class="d"></i>Four projects, four looks</div><div class="mb mb-spawn"><span class="mi mi-happy"></span><i class="d"></i>Open on both, right now</div><div class="mb mb-cheer"><span class="mi mi-happy"></span><i class="d"></i>Allowed. Claude carries on</div></div></div></div>
+        <p class="hero-caption" id="hero-caption" data-k="wait"><span class="dot" aria-hidden="true"></span><span class="txt">Your phone puts it first: Waiting on you.</span></p>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec band" id="why">
+    <div class="wrap">
+      <div class="sec-head">
+        <h2 class="h2">Why Lostty exists</h2>
+        <p class="lede">Coding agents work best when you let them run. The trouble is, they don't run for long before they need you. I built Lostty to fix the things that kept going wrong whenever I left an agent running and walked away.</p>
+      </div>
+
+      <div class="story-grid">
+        <div class="chapters">
+
+          <article class="ch" id="ch-1">
+            <div class="ch-text">
+              <span class="ch-num">#1</span>
+              <h3 class="h3">The agent stopped, and I didn't know.</h3>
+              <p class="ch-problem"><span class="ch-label">The problem</span>You start Claude on something big. You go make a coffee. Twenty minutes later you come back, and it's been sitting on a permission prompt for nineteen of them.</p>
+              <p class="ch-fix"><span class="ch-label">The fix</span>Lostty knows what every terminal is doing. Your phone sorts them into <strong>Waiting on you</strong>, <strong>Working</strong>, <strong>Ready</strong> and <strong>Idle</strong>, so the one that needs you is always first. Tap in, answer, and Claude carries on. Anything that waited on you while you were busy lands in the inbox under the bell.</p>
+              <div class="legend" aria-label="Session states">
+                <span class="chip wait"><span class="m mi-wait"></span>Waiting on you</span>
+                <span class="chip work"><span class="m mi-happy"></span>Working</span>
+                <span class="chip ready"><span class="m mi-ready"></span>Ready</span>
+                <span class="chip idle"><span class="m mi-sleep"></span>Idle</span>
+              </div>
+            </div>
+            <div class="ch-fig"><div class="rig solo-phone" role="img" aria-label="The phone list with the waiting session sorted first and the mascot waving."><div class="scene stop rise wave" aria-hidden="true"><div class="mac"><div class="mac-bar"><span class="lights"><i></i><i></i><i></i></span><span class="mac-title">Lostty</span><span class="pill"><b>&gt;</b> lostty/skins</span></div><div class="mac-body"><div class="col"><div class="pane p-a sk-neon"><div class="skin tx-grid"></div><div class="ph"><span class="pp"><b>&gt;</b> lostty/skins</span><span class="pst"><span class="st-base"><span class="star">&#10035;</span> Editing App.swift</span><span class="st-stop">Waiting on you</span><span class="st-ans"><span class="star">&#10035;</span> Running tests</span></span></div><pre class="pt st-base"><span class="a">&gt;</span> make the skin picker remember
+  the last pane
+<span class="b">&#9210;</span> Read(SkinPicker.swift)
+<span class="b">&#9210;</span> Update(App.swift) <span class="m">+18 &#8722;4</span>
+<span class="a">&#10035;</span> Working&#8230; <span class="m">(1m 12s)</span></pre><pre class="pt st-stop"><span class="b">&#9210;</span> Bash(xcodebuild test
+    -scheme LosttyRemote)
+<span class="q">Do you want to proceed?
+<span class="a">&#10095; 1. Yes</span>
+  2. Yes, and don&#8217;t ask again
+  3. No</span></pre><pre class="pt st-ans"><span class="b">&#9210;</span> Bash(xcodebuild test
+    -scheme LosttyRemote)
+  <span class="a">&#10095; 1. Yes</span> <span class="m">from iPhone</span>
+<span class="a">&#10035;</span> Running tests&#8230; <span class="m">128 passed</span></pre><span class="same">Same session as the phone</span></div><div class="pane p-b sk-sunset"><div class="skin tx-scan"></div><div class="ph"><span class="pp"><b>&gt;</b> lostty/stay-awake</span><span class="pst"><span class="star">&#10035;</span> Editing StayAwakeController.swift</span></div><pre class="pt"><span class="a">&gt;</span> fix the login bug
+<span class="b">&#9210;</span> Read(LoginView.swift)
+<span class="b">&#9210;</span> Update(StayAwakeController.swift)
+<span class="a">&#10035;</span> Incubating&#8230; <span class="m">(3m 52s)</span></pre></div></div><div class="col"><div class="pane p-c sk-deep"><div class="skin tx-bubbles"></div><div class="ph"><span class="pp"><b>&gt;</b> home</span><span class="pst">Ready</span></div><pre class="pt"><span class="a">$</span> tail -f deploy.log
+<span class="b">&#10003;</span> build 4312 healthy
+<span class="b">&#10003;</span> watch ready
+<span class="a">$</span> </pre></div><div class="pane p-d sk-silver"><div class="skin tx-stars"></div><div class="ph"><span class="pp"><b>&gt;</b> api-server/main</span><span class="pst">Idle &middot; 2h</span></div><pre class="pt"><span class="a">$</span> npm run dev
+<span class="m">listening on :8080</span>
+<span class="m">^C</span>
+<span class="a">$</span> </pre></div></div><div class="col col-e"><div class="pane p-e sk-bubble"><div class="skin tx-sparkle"></div><div class="ph"><span class="pp"><b>&gt;</b> lostty/website</span><span class="pst">Started from iPhone</span></div><pre class="pt"><span class="a">&#10043;</span> Welcome to Claude Code
+  <span class="m">cwd</span> ~/code/lostty/website
+  <span class="m">model</span> Opus
+
+<span class="a">&gt;</span> <span class="caret"></span></pre></div></div></div><div class="mac-usage"><span>Opus</span><span>ctx <span class="meter">&#9632;&#9632;&#9632;&#9633;&#9633;</span> 50K</span><span>5h <span class="meter">&#9632;&#9633;&#9633;&#9633;&#9633;</span> 22%</span></div></div><div class="phone"><div class="screen"><div class="island"></div><div class="sbar"><span>9:41</span><span class="sicons"><i class="sig"></i><i class="bat"></i></span></div><div class="view view-list"><div class="k-head"><svg viewBox="0 0 100 100" aria-hidden="true" class="axo logo"><path d="M60 82 C70 86 80 84 84 76 C86 72 82 70 80 73 C77 78 70 79 63 76 Z" fill="#EC97C6"/><ellipse cx="50" cy="76" rx="15" ry="12" fill="#EC97C6"/><ellipse cx="50" cy="79" rx="8" ry="6" fill="#F7B2D8"/><ellipse cx="39" cy="80" rx="4.2" ry="3.2" fill="#F7B2D8"/><ellipse cx="61" cy="80" rx="4.2" ry="3.2" fill="#F7B2D8"/><ellipse cx="43" cy="88" rx="5" ry="3" fill="#F7B2D8"/><ellipse cx="57" cy="88" rx="5" ry="3" fill="#F7B2D8"/><ellipse cx="14" cy="21" rx="9" ry="4.6" transform="rotate(-42 14 21)" fill="#E5199C"/><ellipse cx="86" cy="21" rx="9" ry="4.6" transform="rotate(42 86 21)" fill="#E5199C"/><ellipse cx="9" cy="34" rx="9" ry="4.6" transform="rotate(-12 9 34)" fill="#E5199C"/><ellipse cx="91" cy="34" rx="9" ry="4.6" transform="rotate(12 91 34)" fill="#E5199C"/><ellipse cx="11" cy="47" rx="8.5" ry="4.3" transform="rotate(18 11 47)" fill="#E5199C"/><ellipse cx="89" cy="47" rx="8.5" ry="4.3" transform="rotate(-18 89 47)" fill="#E5199C"/><path d="M50 15 C76.4 15 83 26.7 83 42.3 C83 60.5 69.8 67 50 67 C30.2 67 17 60.5 17 42.3 C17 26.7 23.6 15 50 15 Z" fill="#F7B2D8"/><ellipse cx="34" cy="24" rx="7" ry="3.2" fill="#FFFFFF" opacity="0.35" transform="rotate(-18 34 24)"/><path d="M33 36 L42 43 L33 50" fill="none" stroke="#3A1530" stroke-width="4.4" stroke-linecap="round" stroke-linejoin="round"/><path  d="M56 43 H68" stroke="#3A1530" stroke-width="4.4" stroke-linecap="round"/><path d="M46 53 Q48 56 50 53.5 Q52 56 54 53" fill="none" stroke="#3A1530" stroke-width="2.42" stroke-linecap="round" stroke-linejoin="round"/><ellipse cx="26" cy="55" rx="5" ry="3" fill="#E5199C" opacity="0.45"/><ellipse cx="75" cy="55" rx="5" ry="3" fill="#E5199C" opacity="0.45"/></svg><h5>Lostty</h5><span class="kbtn"><svg viewBox="0 0 24 24" fill="none" stroke="#F3F0F6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg><span class="badge">1</span></span><span class="kbtn kb-plus"><svg viewBox="0 0 24 24" fill="none" stroke="#F3F0F6" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></div><div class="conn">Connected <b><span class="n4">4</span><span class="n5">5</span></b></div><div class="list"><div class="card c-e sk-bubble"><div class="c-body"><div class="c-t"><i class="sw"></i>Website copy pass</div><div class="c-p"><b>&gt;</b> lostty/website</div><div class="c-d-line">Starting Claude &middot; Opus</div><div class="c-s"><span>&#10035; Starting&#8230;</span></div></div><span class="c-m base mi-happy"></span><span class="chev">&#8250;</span></div><div class="card c-a sk-neon"><div class="c-body"><div class="c-t"><i class="sw"></i>Lostty UI redesign plan</div><div class="c-p"><b>&gt;</b> lostty/skins</div><div class="c-d-line"><span class="v-base">Editing App.swift</span><span class="v-stop">Allow? Run the iOS tests</span><span class="v-ans">xcodebuild test</span></div><div class="c-s"><span class="v-base">&#10035; Working&#8230; (1m 12s)</span><span class="v-stop">Waiting on You.</span><span class="v-ans">&#10035; Running tests&#8230;</span></div></div><span class="c-m base mi-happy"></span><span class="c-m alt mi-wait"></span><span class="chev">&#8250;</span></div><div class="card c-b sk-sunset"><div class="c-body"><div class="c-t"><i class="sw"></i>Fix the login bug</div><div class="c-p"><b>&gt;</b> lostty/stay-awake</div><div class="c-d-line">Editing StayAwakeController.swift</div><div class="c-s">&#10035; Incubating&#8230; (3m 52s)</div></div><span class="c-m base mi-happy"></span><span class="chev">&#8250;</span></div><div class="card c-c sk-deep"><div class="c-body"><div class="c-t"><i class="sw"></i>Deploy watch</div><div class="c-p"><b>&gt;</b> home</div><div class="c-d-line">Watching deploy.log</div><div class="c-s">Ready.</div></div><span class="c-m base mi-ready"></span><span class="chev">&#8250;</span></div><div class="card c-d sk-silver"><div class="c-body"><div class="c-t"><i class="sw"></i>api-server</div><div class="c-p"><b>&gt;</b> api-server/main</div><div class="c-d-line">2h ago</div><div class="c-s">Idle.</div></div><span class="c-m base mi-sleep"></span><span class="chev">&#8250;</span></div></div></div><div class="view view-term"><div class="t-head"><span class="back">&#8249;</span><span class="tt">Lostty UI redesign plan</span><span class="tp"><b>&gt;</b> lostty/skins</span></div><div class="t-body"><span class="a">&gt;</span> make the skin picker remember
+  the last pane
+<span class="g">&#9210;</span> Update(App.swift) <span class="m">+18 &#8722;4</span>
+<span class="g">&#9210;</span> Bash(xcodebuild test
+    -scheme LosttyRemote)
+<span class="t-q"><span class="q">Do you want to proceed?
+<span class="sel">&#10095; 1. Yes</span>
+  2. Yes, and don&#8217;t ask again
+  3. No</span>
+<span class="a">&gt;</span> <span class="caret"></span></span><span class="t-ans">  <span class="sel">&#10095; 1. Yes</span>
+<span class="a">&#10035;</span> Running tests&#8230; <span class="m">(0m 04s)</span>
+<span class="m">  Test Suite LosttyRemoteTests started</span></span></div><div class="kbd"><div class="krow acc"><span class="k">esc</span><span class="k">tab</span><span class="k">ctrl</span><span class="k">&#8593;</span><span class="k">&#8595;</span><span class="k">&#8592;</span><span class="k">&#8594;</span></div><div class="krow num"><span class="k k1">1</span><span class="k">2</span><span class="k">3</span><span class="k">4</span><span class="k">5</span><span class="k">6</span><span class="k">7</span><span class="k">8</span><span class="k">9</span><span class="k">0</span><span class="ktap"></span><span class="gapmark"><span class="s1t">Between 1 and 2</span><span class="s2t">Typed 1</span></span></div><div class="krow "><span class="k">q</span><span class="k">w</span><span class="k">e</span><span class="k">r</span><span class="k">t</span><span class="k">y</span><span class="k">u</span><span class="k">i</span><span class="k">o</span><span class="k">p</span></div><div class="krow "><span class="k">a</span><span class="k">s</span><span class="k">d</span><span class="k">f</span><span class="k">g</span><span class="k">h</span><span class="k">j</span><span class="k">k</span><span class="k">l</span></div><div class="krow"><span class="k mod">&#8679;</span><span class="k">z</span><span class="k">x</span><span class="k">c</span><span class="k">v</span><span class="k">b</span><span class="k">n</span><span class="k">m</span><span class="k mod">&#9003;</span></div><div class="krow"><span class="k mod">&#8963;</span><span class="k wide">space</span><span class="k ret">return</span></div></div></div><div class="sh sh-ok"><div class="grab"></div><span class="wait-tag"><i></i>Waiting on you</span><h6>Lostty UI redesign plan</h6><div class="lbl">Allow? Run the iOS tests</div><div class="cmd">$ xcodebuild test -scheme LosttyRemote</div><div class="ok-row"><span>Deny</span><span class="allow">Allow</span></div></div><div class="sh sh-new"><div class="grab"></div><h6>New session</h6><div class="lbl">Project folder on your Mac</div><div class="field"><svg viewBox="0 0 24 24" fill="none" stroke="#8E8897" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg> website</div><div class="folders"><div class="on">~/code/lostty/website</div><div>~/code/lostty</div><div>~/code/api-server</div></div><div class="lbl">Start</div><div class="seg3"><span class="on">Claude</span><span>Codex</span><span>Shell</span></div><div class="lbl">Model</div><div class="models"><span class="on">Opus</span><span>Sonnet</span><span>Haiku</span></div><div class="bigbtn">Start</div></div><span class="tapr tap-plus"></span><span class="tapr tap-start"></span><span class="tapr tap-allow"></span></div></div><div class="mb mb-wait"><span class="mi mi-wait"></span><i class="d"></i>Waiting on you</div><div class="mb mb-snap"><span class="mi mi-happy"></span><i class="d"></i>Answered from the phone</div><div class="mb mb-skin"><span class="mi mi-ready"></span><i class="d"></i>Four projects, four looks</div><div class="mb mb-spawn"><span class="mi mi-happy"></span><i class="d"></i>Open on both, right now</div><div class="mb mb-cheer"><span class="mi mi-happy"></span><i class="d"></i>Allowed. Claude carries on</div></div></div></div>
+          </article>
+
+          <article class="ch" id="ch-2">
+            <div class="ch-text">
+              <span class="ch-num">#2</span>
+              <h3 class="h3">My phone got a tiny, useless Mac.</h3>
+              <p class="ch-problem"><span class="ch-label">The problem</span>Screen sharing works, technically. But you're pinching around a 27-inch screen on a 6-inch phone, and typing into it is miserable.</p>
+              <p class="ch-fix"><span class="ch-label">The fix</span>The phone app is a real terminal. It opens the same session that's running on your Mac: same output, same prompt, same half-typed command. Come back to your Mac and carry on. Nothing restarts. The keyboard is made for it, too: <strong>a tap that lands in the gap between two keys types the nearest one</strong>, instead of nothing.</p>
+              <div class="tip">
+                <b>Turn on Stay Awake before you leave</b>
+                <ul>
+                  <li>Your Mac keeps working with the lid closed, even on battery.</li>
+                  <li>If its Wi-Fi drops, it hops onto your iPhone's hotspot, so you can still reach it.</li>
+                </ul>
+              </div>
+            </div>
+            <div class="ch-fig"><div class="rig solo-phone" role="img" aria-label="The phone showing the real terminal; a tap between the 1 and 2 keys types 1."><div class="scene rise term snap answered" aria-hidden="true"><div class="mac"><div class="mac-bar"><span class="lights"><i></i><i></i><i></i></span><span class="mac-title">Lostty</span><span class="pill"><b>&gt;</b> lostty/skins</span></div><div class="mac-body"><div class="col"><div class="pane p-a sk-neon"><div class="skin tx-grid"></div><div class="ph"><span class="pp"><b>&gt;</b> lostty/skins</span><span class="pst"><span class="st-base"><span class="star">&#10035;</span> Editing App.swift</span><span class="st-stop">Waiting on you</span><span class="st-ans"><span class="star">&#10035;</span> Running tests</span></span></div><pre class="pt st-base"><span class="a">&gt;</span> make the skin picker remember
+  the last pane
+<span class="b">&#9210;</span> Read(SkinPicker.swift)
+<span class="b">&#9210;</span> Update(App.swift) <span class="m">+18 &#8722;4</span>
+<span class="a">&#10035;</span> Working&#8230; <span class="m">(1m 12s)</span></pre><pre class="pt st-stop"><span class="b">&#9210;</span> Bash(xcodebuild test
+    -scheme LosttyRemote)
+<span class="q">Do you want to proceed?
+<span class="a">&#10095; 1. Yes</span>
+  2. Yes, and don&#8217;t ask again
+  3. No</span></pre><pre class="pt st-ans"><span class="b">&#9210;</span> Bash(xcodebuild test
+    -scheme LosttyRemote)
+  <span class="a">&#10095; 1. Yes</span> <span class="m">from iPhone</span>
+<span class="a">&#10035;</span> Running tests&#8230; <span class="m">128 passed</span></pre><span class="same">Same session as the phone</span></div><div class="pane p-b sk-sunset"><div class="skin tx-scan"></div><div class="ph"><span class="pp"><b>&gt;</b> lostty/stay-awake</span><span class="pst"><span class="star">&#10035;</span> Editing StayAwakeController.swift</span></div><pre class="pt"><span class="a">&gt;</span> fix the login bug
+<span class="b">&#9210;</span> Read(LoginView.swift)
+<span class="b">&#9210;</span> Update(StayAwakeController.swift)
+<span class="a">&#10035;</span> Incubating&#8230; <span class="m">(3m 52s)</span></pre></div></div><div class="col"><div class="pane p-c sk-deep"><div class="skin tx-bubbles"></div><div class="ph"><span class="pp"><b>&gt;</b> home</span><span class="pst">Ready</span></div><pre class="pt"><span class="a">$</span> tail -f deploy.log
+<span class="b">&#10003;</span> build 4312 healthy
+<span class="b">&#10003;</span> watch ready
+<span class="a">$</span> </pre></div><div class="pane p-d sk-silver"><div class="skin tx-stars"></div><div class="ph"><span class="pp"><b>&gt;</b> api-server/main</span><span class="pst">Idle &middot; 2h</span></div><pre class="pt"><span class="a">$</span> npm run dev
+<span class="m">listening on :8080</span>
+<span class="m">^C</span>
+<span class="a">$</span> </pre></div></div><div class="col col-e"><div class="pane p-e sk-bubble"><div class="skin tx-sparkle"></div><div class="ph"><span class="pp"><b>&gt;</b> lostty/website</span><span class="pst">Started from iPhone</span></div><pre class="pt"><span class="a">&#10043;</span> Welcome to Claude Code
+  <span class="m">cwd</span> ~/code/lostty/website
+  <span class="m">model</span> Opus
+
+<span class="a">&gt;</span> <span class="caret"></span></pre></div></div></div><div class="mac-usage"><span>Opus</span><span>ctx <span class="meter">&#9632;&#9632;&#9632;&#9633;&#9633;</span> 50K</span><span>5h <span class="meter">&#9632;&#9633;&#9633;&#9633;&#9633;</span> 22%</span></div></div><div class="phone"><div class="screen"><div class="island"></div><div class="sbar"><span>9:41</span><span class="sicons"><i class="sig"></i><i class="bat"></i></span></div><div class="view view-list"><div class="k-head"><svg viewBox="0 0 100 100" aria-hidden="true" class="axo logo"><path d="M60 82 C70 86 80 84 84 76 C86 72 82 70 80 73 C77 78 70 79 63 76 Z" fill="#EC97C6"/><ellipse cx="50" cy="76" rx="15" ry="12" fill="#EC97C6"/><ellipse cx="50" cy="79" rx="8" ry="6" fill="#F7B2D8"/><ellipse cx="39" cy="80" rx="4.2" ry="3.2" fill="#F7B2D8"/><ellipse cx="61" cy="80" rx="4.2" ry="3.2" fill="#F7B2D8"/><ellipse cx="43" cy="88" rx="5" ry="3" fill="#F7B2D8"/><ellipse cx="57" cy="88" rx="5" ry="3" fill="#F7B2D8"/><ellipse cx="14" cy="21" rx="9" ry="4.6" transform="rotate(-42 14 21)" fill="#E5199C"/><ellipse cx="86" cy="21" rx="9" ry="4.6" transform="rotate(42 86 21)" fill="#E5199C"/><ellipse cx="9" cy="34" rx="9" ry="4.6" transform="rotate(-12 9 34)" fill="#E5199C"/><ellipse cx="91" cy="34" rx="9" ry="4.6" transform="rotate(12 91 34)" fill="#E5199C"/><ellipse cx="11" cy="47" rx="8.5" ry="4.3" transform="rotate(18 11 47)" fill="#E5199C"/><ellipse cx="89" cy="47" rx="8.5" ry="4.3" transform="rotate(-18 89 47)" fill="#E5199C"/><path d="M50 15 C76.4 15 83 26.7 83 42.3 C83 60.5 69.8 67 50 67 C30.2 67 17 60.5 17 42.3 C17 26.7 23.6 15 50 15 Z" fill="#F7B2D8"/><ellipse cx="34" cy="24" rx="7" ry="3.2" fill="#FFFFFF" opacity="0.35" transform="rotate(-18 34 24)"/><path d="M33 36 L42 43 L33 50" fill="none" stroke="#3A1530" stroke-width="4.4" stroke-linecap="round" stroke-linejoin="round"/><path  d="M56 43 H68" stroke="#3A1530" stroke-width="4.4" stroke-linecap="round"/><path d="M46 53 Q48 56 50 53.5 Q52 56 54 53" fill="none" stroke="#3A1530" stroke-width="2.42" stroke-linecap="round" stroke-linejoin="round"/><ellipse cx="26" cy="55" rx="5" ry="3" fill="#E5199C" opacity="0.45"/><ellipse cx="75" cy="55" rx="5" ry="3" fill="#E5199C" opacity="0.45"/></svg><h5>Lostty</h5><span class="kbtn"><svg viewBox="0 0 24 24" fill="none" stroke="#F3F0F6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg><span class="badge">1</span></span><span class="kbtn kb-plus"><svg viewBox="0 0 24 24" fill="none" stroke="#F3F0F6" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></div><div class="conn">Connected <b><span class="n4">4</span><span class="n5">5</span></b></div><div class="list"><div class="card c-e sk-bubble"><div class="c-body"><div class="c-t"><i class="sw"></i>Website copy pass</div><div class="c-p"><b>&gt;</b> lostty/website</div><div class="c-d-line">Starting Claude &middot; Opus</div><div class="c-s"><span>&#10035; Starting&#8230;</span></div></div><span class="c-m base mi-happy"></span><span class="chev">&#8250;</span></div><div class="card c-a sk-neon"><div class="c-body"><div class="c-t"><i class="sw"></i>Lostty UI redesign plan</div><div class="c-p"><b>&gt;</b> lostty/skins</div><div class="c-d-line"><span class="v-base">Editing App.swift</span><span class="v-stop">Allow? Run the iOS tests</span><span class="v-ans">xcodebuild test</span></div><div class="c-s"><span class="v-base">&#10035; Working&#8230; (1m 12s)</span><span class="v-stop">Waiting on You.</span><span class="v-ans">&#10035; Running tests&#8230;</span></div></div><span class="c-m base mi-happy"></span><span class="c-m alt mi-wait"></span><span class="chev">&#8250;</span></div><div class="card c-b sk-sunset"><div class="c-body"><div class="c-t"><i class="sw"></i>Fix the login bug</div><div class="c-p"><b>&gt;</b> lostty/stay-awake</div><div class="c-d-line">Editing StayAwakeController.swift</div><div class="c-s">&#10035; Incubating&#8230; (3m 52s)</div></div><span class="c-m base mi-happy"></span><span class="chev">&#8250;</span></div><div class="card c-c sk-deep"><div class="c-body"><div class="c-t"><i class="sw"></i>Deploy watch</div><div class="c-p"><b>&gt;</b> home</div><div class="c-d-line">Watching deploy.log</div><div class="c-s">Ready.</div></div><span class="c-m base mi-ready"></span><span class="chev">&#8250;</span></div><div class="card c-d sk-silver"><div class="c-body"><div class="c-t"><i class="sw"></i>api-server</div><div class="c-p"><b>&gt;</b> api-server/main</div><div class="c-d-line">2h ago</div><div class="c-s">Idle.</div></div><span class="c-m base mi-sleep"></span><span class="chev">&#8250;</span></div></div></div><div class="view view-term"><div class="t-head"><span class="back">&#8249;</span><span class="tt">Lostty UI redesign plan</span><span class="tp"><b>&gt;</b> lostty/skins</span></div><div class="t-body"><span class="a">&gt;</span> make the skin picker remember
+  the last pane
+<span class="g">&#9210;</span> Update(App.swift) <span class="m">+18 &#8722;4</span>
+<span class="g">&#9210;</span> Bash(xcodebuild test
+    -scheme LosttyRemote)
+<span class="t-q"><span class="q">Do you want to proceed?
+<span class="sel">&#10095; 1. Yes</span>
+  2. Yes, and don&#8217;t ask again
+  3. No</span>
+<span class="a">&gt;</span> <span class="caret"></span></span><span class="t-ans">  <span class="sel">&#10095; 1. Yes</span>
+<span class="a">&#10035;</span> Running tests&#8230; <span class="m">(0m 04s)</span>
+<span class="m">  Test Suite LosttyRemoteTests started</span></span></div><div class="kbd"><div class="krow acc"><span class="k">esc</span><span class="k">tab</span><span class="k">ctrl</span><span class="k">&#8593;</span><span class="k">&#8595;</span><span class="k">&#8592;</span><span class="k">&#8594;</span></div><div class="krow num"><span class="k k1">1</span><span class="k">2</span><span class="k">3</span><span class="k">4</span><span class="k">5</span><span class="k">6</span><span class="k">7</span><span class="k">8</span><span class="k">9</span><span class="k">0</span><span class="ktap"></span><span class="gapmark"><span class="s1t">Between 1 and 2</span><span class="s2t">Typed 1</span></span></div><div class="krow "><span class="k">q</span><span class="k">w</span><span class="k">e</span><span class="k">r</span><span class="k">t</span><span class="k">y</span><span class="k">u</span><span class="k">i</span><span class="k">o</span><span class="k">p</span></div><div class="krow "><span class="k">a</span><span class="k">s</span><span class="k">d</span><span class="k">f</span><span class="k">g</span><span class="k">h</span><span class="k">j</span><span class="k">k</span><span class="k">l</span></div><div class="krow"><span class="k mod">&#8679;</span><span class="k">z</span><span class="k">x</span><span class="k">c</span><span class="k">v</span><span class="k">b</span><span class="k">n</span><span class="k">m</span><span class="k mod">&#9003;</span></div><div class="krow"><span class="k mod">&#8963;</span><span class="k wide">space</span><span class="k ret">return</span></div></div></div><div class="sh sh-ok"><div class="grab"></div><span class="wait-tag"><i></i>Waiting on you</span><h6>Lostty UI redesign plan</h6><div class="lbl">Allow? Run the iOS tests</div><div class="cmd">$ xcodebuild test -scheme LosttyRemote</div><div class="ok-row"><span>Deny</span><span class="allow">Allow</span></div></div><div class="sh sh-new"><div class="grab"></div><h6>New session</h6><div class="lbl">Project folder on your Mac</div><div class="field"><svg viewBox="0 0 24 24" fill="none" stroke="#8E8897" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg> website</div><div class="folders"><div class="on">~/code/lostty/website</div><div>~/code/lostty</div><div>~/code/api-server</div></div><div class="lbl">Start</div><div class="seg3"><span class="on">Claude</span><span>Codex</span><span>Shell</span></div><div class="lbl">Model</div><div class="models"><span class="on">Opus</span><span>Sonnet</span><span>Haiku</span></div><div class="bigbtn">Start</div></div><span class="tapr tap-plus"></span><span class="tapr tap-start"></span><span class="tapr tap-allow"></span></div></div><div class="mb mb-wait"><span class="mi mi-wait"></span><i class="d"></i>Waiting on you</div><div class="mb mb-snap"><span class="mi mi-happy"></span><i class="d"></i>Answered from the phone</div><div class="mb mb-skin"><span class="mi mi-ready"></span><i class="d"></i>Four projects, four looks</div><div class="mb mb-spawn"><span class="mi mi-happy"></span><i class="d"></i>Open on both, right now</div><div class="mb mb-cheer"><span class="mi mi-happy"></span><i class="d"></i>Allowed. Claude carries on</div></div></div></div>
+          </article>
+
+          <article class="ch" id="ch-3">
+            <div class="ch-text">
+              <span class="ch-num">#3</span>
+              <h3 class="h3">Ten terminals, all the same black box.</h3>
+              <p class="ch-problem"><span class="ch-label">The problem</span>Once you've got a few agents going, every terminal looks the same. Sooner or later, you type into the wrong one.</p>
+              <p class="ch-fix"><span class="ch-label">The fix</span>Skins. Each project gets its own colors and texture, and the terminal changes to match when you move into a project. Your phone shows the same colors, so the list reads at a glance. Each terminal also says what Claude is doing right now, like <strong>Editing App.swift</strong>, with its live <strong>&#10035; Working&#8230;</strong> line. A soft glow traces the window while Claude works, so you can tell from across the room.</p>
+            </div>
+            <div class="ch-fig"><div class="rig solo-mac" role="img" aria-label="The Mac window with four panes, each in its own skin, and a glow tracing the window."><div class="scene rise answered s1 s2 s3 s4 trace" aria-hidden="true"><div class="mac"><div class="mac-bar"><span class="lights"><i></i><i></i><i></i></span><span class="mac-title">Lostty</span><span class="pill"><b>&gt;</b> lostty/skins</span></div><div class="mac-body"><div class="col"><div class="pane p-a sk-neon"><div class="skin tx-grid"></div><div class="ph"><span class="pp"><b>&gt;</b> lostty/skins</span><span class="pst"><span class="st-base"><span class="star">&#10035;</span> Editing App.swift</span><span class="st-stop">Waiting on you</span><span class="st-ans"><span class="star">&#10035;</span> Running tests</span></span></div><pre class="pt st-base"><span class="a">&gt;</span> make the skin picker remember
+  the last pane
+<span class="b">&#9210;</span> Read(SkinPicker.swift)
+<span class="b">&#9210;</span> Update(App.swift) <span class="m">+18 &#8722;4</span>
+<span class="a">&#10035;</span> Working&#8230; <span class="m">(1m 12s)</span></pre><pre class="pt st-stop"><span class="b">&#9210;</span> Bash(xcodebuild test
+    -scheme LosttyRemote)
+<span class="q">Do you want to proceed?
+<span class="a">&#10095; 1. Yes</span>
+  2. Yes, and don&#8217;t ask again
+  3. No</span></pre><pre class="pt st-ans"><span class="b">&#9210;</span> Bash(xcodebuild test
+    -scheme LosttyRemote)
+  <span class="a">&#10095; 1. Yes</span> <span class="m">from iPhone</span>
+<span class="a">&#10035;</span> Running tests&#8230; <span class="m">128 passed</span></pre><span class="same">Same session as the phone</span></div><div class="pane p-b sk-sunset"><div class="skin tx-scan"></div><div class="ph"><span class="pp"><b>&gt;</b> lostty/stay-awake</span><span class="pst"><span class="star">&#10035;</span> Editing StayAwakeController.swift</span></div><pre class="pt"><span class="a">&gt;</span> fix the login bug
+<span class="b">&#9210;</span> Read(LoginView.swift)
+<span class="b">&#9210;</span> Update(StayAwakeController.swift)
+<span class="a">&#10035;</span> Incubating&#8230; <span class="m">(3m 52s)</span></pre></div></div><div class="col"><div class="pane p-c sk-deep"><div class="skin tx-bubbles"></div><div class="ph"><span class="pp"><b>&gt;</b> home</span><span class="pst">Ready</span></div><pre class="pt"><span class="a">$</span> tail -f deploy.log
+<span class="b">&#10003;</span> build 4312 healthy
+<span class="b">&#10003;</span> watch ready
+<span class="a">$</span> </pre></div><div class="pane p-d sk-silver"><div class="skin tx-stars"></div><div class="ph"><span class="pp"><b>&gt;</b> api-server/main</span><span class="pst">Idle &middot; 2h</span></div><pre class="pt"><span class="a">$</span> npm run dev
+<span class="m">listening on :8080</span>
+<span class="m">^C</span>
+<span class="a">$</span> </pre></div></div><div class="col col-e"><div class="pane p-e sk-bubble"><div class="skin tx-sparkle"></div><div class="ph"><span class="pp"><b>&gt;</b> lostty/website</span><span class="pst">Started from iPhone</span></div><pre class="pt"><span class="a">&#10043;</span> Welcome to Claude Code
+  <span class="m">cwd</span> ~/code/lostty/website
+  <span class="m">model</span> Opus
+
+<span class="a">&gt;</span> <span class="caret"></span></pre></div></div></div><div class="mac-usage"><span>Opus</span><span>ctx <span class="meter">&#9632;&#9632;&#9632;&#9633;&#9633;</span> 50K</span><span>5h <span class="meter">&#9632;&#9633;&#9633;&#9633;&#9633;</span> 22%</span></div></div><div class="phone"><div class="screen"><div class="island"></div><div class="sbar"><span>9:41</span><span class="sicons"><i class="sig"></i><i class="bat"></i></span></div><div class="view view-list"><div class="k-head"><svg viewBox="0 0 100 100" aria-hidden="true" class="axo logo"><path d="M60 82 C70 86 80 84 84 76 C86 72 82 70 80 73 C77 78 70 79 63 76 Z" fill="#EC97C6"/><ellipse cx="50" cy="76" rx="15" ry="12" fill="#EC97C6"/><ellipse cx="50" cy="79" rx="8" ry="6" fill="#F7B2D8"/><ellipse cx="39" cy="80" rx="4.2" ry="3.2" fill="#F7B2D8"/><ellipse cx="61" cy="80" rx="4.2" ry="3.2" fill="#F7B2D8"/><ellipse cx="43" cy="88" rx="5" ry="3" fill="#F7B2D8"/><ellipse cx="57" cy="88" rx="5" ry="3" fill="#F7B2D8"/><ellipse cx="14" cy="21" rx="9" ry="4.6" transform="rotate(-42 14 21)" fill="#E5199C"/><ellipse cx="86" cy="21" rx="9" ry="4.6" transform="rotate(42 86 21)" fill="#E5199C"/><ellipse cx="9" cy="34" rx="9" ry="4.6" transform="rotate(-12 9 34)" fill="#E5199C"/><ellipse cx="91" cy="34" rx="9" ry="4.6" transform="rotate(12 91 34)" fill="#E5199C"/><ellipse cx="11" cy="47" rx="8.5" ry="4.3" transform="rotate(18 11 47)" fill="#E5199C"/><ellipse cx="89" cy="47" rx="8.5" ry="4.3" transform="rotate(-18 89 47)" fill="#E5199C"/><path d="M50 15 C76.4 15 83 26.7 83 42.3 C83 60.5 69.8 67 50 67 C30.2 67 17 60.5 17 42.3 C17 26.7 23.6 15 50 15 Z" fill="#F7B2D8"/><ellipse cx="34" cy="24" rx="7" ry="3.2" fill="#FFFFFF" opacity="0.35" transform="rotate(-18 34 24)"/><path d="M33 36 L42 43 L33 50" fill="none" stroke="#3A1530" stroke-width="4.4" stroke-linecap="round" stroke-linejoin="round"/><path  d="M56 43 H68" stroke="#3A1530" stroke-width="4.4" stroke-linecap="round"/><path d="M46 53 Q48 56 50 53.5 Q52 56 54 53" fill="none" stroke="#3A1530" stroke-width="2.42" stroke-linecap="round" stroke-linejoin="round"/><ellipse cx="26" cy="55" rx="5" ry="3" fill="#E5199C" opacity="0.45"/><ellipse cx="75" cy="55" rx="5" ry="3" fill="#E5199C" opacity="0.45"/></svg><h5>Lostty</h5><span class="kbtn"><svg viewBox="0 0 24 24" fill="none" stroke="#F3F0F6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg><span class="badge">1</span></span><span class="kbtn kb-plus"><svg viewBox="0 0 24 24" fill="none" stroke="#F3F0F6" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></div><div class="conn">Connected <b><span class="n4">4</span><span class="n5">5</span></b></div><div class="list"><div class="card c-e sk-bubble"><div class="c-body"><div class="c-t"><i class="sw"></i>Website copy pass</div><div class="c-p"><b>&gt;</b> lostty/website</div><div class="c-d-line">Starting Claude &middot; Opus</div><div class="c-s"><span>&#10035; Starting&#8230;</span></div></div><span class="c-m base mi-happy"></span><span class="chev">&#8250;</span></div><div class="card c-a sk-neon"><div class="c-body"><div class="c-t"><i class="sw"></i>Lostty UI redesign plan</div><div class="c-p"><b>&gt;</b> lostty/skins</div><div class="c-d-line"><span class="v-base">Editing App.swift</span><span class="v-stop">Allow? Run the iOS tests</span><span class="v-ans">xcodebuild test</span></div><div class="c-s"><span class="v-base">&#10035; Working&#8230; (1m 12s)</span><span class="v-stop">Waiting on You.</span><span class="v-ans">&#10035; Running tests&#8230;</span></div></div><span class="c-m base mi-happy"></span><span class="c-m alt mi-wait"></span><span class="chev">&#8250;</span></div><div class="card c-b sk-sunset"><div class="c-body"><div class="c-t"><i class="sw"></i>Fix the login bug</div><div class="c-p"><b>&gt;</b> lostty/stay-awake</div><div class="c-d-line">Editing StayAwakeController.swift</div><div class="c-s">&#10035; Incubating&#8230; (3m 52s)</div></div><span class="c-m base mi-happy"></span><span class="chev">&#8250;</span></div><div class="card c-c sk-deep"><div class="c-body"><div class="c-t"><i class="sw"></i>Deploy watch</div><div class="c-p"><b>&gt;</b> home</div><div class="c-d-line">Watching deploy.log</div><div class="c-s">Ready.</div></div><span class="c-m base mi-ready"></span><span class="chev">&#8250;</span></div><div class="card c-d sk-silver"><div class="c-body"><div class="c-t"><i class="sw"></i>api-server</div><div class="c-p"><b>&gt;</b> api-server/main</div><div class="c-d-line">2h ago</div><div class="c-s">Idle.</div></div><span class="c-m base mi-sleep"></span><span class="chev">&#8250;</span></div></div></div><div class="view view-term"><div class="t-head"><span class="back">&#8249;</span><span class="tt">Lostty UI redesign plan</span><span class="tp"><b>&gt;</b> lostty/skins</span></div><div class="t-body"><span class="a">&gt;</span> make the skin picker remember
+  the last pane
+<span class="g">&#9210;</span> Update(App.swift) <span class="m">+18 &#8722;4</span>
+<span class="g">&#9210;</span> Bash(xcodebuild test
+    -scheme LosttyRemote)
+<span class="t-q"><span class="q">Do you want to proceed?
+<span class="sel">&#10095; 1. Yes</span>
+  2. Yes, and don&#8217;t ask again
+  3. No</span>
+<span class="a">&gt;</span> <span class="caret"></span></span><span class="t-ans">  <span class="sel">&#10095; 1. Yes</span>
+<span class="a">&#10035;</span> Running tests&#8230; <span class="m">(0m 04s)</span>
+<span class="m">  Test Suite LosttyRemoteTests started</span></span></div><div class="kbd"><div class="krow acc"><span class="k">esc</span><span class="k">tab</span><span class="k">ctrl</span><span class="k">&#8593;</span><span class="k">&#8595;</span><span class="k">&#8592;</span><span class="k">&#8594;</span></div><div class="krow num"><span class="k k1">1</span><span class="k">2</span><span class="k">3</span><span class="k">4</span><span class="k">5</span><span class="k">6</span><span class="k">7</span><span class="k">8</span><span class="k">9</span><span class="k">0</span><span class="ktap"></span><span class="gapmark"><span class="s1t">Between 1 and 2</span><span class="s2t">Typed 1</span></span></div><div class="krow "><span class="k">q</span><span class="k">w</span><span class="k">e</span><span class="k">r</span><span class="k">t</span><span class="k">y</span><span class="k">u</span><span class="k">i</span><span class="k">o</span><span class="k">p</span></div><div class="krow "><span class="k">a</span><span class="k">s</span><span class="k">d</span><span class="k">f</span><span class="k">g</span><span class="k">h</span><span class="k">j</span><span class="k">k</span><span class="k">l</span></div><div class="krow"><span class="k mod">&#8679;</span><span class="k">z</span><span class="k">x</span><span class="k">c</span><span class="k">v</span><span class="k">b</span><span class="k">n</span><span class="k">m</span><span class="k mod">&#9003;</span></div><div class="krow"><span class="k mod">&#8963;</span><span class="k wide">space</span><span class="k ret">return</span></div></div></div><div class="sh sh-ok"><div class="grab"></div><span class="wait-tag"><i></i>Waiting on you</span><h6>Lostty UI redesign plan</h6><div class="lbl">Allow? Run the iOS tests</div><div class="cmd">$ xcodebuild test -scheme LosttyRemote</div><div class="ok-row"><span>Deny</span><span class="allow">Allow</span></div></div><div class="sh sh-new"><div class="grab"></div><h6>New session</h6><div class="lbl">Project folder on your Mac</div><div class="field"><svg viewBox="0 0 24 24" fill="none" stroke="#8E8897" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg> website</div><div class="folders"><div class="on">~/code/lostty/website</div><div>~/code/lostty</div><div>~/code/api-server</div></div><div class="lbl">Start</div><div class="seg3"><span class="on">Claude</span><span>Codex</span><span>Shell</span></div><div class="lbl">Model</div><div class="models"><span class="on">Opus</span><span>Sonnet</span><span>Haiku</span></div><div class="bigbtn">Start</div></div><span class="tapr tap-plus"></span><span class="tapr tap-start"></span><span class="tapr tap-allow"></span></div></div><div class="mb mb-wait"><span class="mi mi-wait"></span><i class="d"></i>Waiting on you</div><div class="mb mb-snap"><span class="mi mi-happy"></span><i class="d"></i>Answered from the phone</div><div class="mb mb-skin"><span class="mi mi-ready"></span><i class="d"></i>Four projects, four looks</div><div class="mb mb-spawn"><span class="mi mi-happy"></span><i class="d"></i>Open on both, right now</div><div class="mb mb-cheer"><span class="mi mi-happy"></span><i class="d"></i>Allowed. Claude carries on</div></div></div></div>
+          </article>
+
+          <article class="ch" id="ch-4">
+            <div class="ch-text">
+              <span class="ch-num">#4</span>
+              <h3 class="h3">Starting anything meant going back to my desk.</h3>
+              <p class="ch-problem"><span class="ch-label">The problem</span>You're out, and you think of the next thing. Now you either wait until you're back, or you go back.</p>
+              <p class="ch-fix"><span class="ch-label">The fix</span>Tap <strong>+</strong> on your phone and pick a project folder on your Mac (browse for it, or search). Choose what starts there: Claude, Codex or a plain shell, and which model. <strong>It opens on your Mac and on your phone at the same time.</strong></p>
+            </div>
+            <div class="ch-fig"><div class="rig " role="img" aria-label="A new session started from the phone, open on the Mac and the phone at once."><div class="scene rise answered spawn s1 s2 s3 s4" aria-hidden="true"><div class="mac"><div class="mac-bar"><span class="lights"><i></i><i></i><i></i></span><span class="mac-title">Lostty</span><span class="pill"><b>&gt;</b> lostty/skins</span></div><div class="mac-body"><div class="col"><div class="pane p-a sk-neon"><div class="skin tx-grid"></div><div class="ph"><span class="pp"><b>&gt;</b> lostty/skins</span><span class="pst"><span class="st-base"><span class="star">&#10035;</span> Editing App.swift</span><span class="st-stop">Waiting on you</span><span class="st-ans"><span class="star">&#10035;</span> Running tests</span></span></div><pre class="pt st-base"><span class="a">&gt;</span> make the skin picker remember
+  the last pane
+<span class="b">&#9210;</span> Read(SkinPicker.swift)
+<span class="b">&#9210;</span> Update(App.swift) <span class="m">+18 &#8722;4</span>
+<span class="a">&#10035;</span> Working&#8230; <span class="m">(1m 12s)</span></pre><pre class="pt st-stop"><span class="b">&#9210;</span> Bash(xcodebuild test
+    -scheme LosttyRemote)
+<span class="q">Do you want to proceed?
+<span class="a">&#10095; 1. Yes</span>
+  2. Yes, and don&#8217;t ask again
+  3. No</span></pre><pre class="pt st-ans"><span class="b">&#9210;</span> Bash(xcodebuild test
+    -scheme LosttyRemote)
+  <span class="a">&#10095; 1. Yes</span> <span class="m">from iPhone</span>
+<span class="a">&#10035;</span> Running tests&#8230; <span class="m">128 passed</span></pre><span class="same">Same session as the phone</span></div><div class="pane p-b sk-sunset"><div class="skin tx-scan"></div><div class="ph"><span class="pp"><b>&gt;</b> lostty/stay-awake</span><span class="pst"><span class="star">&#10035;</span> Editing StayAwakeController.swift</span></div><pre class="pt"><span class="a">&gt;</span> fix the login bug
+<span class="b">&#9210;</span> Read(LoginView.swift)
+<span class="b">&#9210;</span> Update(StayAwakeController.swift)
+<span class="a">&#10035;</span> Incubating&#8230; <span class="m">(3m 52s)</span></pre></div></div><div class="col"><div class="pane p-c sk-deep"><div class="skin tx-bubbles"></div><div class="ph"><span class="pp"><b>&gt;</b> home</span><span class="pst">Ready</span></div><pre class="pt"><span class="a">$</span> tail -f deploy.log
+<span class="b">&#10003;</span> build 4312 healthy
+<span class="b">&#10003;</span> watch ready
+<span class="a">$</span> </pre></div><div class="pane p-d sk-silver"><div class="skin tx-stars"></div><div class="ph"><span class="pp"><b>&gt;</b> api-server/main</span><span class="pst">Idle &middot; 2h</span></div><pre class="pt"><span class="a">$</span> npm run dev
+<span class="m">listening on :8080</span>
+<span class="m">^C</span>
+<span class="a">$</span> </pre></div></div><div class="col col-e"><div class="pane p-e sk-bubble"><div class="skin tx-sparkle"></div><div class="ph"><span class="pp"><b>&gt;</b> lostty/website</span><span class="pst">Started from iPhone</span></div><pre class="pt"><span class="a">&#10043;</span> Welcome to Claude Code
+  <span class="m">cwd</span> ~/code/lostty/website
+  <span class="m">model</span> Opus
+
+<span class="a">&gt;</span> <span class="caret"></span></pre></div></div></div><div class="mac-usage"><span>Opus</span><span>ctx <span class="meter">&#9632;&#9632;&#9632;&#9633;&#9633;</span> 50K</span><span>5h <span class="meter">&#9632;&#9633;&#9633;&#9633;&#9633;</span> 22%</span></div></div><div class="phone"><div class="screen"><div class="island"></div><div class="sbar"><span>9:41</span><span class="sicons"><i class="sig"></i><i class="bat"></i></span></div><div class="view view-list"><div class="k-head"><svg viewBox="0 0 100 100" aria-hidden="true" class="axo logo"><path d="M60 82 C70 86 80 84 84 76 C86 72 82 70 80 73 C77 78 70 79 63 76 Z" fill="#EC97C6"/><ellipse cx="50" cy="76" rx="15" ry="12" fill="#EC97C6"/><ellipse cx="50" cy="79" rx="8" ry="6" fill="#F7B2D8"/><ellipse cx="39" cy="80" rx="4.2" ry="3.2" fill="#F7B2D8"/><ellipse cx="61" cy="80" rx="4.2" ry="3.2" fill="#F7B2D8"/><ellipse cx="43" cy="88" rx="5" ry="3" fill="#F7B2D8"/><ellipse cx="57" cy="88" rx="5" ry="3" fill="#F7B2D8"/><ellipse cx="14" cy="21" rx="9" ry="4.6" transform="rotate(-42 14 21)" fill="#E5199C"/><ellipse cx="86" cy="21" rx="9" ry="4.6" transform="rotate(42 86 21)" fill="#E5199C"/><ellipse cx="9" cy="34" rx="9" ry="4.6" transform="rotate(-12 9 34)" fill="#E5199C"/><ellipse cx="91" cy="34" rx="9" ry="4.6" transform="rotate(12 91 34)" fill="#E5199C"/><ellipse cx="11" cy="47" rx="8.5" ry="4.3" transform="rotate(18 11 47)" fill="#E5199C"/><ellipse cx="89" cy="47" rx="8.5" ry="4.3" transform="rotate(-18 89 47)" fill="#E5199C"/><path d="M50 15 C76.4 15 83 26.7 83 42.3 C83 60.5 69.8 67 50 67 C30.2 67 17 60.5 17 42.3 C17 26.7 23.6 15 50 15 Z" fill="#F7B2D8"/><ellipse cx="34" cy="24" rx="7" ry="3.2" fill="#FFFFFF" opacity="0.35" transform="rotate(-18 34 24)"/><path d="M33 36 L42 43 L33 50" fill="none" stroke="#3A1530" stroke-width="4.4" stroke-linecap="round" stroke-linejoin="round"/><path  d="M56 43 H68" stroke="#3A1530" stroke-width="4.4" stroke-linecap="round"/><path d="M46 53 Q48 56 50 53.5 Q52 56 54 53" fill="none" stroke="#3A1530" stroke-width="2.42" stroke-linecap="round" stroke-linejoin="round"/><ellipse cx="26" cy="55" rx="5" ry="3" fill="#E5199C" opacity="0.45"/><ellipse cx="75" cy="55" rx="5" ry="3" fill="#E5199C" opacity="0.45"/></svg><h5>Lostty</h5><span class="kbtn"><svg viewBox="0 0 24 24" fill="none" stroke="#F3F0F6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg><span class="badge">1</span></span><span class="kbtn kb-plus"><svg viewBox="0 0 24 24" fill="none" stroke="#F3F0F6" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></div><div class="conn">Connected <b><span class="n4">4</span><span class="n5">5</span></b></div><div class="list"><div class="card c-e sk-bubble"><div class="c-body"><div class="c-t"><i class="sw"></i>Website copy pass</div><div class="c-p"><b>&gt;</b> lostty/website</div><div class="c-d-line">Starting Claude &middot; Opus</div><div class="c-s"><span>&#10035; Starting&#8230;</span></div></div><span class="c-m base mi-happy"></span><span class="chev">&#8250;</span></div><div class="card c-a sk-neon"><div class="c-body"><div class="c-t"><i class="sw"></i>Lostty UI redesign plan</div><div class="c-p"><b>&gt;</b> lostty/skins</div><div class="c-d-line"><span class="v-base">Editing App.swift</span><span class="v-stop">Allow? Run the iOS tests</span><span class="v-ans">xcodebuild test</span></div><div class="c-s"><span class="v-base">&#10035; Working&#8230; (1m 12s)</span><span class="v-stop">Waiting on You.</span><span class="v-ans">&#10035; Running tests&#8230;</span></div></div><span class="c-m base mi-happy"></span><span class="c-m alt mi-wait"></span><span class="chev">&#8250;</span></div><div class="card c-b sk-sunset"><div class="c-body"><div class="c-t"><i class="sw"></i>Fix the login bug</div><div class="c-p"><b>&gt;</b> lostty/stay-awake</div><div class="c-d-line">Editing StayAwakeController.swift</div><div class="c-s">&#10035; Incubating&#8230; (3m 52s)</div></div><span class="c-m base mi-happy"></span><span class="chev">&#8250;</span></div><div class="card c-c sk-deep"><div class="c-body"><div class="c-t"><i class="sw"></i>Deploy watch</div><div class="c-p"><b>&gt;</b> home</div><div class="c-d-line">Watching deploy.log</div><div class="c-s">Ready.</div></div><span class="c-m base mi-ready"></span><span class="chev">&#8250;</span></div><div class="card c-d sk-silver"><div class="c-body"><div class="c-t"><i class="sw"></i>api-server</div><div class="c-p"><b>&gt;</b> api-server/main</div><div class="c-d-line">2h ago</div><div class="c-s">Idle.</div></div><span class="c-m base mi-sleep"></span><span class="chev">&#8250;</span></div></div></div><div class="view view-term"><div class="t-head"><span class="back">&#8249;</span><span class="tt">Lostty UI redesign plan</span><span class="tp"><b>&gt;</b> lostty/skins</span></div><div class="t-body"><span class="a">&gt;</span> make the skin picker remember
+  the last pane
+<span class="g">&#9210;</span> Update(App.swift) <span class="m">+18 &#8722;4</span>
+<span class="g">&#9210;</span> Bash(xcodebuild test
+    -scheme LosttyRemote)
+<span class="t-q"><span class="q">Do you want to proceed?
+<span class="sel">&#10095; 1. Yes</span>
+  2. Yes, and don&#8217;t ask again
+  3. No</span>
+<span class="a">&gt;</span> <span class="caret"></span></span><span class="t-ans">  <span class="sel">&#10095; 1. Yes</span>
+<span class="a">&#10035;</span> Running tests&#8230; <span class="m">(0m 04s)</span>
+<span class="m">  Test Suite LosttyRemoteTests started</span></span></div><div class="kbd"><div class="krow acc"><span class="k">esc</span><span class="k">tab</span><span class="k">ctrl</span><span class="k">&#8593;</span><span class="k">&#8595;</span><span class="k">&#8592;</span><span class="k">&#8594;</span></div><div class="krow num"><span class="k k1">1</span><span class="k">2</span><span class="k">3</span><span class="k">4</span><span class="k">5</span><span class="k">6</span><span class="k">7</span><span class="k">8</span><span class="k">9</span><span class="k">0</span><span class="ktap"></span><span class="gapmark"><span class="s1t">Between 1 and 2</span><span class="s2t">Typed 1</span></span></div><div class="krow "><span class="k">q</span><span class="k">w</span><span class="k">e</span><span class="k">r</span><span class="k">t</span><span class="k">y</span><span class="k">u</span><span class="k">i</span><span class="k">o</span><span class="k">p</span></div><div class="krow "><span class="k">a</span><span class="k">s</span><span class="k">d</span><span class="k">f</span><span class="k">g</span><span class="k">h</span><span class="k">j</span><span class="k">k</span><span class="k">l</span></div><div class="krow"><span class="k mod">&#8679;</span><span class="k">z</span><span class="k">x</span><span class="k">c</span><span class="k">v</span><span class="k">b</span><span class="k">n</span><span class="k">m</span><span class="k mod">&#9003;</span></div><div class="krow"><span class="k mod">&#8963;</span><span class="k wide">space</span><span class="k ret">return</span></div></div></div><div class="sh sh-ok"><div class="grab"></div><span class="wait-tag"><i></i>Waiting on you</span><h6>Lostty UI redesign plan</h6><div class="lbl">Allow? Run the iOS tests</div><div class="cmd">$ xcodebuild test -scheme LosttyRemote</div><div class="ok-row"><span>Deny</span><span class="allow">Allow</span></div></div><div class="sh sh-new"><div class="grab"></div><h6>New session</h6><div class="lbl">Project folder on your Mac</div><div class="field"><svg viewBox="0 0 24 24" fill="none" stroke="#8E8897" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg> website</div><div class="folders"><div class="on">~/code/lostty/website</div><div>~/code/lostty</div><div>~/code/api-server</div></div><div class="lbl">Start</div><div class="seg3"><span class="on">Claude</span><span>Codex</span><span>Shell</span></div><div class="lbl">Model</div><div class="models"><span class="on">Opus</span><span>Sonnet</span><span>Haiku</span></div><div class="bigbtn">Start</div></div><span class="tapr tap-plus"></span><span class="tapr tap-start"></span><span class="tapr tap-allow"></span></div></div><div class="mb mb-wait"><span class="mi mi-wait"></span><i class="d"></i>Waiting on you</div><div class="mb mb-snap"><span class="mi mi-happy"></span><i class="d"></i>Answered from the phone</div><div class="mb mb-skin"><span class="mi mi-ready"></span><i class="d"></i>Four projects, four looks</div><div class="mb mb-spawn"><span class="mi mi-happy"></span><i class="d"></i>Open on both, right now</div><div class="mb mb-cheer"><span class="mi mi-happy"></span><i class="d"></i>Allowed. Claude carries on</div></div></div></div>
+          </article>
+
+        </div>
+
+        <div class="stage-col" aria-hidden="false">
+          <div class="stage">
+            <div id="stage-rig"><div class="rig " role="img" aria-label="The Mac and the iPhone acting out each fix as you scroll."><div class="scene " aria-hidden="true"><div class="mac"><div class="mac-bar"><span class="lights"><i></i><i></i><i></i></span><span class="mac-title">Lostty</span><span class="pill"><b>&gt;</b> lostty/skins</span></div><div class="mac-body"><div class="col"><div class="pane p-a sk-neon"><div class="skin tx-grid"></div><div class="ph"><span class="pp"><b>&gt;</b> lostty/skins</span><span class="pst"><span class="st-base"><span class="star">&#10035;</span> Editing App.swift</span><span class="st-stop">Waiting on you</span><span class="st-ans"><span class="star">&#10035;</span> Running tests</span></span></div><pre class="pt st-base"><span class="a">&gt;</span> make the skin picker remember
+  the last pane
+<span class="b">&#9210;</span> Read(SkinPicker.swift)
+<span class="b">&#9210;</span> Update(App.swift) <span class="m">+18 &#8722;4</span>
+<span class="a">&#10035;</span> Working&#8230; <span class="m">(1m 12s)</span></pre><pre class="pt st-stop"><span class="b">&#9210;</span> Bash(xcodebuild test
+    -scheme LosttyRemote)
+<span class="q">Do you want to proceed?
+<span class="a">&#10095; 1. Yes</span>
+  2. Yes, and don&#8217;t ask again
+  3. No</span></pre><pre class="pt st-ans"><span class="b">&#9210;</span> Bash(xcodebuild test
+    -scheme LosttyRemote)
+  <span class="a">&#10095; 1. Yes</span> <span class="m">from iPhone</span>
+<span class="a">&#10035;</span> Running tests&#8230; <span class="m">128 passed</span></pre><span class="same">Same session as the phone</span></div><div class="pane p-b sk-sunset"><div class="skin tx-scan"></div><div class="ph"><span class="pp"><b>&gt;</b> lostty/stay-awake</span><span class="pst"><span class="star">&#10035;</span> Editing StayAwakeController.swift</span></div><pre class="pt"><span class="a">&gt;</span> fix the login bug
+<span class="b">&#9210;</span> Read(LoginView.swift)
+<span class="b">&#9210;</span> Update(StayAwakeController.swift)
+<span class="a">&#10035;</span> Incubating&#8230; <span class="m">(3m 52s)</span></pre></div></div><div class="col"><div class="pane p-c sk-deep"><div class="skin tx-bubbles"></div><div class="ph"><span class="pp"><b>&gt;</b> home</span><span class="pst">Ready</span></div><pre class="pt"><span class="a">$</span> tail -f deploy.log
+<span class="b">&#10003;</span> build 4312 healthy
+<span class="b">&#10003;</span> watch ready
+<span class="a">$</span> </pre></div><div class="pane p-d sk-silver"><div class="skin tx-stars"></div><div class="ph"><span class="pp"><b>&gt;</b> api-server/main</span><span class="pst">Idle &middot; 2h</span></div><pre class="pt"><span class="a">$</span> npm run dev
+<span class="m">listening on :8080</span>
+<span class="m">^C</span>
+<span class="a">$</span> </pre></div></div><div class="col col-e"><div class="pane p-e sk-bubble"><div class="skin tx-sparkle"></div><div class="ph"><span class="pp"><b>&gt;</b> lostty/website</span><span class="pst">Started from iPhone</span></div><pre class="pt"><span class="a">&#10043;</span> Welcome to Claude Code
+  <span class="m">cwd</span> ~/code/lostty/website
+  <span class="m">model</span> Opus
+
+<span class="a">&gt;</span> <span class="caret"></span></pre></div></div></div><div class="mac-usage"><span>Opus</span><span>ctx <span class="meter">&#9632;&#9632;&#9632;&#9633;&#9633;</span> 50K</span><span>5h <span class="meter">&#9632;&#9633;&#9633;&#9633;&#9633;</span> 22%</span></div></div><div class="phone"><div class="screen"><div class="island"></div><div class="sbar"><span>9:41</span><span class="sicons"><i class="sig"></i><i class="bat"></i></span></div><div class="view view-list"><div class="k-head"><svg viewBox="0 0 100 100" aria-hidden="true" class="axo logo"><path d="M60 82 C70 86 80 84 84 76 C86 72 82 70 80 73 C77 78 70 79 63 76 Z" fill="#EC97C6"/><ellipse cx="50" cy="76" rx="15" ry="12" fill="#EC97C6"/><ellipse cx="50" cy="79" rx="8" ry="6" fill="#F7B2D8"/><ellipse cx="39" cy="80" rx="4.2" ry="3.2" fill="#F7B2D8"/><ellipse cx="61" cy="80" rx="4.2" ry="3.2" fill="#F7B2D8"/><ellipse cx="43" cy="88" rx="5" ry="3" fill="#F7B2D8"/><ellipse cx="57" cy="88" rx="5" ry="3" fill="#F7B2D8"/><ellipse cx="14" cy="21" rx="9" ry="4.6" transform="rotate(-42 14 21)" fill="#E5199C"/><ellipse cx="86" cy="21" rx="9" ry="4.6" transform="rotate(42 86 21)" fill="#E5199C"/><ellipse cx="9" cy="34" rx="9" ry="4.6" transform="rotate(-12 9 34)" fill="#E5199C"/><ellipse cx="91" cy="34" rx="9" ry="4.6" transform="rotate(12 91 34)" fill="#E5199C"/><ellipse cx="11" cy="47" rx="8.5" ry="4.3" transform="rotate(18 11 47)" fill="#E5199C"/><ellipse cx="89" cy="47" rx="8.5" ry="4.3" transform="rotate(-18 89 47)" fill="#E5199C"/><path d="M50 15 C76.4 15 83 26.7 83 42.3 C83 60.5 69.8 67 50 67 C30.2 67 17 60.5 17 42.3 C17 26.7 23.6 15 50 15 Z" fill="#F7B2D8"/><ellipse cx="34" cy="24" rx="7" ry="3.2" fill="#FFFFFF" opacity="0.35" transform="rotate(-18 34 24)"/><path d="M33 36 L42 43 L33 50" fill="none" stroke="#3A1530" stroke-width="4.4" stroke-linecap="round" stroke-linejoin="round"/><path  d="M56 43 H68" stroke="#3A1530" stroke-width="4.4" stroke-linecap="round"/><path d="M46 53 Q48 56 50 53.5 Q52 56 54 53" fill="none" stroke="#3A1530" stroke-width="2.42" stroke-linecap="round" stroke-linejoin="round"/><ellipse cx="26" cy="55" rx="5" ry="3" fill="#E5199C" opacity="0.45"/><ellipse cx="75" cy="55" rx="5" ry="3" fill="#E5199C" opacity="0.45"/></svg><h5>Lostty</h5><span class="kbtn"><svg viewBox="0 0 24 24" fill="none" stroke="#F3F0F6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg><span class="badge">1</span></span><span class="kbtn kb-plus"><svg viewBox="0 0 24 24" fill="none" stroke="#F3F0F6" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></div><div class="conn">Connected <b><span class="n4">4</span><span class="n5">5</span></b></div><div class="list"><div class="card c-e sk-bubble"><div class="c-body"><div class="c-t"><i class="sw"></i>Website copy pass</div><div class="c-p"><b>&gt;</b> lostty/website</div><div class="c-d-line">Starting Claude &middot; Opus</div><div class="c-s"><span>&#10035; Starting&#8230;</span></div></div><span class="c-m base mi-happy"></span><span class="chev">&#8250;</span></div><div class="card c-a sk-neon"><div class="c-body"><div class="c-t"><i class="sw"></i>Lostty UI redesign plan</div><div class="c-p"><b>&gt;</b> lostty/skins</div><div class="c-d-line"><span class="v-base">Editing App.swift</span><span class="v-stop">Allow? Run the iOS tests</span><span class="v-ans">xcodebuild test</span></div><div class="c-s"><span class="v-base">&#10035; Working&#8230; (1m 12s)</span><span class="v-stop">Waiting on You.</span><span class="v-ans">&#10035; Running tests&#8230;</span></div></div><span class="c-m base mi-happy"></span><span class="c-m alt mi-wait"></span><span class="chev">&#8250;</span></div><div class="card c-b sk-sunset"><div class="c-body"><div class="c-t"><i class="sw"></i>Fix the login bug</div><div class="c-p"><b>&gt;</b> lostty/stay-awake</div><div class="c-d-line">Editing StayAwakeController.swift</div><div class="c-s">&#10035; Incubating&#8230; (3m 52s)</div></div><span class="c-m base mi-happy"></span><span class="chev">&#8250;</span></div><div class="card c-c sk-deep"><div class="c-body"><div class="c-t"><i class="sw"></i>Deploy watch</div><div class="c-p"><b>&gt;</b> home</div><div class="c-d-line">Watching deploy.log</div><div class="c-s">Ready.</div></div><span class="c-m base mi-ready"></span><span class="chev">&#8250;</span></div><div class="card c-d sk-silver"><div class="c-body"><div class="c-t"><i class="sw"></i>api-server</div><div class="c-p"><b>&gt;</b> api-server/main</div><div class="c-d-line">2h ago</div><div class="c-s">Idle.</div></div><span class="c-m base mi-sleep"></span><span class="chev">&#8250;</span></div></div></div><div class="view view-term"><div class="t-head"><span class="back">&#8249;</span><span class="tt">Lostty UI redesign plan</span><span class="tp"><b>&gt;</b> lostty/skins</span></div><div class="t-body"><span class="a">&gt;</span> make the skin picker remember
+  the last pane
+<span class="g">&#9210;</span> Update(App.swift) <span class="m">+18 &#8722;4</span>
+<span class="g">&#9210;</span> Bash(xcodebuild test
+    -scheme LosttyRemote)
+<span class="t-q"><span class="q">Do you want to proceed?
+<span class="sel">&#10095; 1. Yes</span>
+  2. Yes, and don&#8217;t ask again
+  3. No</span>
+<span class="a">&gt;</span> <span class="caret"></span></span><span class="t-ans">  <span class="sel">&#10095; 1. Yes</span>
+<span class="a">&#10035;</span> Running tests&#8230; <span class="m">(0m 04s)</span>
+<span class="m">  Test Suite LosttyRemoteTests started</span></span></div><div class="kbd"><div class="krow acc"><span class="k">esc</span><span class="k">tab</span><span class="k">ctrl</span><span class="k">&#8593;</span><span class="k">&#8595;</span><span class="k">&#8592;</span><span class="k">&#8594;</span></div><div class="krow num"><span class="k k1">1</span><span class="k">2</span><span class="k">3</span><span class="k">4</span><span class="k">5</span><span class="k">6</span><span class="k">7</span><span class="k">8</span><span class="k">9</span><span class="k">0</span><span class="ktap"></span><span class="gapmark"><span class="s1t">Between 1 and 2</span><span class="s2t">Typed 1</span></span></div><div class="krow "><span class="k">q</span><span class="k">w</span><span class="k">e</span><span class="k">r</span><span class="k">t</span><span class="k">y</span><span class="k">u</span><span class="k">i</span><span class="k">o</span><span class="k">p</span></div><div class="krow "><span class="k">a</span><span class="k">s</span><span class="k">d</span><span class="k">f</span><span class="k">g</span><span class="k">h</span><span class="k">j</span><span class="k">k</span><span class="k">l</span></div><div class="krow"><span class="k mod">&#8679;</span><span class="k">z</span><span class="k">x</span><span class="k">c</span><span class="k">v</span><span class="k">b</span><span class="k">n</span><span class="k">m</span><span class="k mod">&#9003;</span></div><div class="krow"><span class="k mod">&#8963;</span><span class="k wide">space</span><span class="k ret">return</span></div></div></div><div class="sh sh-ok"><div class="grab"></div><span class="wait-tag"><i></i>Waiting on you</span><h6>Lostty UI redesign plan</h6><div class="lbl">Allow? Run the iOS tests</div><div class="cmd">$ xcodebuild test -scheme LosttyRemote</div><div class="ok-row"><span>Deny</span><span class="allow">Allow</span></div></div><div class="sh sh-new"><div class="grab"></div><h6>New session</h6><div class="lbl">Project folder on your Mac</div><div class="field"><svg viewBox="0 0 24 24" fill="none" stroke="#8E8897" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg> website</div><div class="folders"><div class="on">~/code/lostty/website</div><div>~/code/lostty</div><div>~/code/api-server</div></div><div class="lbl">Start</div><div class="seg3"><span class="on">Claude</span><span>Codex</span><span>Shell</span></div><div class="lbl">Model</div><div class="models"><span class="on">Opus</span><span>Sonnet</span><span>Haiku</span></div><div class="bigbtn">Start</div></div><span class="tapr tap-plus"></span><span class="tapr tap-start"></span><span class="tapr tap-allow"></span></div></div><div class="mb mb-wait"><span class="mi mi-wait"></span><i class="d"></i>Waiting on you</div><div class="mb mb-snap"><span class="mi mi-happy"></span><i class="d"></i>Answered from the phone</div><div class="mb mb-skin"><span class="mi mi-ready"></span><i class="d"></i>Four projects, four looks</div><div class="mb mb-spawn"><span class="mi mi-happy"></span><i class="d"></i>Open on both, right now</div><div class="mb mb-cheer"><span class="mi mi-happy"></span><i class="d"></i>Allowed. Claude carries on</div></div></div></div>
+            <div class="prog" aria-hidden="true">
+              <div class="seg"><span class="bar"><i></i></span>Waiting on you</div>
+              <div class="seg"><span class="bar"><i></i></span>A real terminal</div>
+              <div class="seg"><span class="bar"><i></i></span>Skins</div>
+              <div class="seg"><span class="bar"><i></i></span>Start from the phone</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="skins">
+    <div class="wrap">
+      <div class="sec-head">
+        <h2 class="h2">Every project gets its own look</h2>
+        <p class="lede">Twelve built-in skins restyle the background, text, texture, ANSI palette, cursor and selection. <code>cd</code> into a project and the pane re-skins; leave and it reverts. Pick one below, or make your own in <code>skins.toml</code>.</p>
+      </div>
+      <div class="skins-grid">
+        <div class="preview-wrap">
+          <div class="preview sk-neon" id="preview">
+            <div class="texture tx-grid"></div>
+            <div class="pv-bar"><span class="lights"><i></i><i></i><i></i></span><span class="pv-pill"><b>&gt;</b> <span id="pv-pill">lostty/skins</span></span></div>
+<pre><span class="a">~/code/lostty</span> <span class="m">on</span> <span class="b">skins</span>
+<span class="a">&gt;</span> skins set <span id="pv-cmd">neon-arcade</span>
+<span class="m">equipped for this pane</span>
+
+<span class="a">&gt;</span> claude
+<span class="b">&#9210;</span> Read(SkinPicker.swift)
+<span class="b">&#9210;</span> Update(App.swift) <span class="m">+18 &#8722;4</span>
+<span class="a">&#10035;</span> Working&#8230; <span class="m">(0m 41s &middot; esc to interrupt)</span>
+
+<span class="a">&gt;</span> <span class="caret"></span></pre>
+            <span class="preview-glow" aria-hidden="true"></span>
+          </div>
+          <div class="pv-meta" aria-live="polite">
+            <span class="nm" id="pv-name">neon-arcade</span>
+            <span class="rar legendary" id="pv-rar">legendary</span>
+            <span class="desc" id="pv-desc">Bright magenta and cyan on a dark purple.</span>
+          </div>
+        </div>
+        <div class="picker" role="group" aria-label="Choose a skin to preview">
+<div class="pk-group">The arcade pack</div>
+<button type="button" id="pk-neon-arcade" class="pk sk-neon" aria-pressed="true" data-id="neon-arcade" data-sk="sk-neon" data-tx="tx-grid" data-rar="legendary" data-rarc="legendary" data-desc="Bright magenta and cyan on a dark purple." data-path="lostty/skins"><span class="sws tx-grid" aria-hidden="true"></span><span class="n">neon-arcade</span><span class="r">legendary</span></button>
+<button type="button" id="pk-sunset-drive" class="pk sk-sunset" aria-pressed="false" data-id="sunset-drive" data-sk="sk-sunset" data-tx="tx-scan" data-rar="epic" data-rarc="epic" data-desc="Warm orange and pink on a dark plum with scanlines." data-path="lostty/stay-awake"><span class="sws tx-scan" aria-hidden="true"></span><span class="n">sunset-drive</span><span class="r">epic</span></button>
+<button type="button" id="pk-mint-protocol" class="pk sk-mint" aria-pressed="false" data-id="mint-protocol" data-sk="sk-mint" data-tx="tx-dots" data-rar="rare" data-rarc="rare" data-desc="Neon green and yellow on a dark teal." data-path="api-server/main"><span class="sws tx-dots" aria-hidden="true"></span><span class="n">mint-protocol</span><span class="r">rare</span></button>
+<button type="button" id="pk-deep-dive" class="pk sk-deep" aria-pressed="false" data-id="deep-dive" data-sk="sk-deep" data-tx="tx-bubbles" data-rar="rare" data-rarc="rare" data-desc="Bright cyan and purple on a dark blue." data-path="home"><span class="sws tx-bubbles" aria-hidden="true"></span><span class="n">deep-dive</span><span class="r">rare</span></button>
+<button type="button" id="pk-lava-rush" class="pk sk-lava" aria-pressed="false" data-id="lava-rush" data-sk="sk-lava" data-tx="tx-diag" data-rar="epic" data-rarc="epic" data-desc="Warm orange and yellow on a dark brown with diagonal texture." data-path="lostty/website"><span class="sws tx-diag" aria-hidden="true"></span><span class="n">lava-rush</span><span class="r">epic</span></button>
+<button type="button" id="pk-bubble-pop" class="pk sk-bubble" aria-pressed="false" data-id="bubble-pop" data-sk="sk-bubble" data-tx="tx-sparkle" data-rar="common" data-rarc="common" data-desc="Hot pink and yellow on a purple with sparkle texture." data-path="lostty/website"><span class="sws tx-sparkle" aria-hidden="true"></span><span class="n">bubble-pop</span><span class="r">common</span></button>
+<div class="pk-group">The Olympian boon pack</div>
+<button type="button" id="pk-thunderhead" class="pk sk-thunder" aria-pressed="false" data-id="thunderhead" data-sk="sk-thunder" data-tx="tx-bolt" data-rar="epic, Zeus" data-rarc="epic" data-desc="Thunder gold on storm navy with lightning." data-path="lostty/main"><span class="sws tx-bolt" aria-hidden="true"></span><span class="n">thunderhead</span><span class="r">epic, Zeus</span></button>
+<button type="button" id="pk-undertow" class="pk sk-undertow" aria-pressed="false" data-id="undertow" data-sk="sk-undertow" data-tx="tx-tide" data-rar="rare, Poseidon" data-rarc="rare" data-desc="Sea-foam on abyssal teal with tide lines." data-path="tide/main"><span class="sws tx-tide" aria-hidden="true"></span><span class="n">undertow</span><span class="r">rare, Poseidon</span></button>
+<button type="button" id="pk-bloodrite" class="pk sk-blood" aria-pressed="false" data-id="bloodrite" data-sk="sk-blood" data-tx="tx-blade" data-rar="heroic, Ares" data-rarc="heroic" data-desc="Battle red on dried blood with blade marks." data-path="ares/main"><span class="sws tx-blade" aria-hidden="true"></span><span class="n">bloodrite</span><span class="r">heroic, Ares</span></button>
+<button type="button" id="pk-heartsease" class="pk sk-hearts" aria-pressed="false" data-id="heartsease" data-sk="sk-hearts" data-tx="tx-petal" data-rar="common, Aphrodite" data-rarc="common" data-desc="Rose pink on dusk rose with petals." data-path="notes"><span class="sws tx-petal" aria-hidden="true"></span><span class="n">heartsease</span><span class="r">common, Aphrodite</span></button>
+<button type="button" id="pk-silverbow" class="pk sk-silver" aria-pressed="false" data-id="silverbow" data-sk="sk-silver" data-tx="tx-stars" data-rar="legendary, Artemis" data-rarc="legendary" data-desc="Hunter green on night forest with a starfield." data-path="api-server/main"><span class="sws tx-stars" aria-hidden="true"></span><span class="n">silverbow</span><span class="r">legendary, Artemis</span></button>
+<button type="button" id="pk-stormsurge" class="pk sk-storm" aria-pressed="false" data-id="stormsurge" data-sk="sk-storm" data-tx="tx-surge" data-rar="duo, Zeus &amp; Poseidon" data-rarc="duo" data-desc="Gold lightning over teal swells." data-path="lostty/skins"><span class="sws tx-surge" aria-hidden="true"></span><span class="n">stormsurge</span><span class="r">duo, Zeus &amp; Poseidon</span></button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec band" id="how">
+    <div class="wrap">
+      <div class="sec-head">
+        <h2 class="h2">Your phone talks straight to your Mac</h2>
+        <p class="lede">Over SSH, inside your own private Tailscale network. There's no Lostty server in the middle. There isn't one.</p>
+      </div>
+      <div class="flow">
+        <div class="node">
+          <svg class="ic" viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="8" width="26" height="18" rx="2.5"/><path d="M3 31h34l-2 2.5H5Z"/></svg>
+          <h3>Your Mac</h3>
+          <p>Lostty runs every terminal here. Sessions keep going when you walk away, with the lid closed if Stay Awake is on.</p>
+          <span class="tag">macOS 15 or later</span>
+        </div>
+        <div class="wire">
+          <span class="line" aria-hidden="true"></span>
+          <span class="pkt" aria-hidden="true"></span><span class="pkt back" aria-hidden="true"></span>
+          <div class="wire-in">
+            <span class="noserver">Lostty server</span>
+            <span class="tunnel">SSH inside your tailnet<small>Mac &#8644; iPhone, direct</small></span>
+          </div>
+        </div>
+        <div class="node">
+          <svg class="ic" viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><rect x="11" y="3" width="18" height="34" rx="4"/><path d="M17 7h6"/></svg>
+          <h3>Your iPhone</h3>
+          <p>The Lostty app opens the same sessions, sorted by who needs you. Its SSH key is made on the phone and never leaves it.</p>
+          <span class="tag">iOS 17 or later</span>
+        </div>
+      </div>
+      <div class="facts">
+        <div class="fact"><b>No account, no relay</b><span>Nothing about your sessions passes through anyone else's machine.</span></div>
+        <div class="fact"><b>Paired with a QR code</b><span>Lostty &#8594; Phone Access&#8230; &#8594; Pair a Phone&#8230;, then scan it with the iPhone and click Allow on the Mac.</span></div>
+        <div class="fact"><b>Reachable when you're out</b><span>Your phone reaches the Mac while it's awake and Lostty is open, from wherever Tailscale reaches.</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="ghostty">
+    <div class="wrap ghostty">
+<pre class="gh-art" aria-hidden="true"><span class="a">$</span> lostty --version
+Lostty
+  engine   Ghostty (Zig core, Metal renderer)
+  mac app  Lostty for Mac
+  phone    Lostty for iPhone
+  license  MIT
+
+<span class="a">$</span> <span class="caret"></span></pre>
+      <div class="gh-copy">
+        <h2 class="h2">Built on Ghostty</h2>
+        <p>Lostty started from <a href="https://ghostty.org" target="_blank" rel="noopener">Ghostty</a>, the fast, native terminal by Mitchell Hashimoto and the Ghostty contributors. Every character you see is drawn by Ghostty's engine, which does the hard part quickly and correctly. Lostty adds the Mac and iPhone side on top.</p>
+        <p>If you love how fast Lostty feels, that's Ghostty. Go give it a star.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec band" id="start">
+    <div class="wrap start-grid">
+      <div>
+        <div class="sec-head">
+          <h2 class="h2">Get started</h2>
+          <p class="lede">Lostty builds from source on your Mac with one command, then installs on your iPhone over its cable.</p>
+        </div>
+        <ul class="reqs">
+          <li><b>Mac</b><span>macOS 15 or later, with Xcode 26 and Homebrew</span></li>
+          <li><b>iPhone</b><span>iOS 17 or later, and its cable</span></li>
+          <li><b>Accounts</b><span>A free Apple Account, and Tailscale on both devices</span></li>
+        </ul>
+      </div>
+      <div>
+        <div class="code">
+          <div class="code-top"><span>Terminal on your Mac</span><button type="button" class="copy" data-copy="clone-cmd">Copy</button></div>
+          <pre id="clone-cmd" data-text="git clone https://github.com/Lawliang/lostty.git&#10;cd lostty&#10;macos/setup.sh"><span class="p">$ </span>git clone https://github.com/Lawliang/lostty.git
+<span class="p">$ </span>cd lostty
+<span class="p">$ </span>macos/setup.sh</pre>
+        </div>
+        <ol class="steps">
+          <li><span><b>Install Xcode 26</b> from the App Store and open it once.</span></li>
+          <li><span><b>Install Lostty</b> with the commands above. The first build takes a while.</span></li>
+          <li><span><b>Add your Apple Account to Xcode</b> in Settings &#8594; Accounts.</span></li>
+          <li><span><b>Install the app</b> on your plugged-in iPhone with <code>macos/install-phone.sh</code>.</span></li>
+          <li><span><b>Install Tailscale</b> on the Mac and the iPhone, signed in to the same account.</span></li>
+          <li><span><b>Pair</b> from Lostty &#8594; Phone Access&#8230; &#8594; Pair a Phone&#8230;, and scan the code.</span></li>
+        </ol>
+        <div class="walk"><span class="mi mi-sleep" aria-hidden="true"></span><p>That's it. Go take a walk. <a href="#docs">Read the full guide</a></p></div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<section class="docs" id="docs" aria-label="Documentation">
+  <div class="wrap docs-grid">
+    <aside class="dside">
+      <nav aria-label="Docs">
+        <span class="grp">Start here</span>
+        <a href="#docs" aria-current="page">Getting Started</a>
+        <a href="https://github.com/Lawliang/lostty/blob/main/docs/lostty-mobile-phone-access.md" target="_blank" rel="noopener">Phone Access <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M6 3h7v7M13 3 5 11"/></svg></a>
+        <span class="grp">Using Lostty</span>
+        <a href="https://github.com/Lawliang/lostty/blob/main/SKINS.md" target="_blank" rel="noopener">Skins <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M6 3h7v7M13 3 5 11"/></svg></a>
+        <a href="https://github.com/Lawliang/lostty/blob/main/docs/lostty-mobile-host-setup.md" target="_blank" rel="noopener">Manual Mac setup <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M6 3h7v7M13 3 5 11"/></svg></a>
+        <span class="grp">Project</span>
+        <a href="https://github.com/Lawliang/lostty/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">Contributing <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M6 3h7v7M13 3 5 11"/></svg></a>
+      </nav>
+    </aside>
+
+    <article class="article">
+      <div class="crumbs">Docs / Start here</div>
+      <h1>Getting Started</h1>
+      <p>Lostty is a Mac terminal with an iPhone app. You build it on your Mac, install the phone app over the cable, and pair the two inside your own Tailscale network. Plan on an hour, most of it waiting for the first build.</p>
+      <p><strong>You'll need:</strong> a Mac on macOS 15 or later, an iPhone on iOS 17 or later with its cable, and a free Apple Account.</p>
+
+      <h2 id="docs-mac">On your Mac</h2>
+      <h3><span class="n">1</span>Install Xcode 26</h3>
+      <p>Get it from the App Store and open it once. You'll also need <a href="https://brew.sh" target="_blank" rel="noopener">Homebrew</a>.</p>
+      <h3><span class="n">2</span>Install Lostty</h3>
+      <p>In Terminal:</p>
+      <div class="code">
+        <div class="code-top"><span>Terminal</span><button type="button" class="copy" data-copy="docs-clone">Copy</button></div>
+        <pre id="docs-clone" data-text="git clone https://github.com/Lawliang/lostty.git&#10;cd lostty&#10;macos/setup.sh">git clone https://github.com/Lawliang/lostty.git
+cd lostty
+macos/setup.sh</pre>
+      </div>
+      <p>It installs what the build needs (it may ask for your password), then builds Lostty, puts it in <code>/Applications</code> and opens it. The first build takes a while.</p>
+      <div class="callout">
+        <span class="mi mi-wait" aria-hidden="true"></span>
+        <p><b>Updating later</b>Run <code>git pull</code>, then <code>macos/install.sh</code>, then choose <strong>Restart to Update</strong> in Lostty's menu bar. Don't Quit Lostty to update: quitting ends every terminal session.</p>
+      </div>
+
+      <h2 id="docs-iphone">On your iPhone</h2>
+      <h3><span class="n">3</span>Add your Apple Account to Xcode</h3>
+      <p>In Xcode: <strong>Settings &#8594; Accounts</strong>, click <strong>+</strong>, and sign in.</p>
+      <h3><span class="n">4</span>Install the app</h3>
+      <p>Plug your iPhone into the Mac, unlock it, and tap <strong>Trust</strong>. Then, in the <code>lostty</code> folder:</p>
+      <div class="code">
+        <div class="code-top"><span>Terminal</span><button type="button" class="copy" data-copy="docs-phone">Copy</button></div>
+        <pre id="docs-phone">macos/install-phone.sh</pre>
+      </div>
+      <p>The first time, the phone may ask you to:</p>
+      <ul>
+        <li>turn on <strong>Settings &#8594; Privacy &amp; Security &#8594; Developer Mode</strong> (the phone restarts);</li>
+        <li>trust your Apple Account in <strong>Settings &#8594; General &#8594; VPN &amp; Device Management</strong>.</li>
+      </ul>
+      <p>Then run the command again.</p>
+      <div class="callout note">
+        <span class="mi mi-ready" aria-hidden="true"></span>
+        <p><b>With a free Apple Account, the app stops opening after 7 days</b>Run the command again to renew it. A paid developer account makes it last a year.</p>
+      </div>
+
+      <h2 id="docs-pair">Pair them</h2>
+      <h3><span class="n">5</span>Install Tailscale on both</h3>
+      <p>Install <a href="https://tailscale.com/download" target="_blank" rel="noopener">Tailscale</a> on the Mac and the iPhone, and sign in to both with the same account. Your phone talks to your Mac directly, over SSH, inside your own private Tailscale network. There's no Lostty server in the middle, and the phone's SSH key never leaves the phone.</p>
+      <h3><span class="n">6</span>Pair</h3>
+      <p>On the Mac, open <strong>Lostty &#8594; Phone Access&#8230;</strong> and fix any row without a &#10003;. Each row says what to click. Then click <strong>Pair a Phone&#8230;</strong>, and on the iPhone open Lostty, tap <strong>Pair with Mac</strong> and scan the code. Click <strong>Allow</strong> on the Mac.</p>
+
+      <h2 id="docs-done">That's it. Go take a walk.</h2>
+      <p>Your phone reaches the Mac while it's awake and Lostty is open. To keep it reachable with the lid closed, turn on <strong>Stay Awake</strong> in Lostty's menu bar, and see <a href="https://github.com/Lawliang/lostty/blob/main/docs/lostty-mobile-phone-access.md" target="_blank" rel="noopener">Lostty on your iPhone</a>.</p>
+
+      <div class="dnext">
+        <a href="#top" data-nav="home"><span>Back to</span>The Lostty home page</a>
+        <a href="https://github.com/Lawliang/lostty/blob/main/docs/lostty-mobile-phone-access.md" target="_blank" rel="noopener"><span>Next</span>Phone Access</a>
+      </div>
+    </article>
+
+    <aside class="dtoc">
+      <div class="t">On this page</div>
+      <nav aria-label="On this page">
+        <a href="#docs-mac">On your Mac</a>
+        <a href="#docs-iphone">On your iPhone</a>
+        <a href="#docs-pair">Pair them</a>
+        <a href="#docs-done">Go take a walk</a>
+      </nav>
+    </aside>
+  </div>
+</section>
+
+<footer class="foot">
+  <div class="wrap">
+    <div class="about">
+      <a class="brand" href="#top" data-nav="home"><svg viewBox="0 0 100 100" aria-hidden="true" class="axo"><path d="M60 82 C70 86 80 84 84 76 C86 72 82 70 80 73 C77 78 70 79 63 76 Z" fill="#EC97C6"/><ellipse cx="50" cy="76" rx="15" ry="12" fill="#EC97C6"/><ellipse cx="50" cy="79" rx="8" ry="6" fill="#F7B2D8"/><ellipse cx="39" cy="80" rx="4.2" ry="3.2" fill="#F7B2D8"/><ellipse cx="61" cy="80" rx="4.2" ry="3.2" fill="#F7B2D8"/><ellipse cx="43" cy="88" rx="5" ry="3" fill="#F7B2D8"/><ellipse cx="57" cy="88" rx="5" ry="3" fill="#F7B2D8"/><ellipse cx="14" cy="21" rx="9" ry="4.6" transform="rotate(-42 14 21)" fill="#E5199C"/><ellipse cx="86" cy="21" rx="9" ry="4.6" transform="rotate(42 86 21)" fill="#E5199C"/><ellipse cx="9" cy="34" rx="9" ry="4.6" transform="rotate(-12 9 34)" fill="#E5199C"/><ellipse cx="91" cy="34" rx="9" ry="4.6" transform="rotate(12 91 34)" fill="#E5199C"/><ellipse cx="11" cy="47" rx="8.5" ry="4.3" transform="rotate(18 11 47)" fill="#E5199C"/><ellipse cx="89" cy="47" rx="8.5" ry="4.3" transform="rotate(-18 89 47)" fill="#E5199C"/><path d="M50 15 C76.4 15 83 26.7 83 42.3 C83 60.5 69.8 67 50 67 C30.2 67 17 60.5 17 42.3 C17 26.7 23.6 15 50 15 Z" fill="#F7B2D8"/><ellipse cx="34" cy="24" rx="7" ry="3.2" fill="#FFFFFF" opacity="0.35" transform="rotate(-18 34 24)"/><path d="M33 36 L42 43 L33 50" fill="none" stroke="#3A1530" stroke-width="4.4" stroke-linecap="round" stroke-linejoin="round"/><path  d="M56 43 H68" stroke="#3A1530" stroke-width="4.4" stroke-linecap="round"/><path d="M46 53 Q48 56 50 53.5 Q52 56 54 53" fill="none" stroke="#3A1530" stroke-width="2.42" stroke-linecap="round" stroke-linejoin="round"/><ellipse cx="26" cy="55" rx="5" ry="3" fill="#E5199C" opacity="0.45"/><ellipse cx="75" cy="55" rx="5" ry="3" fill="#E5199C" opacity="0.45"/></svg>Lostty</a>
+      <p>Leave your desk, not your terminal. MIT licensed. Built on Ghostty by Mitchell Hashimoto and the Ghostty contributors.</p>
+    </div>
+    <div>
+      <h4>Lostty</h4>
+      <ul>
+        <li><a href="#why" data-nav="home">Features</a></li>
+        <li><a href="#skins" data-nav="home">Skins</a></li>
+        <li><a href="#how" data-nav="home">How it works</a></li>
+        <li><a href="#docs" data-nav="docs">Docs</a></li>
+      </ul>
+    </div>
+    <div>
+      <h4>Elsewhere</h4>
+      <ul>
+        <li><a href="https://github.com/Lawliang/lostty" target="_blank" rel="noopener">GitHub</a></li>
+        <li><a href="https://github.com/Lawliang/lostty/blob/main/LICENSE" target="_blank" rel="noopener">License (MIT)</a></li>
+        <li><a href="https://github.com/Lawliang/lostty/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">Contributing</a></li>
+        <li><a href="https://ghostty.org" target="_blank" rel="noopener">Ghostty</a></li>
+      </ul>
+    </div>
+  </div>
+</footer>
+
+<script>
+(function () {
+  "use strict";
+  var root = document.documentElement;
+  var reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+  var FLAGS = ["stop", "rise", "wave", "term", "tap", "snap", "answered", "s1", "s2", "s3", "s4", "trace", "plus", "sheet", "spawn", "approve", "allowtap", "cheer"];
+  function setFlags(scene, on) {
+    for (var i = 0; i < FLAGS.length; i++) {
+      scene.classList.toggle(FLAGS[i], on.indexOf(FLAGS[i]) !== -1);
+    }
+  }
+
+  /* ---------- hero: a looping, time-based handoff ---------- */
+  var HERO = [
+    { f: [], t: 1700, k: "work", c: "Claude is working in lostty/skins." },
+    { f: ["stop"], t: 1200, k: "wait", c: "Claude stopped to ask before running the iOS tests." },
+    { f: ["stop", "rise", "wave"], t: 1900, k: "wait", c: "Your phone puts it first: Waiting on you." },
+    { f: ["stop", "rise", "approve"], t: 1500, k: "wait", c: "Open it on the phone. Allow? Run the iOS tests." },
+    { f: ["stop", "rise", "approve", "allowtap"], t: 900, k: "tap", c: "You tap Allow." },
+    { f: ["rise", "answered", "cheer"], t: 2800, k: "work", c: "Claude carries on. The phone goes back in your pocket." }
+  ];
+  var heroScene = document.querySelector("#hero-rig .scene");
+  var heroCap = document.getElementById("hero-caption");
+  var heroCapText = heroCap ? heroCap.querySelector(".txt") : null;
+  var heroIdx = 2, heroTimer = null, heroVisible = true;
+  function heroShow(i) {
+    var s = HERO[i];
+    setFlags(heroScene, s.f);
+    if (heroCap) { heroCap.setAttribute("data-k", s.k); heroCapText.textContent = s.c; }
+  }
+  function heroTick() {
+    heroIdx = (heroIdx + 1) % HERO.length;
+    heroShow(heroIdx);
+    heroTimer = setTimeout(heroTick, HERO[heroIdx].t);
+  }
+  function heroStart() {
+    if (heroTimer || reduce.matches || !heroVisible || document.hidden || !heroScene) return;
+    heroTimer = setTimeout(heroTick, 900);
+  }
+  function heroStop() { clearTimeout(heroTimer); heroTimer = null; }
+  if (heroScene) {
+    if ("IntersectionObserver" in window) {
+      new IntersectionObserver(function (es) {
+        heroVisible = es[0].isIntersecting;
+        if (heroVisible) heroStart(); else heroStop();
+      }).observe(heroScene);
+    }
+    document.addEventListener("visibilitychange", function () { if (document.hidden) heroStop(); else heroStart(); });
+    reduce.addEventListener && reduce.addEventListener("change", function () { if (reduce.matches) { heroStop(); heroIdx = 2; heroShow(2); } else heroStart(); });
+    heroStart();
+  }
+
+  /* ---------- story: scroll progress drives the stage ---------- */
+  var ALL = ["s1", "s2", "s3", "s4", "trace"];
+  var BEATS = [
+    [],
+    ["stop"],
+    ["stop", "rise", "wave"],
+    ["stop", "rise", "term"],
+    ["stop", "rise", "term", "tap"],
+    ["rise", "term", "snap", "answered"],
+    ["rise", "answered", "s1"],
+    ["rise", "answered", "s1", "s2"],
+    ["rise", "answered", "s1", "s2", "s3"],
+    ["rise", "answered"].concat(ALL),
+    ["rise", "answered", "plus"].concat(ALL),
+    ["rise", "answered", "sheet"].concat(ALL),
+    ["rise", "answered", "spawn"].concat(ALL)
+  ];
+  var RANGES = [[0, 3], [3, 3], [6, 4], [10, 3]];
+  var stageMQ = window.matchMedia("(min-width: 960px)");
+  var chapters = Array.prototype.slice.call(document.querySelectorAll(".ch"));
+  var stageScene = document.querySelector("#stage-rig .scene");
+  var segs = Array.prototype.slice.call(document.querySelectorAll(".seg"));
+  var lastBeat = -1, ticking = false;
+
+  function update() {
+    ticking = false;
+    if (!stageScene || !stageMQ.matches || document.body.classList.contains("view-docs")) return;
+    var vh = window.innerHeight, mid = vh * 0.5, active = 0, beat = 0;
+    for (var i = 0; i < chapters.length; i++) {
+      var r = chapters[i].getBoundingClientRect();
+      var p = Math.min(1, Math.max(0, (mid - r.top) / r.height));
+      if (r.top <= mid) active = i;
+      if (segs[i]) { segs[i].style.setProperty("--p", p.toFixed(3)); }
+    }
+    var ar = chapters[active].getBoundingClientRect();
+    var ap = Math.min(0.999, Math.max(0, (mid - ar.top) / ar.height));
+    var rg = RANGES[active];
+    beat = rg[0] + Math.floor(ap * rg[1]);
+    if (beat !== lastBeat) {
+      lastBeat = beat;
+      setFlags(stageScene, BEATS[beat]);
+    }
+    for (var j = 0; j < chapters.length; j++) {
+      chapters[j].classList.toggle("is-active", j === active);
+      if (segs[j]) segs[j].classList.toggle("on", j === active);
+    }
+  }
+  function onScroll() { if (!ticking) { ticking = true; requestAnimationFrame(update); } }
+  window.addEventListener("scroll", onScroll, { passive: true });
+  window.addEventListener("resize", onScroll);
+  stageMQ.addEventListener && stageMQ.addEventListener("change", onScroll);
+  update();
+
+  /* ---------- skins picker ---------- */
+  var preview = document.getElementById("preview");
+  var pvTex = preview ? preview.querySelector(".texture") : null;
+  var pvName = document.getElementById("pv-name");
+  var pvRar = document.getElementById("pv-rar");
+  var pvDesc = document.getElementById("pv-desc");
+  var pvCmd = document.getElementById("pv-cmd");
+  var pvPill = document.getElementById("pv-pill");
+  var picks = Array.prototype.slice.call(document.querySelectorAll(".pk"));
+  function applySkin(btn) {
+    if (!preview) return;
+    var d = btn.dataset;
+    preview.className = "preview " + d.sk;
+    pvTex.className = "texture " + d.tx;
+    pvName.textContent = d.id;
+    pvRar.textContent = d.rar;
+    pvRar.className = "rar " + d.rarc;
+    pvDesc.textContent = d.desc;
+    pvCmd.textContent = d.id;
+    pvPill.textContent = d.path;
+    picks.forEach(function (b) { b.setAttribute("aria-pressed", b === btn ? "true" : "false"); });
+  }
+  picks.forEach(function (b) {
+    b.addEventListener("click", function () { applySkin(b); });
+    b.addEventListener("mouseenter", function () { if (window.matchMedia("(hover: hover)").matches) applySkin(b); });
+    b.addEventListener("focus", function () { applySkin(b); });
+  });
+
+  /* ---------- copy buttons ---------- */
+  document.querySelectorAll("[data-copy]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var src = document.getElementById(btn.getAttribute("data-copy"));
+      var text = src.getAttribute("data-text") || src.innerText;
+      function done(ok) {
+        btn.textContent = ok ? "Copied" : "Press ⌘C";
+        btn.classList.toggle("done", ok);
+        setTimeout(function () { btn.textContent = "Copy"; btn.classList.remove("done"); }, 1800);
+      }
+      function fallback() {
+        try {
+          var range = document.createRange();
+          range.selectNodeContents(src);
+          var sel = window.getSelection();
+          sel.removeAllRanges(); sel.addRange(range);
+          var ok = false;
+          try { ok = document.execCommand("copy"); } catch (e) { ok = false; }
+          done(ok);
+        } catch (e) { done(false); }
+      }
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(function () { done(true); }, fallback);
+        } else { fallback(); }
+      } catch (e) { fallback(); }
+    });
+  });
+
+  /* ---------- home / docs view ---------- */
+  var navHome = document.querySelectorAll('.navlinks a[data-nav="docs"]');
+  function route() {
+    var h = (location.hash || "").slice(1);
+    var docs = h === "docs" || h.indexOf("docs-") === 0;
+    var was = document.body.classList.contains("view-docs");
+    document.body.classList.toggle("view-docs", docs);
+    navHome.forEach(function (a) {
+      if (docs) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
+    });
+    if (docs) {
+      var el = h === "docs" ? null : document.getElementById(h);
+      if (el) { el.scrollIntoView({ behavior: "instant" }); } else if (!was) { window.scrollTo({ top: 0, behavior: "instant" }); }
+    } else if (was) {
+      var target = h ? document.getElementById(h) : null;
+      if (target) target.scrollIntoView({ behavior: "instant" }); else window.scrollTo({ top: 0, behavior: "instant" });
+    }
+    lastBeat = -1; onScroll();
+  }
+  window.addEventListener("hashchange", route);
+  route();
+
+  /* docs on-this-page highlight */
+  var tocLinks = Array.prototype.slice.call(document.querySelectorAll(".dtoc a"));
+  if ("IntersectionObserver" in window && tocLinks.length) {
+    var io = new IntersectionObserver(function (es) {
+      es.forEach(function (e) {
+        if (e.isIntersecting) {
+          tocLinks.forEach(function (a) { a.classList.toggle("on", a.getAttribute("href") === "#" + e.target.id); });
+        }
+      });
+    }, { rootMargin: "-20% 0px -70% 0px" });
+    tocLinks.forEach(function (a) { var t = document.getElementById(a.getAttribute("href").slice(1)); if (t) io.observe(t); });
+  }
+
+  /* ---------- theme toggle ---------- */
+  var tb = document.getElementById("themebtn");
+  if (tb) {
+    try { var saved = localStorage.getItem("lostty-theme"); if (saved) root.setAttribute("data-theme", saved); } catch (e) {}
+    tb.addEventListener("click", function () {
+      var cur = root.getAttribute("data-theme");
+      if (!cur) cur = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      var next = cur === "dark" ? "light" : "dark";
+      root.setAttribute("data-theme", next);
+      try { localStorage.setItem("lostty-theme", next); } catch (e) {}
+    });
+  }
+})();
+
+</script>
