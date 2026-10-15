@@ -64,5 +64,66 @@ struct GuardServerTests {
         let ok = #"{"v":1,"pane":"P","agent":"claude","tool":"Bash","input":"x","cwd":"/r","group":"leaving","why":"w"}"#
         #expect(try send(ok, to: path).contains("allow"))
     }
+
+    func connectRaw(_ path: URL) -> Int32 {
+        let fd = socket(AF_UNIX, SOCK_STREAM, 0)
+        var addr = sockaddr_un()
+        addr.sun_family = sa_family_t(AF_UNIX)
+        withUnsafeMutableBytes(of: &addr.sun_path) { raw in
+            _ = path.path.withCString { strncpy(raw.baseAddress!.assumingMemoryBound(to: CChar.self), $0, raw.count - 1) }
+        }
+        _ = withUnsafePointer(to: &addr) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { connect(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size)) }
+        }
+        return fd
+    }
+
+    /// Seconds until the server closes `fd` (reads EOF), polling writes of `trickle` bytes.
+    func timeToClose(_ fd: Int32, trickle: Bool) -> Double {
+        let start = Date()
+        var buf = [UInt8](repeating: 0, count: 64)
+        var tv = timeval(tv_sec: 0, tv_usec: 500_000)
+        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
+        while Date().timeIntervalSince(start) < 6 {
+            if trickle { var b: UInt8 = 0x20; _ = write(fd, &b, 1) }
+            let n = read(fd, &buf, buf.count)
+            if n == 0 { break }
+        }
+        return Date().timeIntervalSince(start)
+    }
+
+    @Test func silentPeerIsClosedWithinTheDeadline() throws {
+        let path = socketPath()
+        let server = GuardServer(path: path) { _ in .allow }
+        try server.start()
+        defer { server.stop(); try? FileManager.default.removeItem(at: path.deletingLastPathComponent()) }
+        let fd = connectRaw(path)
+        defer { close(fd) }
+        #expect(timeToClose(fd, trickle: false) < 4)
+    }
+
+    @Test func trickleDoesNotExtendTheDeadline() throws {
+        let path = socketPath()
+        let server = GuardServer(path: path) { _ in .allow }
+        try server.start()
+        defer { server.stop(); try? FileManager.default.removeItem(at: path.deletingLastPathComponent()) }
+        let fd = connectRaw(path)
+        defer { close(fd) }
+        #expect(timeToClose(fd, trickle: true) < 4)
+    }
+
+    @Test func idleConnectionsDontBlockARealRequest() throws {
+        let path = socketPath()
+        let server = GuardServer(path: path) { _ in .allow }
+        try server.start()
+        defer { server.stop(); try? FileManager.default.removeItem(at: path.deletingLastPathComponent()) }
+        let idle = (0..<20).map { _ in connectRaw(path) }
+        defer { idle.forEach { close($0) } }
+        let ok = #"{"v":1,"pane":"P","agent":"claude","tool":"Bash","input":"x","cwd":"/r","group":"leaving","why":"w"}"#
+        let start = Date()
+        let reply = try send(ok, to: path)
+        #expect(reply.contains("allow"))
+        #expect(Date().timeIntervalSince(start) < 1, "took \(Date().timeIntervalSince(start))s, reply \(reply)")
+    }
 }
 #endif
