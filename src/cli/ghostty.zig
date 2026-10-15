@@ -351,4 +351,6 @@ test {
     _ = @import("tmux/session.zig");
     _ = @import("tmux/snippet_test.zig");
     _ = @import("guard/shell.zig");
+    _ = @import("guard/paths.zig");
+    _ = @import("guard/config.zig");
 }
