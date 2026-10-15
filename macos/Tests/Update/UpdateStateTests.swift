@@ -109,4 +109,18 @@ struct UpdateStateTests {
         let state: UpdateState = .checking(.init(cancel: {}))
         #expect(state.isIdle == false)
     }
+
+    // MARK: - Keeping sessions through an update
+
+    @Test func installingFromTheUpdateWindowKeepsSessions() {
+        let state: UpdateState = .installing(.init(retryTerminatingApplication: {}, dismiss: {}))
+        #expect(state.relaunchesAfterInstall)
+    }
+
+    @Test func aBackgroundInstallOnQuitDoesNot() {
+        // Sparkle installs it when the user quits and doesn't reopen Lostty.
+        let state: UpdateState = .installing(.init(isAutoUpdate: true, retryTerminatingApplication: {}, dismiss: {}))
+        #expect(!state.relaunchesAfterInstall)
+        #expect(!UpdateState.idle.relaunchesAfterInstall)
+    }
 }
