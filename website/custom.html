@@ -1494,6 +1494,7 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
           var b = k.getBoundingClientRect();
           u = u ? { left: Math.min(u.left, b.left), top: Math.min(u.top, b.top), right: Math.max(u.right, b.right), bottom: Math.max(u.bottom, b.bottom) } : b;
         });
+        if (u) u = { left: u.left, top: u.top, right: u.right, bottom: u.bottom, width: u.right - u.left };
         return u;
       }
       var rg = document.createRange(); rg.selectNodeContents(el);
@@ -1516,23 +1517,51 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
       qz = [];
       var blocks = $$('h1, .lede, .hero-cta', copy);
       blocks.forEach(function (el) { el.style.transform = ''; });
+      // Sideways, the field stops about G px from the ink: each edge snaps to
+      // the nearest column, so that gap ("side") lands within half a column.
+      var G = 14, B = [];
       blocks.forEach(function (el) {
         var r = hug(el);
         if (!r || !r.width) return;
-        // Sideways, the field stops about G px from the ink: each edge snaps to
-        // the nearest column. Rows are too tall to snap the same way, so the
-        // block is nudged down (less than one row) until the gap above and
-        // below its ink is equal and as close as rows allow to the side gap.
-        var G = 14, x0 = r.left - hr.left, x1 = r.right - hr.left, y0 = r.top - hr.top, y1 = r.bottom - hr.top;
+        var x0 = r.left - hr.left, x1 = r.right - hr.left, y0 = r.top - hr.top, y1 = r.bottom - hr.top;
         var c0 = Math.round((x0 - G) / cw), c1 = Math.round((x1 + G) / cw) - 1;
-        var side = ((x0 - c0 * cw) + ((c1 + 1) * cw - x1)) / 2;
-        var h = y1 - y0, n = Math.max(1, Math.round((h + 2 * side) / chh));
-        if ((n * chh - h) / 2 < 6) n++;
-        var gap = (n * chh - h) / 2, k = Math.ceil((y0 - gap) / chh), d = k * chh + gap - y0;
-        if (d > 0.5) el.style.transform = 'translateY(' + d.toFixed(2) + 'px)';
+        B.push({ el: el, y0: y0, h: y1 - y0, c0: c0, c1: c1, side: ((x0 - c0 * cw) + ((c1 + 1) * cw - x1)) / 2 });
+      });
+      if (!B.length) return;
+      // Rows are too tall to snap the same way. The headline is nudged down
+      // (less than a row) so its box clears it equally above and below, as
+      // close to the side gap as rows allow. Each later block sits the same
+      // distance D below the one above; D is chosen so their boxes also come
+      // as close as they can to the side gap, with a row of field between.
+      function rowsAt(b, t) {
+        var r0 = Math.round((t - b.side) / chh), r1 = Math.round((t + b.h + b.side) / chh) - 1;
+        return { r0: r0, r1: r1, top: t - r0 * chh, bot: (r1 + 1) * chh - t - b.h };
+      }
+      var h0 = B[0], n = Math.max(1, Math.round((h0.h + 2 * h0.side) / chh));
+      if ((n * chh - h0.h) / 2 < 6) n++;
+      var g0 = (n * chh - h0.h) / 2, k = Math.ceil((h0.y0 - g0) / chh);
+      var place = [{ t: k * chh + g0, z: { r0: k, r1: k + n - 1 } }];
+      var best = null;
+      for (var D = 30; D <= 60; D += 0.5) {
+        var y = place[0].t + h0.h, prev = place[0].z.r1, err = Math.abs(D - 44) * 0.05, list = [], ok = true;
+        for (var i = 1; i < B.length; i++) {
+          var t = y + D, zz = rowsAt(B[i], t);
+          if (zz.r0 <= prev + 1) { ok = false; break; }
+          err += Math.abs(zz.top - B[i].side) + Math.abs(zz.bot - B[i].side) + (zz.top < 5 || zz.bot < 5 ? 100 : 0);
+          list.push({ t: t, z: zz }); y = t + B[i].h; prev = zz.r1;
+        }
+        if (ok && (!best || err < best.err)) best = { err: err, list: list };
+      }
+      if (!best) { // too tight for a free row: keep the natural layout
+        best = { list: B.slice(1).map(function (b) { return { t: b.y0, z: rowsAt(b, b.y0) }; }) };
+      }
+      place = place.concat(best.list);
+      B.forEach(function (b, i) {
+        var p = place[i], d = p.t - b.y0;
+        if (Math.abs(d) > 0.5) b.el.style.transform = 'translateY(' + d.toFixed(2) + 'px)';
         qz.push({
-          c0: c0, c1: c1, r0: k, r1: k + n - 1,
-          t0: Math.floor((y0 + d) / chh), t1: Math.floor((y1 + d) / chh)
+          c0: b.c0, c1: b.c1, r0: p.z.r0, r1: p.z.r1,
+          t0: Math.floor(p.t / chh), t1: Math.floor((p.t + b.h) / chh)
         });
       });
       // keep at least one row of field between stacked blocks: where two
