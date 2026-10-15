@@ -29,8 +29,13 @@ final class MobileStore: ObservableObject {
     /// This phone's note changes the Mac may not have applied yet.
     var pendingNotes = PendingDrops()
 
-    /// One Face ID approval per foreground period.
+    /// One Face ID approval, until the app goes unused for `AwayClock.limit`.
     private var context = LAContext()
+    /// Unused for `AwayClock.limit` with the app open: no connections and
+    /// nothing drawing, until it's used again (`wake`).
+    @Published private(set) var resting = false
+    private var away = AwayClock(now: Date())
+    private var restCheck: Task<Void, Never>?
     private var key: RemoteKey?
     let defaults: UserDefaults
     private var openIO: RemoteSurfaceIO?
@@ -317,7 +322,10 @@ final class MobileStore: ObservableObject {
     /// can't drop a newer terminal.
     func terminalLeft(_ session: RemoteSession, _ terminal: OpenTerminal, keepWarm: Bool) {
         if openIO === terminal.io { openIO = nil }
-        guard keepWarm else { return }
+        if let typed = terminal.io.lastWritten { away.used(at: typed) }
+        // Resting lets it go, as the background does.
+        if resting, keepWarm { terminal.io.detach() }
+        guard keepWarm, !resting else { return }
         close(warm.put(.init(id: session.id, name: session.name), terminal, now: Date()))
         scheduleWarmCheck()
     }
@@ -379,7 +387,7 @@ final class MobileStore: ObservableObject {
         #if DEBUG
         if isGallery { return }
         #endif
-        let wanted = gate.wanted(hasHosts: !settings.remoteHosts.isEmpty)
+        let wanted = !resting && gate.wanted(hasHosts: !settings.remoteHosts.isEmpty)
         if wanted, watchTask == nil {
             watchTask = Task { [weak self] in await self?.watchLoop() }
         } else if !wanted, let task = watchTask {
@@ -890,23 +898,89 @@ final class MobileStore: ObservableObject {
             // Control Center; only a real trip to the background restarts.
             let returning = wasBackgrounded
             wasBackgrounded = false
+            if returning {
+                // Face ID again only after a long time away; coming back
+                // is a use, and wakes the app if it was resting.
+                noteTyping()
+                if away.isAway(now: Date()) { forgetFaceID() }
+                away.used(at: Date())
+                resting = false
+            }
             gate.becameActive(afterBackground: returning)
             updateWatch()
             if returning { openIO?.restart() }
+            scheduleRestCheck()
         case .background:
             wasBackgrounded = true
             // iOS suspends their connections anyway; don't keep them.
             close(warm.removeAll())
             warmCheck?.cancel()
+            restCheck?.cancel()
             gate.wentToBackground()
             updateWatch()
-            // Face ID again after the app has been away.
-            context.invalidate()
-            context = LAContext()
-            key = nil
         default:
             break
         }
+    }
+
+    // MARK: Resting
+
+    /// A touch anywhere in the app.
+    func used() {
+        away.used(at: Date())
+    }
+
+    /// Used again after resting: the list comes back, connects, and asks
+    /// for Face ID.
+    func wake() {
+        away.used(at: Date())
+        resting = false
+        gate.userAsked()
+        updateWatch()
+        scheduleRestCheck()
+    }
+
+    /// Rests once the app has gone unused for `AwayClock.limit`, looking
+    /// again whenever a touch or key moved that on.
+    private func scheduleRestCheck() {
+        restCheck?.cancel()
+        guard !resting else { return }
+        restCheck = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let restsAt = self?.away.restsAt else { return }
+                try? await Task.sleep(for: .seconds(max(1, restsAt.timeIntervalSinceNow)))
+                guard !Task.isCancelled, let self else { return }
+                self.noteTyping()
+                if self.away.isAway(now: Date()) {
+                    self.rest()
+                    return
+                }
+            }
+        }
+    }
+
+    /// Typing into the open terminal counts as a use.
+    private func noteTyping() {
+        if let typed = openIO?.lastWritten { away.used(at: typed) }
+    }
+
+    /// Lets everything go, as the background does, so an open app nobody
+    /// is using doesn't keep the phone busy (and warm): the connections
+    /// close, the screens (and their animations) give way to a still one,
+    /// and Face ID is asked again.
+    private func rest() {
+        resting = true
+        openIO?.detach()
+        close(warm.removeAll())
+        warmCheck?.cancel()
+        updateWatch()
+        forgetFaceID()
+    }
+
+    private func forgetFaceID() {
+        context.invalidate()
+        context = LAContext()
+        key = nil
     }
 
     /// Any network update after the first (Wi-Fi ↔ cellular, a new

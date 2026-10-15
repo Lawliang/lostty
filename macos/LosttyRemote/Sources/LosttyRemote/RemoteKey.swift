@@ -146,7 +146,7 @@ public struct RemoteKey: @unchecked Sendable {
     /// Loads the key whose handle is at `url`, creating it on first use.
     /// Signing asks for Face ID / Touch ID through `context`: pass the same
     /// `LAContext` for every connection and it asks once, until the context
-    /// is invalidated (the app invalidates it when it goes to the background).
+    /// is invalidated (the app does after `AwayClock.limit` without use).
     public static func secureEnclave(storedAt url: URL, context: LAContext? = nil) throws -> RemoteKey {
         guard SecureEnclave.isAvailable else { throw RemoteError.secureEnclaveUnavailable }
         // Never replace an existing handle: that would silently invalidate the

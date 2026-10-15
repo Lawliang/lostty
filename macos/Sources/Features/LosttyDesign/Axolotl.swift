@@ -14,11 +14,14 @@ struct Axolotl: View {
     var pose: Pose = .resting
     /// Whether `.waiting`'s cursor eye blinks; off, it stays lit.
     var blinks = true
+    /// Off, it holds the pose's still frame, as with Reduce Motion.
+    var moves = true
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
+        let still = reduceMotion || !moves
         Group {
-            if pose != .resting && pose != .happy && !reduceMotion {
+            if pose != .resting && pose != .happy && !still {
                 TimelineView(.animation) { context in
                     let time = context.date.timeIntervalSinceReferenceDate
                     let frame = AxolotlMotion.frame(pose: pose, reduceMotion: false, time: time)
@@ -29,7 +32,7 @@ struct Axolotl: View {
                             sleep: pose == .sleeping ? AxolotlMotion.sleep(at: time) : nil)
                 }
             } else {
-                let frame = AxolotlMotion.frame(pose: pose, reduceMotion: reduceMotion, time: 0)
+                let frame = AxolotlMotion.frame(pose: pose, reduceMotion: still, time: 0)
                 drawing(cursor: frame.cursor, gills: frame.gills,
                         wave: pose == .waving ? AxolotlMotion.stillWave : nil,
                         sleep: pose == .sleeping ? AxolotlMotion.stillSleep : nil)

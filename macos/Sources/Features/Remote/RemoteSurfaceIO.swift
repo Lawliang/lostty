@@ -179,6 +179,10 @@ final class RemoteSurfaceIO: Ghostty.RemoteIO, @unchecked Sendable {
         await stateLock.withLock { task }?.value
     }
 
+    /// When input last reached the session: the person typing counts as
+    /// using the app.
+    var lastWritten: Date? { stateLock.withLock { lastWrite } }
+
     /// Whether input reached the session in the last `seconds`: the person
     /// typed `exit` (or Ctrl-D) rather than the session ending elsewhere.
     func wroteRecently(within seconds: TimeInterval) -> Bool {

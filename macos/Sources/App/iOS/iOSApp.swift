@@ -18,16 +18,22 @@ struct Ghostty_iOSApp: App {
     var body: some Scene {
         WindowGroup {
             Group {
-                #if DEBUG
-                if UserDefaults.standard.bool(forKey: "LosttyDesignGallery") {
-                    DesignGalleryScreen()
+                // Unused for a while: a still screen in place of everything.
+                if store.resting {
+                    RestingScreen()
                 } else {
+                    #if DEBUG
+                    if UserDefaults.standard.bool(forKey: "LosttyDesignGallery") {
+                        DesignGalleryScreen()
+                    } else {
+                        MainTabs()
+                    }
+                    #else
                     MainTabs()
+                    #endif
                 }
-                #else
-                MainTabs()
-                #endif
             }
+            .background(TouchWatcher { store.used() })
             .environmentObject(ghostty_app)
             .environmentObject(store)
             .preferredColorScheme(.dark)
