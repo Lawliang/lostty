@@ -235,9 +235,9 @@ p { margin: 0; }
   font-stretch: normal; font-size: clamp(38px, 5.3vw, 72px); line-height: 1.02; font-weight: 700; letter-spacing: -.04em;
   max-width: none; margin-top: 0;
 }
-.hero .lede { font-size: 16px; color: var(--ink); max-width: 46ch; margin-top: 44px; }
-.hero-cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; }
-.hero-meta { margin-top: 28px; font-size: 13px; color: var(--ink-2); display: flex; flex-wrap: wrap; gap: 4px 22px; }
+.hero .lede { font-size: 16px; color: var(--ink); max-width: 46ch; margin-top: 64px; }
+.hero-cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 60px; }
+.hero-meta { margin-top: 48px; font-size: 13px; color: var(--ink-2); display: flex; flex-wrap: wrap; gap: 4px 22px; }
 .hero-meta span b { color: var(--ink); font-weight: 600; }
 @media (max-width: 899px) {
   .hero-in { height: auto; align-items: flex-end; padding-top: 310px; }
@@ -1511,11 +1511,23 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
         if (!r || !r.width) return;
         // cells are drawn from their top-left corner, so a box covers the
         // cells whose span touches it: floor at both ends, not ceil
+        // the same padding on all four sides
+        var P = 14;
         qz.push({
-          c0: Math.floor((r.left - hr.left - 16) / cw), c1: Math.floor((r.right - hr.left + 16) / cw),
-          r0: Math.floor((r.top - hr.top - 4) / chh), r1: Math.floor((r.bottom - hr.top + 4) / chh)
+          c0: Math.floor((r.left - hr.left - P) / cw), c1: Math.floor((r.right - hr.left + P) / cw),
+          r0: Math.floor((r.top - hr.top - P) / chh), r1: Math.floor((r.bottom - hr.top + P) / chh),
+          t0: Math.floor((r.top - hr.top) / chh), t1: Math.floor((r.bottom - hr.top) / chh)
         });
       });
+      // keep at least one row of field between stacked blocks: where two
+      // padded boxes touch, both give up padding around a middle row
+      qz.sort(function (a, b) { return a.r0 - b.r0; });
+      for (var z = 1; z < qz.length; z++) {
+        var a = qz[z - 1], b = qz[z];
+        if (b.r0 > a.r1 + 1 || b.t0 - a.t1 < 2) continue;
+        var mid = Math.floor((a.t1 + b.t0) / 2);
+        a.r1 = Math.min(a.r1, mid - 1); b.r0 = Math.max(b.r0, mid + 1);
+      }
     }
     function inQuiet(c, r) {
       for (var z = 0; z < qz.length; z++) { var q = qz[z]; if (c >= q.c0 && c <= q.c1 && r >= q.r0 && r <= q.r1) return true; }
