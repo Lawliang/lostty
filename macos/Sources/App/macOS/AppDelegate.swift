@@ -288,13 +288,17 @@ class AppDelegate: NSObject,
 
         let center = UNUserNotificationCenter.current()
 
+        let guardDeny = UNNotificationAction(identifier: GuardRuntime.denyAction, title: "Deny", options: [.destructive])
+        let guardCategory = UNNotificationCategory(identifier: GuardRuntime.category, actions: [guardDeny], intentIdentifiers: [], options: [.customDismissAction])
+
         center.setNotificationCategories([
             UNNotificationCategory(
                 identifier: Ghostty.userNotificationCategory,
                 actions: actions,
                 intentIdentifiers: [],
                 options: [.customDismissAction]
-            )
+            ),
+            guardCategory,
         ])
         center.delegate = self
 
@@ -376,6 +380,8 @@ class AppDelegate: NSObject,
         // Restart to Update: notice a new build installed over this one.
         BundleWatch.shared.start()
         HookNotifications.checkAtLaunch()
+        GuardRuntime.shared.start()
+        ClaudeRuntime.shared.agentGone = { GuardRuntime.shared.agentGone($0) }
 
         // Lostty Mobile: after a crash, offer to reopen the tmux sessions
         // the previous Lostty left running.
@@ -1031,6 +1037,7 @@ class AppDelegate: NSObject,
         didReceive: UNNotificationResponse,
         withCompletionHandler: () -> Void
     ) {
+        if MainActor.assumeIsolated({ GuardRuntime.shared.handle(didReceive) }) { withCompletionHandler(); return }
         ghostty.handleUserNotification(response: didReceive)
         withCompletionHandler()
     }
@@ -1040,6 +1047,10 @@ class AppDelegate: NSObject,
         willPresent: UNNotification,
         withCompletionHandler: (UNNotificationPresentationOptions) -> Void
     ) {
+        if willPresent.request.content.userInfo["lostty"] as? String == "guard" {
+            withCompletionHandler([.banner, .sound, .list])
+            return
+        }
         // Lostty: Stay Awake's notices carry no surface, so show them here.
         if willPresent.request.content.userInfo["lostty"] as? String == "stay-awake" {
             withCompletionHandler(LosttyMute.isMuted() ? [.banner] : [.banner, .sound])

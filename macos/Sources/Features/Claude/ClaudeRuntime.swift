@@ -29,6 +29,10 @@ final class ClaudeRuntime: ObservableObject {
     /// naming its conversation file: the turn observer's cue. Set at launch.
     var turnEnded: @MainActor (UUID, String) -> Void = { _, _ in }
 
+    /// A pane's agent exited (SessionEnd, or the shell reported the command
+    /// finished): the guard stops typing outcomes into it. Set at launch.
+    var agentGone: @MainActor (UUID) -> Void = { _ in }
+
     private let now: () -> Date
     private let schedule: Scheduler
     /// Panes not focused right now. Panes start focused (SurfaceView does).
@@ -65,6 +69,7 @@ final class ClaudeRuntime: ObservableObject {
             Ghostty.logger.debug("claude: rejected malformed \(ClaudeConstants.userVarName) payload")
             return
         }
+        if state == .exit { agentGone(id) }
         // Only a turn that was under way ends: anything printed in a pane can
         // carry this user var, so an idle out of nowhere names no file.
         let turnUnderWay = !phase(id).isOff
@@ -75,10 +80,12 @@ final class ClaudeRuntime: ObservableObject {
     /// The pane's shell reported a command finished, so whatever ran there
     /// (claude included) is gone: a racing trace must not stay up.
     func commandFinished(_ id: UUID) {
+        agentGone(id)
         apply(.exit, to: id)
     }
 
     func surfaceClosed(_ id: UUID) {
+        agentGone(id)
         phases[id] = nil
         unfocused.remove(id)
         seen.remove(id)
