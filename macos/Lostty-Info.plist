@@ -108,12 +108,12 @@
 			</array>
 		</dict>
 	</array>
-	<key>SUEnableAutomaticChecks</key>
-	<false/>
 	<key>SUPublicEDKey</key>
 	<string>wsNcGf5hirwtdXMVnYoxRIX/SqZQLMOsYlD3q3imeok=</string>
 	<key>LosttyUpdateFeed</key>
 	<string>$(LOSTTY_UPDATE_FEED)</string>
+	<key>SUScheduledCheckInterval</key>
+	<integer>86400</integer>
 	<key>UTExportedTypeDeclarations</key>
 	<array>
 		<dict>

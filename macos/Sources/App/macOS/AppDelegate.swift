@@ -911,27 +911,12 @@ class AppDelegate: NSObject,
         default: UserDefaults.ghostty.removeObject(forKey: "NSQuitAlwaysKeepsWindows")
         }
 
-        // Sync our auto-update settings. If SUEnableAutomaticChecks (in our Info.plist) is
-        // explicitly false (NO), auto-updates are disabled. Otherwise, we use the behavior
-        // defined by our "auto-update" configuration (if set) or fall back to Sparkle
-        // user-based defaults.
-        if Bundle.main.infoDictionary?["SUEnableAutomaticChecks"] as? Bool == false {
-            updateController.updater.automaticallyChecksForUpdates = false
-            updateController.updater.automaticallyDownloadsUpdates = false
-        } else if let autoUpdate = config.autoUpdate {
-            updateController.updater.automaticallyChecksForUpdates =
-                autoUpdate == .check || autoUpdate == .download
-            updateController.updater.automaticallyDownloadsUpdates =
-                autoUpdate == .download
-            /*
-             To test `auto-update` easily, uncomment the line below and
-             delete `SUEnableAutomaticChecks` in Lostty-Info.plist.
-
-             Note: When `auto-update = download`, you may need to
-             `Clean Build Folder` if a background install has already begun.
-             */
-            // updateController.updater.checkForUpdatesInBackground()
-        }
+        // Lostty's updates: release builds check daily and ask first; a build
+        // made on this Mac never checks (UpdateFeed). Setting both every time
+        // also means Sparkle never asks "check automatically?".
+        let schedule = UpdateFeed.schedule(hasFeed: UpdateFeed.current != nil, autoUpdate: config.autoUpdate)
+        updateController.updater.automaticallyChecksForUpdates = schedule.checks
+        updateController.updater.automaticallyDownloadsUpdates = schedule.downloads
 
         // Config could change keybindings, so update everything that depends on that
         syncMenuShortcuts(config)
@@ -1509,10 +1494,7 @@ extension AppDelegate: NSMenuItemValidation {
             return NSWorkspace.shared.defaultTerminal != Bundle.main.bundleURL
 
         case #selector(checkForUpdates(_:)):
-            // Ghostty Skins: this fork has no appcast feed (see
-            // UpdateDelegate.feedURLString) and must never offer to replace
-            // itself with official Ghostty, so disable the menu item outright.
-            return false
+            return updateController.canCheck
 
         case #selector(floatOnTop(_:)),
             #selector(useAsDefault(_:)):
