@@ -67,6 +67,8 @@ struct GuardServerTests {
 
     func connectRaw(_ path: URL) -> Int32 {
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
+        var one: Int32 = 1
+        setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &one, socklen_t(MemoryLayout<Int32>.size))
         var addr = sockaddr_un()
         addr.sun_family = sa_family_t(AF_UNIX)
         withUnsafeMutableBytes(of: &addr.sun_path) { raw in
@@ -92,6 +94,21 @@ struct GuardServerTests {
         return Date().timeIntervalSince(start)
     }
 
+    @Test func aSlowStarterIsStillAnswered() throws {
+        let path = socketPath()
+        let server = GuardServer(path: path) { _ in .allow }
+        try server.start()
+        defer { server.stop(); try? FileManager.default.removeItem(at: path.deletingLastPathComponent()) }
+        let fd = connectRaw(path)
+        defer { close(fd) }
+        Thread.sleep(forTimeInterval: 0.3)
+        let ok = #"{"v":1,"pane":"P","agent":"claude","tool":"Bash","input":"x","cwd":"/r","group":"leaving","why":"w"}"# + "\n"
+        _ = ok.withCString { write(fd, $0, strlen($0)) }
+        var buf = [UInt8](repeating: 0, count: 4096)
+        let n = read(fd, &buf, buf.count)
+        #expect(String(decoding: buf.prefix(max(n, 0)), as: UTF8.self).contains("allow"))
+    }
+
     @Test func silentPeerIsClosedWithinTheDeadline() throws {
         let path = socketPath()
         let server = GuardServer(path: path) { _ in .allow }
@@ -99,7 +116,8 @@ struct GuardServerTests {
         defer { server.stop(); try? FileManager.default.removeItem(at: path.deletingLastPathComponent()) }
         let fd = connectRaw(path)
         defer { close(fd) }
-        #expect(timeToClose(fd, trickle: false) < 4)
+        let t = timeToClose(fd, trickle: false)
+        #expect(t >= 1.5 && t < 4, "closed after \(t)s")
     }
 
     @Test func trickleDoesNotExtendTheDeadline() throws {
@@ -109,7 +127,8 @@ struct GuardServerTests {
         defer { server.stop(); try? FileManager.default.removeItem(at: path.deletingLastPathComponent()) }
         let fd = connectRaw(path)
         defer { close(fd) }
-        #expect(timeToClose(fd, trickle: true) < 4)
+        let t = timeToClose(fd, trickle: true)
+        #expect(t >= 1.5 && t < 4, "closed after \(t)s")
     }
 
     @Test func idleConnectionsDontBlockARealRequest() throws {

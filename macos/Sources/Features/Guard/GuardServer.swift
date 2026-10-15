@@ -84,6 +84,8 @@ final class GuardServer: @unchecked Sendable {
             let conn = accept(listenFD, nil, nil)
             if conn < 0 { return }  // EAGAIN/EWOULDBLOCK (or a reset peer): nothing more now
             _ = fcntl(conn, F_SETFD, FD_CLOEXEC)
+            // Darwin hands back the listener's O_NONBLOCK; reads must block so SO_RCVTIMEO applies.
+            _ = fcntl(conn, F_SETFL, fcntl(conn, F_GETFL) & ~O_NONBLOCK)
             var uid: uid_t = 0
             var gid: gid_t = 0
             guard getpeereid(conn, &uid, &gid) == 0, uid == getuid(), reserve() else {
