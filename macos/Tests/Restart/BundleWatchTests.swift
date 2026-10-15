@@ -14,7 +14,7 @@ struct BundleWatchTests {
         let exe = try folder().appendingPathComponent("lostty")
         try Data("old".utf8).write(to: exe)
         let before = BundleWatch.stamp(atPath: exe.path)
-        // As install-skins.sh does: remove, then copy in a new one.
+        // As install.sh does: remove, then copy in a new one.
         try FileManager.default.removeItem(at: exe)
         try Data("new".utf8).write(to: exe)
         #expect(BundleWatch.changed(before, BundleWatch.stamp(atPath: exe.path)))

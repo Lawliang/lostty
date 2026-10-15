@@ -2,7 +2,7 @@
 import AppKit
 
 /// Handler for the `restart to update` AppleScript command (`Ghostty.sdef`):
-/// for `install-skins.sh --previous` and agents.
+/// for `install.sh --previous` and agents.
 @MainActor
 @objc(LosttyScriptRestartCommand)
 final class ScriptRestartCommand: NSScriptCommand {

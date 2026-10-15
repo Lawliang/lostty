@@ -19,7 +19,7 @@ To move to a new tag:
     zig build test -Demit-macos-app=false -Dtest-filter="skins:"
     zig build -Demit-macos-app=false -Doptimize=ReleaseFast -Dxcframework-target=native
     macos/skins-test.sh
-    macos/install-skins.sh
+    macos/install.sh
 
 ## Upstream files we hook (keep these hunks when resolving conflicts)
 

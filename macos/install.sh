@@ -54,7 +54,7 @@ if [ -n "$IDENTITY" ]; then
   codesign --verify --deep --strict "$APP"
 fi
 # Keep the build being replaced: the menu bar's Go Back to Previous Build,
-# or `install-skins.sh --previous` when the new one won't start.
+# or `install.sh --previous` when the new one won't start.
 rm -rf "/Applications/Lostty (previous).app" "/Applications/Ghostty Skins.app"
 # Copied aside, then renamed into place in one step: a Lostty checking for
 # a new build never sees half of one.

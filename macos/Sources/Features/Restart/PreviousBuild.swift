@@ -1,7 +1,7 @@
 #if os(macOS)
 import Foundation
 
-/// The build install-skins.sh replaced, kept as "Lostty (previous).app":
+/// The build install.sh replaced, kept as "Lostty (previous).app":
 /// Go Back to Previous Build swaps the two and restarts.
 enum PreviousBuild {
     static let installedURL = URL(fileURLWithPath: "/Applications/Lostty.app")

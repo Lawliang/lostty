@@ -1,7 +1,7 @@
 #if os(macOS)
 import Foundation
 
-/// Notices this Lostty's app was replaced on disk (install-skins.sh, a new
+/// Notices this Lostty's app was replaced on disk (install.sh, a new
 /// Debug build): its executable is a different file than at launch. Then
 /// Restart to Update shows.
 @MainActor

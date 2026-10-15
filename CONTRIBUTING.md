@@ -75,7 +75,7 @@ Lostty has two halves: the terminal engine (Zig, in `src/`), built into
 To build a release copy and install it as `/Applications/Lostty.app`:
 
 ```sh
-macos/install-skins.sh
+macos/install.sh
 ```
 
 ### Test
