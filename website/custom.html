@@ -237,6 +237,12 @@ p { margin: 0; }
 }
 .hero .lede { font-size: 16px; color: var(--ink); max-width: 46ch; margin-top: 40px; }
 .hero-cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 40px; }
+/* hero buttons round into full pills on hover and keyboard focus */
+.hero-cta .btn { transition: border-radius .35s cubic-bezier(.3, .7, .2, 1), transform .15s, background-color .15s, color .15s; }
+.hero-cta .btn:hover, .hero-cta .btn:focus-visible { border-radius: 999px; }
+/* no box behind the buttons, so the outlined one needs its own fill to keep the field out */
+.hero-cta .btn:not(.primary) { background: var(--paper); }
+.hero-cta .btn:not(.primary):hover { background: var(--ink); }
 @media (max-width: 899px) {
   .hero-in { height: auto; align-items: flex-end; padding-top: 310px; }
 }
@@ -682,7 +688,7 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
     <div class="wrap hero-in">
       <div class="hero-copy" id="hero-copy">
         <h1>Go touch grass,<br>with Lostty.</h1>
-        <p class="lede">A fast, native Mac terminal with an iPhone app, for people who run Claude Code and Codex. Every terminal keeps running on your Mac. Your phone shows you which one needs you, and you answer it right there.</p>
+        <p class="lede">A fast, native Mac terminal coding harness in sync with an iPhone app, built for people who run Claude Code and Codex CLI on the go. Every terminal keeps running on your Mac, your data connects directly from Mac to iPhone. Everything your Mac can access, your phone can access too.</p>
         <div class="hero-cta">
           <a class="btn primary" href="#install">Get started</a>
           <a class="btn" href="#docs">Read the docs <kbd>/</kbd></a>
@@ -1511,6 +1517,24 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
         bottom: b.bottom - Math.max(0, m.fontBoundingBoxDescent - m.actualBoundingBoxDescent)
       };
     }
+    // each line of a block, trimmed to its ink the same way as hug()
+    function lineBoxes(el) {
+      if (el.classList.contains('hero-cta')) return [hug(el)];
+      var rg = document.createRange(); rg.selectNodeContents(el);
+      var cs = getComputedStyle(el), mc = hug.c || (hug.c = document.createElement('canvas').getContext('2d'));
+      mc.font = cs.fontWeight + ' ' + cs.fontSize + ' ' + cs.fontFamily;
+      var m = mc.measureText(el.textContent.trim());
+      var ti = Math.max(0, (m.fontBoundingBoxAscent || 0) - m.actualBoundingBoxAscent);
+      var bi = Math.max(0, (m.fontBoundingBoxDescent || 0) - m.actualBoundingBoxDescent);
+      var out = [];
+      Array.prototype.forEach.call(rg.getClientRects(), function (r) {
+        if (r.width < 1) return;
+        var l = out.find(function (o) { return Math.abs(o.top0 - r.top) < 3; });
+        if (l) { l.left = Math.min(l.left, r.left); l.right = Math.max(l.right, r.right); }
+        else out.push({ top0: r.top, left: r.left, right: r.right, top: r.top + ti, bottom: r.bottom - bi });
+      });
+      return out.sort(function (a, b) { return a.top - b.top; });
+    }
     function quietZone() {
       if (!copy) return;
       var hr = hero.getBoundingClientRect();
@@ -1560,7 +1584,7 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
         var p = place[i], d = p.t - b.y0;
         if (Math.abs(d) > 0.5) b.el.style.transform = 'translateY(' + d.toFixed(2) + 'px)';
         qz.push({
-          c0: b.c0, c1: b.c1, r0: p.z.r0, r1: p.z.r1,
+          el: b.el, side: b.side, r0: p.z.r0, r1: p.z.r1,
           t0: Math.floor(p.t / chh), t1: Math.floor((p.t + b.h) / chh)
         });
       });
@@ -1573,6 +1597,26 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
         var mid = Math.floor((a.t1 + b.t0) / 2);
         a.r1 = Math.min(a.r1, mid - 1); b.r0 = Math.max(b.r0, mid + 1);
       }
+      // Wrap each box around its lines: every row of a box spans only the
+      // lines it sits beside (each line padded by the side gap), so a short
+      // last line leaves the field showing to its right.
+      var rowsZ = [];
+      qz.forEach(function (q) {
+        // the buttons keep their place in the layout but get no box: the
+        // field runs right up to them
+        if (q.el.classList.contains('hero-cta')) return;
+        var L = lineBoxes(q.el).map(function (l) {
+          return { x0: l.left - hr.left, x1: l.right - hr.left, a: l.top - hr.top - q.side, b: l.bottom - hr.top + q.side };
+        });
+        if (!L.length) return;
+        for (var r = q.r0; r <= q.r1; r++) {
+          var top = r * chh, bot = top + chh, x0 = Infinity, x1 = -Infinity;
+          L.forEach(function (l) { if (l.a < bot && l.b > top) { x0 = Math.min(x0, l.x0); x1 = Math.max(x1, l.x1); } });
+          if (x0 === Infinity) { var nl = top < L[0].a ? L[0] : L[L.length - 1]; x0 = nl.x0; x1 = nl.x1; }
+          rowsZ.push({ c0: Math.round((x0 - G) / cw), c1: Math.round((x1 + G) / cw) - 1, r0: r, r1: r });
+        }
+      });
+      qz = rowsZ;
     }
     function inQuiet(c, r) {
       for (var z = 0; z < qz.length; z++) { var q = qz[z]; if (c >= q.c0 && c <= q.c1 && r >= q.r0 && r <= q.r1) return true; }
