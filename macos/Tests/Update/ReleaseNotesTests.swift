@@ -127,4 +127,10 @@ struct ReleaseNotesTests {
             Issue.record("Expected compareTip case")
         }
     }
+
+    @Test func aLosttyReleaseLinksItsTag() {
+        let notes = UpdateState.ReleaseNotes(displayVersionString: "0.2", currentCommit: nil)
+        #expect(notes?.url.absoluteString == "https://github.com/Lawliang/lostty/releases/tag/v0.2")
+        #expect(notes?.label == "View Release Notes")
+    }
 }

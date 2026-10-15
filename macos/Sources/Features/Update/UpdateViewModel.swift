@@ -314,7 +314,7 @@ enum UpdateState: Equatable {
         }
 
         private static func extractSemanticVersion(from version: String) -> String? {
-            let pattern = #"^\d+\.\d+\.\d+$"#
+            let pattern = #"^\d+\.\d+(\.\d+)?$"#
             if version.range(of: pattern, options: .regularExpression) != nil {
                 return version
             }

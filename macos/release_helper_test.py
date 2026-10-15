@@ -1,10 +1,12 @@
 """Tests for release_helper.py: python3 -I macos/release_helper_test.py"""
 import importlib.util
 import pathlib
+import sys
 import unittest
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 
+sys.dont_write_bytecode = True  # no __pycache__ in macos/
 _spec = importlib.util.spec_from_file_location(
     "release_helper", pathlib.Path(__file__).with_name("release_helper.py"))
 helper = importlib.util.module_from_spec(_spec)

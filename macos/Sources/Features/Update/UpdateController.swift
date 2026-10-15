@@ -92,6 +92,14 @@ class UpdateController {
     ///
     /// This is typically connected to a menu item action.
     @objc func checkForUpdates() {
+        if UpdateFeed.checkAction(feed: UpdateFeed.current) == .explainLocalBuild {
+            let alert = NSAlert()
+            alert.messageText = "No updates to check for"
+            alert.informativeText = UpdateFeed.localBuildMessage
+            alert.runModal()
+            return
+        }
+
         // If we're already idle, then just check for updates immediately.
         if viewModel.state == .idle {
             updater.checkForUpdates()
@@ -110,13 +118,19 @@ class UpdateController {
         }
     }
 
+    /// Whether Check for Updates… can run: always in a build made on this
+    /// Mac (it explains how that build updates), else when Sparkle can.
+    var canCheck: Bool {
+        UpdateFeed.current == nil || updater.canCheckForUpdates
+    }
+
     /// Validate the check for updates menu item.
     ///
     /// - Parameter item: The menu item to validate
     /// - Returns: Whether the menu item should be enabled
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         if item.action == #selector(checkForUpdates) {
-            return updater.canCheckForUpdates
+            return canCheck
         }
         return true
     }
