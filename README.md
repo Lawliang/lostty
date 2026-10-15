@@ -217,12 +217,11 @@ If you love how fast Lostty feels, that's Ghostty. Go give it a star.
 
 ## Reference
 
-- **[HACKING.md](HACKING.md)**: Build, test and debug Lostty. Start here if you want to change something.
 - **[SKINS.md](SKINS.md)**: The twelve built-in skins, project skins, and how to make your own.
 - **[Lostty on your iPhone](docs/lostty-mobile-phone-access.md)**: How pairing works, and what Phone Access sets up on your Mac.
 - **[Manual Mac setup](docs/lostty-mobile-host-setup.md)**: The steps Phone Access automates, for setting up by hand.
 - **[UPGRADING.md](UPGRADING.md)**: Merging a new Ghostty release into Lostty.
-- **[CONTRIBUTING.md](CONTRIBUTING.md)**: Reporting bugs and sending changes.
+- **[CONTRIBUTING.md](CONTRIBUTING.md)**: Build, test and debug Lostty, report bugs and send changes. Start here if you want to change something.
 
 ## License
 

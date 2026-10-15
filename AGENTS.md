@@ -5,7 +5,7 @@ A file for [guiding coding agents](https://agents.md/).
 Lostty is a Mac terminal and iPhone companion app built on Ghostty's
 terminal engine. It still merges from upstream Ghostty, so don't delete
 engine code or other-platform code (`src/apprt/gtk`, `flatpak/`, `snap/`,
-`dist/`, `po/`, `pkg/`). See `HACKING.md` for more.
+`dist/`, `po/`, `pkg/`). See `CONTRIBUTING.md` for more.
 
 ## Commands
 
