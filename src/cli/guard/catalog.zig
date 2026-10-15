@@ -73,6 +73,31 @@ fn operands(alloc: Allocator, argv: []const shell.Word) Error![]const shell.Word
     return out.toOwnedSlice(alloc);
 }
 
+/// Skips leading flags; `with_value` lists short flags that take a value.
+fn skipFlags(argv_in: []const shell.Word, with_value: []const u8) []const shell.Word {
+    var argv = argv_in;
+    while (argv.len > 0 and !argv[0].dynamic and argv[0].text.len > 0 and argv[0].text[0] == '-') {
+        const t = argv[0].text;
+        if (eq(t, "--")) return argv[1..];
+        if (t.len == 2 and t[1] != '-' and std.mem.indexOfScalar(u8, with_value, t[1]) != null) {
+            argv = argv[@min(2, argv.len)..];
+        } else argv = argv[1..];
+    }
+    return argv;
+}
+
+/// Where the project is: the repo around `cwd` (filesystem walk, no git
+/// process), or `cwd` itself when there is none.
+fn projectRoot(ctx: Ctx) ?[]const u8 {
+    const c = ctx.cwd orelse return null;
+    return paths.findRepo(ctx.alloc, c) orelse c;
+}
+
+fn listed(commands: []const []const u8, text: []const u8) bool {
+    for (commands) |c| if (eq(base(text), base(c)) or eq(text, c)) return true;
+    return false;
+}
+
 fn finding(g: Group, why: []const u8) ?Finding {
     return .{ .group = g, .why = why };
 }
@@ -90,14 +115,32 @@ fn command(ctx: Ctx, probe: anytype, argv_in: []const shell.Word) Error!?Finding
     // Unwrap commands that run another one.
     while (argv.len > 0 and !argv[0].dynamic) {
         const name = base(argv[0].text);
-        if (eq(name, "sudo") or eq(name, "command") or eq(name, "nohup") or eq(name, "exec") or eq(name, "time")) {
-            argv = argv[1..];
+        if (eq(name, "sudo")) {
+            argv = skipFlags(argv[1..], "ugChpUrtD");
+        } else if (eq(name, "command") or eq(name, "nohup") or eq(name, "time")) {
+            argv = skipFlags(argv[1..], "");
+        } else if (eq(name, "exec")) {
+            argv = skipFlags(argv[1..], "a");
+        } else if (eq(name, "nice")) {
+            argv = skipFlags(argv[1..], "n");
+        } else if (eq(name, "timeout")) {
+            argv = skipFlags(argv[1..], "sk");
+            if (argv.len > 0) argv = argv[1..]; // the duration
         } else if (eq(name, "env")) {
             argv = argv[1..];
-            while (argv.len > 0 and !argv[0].dynamic and (std.mem.indexOfScalar(u8, argv[0].text, '=') != null or (argv[0].text.len > 0 and argv[0].text[0] == '-'))) argv = argv[1..];
-        } else if (eq(name, "nice") or eq(name, "timeout")) {
-            argv = argv[1..];
-            while (argv.len > 0 and !argv[0].dynamic and argv[0].text.len > 0 and (argv[0].text[0] == '-' or std.ascii.isDigit(argv[0].text[0]))) argv = argv[1..];
+            while (argv.len > 0 and !argv[0].dynamic) {
+                const t = argv[0].text;
+                if (eq(t, "-S") or eq(t, "--split-string")) {
+                    if (argv.len < 2 or argv[1].dynamic) return finding(.unreadable, "env runs a shell string Lostty can't read");
+                    return inner(ctx, probe, argv[1].text);
+                } else if (eq(t, "-u") or eq(t, "-C")) {
+                    argv = argv[@min(2, argv.len)..];
+                } else if (t.len > 0 and t[0] == '-') {
+                    argv = argv[1..];
+                } else if (std.mem.indexOfScalar(u8, t, '=') != null) {
+                    argv = argv[1..];
+                } else break;
+            }
         } else break;
     }
     if (argv.len == 0) return null;
@@ -105,15 +148,29 @@ fn command(ctx: Ctx, probe: anytype, argv_in: []const shell.Word) Error!?Finding
     // variable for a name but is plainly Lostty's hooks command.
     if (has(argv, "+claude-hooks") and (has(argv, "remove") or has(argv, "install"))) return finding(.guardrails, "changes Lostty's agent hooks, which run the guard");
     if (argv[0].dynamic) return finding(.unreadable, "runs a command named by a variable or another command's output");
+    if (argv[0].text.len > 0 and argv[0].text[0] == '-') return finding(.unreadable, "runs a command behind options Lostty can't read");
     const name = base(argv[0].text);
     const args = argv[1..];
 
     // Scripts you listed as critical. findRepo reads the filesystem only:
     // no git process for an everyday command.
-    const eff = try ctx.config.forRepo(ctx.alloc, if (ctx.cwd) |c| paths.findRepo(ctx.alloc, c) else null);
-    for (eff.commands) |c| if (eq(name, base(c)) or eq(argv[0].text, c)) {
+    const eff = try ctx.config.forRepo(ctx.alloc, projectRoot(ctx));
+    if (listed(eff.commands, argv[0].text)) {
         return .{ .group = .leaving, .why = try std.fmt.allocPrint(ctx.alloc, "{s} is on your list of critical commands", .{name}) };
-    };
+    }
+    // A listed script run through a shell: `bash ship.sh`, `source ship.sh`.
+    if (eq(name, "sh") or eq(name, "bash") or eq(name, "zsh") or eq(name, "dash") or eq(name, "source") or eq(name, ".")) {
+        var is_c = false;
+        for (args) |w| if (!w.dynamic and eq(w.text, "-c")) {
+            is_c = true;
+        };
+        if (!is_c) {
+            const ops = try operands(ctx.alloc, args);
+            if (ops.len > 0 and !ops[0].dynamic and listed(eff.commands, ops[0].text)) {
+                return .{ .group = .leaving, .why = try std.fmt.allocPrint(ctx.alloc, "{s} is on your list of critical commands", .{base(ops[0].text)}) };
+            }
+        }
+    }
 
     if (eq(name, "sh") or eq(name, "bash") or eq(name, "zsh") or eq(name, "dash")) {
         for (args, 0..) |w, i| if (!w.dynamic and eq(w.text, "-c")) {
@@ -146,8 +203,15 @@ fn command(ctx: Ctx, probe: anytype, argv_in: []const shell.Word) Error!?Finding
     if (eq(name, "shred") or eq(name, "srm")) return finding(.deleting, "shred destroys files for good");
     if (eq(name, "find")) {
         if (has(args, "-delete")) return finding(.deleting, "find -delete removes whatever matches, which Lostty can't see");
-        for (args, 0..) |w, i| if (!w.dynamic and (eq(w.text, "-exec") or eq(w.text, "-execdir") or eq(w.text, "-ok")) and i + 1 < args.len and isRemover(base(args[i + 1].text))) {
-            return finding(.deleting, "find runs rm on whatever matches, which Lostty can't see");
+        for (args, 0..) |w, i| if (!w.dynamic and (eq(w.text, "-exec") or eq(w.text, "-execdir") or eq(w.text, "-ok") or eq(w.text, "-okdir"))) {
+            var sub: std.ArrayList(shell.Word) = .empty;
+            for (args[i + 1 ..]) |x| {
+                if (!x.dynamic and (eq(x.text, ";") or eq(x.text, "+"))) break;
+                if (!x.dynamic and eq(x.text, "{}")) {
+                    try sub.append(ctx.alloc, .{ .text = x.text, .dynamic = true });
+                } else try sub.append(ctx.alloc, x);
+            }
+            if (try command(ctx, probe, sub.items)) |f| return f;
         };
         return null;
     }
@@ -159,7 +223,12 @@ fn command(ctx: Ctx, probe: anytype, argv_in: []const shell.Word) Error!?Finding
     if (eq(name, "twine") and has(args, "upload")) return finding(.leaving, "publishes a Python package");
     if (eq(name, "pod") and has(args, "trunk")) return finding(.leaving, "publishes a pod");
     if (eq(name, "scp") or eq(name, "rsync")) {
-        for (try operands(ctx.alloc, args)) |w| if (w.dynamic or isRemote(w.text)) return finding(.leaving, "copies files to another machine");
+        const ops = try operands(ctx.alloc, args);
+        for (ops) |w| if (w.dynamic or isRemote(w.text)) return finding(.leaving, "copies files to another machine");
+        if (eq(name, "rsync")) {
+            for (args) |w| if (!w.dynamic and std.mem.startsWith(u8, w.text, "--delete")) return finding(.deleting, "rsync --delete removes files in the destination");
+            if (ops.len >= 2) return write(ctx, probe, ops[ops.len - 1]);
+        }
     }
     if (eq(name, "docker") or eq(name, "podman")) {
         if (has(args, "rm") or has(args, "rmi") or has(args, "prune") or (has(args, "down") and hasShort(args, 'v'))) return finding(.deleting, "removes containers, images or volumes");
@@ -170,7 +239,12 @@ fn command(ctx: Ctx, probe: anytype, argv_in: []const shell.Word) Error!?Finding
     }
     if (eq(name, "cp") or eq(name, "mv") or eq(name, "install") or eq(name, "ln")) {
         const ops = try operands(ctx.alloc, args);
-        if (ops.len >= 2) return write(ctx, probe, ops[ops.len - 1]);
+        if (ops.len >= 2) {
+            if (eq(name, "mv")) {
+                if (try mvSources(ctx, probe, ops[0 .. ops.len - 1])) |f| return f;
+            }
+            return write(ctx, probe, ops[ops.len - 1]);
+        }
         return null;
     }
     if (eq(name, "tee") or eq(name, "truncate") or eq(name, "chmod") or eq(name, "chown")) {
@@ -189,6 +263,22 @@ fn command(ctx: Ctx, probe: anytype, argv_in: []const shell.Word) Error!?Finding
             return write(ctx, probe, .{ .text = w.text[3..], .dynamic = false });
         };
     }
+    return null;
+}
+
+/// mv takes its sources away: guardrails stay put, and a source from
+/// outside the project can't be put back from the repo.
+fn mvSources(ctx: Ctx, probe: anytype, sources: []const shell.Word) Error!?Finding {
+    const cwd = ctx.cwd orelse return null;
+    const project = projectRoot(ctx).?;
+    var outside: std.ArrayList(shell.Word) = .empty;
+    for (sources) |w| {
+        if (w.dynamic) continue;
+        const abs = try paths.resolve(ctx.alloc, cwd, w.text);
+        if (paths.isGuardrail(abs, ctx.home)) return finding(.guardrails, "moves a file the guard depends on");
+        if (!paths.inside(abs, project)) try outside.append(ctx.alloc, w);
+    }
+    if (outside.items.len > 0) return deletion(ctx, probe, outside.items);
     return null;
 }
 
@@ -222,7 +312,7 @@ fn inner(ctx: Ctx, probe: anytype, src: []const u8) Error!?Finding {
 pub fn deletion(ctx: Ctx, probe: anytype, words: []const shell.Word) Error!?Finding {
     if (words.len == 0) return null;
     const cwd = ctx.cwd orelse return finding(.deleting, "deletes from a folder Lostty can't work out");
-    for (words) |w| if (w.dynamic) return finding(.deleting, "deletes paths held in a variable or another command's output");
+    for (words) |w| if (w.dynamic or std.mem.indexOf(u8, w.text, "{}") != null) return finding(.deleting, "deletes paths held in a variable or another command's output");
     const root = probe.repoRoot(cwd) orelse return finding(.deleting, "deletes outside any git repo, so git can't restore it");
     const eff = try ctx.config.forRepo(ctx.alloc, root);
     var rels: std.ArrayList([]const u8) = .empty;
@@ -249,7 +339,8 @@ fn isDeletable(rel: []const u8, names: []const []const u8) bool {
 /// A file tool's write, or a shell write: critical for guardrails and for
 /// places outside the project (the repo, or the folder when there's none).
 pub fn write(ctx: Ctx, probe: anytype, w: shell.Word) Error!?Finding {
-    if (w.dynamic) return finding(.outside, "writes to a path held in a variable");
+    _ = probe; // the project is found on disk; no git process for a write
+    if (w.dynamic or std.mem.indexOf(u8, w.text, "{}") != null) return finding(.outside, "writes to a path held in a variable");
     if (std.mem.startsWith(u8, w.text, "/dev/") and !eq(w.text, "/dev/null") and !std.mem.startsWith(u8, w.text, "/dev/std") and !std.mem.startsWith(u8, w.text, "/dev/fd/")) {
         return finding(.outside, "writes to a device");
     }
@@ -258,7 +349,7 @@ pub fn write(ctx: Ctx, probe: anytype, w: shell.Word) Error!?Finding {
     const abs = try paths.resolve(ctx.alloc, cwd, w.text);
     if (paths.isGuardrail(abs, ctx.home)) return finding(.guardrails, "changes a file the guard depends on");
     if (paths.isWriteExempt(abs, ctx.home, ctx.tmpdir)) return null;
-    const project = probe.repoRoot(cwd) orelse cwd;
+    const project = projectRoot(ctx).?;
     if (paths.inside(abs, project)) return null;
     return .{ .group = .outside, .why = try std.fmt.allocPrint(ctx.alloc, "writes {s}, outside the project", .{abs}) };
 }
@@ -268,6 +359,8 @@ fn gitCommand(ctx_in: Ctx, probe: anytype, args_in: []const shell.Word) Error!?F
     var args = args_in;
     // Global options before the subcommand.
     while (args.len > 0 and !args[0].dynamic and args[0].text.len > 0 and args[0].text[0] == '-') {
+        if (std.ascii.startsWithIgnoreCase(args[0].text, "-calias.")) return finding(.unreadable, "git alias can run any command");
+        if (eq(args[0].text, "-c") and args.len > 1 and (args[1].dynamic or std.ascii.startsWithIgnoreCase(args[1].text, "alias."))) return finding(.unreadable, "git alias can run any command");
         if ((eq(args[0].text, "-C") or eq(args[0].text, "-c")) and args.len > 1) {
             if (eq(args[0].text, "-C")) {
                 if (args[1].dynamic) return finding(.unreadable, "runs git in a folder held in a variable");
@@ -279,9 +372,10 @@ fn gitCommand(ctx_in: Ctx, probe: anytype, args_in: []const shell.Word) Error!?F
     if (args.len == 0 or args[0].dynamic) return null;
     const sub = args[0].text;
     const rest = args[1..];
-    const root: ?[]const u8 = if (ctx.cwd) |c| probe.repoRoot(c) else null;
+    // Only the branches that must ask git look the repo up.
+    const cwd_ = ctx.cwd;
 
-    if (eq(sub, "push")) return push(ctx, probe, root, rest);
+    if (eq(sub, "push")) return push(ctx, probe, rest);
     if (eq(sub, "clean")) {
         if ((has(rest, "--force") or hasShort(rest, 'f')) and !has(rest, "--dry-run") and !hasShort(rest, 'n'))
             return finding(.deleting, "git clean deletes untracked files git can't restore");
@@ -303,15 +397,28 @@ fn gitCommand(ctx_in: Ctx, probe: anytype, args_in: []const shell.Word) Error!?F
             after = rest[i + 1 ..];
         };
         if (after.len == 0 and has(rest, ".")) after = &.{.{ .text = ".", .dynamic = false }};
-        if (after.len > 0) return discards(ctx, probe, root, after);
+        if (after.len == 0 and !has(rest, "-b") and !has(rest, "-B") and !has(rest, "--orphan") and !has(rest, "-t") and !has(rest, "--track")) {
+            // No `--`: with 2+ operands all but the first are paths; a lone
+            // operand is a path when it exists on disk.
+            const ops = try operands(ctx.alloc, rest);
+            if (ops.len >= 2) {
+                after = ops[1..];
+            } else if (ops.len == 1 and !ops[0].dynamic and cwd_ != null) {
+                const abs = try paths.resolve(ctx.alloc, cwd_.?, ops[0].text);
+                if (std.fs.cwd().access(abs, .{})) |_| {
+                    after = ops;
+                } else |_| {}
+            }
+        }
+        if (after.len > 0) return discards(ctx, probe, gitRoot(probe, cwd_), after);
         return null;
     }
     if (eq(sub, "restore")) {
         if (has(rest, "--staged") and !has(rest, "--worktree") and !hasShort(rest, 'W')) return null;
-        return discards(ctx, probe, root, try operands(ctx.alloc, rest));
+        return discards(ctx, probe, gitRoot(probe, cwd_), try operands(ctx.alloc, rest));
     }
     if (eq(sub, "commit") and has(rest, "--amend")) {
-        const r = root orelse return null;
+        const r = gitRoot(probe, cwd_) orelse return null;
         if (probe.headPushed(r)) return finding(.discarding, "amends a commit that's already pushed");
         return null;
     }
@@ -319,7 +426,7 @@ fn gitCommand(ctx_in: Ctx, probe: anytype, args_in: []const shell.Word) Error!?F
     if (eq(sub, "tag") and (has(rest, "-d") or has(rest, "--delete"))) return finding(.deleting, "deletes a tag");
     if (eq(sub, "update-ref") and has(rest, "-d")) return finding(.deleting, "deletes a ref");
     if (eq(sub, "branch") and (has(rest, "-d") or has(rest, "-D") or has(rest, "--delete"))) {
-        const r = root orelse return finding(.deleting, "deletes a branch outside any repo Lostty can check");
+        const r = gitRoot(probe, cwd_) orelse return finding(.deleting, "deletes a branch outside any repo Lostty can check");
         for (try operands(ctx.alloc, rest)) |w| {
             if (w.dynamic) return finding(.deleting, "deletes a branch named by a variable");
             if (probe.onlyHere(r, w.text)) return .{ .group = .deleting, .why = try std.fmt.allocPrint(ctx.alloc, "deletes branch {s}, whose commits are on no other branch", .{w.text}) };
@@ -338,7 +445,7 @@ fn gitCommand(ctx_in: Ctx, probe: anytype, args_in: []const shell.Word) Error!?F
     }
     if (eq(sub, "merge")) {
         if (has(rest, "--abort") or has(rest, "--continue")) return null;
-        const r = root orelse return null;
+        const r = gitRoot(probe, cwd_) orelse return null;
         const current = probe.branch(r) orelse return null;
         const eff = try ctx.config.forRepo(ctx.alloc, r);
         for (eff.protected_branches) |b| if (eq(b, current)) {
@@ -347,6 +454,10 @@ fn gitCommand(ctx_in: Ctx, probe: anytype, args_in: []const shell.Word) Error!?F
         return null;
     }
     return null;
+}
+
+fn gitRoot(probe: anytype, cwd: ?[]const u8) ?[]const u8 {
+    return probe.repoRoot(cwd orelse return null);
 }
 
 fn discards(ctx: Ctx, probe: anytype, root: ?[]const u8, targets: []const shell.Word) Error!?Finding {
@@ -363,18 +474,33 @@ fn discards(ctx: Ctx, probe: anytype, root: ?[]const u8, targets: []const shell.
     return .{ .group = .discarding, .why = "throws away uncommitted changes", .lost = try (git.Changes{ .changed = c.changed }).describe(ctx.alloc) };
 }
 
-fn push(ctx: Ctx, probe: anytype, root: ?[]const u8, rest: []const shell.Word) Error!?Finding {
+fn isForceFlag(w: shell.Word) bool {
+    if (w.dynamic) return false;
+    return eq(w.text, "--force") or eq(w.text, "--mirror") or std.mem.startsWith(u8, w.text, "--force-with-lease") or
+        eq(w.text, "--force-if-includes");
+}
+
+fn push(ctx: Ctx, probe: anytype, rest: []const shell.Word) Error!?Finding {
+    const root = projectRoot(ctx);
     const eff = try ctx.config.forRepo(ctx.alloc, root);
-    const forced = has(rest, "--force") or has(rest, "--force-with-lease") or hasShort(rest, 'f') or has(rest, "--mirror");
+    const ops = try operands(ctx.alloc, rest);
+    var forced = hasShort(rest, 'f');
+    for (rest) |w| if (isForceFlag(w)) {
+        forced = true;
+    };
+    // A leading `+` on a refspec forces that push.
+    if (ops.len >= 2) for (ops[1..]) |w| if (!w.dynamic and w.text.len > 0 and w.text[0] == '+') {
+        forced = true;
+    };
     if (eff.push == .all) return finding(.leaving, if (forced) "git push --force overwrites the remote" else "git push sends commits off this Mac");
     // push = protected: only force, tags, deletes, and protected branches.
     if (forced) return finding(.leaving, "git push --force overwrites the remote");
     if (has(rest, "--tags") or has(rest, "--delete") or hasShort(rest, 'd')) return finding(.leaving, "pushes tags or deletes on the remote");
-    const ops = try operands(ctx.alloc, rest);
     if (ops.len >= 2) {
         for (ops[1..]) |w| {
             if (w.dynamic) return finding(.leaving, "pushes a branch named by a variable");
-            const dst = if (std.mem.indexOfScalar(u8, w.text, ':')) |i| w.text[i + 1 ..] else w.text;
+            const spec = if (w.text.len > 0 and w.text[0] == '+') w.text[1..] else w.text;
+            const dst = if (std.mem.indexOfScalar(u8, spec, ':')) |i| spec[i + 1 ..] else spec;
             const name = if (std.mem.startsWith(u8, dst, "refs/heads/")) dst["refs/heads/".len..] else dst;
             for (eff.protected_branches) |b| if (eq(b, name)) return .{ .group = .leaving, .why = try std.fmt.allocPrint(ctx.alloc, "pushes to {s}, a protected branch", .{name}) };
         }
@@ -597,4 +723,126 @@ test "guard catalog: wrappers, shells and unreadable commands" {
     try std.testing.expectEqual(@as(?Group, .deleting), try group(a, .{}, "docker volume rm data"));
     try std.testing.expectEqual(@as(?Group, .deleting), try group(a, .{}, "psql -c 'drop table users'"));
     try std.testing.expectEqual(@as(?Group, .deleting), try group(a, .{}, "kubectl delete pod x"));
+}
+
+const NoGit = struct {
+    pub fn repoRoot(_: NoGit, _: []const u8) ?[]const u8 {
+        @panic("harmless call asked git for the repo");
+    }
+    pub fn branch(_: NoGit, _: []const u8) ?[]const u8 {
+        @panic("harmless call asked git for the branch");
+    }
+    pub fn changes(_: NoGit, _: []const u8, _: []const []const u8) ?git.Changes {
+        @panic("harmless call asked git for changes");
+    }
+    pub fn onlyHere(_: NoGit, _: []const u8, _: []const u8) bool {
+        @panic("harmless call asked git");
+    }
+    pub fn headPushed(_: NoGit, _: []const u8) bool {
+        @panic("harmless call asked git");
+    }
+};
+
+test "guard catalog: harmless calls never touch git" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const ctx: Ctx = .{ .alloc = a, .cwd = "/r", .home = "/Users/me", .tmpdir = null, .config = config.Config.parse(a, "") };
+    for ([_][]const u8{
+        "cat a > out.txt",    "git status", "git log --oneline", "cp a b",
+        "sed -i '' s/a/b/ f", "git diff",   "git commit -m x",   "git checkout -b new",
+        "tee out.txt",        "git stash",  "mv a b",
+    }) |src| {
+        const cmds = try shell.parse(a, src, "/Users/me");
+        for (cmds) |c| try std.testing.expect((try classify(ctx, NoGit{}, c)) == null);
+    }
+    try std.testing.expect((try write(ctx, NoGit{}, .{ .text = "src/a.zig", .dynamic = false })) == null);
+}
+
+test "guard catalog: git checkout without --" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(.{ .sub_path = "x.zig", .data = "" });
+    const root = try tmp.dir.realpathAlloc(a, ".");
+    const p: Fake = .{ .root = root, .changed = &.{"x.zig"} };
+    try std.testing.expectEqual(@as(?Group, .discarding), (try check(a, p, root, "git checkout x.zig")).?.group);
+    try std.testing.expectEqual(@as(?Group, .discarding), (try check(a, p, root, "git checkout HEAD~1 x.zig")).?.group);
+    // A lone operand that isn't a file is a branch.
+    try std.testing.expect((try check(a, p, root, "git checkout feature")) == null);
+    try std.testing.expect((try check(a, p, root, "git checkout -b new")) == null);
+}
+
+test "guard catalog: listed scripts run through a shell" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    for ([_][]const u8{
+        "bash macos/ship-phone.sh", "sh ship-phone.sh",     "bash -x macos/ship-phone.sh",
+        "/bin/bash ship-phone.sh",  "source ship-phone.sh", ". ./macos/ship-phone.sh",
+    }) |src| try std.testing.expectEqual(@as(?Group, .leaving), try group(a, .{}, src));
+    try std.testing.expectEqual(@as(?Group, null), try group(a, .{}, "bash build.sh"));
+}
+
+test "guard catalog: mv checks its sources" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    try std.testing.expectEqual(@as(?Group, .guardrails), try group(a, .{}, "mv ~/.claude/settings.json /tmp/x"));
+    try std.testing.expectEqual(@as(?Group, .guardrails), try group(a, .{}, "mv ~/.config/lostty /tmp/"));
+    try std.testing.expectEqual(@as(?Group, .guardrails), try group(a, .{}, "mv .claude/settings.local.json /tmp/"));
+    try std.testing.expectEqual(@as(?Group, .deleting), try group(a, .{}, "mv ~/notes.md ."));
+    try std.testing.expectEqual(@as(?Group, null), try group(a, .{}, "mv a b"));
+}
+
+test "guard catalog: wrapper flags don't hide the command" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    for ([_][]const u8{
+        "sudo -u root git push",       "sudo -E git push",     "sudo -n git push",
+        "env -u FOO git push",         "env -C /tmp git push", "env -S 'git push'",
+        "timeout -s KILL 30 git push", "command -p git push",  "nice -n 5 git push",
+    }) |src| {
+        if ((try group(a, .{}, src)) != .leaving) {
+            std.debug.print("missed: {s}\n", .{src});
+            return error.TestUnexpectedResult;
+        }
+    }
+    try std.testing.expectEqual(@as(?Group, .deleting), try group(a, .{}, "sudo -u root rm ../x"));
+    try std.testing.expectEqual(@as(?Group, .unreadable), try group(a, .{}, "sudo -- -x"));
+}
+
+test "guard catalog: forced pushes in protected mode" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const ctx: Ctx = .{ .alloc = a, .cwd = "/r", .home = "/Users/me", .tmpdir = null, .config = config.Config.parse(a,
+        \\{"repos":{"/r":{"push":"protected"}}}
+    ) };
+    const p = Fake{ .current = "feature" };
+    for ([_][]const u8{ "git push origin +main", "git push origin +feature", "git push --force-with-lease=x origin feature", "git push --force-if-includes origin feature" }) |src| {
+        const cmds = try shell.parse(a, src, "/Users/me");
+        try std.testing.expect((try classify(ctx, p, cmds[0])) != null);
+    }
+    const plain = try shell.parse(a, "git push origin feature", "/Users/me");
+    try std.testing.expect((try classify(ctx, p, plain[0])) == null);
+}
+
+test "guard catalog: rsync, git aliases and find -exec" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    try std.testing.expectEqual(@as(?Group, .outside), try group(a, .{}, "rsync -a src/ ~/backup/"));
+    try std.testing.expectEqual(@as(?Group, null), try group(a, .{}, "rsync -a src/ out/"));
+    try std.testing.expectEqual(@as(?Group, .deleting), try group(a, .{}, "rsync -a --delete src/ out/"));
+    try std.testing.expectEqual(@as(?Group, .leaving), try group(a, .{}, "rsync -a src/ host:/x"));
+    try std.testing.expectEqual(@as(?Group, .unreadable), try group(a, .{}, "git -c alias.st='!rm -rf x' st"));
+    try std.testing.expectEqual(@as(?Group, null), try group(a, .{}, "git -c color.ui=never status"));
+    try std.testing.expectEqual(@as(?Group, .deleting), try group(a, .{}, "find . -name '*.o' -exec rm {} ';'"));
+    try std.testing.expectEqual(@as(?Group, .deleting), try group(a, .{}, "find . -exec sh -c 'rm {}' ';'"));
+    try std.testing.expectEqual(@as(?Group, .leaving), try group(a, .{}, "find . -exec git push ';'"));
+    try std.testing.expectEqual(@as(?Group, null), try group(a, .{}, "find . -name x -exec grep y {} +"));
 }
