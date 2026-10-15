@@ -1500,7 +1500,18 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
         return u;
       }
       var rg = document.createRange(); rg.selectNodeContents(el);
-      return rg.getBoundingClientRect();
+      var b = rg.getBoundingClientRect();
+      // a text range spans the font's full ascent and descent; trim it to the
+      // ink, so the box sits as close above and below the letters as beside them
+      var cs = getComputedStyle(el), mc = hug.c || (hug.c = document.createElement('canvas').getContext('2d'));
+      mc.font = cs.fontWeight + ' ' + cs.fontSize + ' ' + cs.fontFamily;
+      var m = mc.measureText(el.textContent.trim());
+      if (!m.fontBoundingBoxAscent) return b;
+      return {
+        left: b.left, right: b.right, width: b.width,
+        top: b.top + Math.max(0, m.fontBoundingBoxAscent - m.actualBoundingBoxAscent),
+        bottom: b.bottom - Math.max(0, m.fontBoundingBoxDescent - m.actualBoundingBoxDescent)
+      };
     }
     function quietZone() {
       if (!copy) return;
@@ -1509,13 +1520,12 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
       $$('h1, .lede, .hero-cta, .hero-meta', copy).forEach(function (el) {
         var r = hug(el);
         if (!r || !r.width) return;
-        // cells are drawn from their top-left corner, so a box covers the
-        // cells whose span touches it: floor at both ends, not ceil
-        // the same padding on all four sides
-        var P = 14;
+        // the field stops G px from the ink on every side, give or take half a
+        // cell: each edge snaps to the cell boundary nearest that gap
+        var G = 14, x0 = r.left - hr.left, x1 = r.right - hr.left, y0 = r.top - hr.top, y1 = r.bottom - hr.top;
         qz.push({
-          c0: Math.floor((r.left - hr.left - P) / cw), c1: Math.floor((r.right - hr.left + P) / cw),
-          r0: Math.floor((r.top - hr.top - P) / chh), r1: Math.floor((r.bottom - hr.top + P) / chh),
+          c0: Math.round((x0 - G) / cw), c1: Math.round((x1 + G) / cw) - 1,
+          r0: Math.round((y0 - G) / chh), r1: Math.round((y1 + G) / chh) - 1,
           t0: Math.floor((r.top - hr.top) / chh), t1: Math.floor((r.bottom - hr.top) / chh)
         });
       });
