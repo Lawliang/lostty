@@ -1035,11 +1035,20 @@ class AppDelegate: NSObject,
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         didReceive: UNNotificationResponse,
-        withCompletionHandler: () -> Void
+        withCompletionHandler: @escaping () -> Void
     ) {
-        if MainActor.assumeIsolated({ GuardRuntime.shared.handle(didReceive) }) { withCompletionHandler(); return }
-        ghostty.handleUserNotification(response: didReceive)
-        withCompletionHandler()
+        // The guard's runtime lives on the main actor; make sure we are there.
+        let route: @MainActor () -> Void = { [self] in
+            if !GuardRuntime.shared.handle(didReceive) {
+                ghostty.handleUserNotification(response: didReceive)
+            }
+            withCompletionHandler()
+        }
+        if Thread.isMainThread {
+            MainActor.assumeIsolated(route)
+        } else {
+            DispatchQueue.main.async { MainActor.assumeIsolated(route) }
+        }
     }
 
     func userNotificationCenter(

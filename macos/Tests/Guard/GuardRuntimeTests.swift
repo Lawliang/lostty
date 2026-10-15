@@ -10,6 +10,7 @@ struct GuardRuntimeTests {
         var withdrawn: [Int] = []
         var typed: [(UUID, String)] = []
         var paneAlive = true
+        var saves = 0
         var now = Date(timeIntervalSinceReferenceDate: 1_000_000)
     }
 
@@ -22,7 +23,7 @@ struct GuardRuntimeTests {
                 log.typed.append((pane, text))
                 return true
             },
-            save: { _ in },
+            save: { _ in log.saves += 1 },
             now: { log.now }
         ))
     }
@@ -73,6 +74,27 @@ struct GuardRuntimeTests {
         #expect(log.typed.isEmpty)
         // The approval still holds for a retry within 10 minutes.
         #expect(rt.handle(check()) == .allow)
+    }
+
+    @Test func theTimerSavesNothingWhenNothingLapsed() {
+        let log = Log()
+        let rt = make(log)
+        _ = rt.handle(check())
+        let before = log.saves
+        rt.tick()
+        #expect(log.saves == before)
+        #expect(log.withdrawn.isEmpty)
+    }
+
+    @Test func aLapsedRequestIsWithdrawnAndSaved() {
+        let log = Log()
+        let rt = make(log)
+        _ = rt.handle(check())
+        let before = log.saves
+        log.now = log.now.addingTimeInterval(3601 + 60)
+        rt.tick()
+        #expect(log.withdrawn == [1])
+        #expect(log.saves == before + 1)
     }
 
     @Test func outcomeTexts() {

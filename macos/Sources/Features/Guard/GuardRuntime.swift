@@ -71,8 +71,10 @@ final class GuardRuntime: ObservableObject {
         }
     }
 
-    private func tick() {
-        for id in book.expire(now: effects.now()) { effects.withdraw(id) }
+    func tick() {
+        let lapsed = book.expire(now: effects.now())
+        guard !lapsed.isEmpty else { return }
+        for id in lapsed { effects.withdraw(id) }
         effects.save(book.persisted())
     }
 
@@ -149,7 +151,6 @@ final class GuardRuntime: ObservableObject {
               let model = surface.surfaceModel else { return false }
         model.sendText(text)
         model.sendKeyEvent(Ghostty.Input.KeyEvent(key: .enter, action: .press, mods: []))
-        model.sendKeyEvent(Ghostty.Input.KeyEvent(key: .enter, action: .release, mods: []))
         return true
     }
 
