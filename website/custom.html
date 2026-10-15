@@ -1517,16 +1517,23 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
       if (!copy) return;
       var hr = hero.getBoundingClientRect();
       qz = [];
-      $$('h1, .lede, .hero-cta, .hero-meta', copy).forEach(function (el) {
+      var blocks = $$('h1, .lede, .hero-cta, .hero-meta', copy);
+      blocks.forEach(function (el) { el.style.transform = ''; });
+      blocks.forEach(function (el) {
         var r = hug(el);
         if (!r || !r.width) return;
-        // the field stops G px from the ink on every side, give or take half a
-        // cell: each edge snaps to the cell boundary nearest that gap
-        var G = 14, x0 = r.left - hr.left, x1 = r.right - hr.left, y0 = r.top - hr.top, y1 = r.bottom - hr.top;
+        // The field stops about G px from the ink on every side. Sideways each
+        // edge snaps to the nearest column. Rows are too tall to snap well, so
+        // the block is nudged down (less than one row) until its ink sits the
+        // same distance, at least G, below one row line and above another.
+        var G = 22, x0 = r.left - hr.left, x1 = r.right - hr.left, y0 = r.top - hr.top, y1 = r.bottom - hr.top;
+        var h = y1 - y0, n = Math.ceil((h + 2 * G) / chh), gap = (n * chh - h) / 2;
+        var k = Math.ceil((y0 - gap) / chh), d = k * chh + gap - y0;
+        if (d > 0.5) el.style.transform = 'translateY(' + d.toFixed(2) + 'px)';
         qz.push({
           c0: Math.round((x0 - G) / cw), c1: Math.round((x1 + G) / cw) - 1,
-          r0: Math.round((y0 - G) / chh), r1: Math.round((y1 + G) / chh) - 1,
-          t0: Math.floor((r.top - hr.top) / chh), t1: Math.floor((r.bottom - hr.top) / chh)
+          r0: k, r1: k + n - 1,
+          t0: Math.floor((y0 + d) / chh), t1: Math.floor((y1 + d) / chh)
         });
       });
       // keep at least one row of field between stacked blocks: where two
