@@ -23,29 +23,58 @@ Lostty is a fast, native Mac terminal with an iPhone app built for exactly this.
 
 ## Getting Started
 
-### 1. Build and install the Mac app
+Three parts: the Mac app, the iPhone app, then pairing them. The first build takes a while; after that it's quick.
 
-<details>
-<summary><strong>What you'll need</strong></summary>
+**You'll need:** a Mac on macOS 15 or later, an iPhone on iOS 17 or later with its cable, and a free [Apple Account](https://account.apple.com).
 
-- Xcode 26
-- Zig 0.15 and tmux: `brew install zig@0.15 tmux`
+### Part 1: The Mac app
 
-</details>
+1. **Install Xcode 26** from the [App Store](https://apps.apple.com/app/xcode/id497799835). Open it once, and let it install what it asks for.
+2. **Install the tools** in Terminal (needs [Homebrew](https://brew.sh)):
 
-```sh
-macos/install-skins.sh
-```
+   ```sh
+   sudo xcode-select --switch /Applications/Xcode.app
+   xcodebuild -downloadComponent MetalToolchain
+   brew install zig@0.15 tmux
+   ```
 
-This builds Lostty and puts it in `/Applications`. Run it again whenever you pull. It keeps the build it replaced, in case you want to go back.
+3. **Get Lostty:**
 
-### 2. Put Lostty on your iPhone
+   ```sh
+   git clone https://github.com/Lawliang/lostty.git
+   cd lostty
+   ```
 
-Open `macos/Lostty.xcodeproj` in Xcode, pick the `Lostty-iOS` scheme and your phone, and press Run. If Xcode complains about signing, pick your own team under **Signing & Capabilities**.
+4. **Build and install it:**
 
-### 3. Pair them
+   ```sh
+   macos/install-skins.sh
+   ```
 
-Install [Tailscale](https://tailscale.com) on your Mac and your iPhone, signed in to the same account. Then, on the Mac, open **Lostty → Phone Access**. It checks that everything's ready and shows you a QR code. Scan it with your phone.
+   Lostty is now in `/Applications`. Open it.
+
+> **Updating later:** `git pull`, run `macos/install-skins.sh` again, then choose **Restart to Update** in Lostty's menu bar. Don't Quit Lostty to update: quitting ends every terminal session.
+
+### Part 2: The iPhone app
+
+1. **Sign in to Xcode:** **Xcode → Settings → Accounts**, click **+**, and add your Apple Account.
+2. **Plug your iPhone into the Mac** and tap **Trust** on the phone.
+3. **Open the project:** `open macos/Lostty.xcodeproj`
+4. **Pick what to build:** in the bar at the top of the window, choose the **Lostty-iOS** scheme, then your iPhone.
+5. **Sign it as you:** click **Lostty** at the top of the left sidebar, choose the **Lostty-iOS** target, and open **Signing & Capabilities**.
+   - **Team:** pick your name.
+   - **Bundle Identifier:** change `com.lawliang` to anything of your own, like `com.yourname.lostty-mobile`. Each identifier can belong to only one Apple Account.
+6. **Press Run (▶).** On the phone, if asked:
+   - turn on **Settings → Privacy & Security → Developer Mode**, and restart the phone;
+   - trust yourself in **Settings → General → VPN & Device Management**.
+
+> **With a free Apple Account,** the app stops opening after 7 days. Plug in and press Run again to renew it. A paid developer account makes it last a year.
+
+### Part 3: Pair them
+
+1. **Install [Tailscale](https://tailscale.com/download)** on the Mac and the iPhone, and sign in to both with the same account.
+2. **On the Mac,** open **Lostty → Phone Access…** and fix any row without a ✓. Each row says what to click.
+3. **Click Pair a Phone…** On the iPhone, open Lostty, tap **Pair with Mac**, and scan the code. Click **Allow** on the Mac.
 
 <details>
 <summary><strong>Why Tailscale?</strong></summary>
@@ -56,7 +85,9 @@ If you'd rather set up the Mac by hand, the steps Phone Access automates are in 
 
 </details>
 
-### 4. That's it. Go take a walk.
+### That's it. Go take a walk.
+
+Your phone reaches the Mac while it's awake and Lostty is open. To keep it reachable with the lid closed, see [Lostty on your iPhone](docs/lostty-mobile-phone-access.md).
 
 ## Why Lostty Exists
 
