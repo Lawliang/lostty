@@ -251,6 +251,10 @@ p { margin: 0; }
   background-size: 300% 100%; background-position: 0% 0;
   -webkit-background-clip: text; background-clip: text; color: transparent;
   animation: sheen 7s cubic-bezier(.22, .8, .2, 1) .4s infinite;
+  /* the clipped background stops at the box, and the tight line height puts the
+     last line's descenders (the y in "Lostty") below it: pad the box down and
+     take the space back so nothing after it moves */
+  padding-bottom: .2em; margin-bottom: -.2em;
 }
 @keyframes sheen { 0% { background-position: 100% 0; } 38%, 100% { background-position: 0% 0; } }
 /* "grass" is filled with a photo of grass (CC0, "Green grass texture (Unsplash)"
