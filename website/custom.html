@@ -237,7 +237,7 @@ p { margin: 0; }
 }
 .hero .lede { font-size: 16px; color: var(--ink); max-width: 46ch; margin-top: 40px; }
 .hero .lede b { font-weight: 800; }
-.hero-points { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 4px; }
+.hero-points { list-style: none; margin: 40px 0 0; padding: 0; display: grid; gap: 4px; }
 .hero-points li { display: grid; grid-template-columns: 2ch minmax(0, 1fr); }
 .hero-points .pt-mark { color: var(--magenta-ink); }
 .hero-cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 40px; }
@@ -693,9 +693,9 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
       <div class="hero-copy" id="hero-copy">
         <h1>Go touch grass,<br>with Lostty.</h1>
         <div class="lede">
-          <p>A fast, modern multi-agent terminal CLI coding harness with our native iPhone app for coding <b>on the go</b>.</p>
+          <p>A fast, modern multi-agent terminal CLI coding harness with our native iPhone app, for builders <b>on the go</b>.</p>
           <ul class="hero-points">
-            <li><span class="pt-mark" aria-hidden="true">❯</span><span>Install builds, view artifacts, run subagents, access MCPs, all on your phone.</span></li>
+            <li><span class="pt-mark" aria-hidden="true">❯</span><span>Install builds, view simulators and artifacts, run subagents, access MCPs, all on your phone.</span></li>
             <li><span class="pt-mark" aria-hidden="true">❯</span><span>Built-in caffeinate and auto-hotspot-switch feature made for Mac laptops.</span></li>
             <li><span class="pt-mark" aria-hidden="true">❯</span><span>Supports Claude Code CLI &amp; Codex CLI.</span></li>
           </ul>
@@ -1514,21 +1514,17 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
         if (u) u = { left: u.left, top: u.top, right: u.right, bottom: u.bottom, width: u.right - u.left };
         return u;
       }
-      var rg = document.createRange(); rg.selectNodeContents(el);
-      var b = rg.getBoundingClientRect();
-      // a text range spans the font's full ascent and descent; trim it to the
-      // ink, so the box sits as close above and below the letters as beside them
-      var cs = getComputedStyle(el), mc = hug.c || (hug.c = document.createElement('canvas').getContext('2d'));
-      mc.font = cs.fontWeight + ' ' + cs.fontSize + ' ' + cs.fontFamily;
-      var m = mc.measureText(el.textContent.trim());
-      if (!m.fontBoundingBoxAscent) return b;
-      return {
-        left: b.left, right: b.right, width: b.width,
-        top: b.top + Math.max(0, m.fontBoundingBoxAscent - m.actualBoundingBoxAscent),
-        bottom: b.bottom - Math.max(0, m.fontBoundingBoxDescent - m.actualBoundingBoxDescent)
-      };
+      // the union of its lines' ink (see lineBoxes)
+      var L = lineBoxes(el);
+      if (!L.length) return null;
+      var u2 = { left: Infinity, right: -Infinity, top: Infinity, bottom: -Infinity };
+      L.forEach(function (l) { u2.left = Math.min(u2.left, l.left); u2.right = Math.max(u2.right, l.right); u2.top = Math.min(u2.top, l.top); u2.bottom = Math.max(u2.bottom, l.bottom); });
+      u2.width = u2.right - u2.left;
+      return u2;
     }
-    // each line of a block, trimmed to its ink the same way as hug()
+    // each line of a block, trimmed to its ink: a text range spans the font's
+    // full ascent and descent, so the box would sit further above and below
+    // the letters than beside them
     function lineBoxes(el) {
       if (el.classList.contains('hero-cta')) return [hug(el)];
       var rg = document.createRange(); rg.selectNodeContents(el);
@@ -1556,7 +1552,7 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
       if (!copy) return;
       var hr = hero.getBoundingClientRect();
       qz = [];
-      var blocks = $$('h1, .lede, .hero-cta', copy);
+      var blocks = $$('h1, .lede > p, .hero-points, .hero-cta', copy);
       blocks.forEach(function (el) { el.style.transform = ''; });
       // Sideways, the field stops about G px from the ink: each edge snaps to
       // the nearest column, so that gap ("side") lands within half a column.
