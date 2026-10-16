@@ -316,7 +316,7 @@ p { margin: 0; }
    with the section's edge; Aurora's Mac and iPhone sit on the right, the iPhone
    ending at the right edge. The type scales with the width (70em across) */
 .ag-demo .wrap{position:relative; z-index:1; container-type:inline-size}
-.ag-stage-col{display:grid; grid-template-columns:minmax(0, 1fr) minmax(0, 49.6em); gap:1.5em; align-items:center;
+.ag-stage-col{display:grid; grid-template-columns:minmax(max-content, 1fr) minmax(0, 49.6em); gap:1.5em; align-items:center;
   min-width:0; font-size:clamp(6px, calc(100cqi / 70), 13px)}
 /* Aurora's moving glow, drawn see-through over the paper and faded out at the
    section's top and bottom; the static gradients stand in without WebGL */
@@ -424,11 +424,21 @@ p { margin: 0; }
 /* hero progress */
 /* both lists are lit until someone picks one; then the other list and its
    device step back for one loop */
-.ag-cats{order:-1; display:grid; grid-template-columns:repeat(2, max-content); gap:0 120px}
+/* one grid: the numbers, then On Mac, then On iPhone. Shrink-wrapped, so the
+   two 1fr columns both take the wider list's width; the lists and the numbers
+   are subgrids, so every row lines up across all three even when text wraps */
+.ag-cats{order:-1; display:grid; grid-template-columns:auto 14px 1fr 120px 1fr; grid-template-rows:auto auto repeat(4, auto); gap:8px 0; width:max-content; position:relative; z-index:1;
+  /* the lists keep their size and may touch the Mac; the Mac gives up width instead */
+  margin-right:-1.5em}
+.ag-cat{grid-row:2 / span 5; display:grid; grid-template-rows:subgrid; min-width:0}
+.ag-cat[data-cat="mac"]{grid-column:3}
+.ag-cat[data-cat="phone"]{grid-column:5}
+.ag-nums{grid-column:1; grid-row:3 / span 4; display:grid; grid-template-rows:subgrid; margin:0; padding:0; list-style:none}
+.ag-nums li{align-self:center; width:26px; height:26px; border-radius:50%; background:var(--magenta); color:#fff; display:grid; place-items:center; font:700 12.5px/1 var(--font-mono)}
 .ag-cat{transition:opacity .4s}
 .ag-cats[data-focus="mac"] .ag-cat[data-cat="phone"],.ag-cats[data-focus="phone"] .ag-cat[data-cat="mac"]{opacity:.38}
 .ag-cats[data-focus] .ag-cat:hover{opacity:1}
-.ag-cat-h{display:block; border:0; background:none; padding:0 0 8px; margin:0; cursor:pointer; color:var(--fg); font:600 19px/1.4 var(--font-ui); letter-spacing:-.01em}
+.ag-cat-h{display:block; justify-self:start; border:0; background:none; padding:0 0 4px; margin:0; cursor:pointer; color:var(--fg); font:600 19px/1.4 var(--font-ui); letter-spacing:-.01em}
 .ag-cat-h:hover{color:var(--magenta-ink)}
 .ag-cat-h[aria-pressed="true"]{color:var(--magenta-ink)}
 /* the device that steps back fades under a veil of the page colour: opacity or
@@ -439,24 +449,24 @@ p { margin: 0; }
 .ag-stage[data-focus="mac"] .ag-phone{transform:translateZ(110px) rotateY(5deg) scale(.92)}
 .ag-stage[data-focus="phone"] .ag-mac::after,.ag-stage[data-focus="mac"] .ag-phone::after{opacity:.68}
 /* Kinetic Mono's axolotl, centred over both lists; it changes with the step */
-.ag-cats-mascot{grid-column:1 / -1; justify-self:center; width:64px; height:64px; object-fit:contain; margin-bottom:14px}
+.ag-cats-mascot{grid-column:3 / -1; grid-row:1; justify-self:center; width:64px; height:64px; object-fit:contain; margin-bottom:14px}
 /* the steps as Kinetic Mono's numbered boxes; the current one gets the magenta edge */
-.ag-steps{display:flex; flex-direction:column; gap:8px; margin:0; list-style:none; padding:0}
+.ag-steps{grid-row:2 / span 4; display:grid; grid-template-rows:subgrid; margin:0; list-style:none; padding:0}
 .ag-steps li{border:1px solid var(--rule); border-radius:4px; padding:10px 12px; font:400 14px/1.4 var(--font-mono); color:var(--ink-2); background:transparent;
   transition:border-color .3s, color .3s, background-color .3s; min-width:0}
-.ag-steps .ag-n{display:block; color:var(--magenta-ink); font-weight:700; margin-bottom:2px}
 .ag-steps li.ag-cur{border-color:var(--magenta); color:var(--ink); background:var(--paper)}
 
 /* narrow: Aurora's own phone layout, the steps in a row under the Mac and iPhone */
 /* narrower: the two lists go under the Mac and iPhone, still side by side */
 @container (max-width:1040px){
   .ag-stage-col{grid-template-columns:minmax(0, 49.6em); gap:24px; font-size:min(13px, calc(100cqi / 50))}
-  .ag-cats{order:0; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:0 40px}
+  .ag-cats{order:0; width:auto; margin-right:0; grid-template-columns:auto 10px 1fr 24px 1fr}
 }
 @container (max-width:640px){
   .ag-stage{padding-right:1.5%}
   .ag-cat-h{font-size:16px}
   .ag-steps li{font-size:13px; padding:8px 10px}
+  .ag-nums li{width:22px; height:22px; font-size:11.5px}
 }
 
 /* ---------- why ---------- */
@@ -927,22 +937,23 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
         </div>
         <div class="ag-cats" id="ag-cats" role="group" aria-label="What the animation shows, on each device">
           <img class="ag-cats-mascot" id="ag-mascot" alt="" hidden>
+          <ol class="ag-nums" aria-hidden="true"><li>1</li><li>2</li><li>3</li><li>4</li></ol>
           <div class="ag-cat" data-cat="mac">
             <button class="ag-cat-h" type="button" aria-pressed="false">On Mac</button>
             <ol class="ag-steps">
-              <li class="ag-cur"><span class="ag-n">1</span>Claude works</li>
-              <li><span class="ag-n">2</span>Stops to ask</li>
-              <li><span class="ag-n">3</span>Carries on</li>
-              <li><span class="ag-n">4</span>Ready</li>
+              <li class="ag-cur">Claude works</li>
+              <li>Stops to ask</li>
+              <li>Carries on</li>
+              <li>Ready</li>
             </ol>
           </div>
           <div class="ag-cat" data-cat="phone">
             <button class="ag-cat-h" type="button" aria-pressed="false">On iPhone</button>
             <ol class="ag-steps">
-              <li class="ag-cur"><span class="ag-n">1</span>Shows it working</li>
-              <li><span class="ag-n">2</span>Puts it first</li>
-              <li><span class="ag-n">3</span>You tap Yes</li>
-              <li><span class="ag-n">4</span>Back in your pocket</li>
+              <li class="ag-cur">Shows it working</li>
+              <li>Puts it first</li>
+              <li>You tap Yes</li>
+              <li>Back in your pocket</li>
             </ol>
           </div>
         </div>
