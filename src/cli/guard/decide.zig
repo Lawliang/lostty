@@ -303,9 +303,9 @@ test "guard decide: harmless and critical Bash" {
     defer arena.deinit();
     const a = arena.allocator();
     try std.testing.expect(try decide(a, env(a), Fake{}, try bash(a, "ls", "/r")) == .harmless);
-    const v = try decide(a, env(a), Fake{}, try bash(a, "git push", "/r"));
+    const v = try decide(a, env(a), Fake{}, try bash(a, "git push --force", "/r"));
     try std.testing.expectEqual(catalog.Group.leaving, v.critical.group);
-    try std.testing.expectEqualStrings("git push", v.critical.input);
+    try std.testing.expectEqualStrings("git push --force", v.critical.input);
     try std.testing.expectEqualStrings("Bash", v.critical.tool);
     try std.testing.expectEqualStrings("/r", v.critical.cwd);
     try std.testing.expectEqualStrings("/r", v.critical.repo.?);
@@ -402,7 +402,7 @@ test "guard decide: apply_patch as Codex sends it, in `command`" {
     try std.testing.expectEqual(catalog.Group.unreadable, (try decide(a, env(a), Fake{}, junk)).critical.group);
     try std.testing.expectEqual(catalog.Group.unreadable, (try decide(a, env(a), Fake{}, empty)).critical.group);
     // A Bash command written as a patch is still read as Bash.
-    try std.testing.expectEqual(catalog.Group.leaving, (try decide(a, env(a), Fake{}, try bash(a, "*** Begin Patch\ngit push", "/r"))).critical.group);
+    try std.testing.expectEqual(catalog.Group.leaving, (try decide(a, env(a), Fake{}, try bash(a, "*** Begin Patch\ngit push --force", "/r"))).critical.group);
 }
 
 test "guard decide: apply_patch through Bash" {
@@ -518,7 +518,7 @@ test "guard decide: other shell tools and mcp before patch" {
     defer arena.deinit();
     const a = arena.allocator();
     const push =
-        \\{"tool_name":"shell","tool_input":{"command":"git push"},"cwd":"/r"}
+        \\{"tool_name":"shell","tool_input":{"command":"git push --force"},"cwd":"/r"}
     ;
     const ls =
         \\{"tool_name":"shell","tool_input":{"command":"ls"},"cwd":"/r"}
@@ -571,19 +571,19 @@ test "guard decide: the whole tool input goes with the request" {
     ;
     try std.testing.expectEqualStrings("{\"branch\":\"x\",\"repo\":\"o/r\"}", (try decide(a, env(a), Fake{}, m)).critical.tool_input.?);
     // Bash keeps the command as input and sends the tool input too.
-    const b = (try decide(a, env(a), Fake{}, try bash(a, "git push", "/r"))).critical;
-    try std.testing.expectEqualStrings("git push", b.input);
-    try std.testing.expect(std.mem.indexOf(u8, b.tool_input.?, "\"command\":\"git push\"") != null);
+    const b = (try decide(a, env(a), Fake{}, try bash(a, "git push --force", "/r"))).critical;
+    try std.testing.expectEqualStrings("git push --force", b.input);
+    try std.testing.expect(std.mem.indexOf(u8, b.tool_input.?, "\"command\":\"git push --force\"") != null);
     // A reworded description is the same call; a different timeout isn't.
     try std.testing.expect(std.mem.indexOf(u8, b.tool_input.?, "Clean up") == null);
     const t1 =
-        \\{"tool_name":"Bash","tool_input":{"command":"git push","description":"Push","timeout":1000},"cwd":"/r"}
+        \\{"tool_name":"Bash","tool_input":{"command":"git push --force","description":"Push","timeout":1000},"cwd":"/r"}
     ;
     const t2 =
-        \\{"tool_name":"Bash","tool_input":{"command":"git push","description":"Push it now","timeout":1000},"cwd":"/r"}
+        \\{"tool_name":"Bash","tool_input":{"command":"git push --force","description":"Push it now","timeout":1000},"cwd":"/r"}
     ;
     const t3 =
-        \\{"tool_name":"Bash","tool_input":{"command":"git push","description":"Push","timeout":2000},"cwd":"/r"}
+        \\{"tool_name":"Bash","tool_input":{"command":"git push --force","description":"Push","timeout":2000},"cwd":"/r"}
     ;
     const k1 = (try decide(a, env(a), Fake{}, t1)).critical.tool_input.?;
     try std.testing.expectEqualStrings(k1, (try decide(a, env(a), Fake{}, t2)).critical.tool_input.?);

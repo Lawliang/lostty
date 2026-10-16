@@ -144,8 +144,9 @@ prompts:
   committed file goes through: git can restore it.
 - **Throwing work away:** `git reset --hard`, `checkout`/`restore` over
   changes, `rebase`, amending a pushed commit.
-- **Leaving the Mac:** every `git push`, `gh pr/issue create`, publishing
-  a package, scripts you list.
+- **Leaving the Mac:** force pushes, tags, branch deletes on the remote and
+  pushes to protected branches (every push if you set `"push": "all"`),
+  `gh pr/issue create`, publishing a package, scripts you list.
 - **Merging into a protected branch** (`main`, `master`, and ones you add).
 - **Changing the guardrails:** agent settings, hook files, `~/.config/lostty`,
   `~/.ssh`, the Keychain.
@@ -170,17 +171,19 @@ Lostty is back.
 Settings live in `~/.config/lostty/guard.json`:
 
     {
-      "push": "all",
+      "push": "protected",
       "protectedBranches": ["release"],
       "commands": ["deploy.sh"],
       "deletable": ["vendor"],
       "repos": {
-        "/Users/you/projectrepos/app": { "push": "protected" }
+        "/Users/you/projectrepos/app": { "push": "all" }
       }
     }
 
-`"push": "protected"` asks only for force pushes, tags, deletes and pushes
-to protected branches. `deletable` folders (by default `node_modules`,
+By default (`"push": "protected"`) Lostty asks only for force pushes
+(including `+ref`, `--force-with-lease`), tags, deletes on the remote and
+pushes to protected branches. `"push": "all"`, globally or for one repo,
+asks for every `git push`. `deletable` folders (by default `node_modules`,
 `zig-out`, `.zig-cache`, `zig-cache`, `DerivedData`, `.build`, `__pycache__`)
 can be deleted without asking.
 

@@ -815,8 +815,11 @@ test "guard catalog: leaving the Mac and merging" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    try std.testing.expectEqual(@as(?Group, .leaving), try group(a, .{}, "git push"));
-    try std.testing.expectEqual(@as(?Group, .leaving), try group(a, .{}, "git push origin feature"));
+    try std.testing.expectEqual(@as(?Group, null), try group(a, .{}, "git push"));
+    try std.testing.expectEqual(@as(?Group, null), try group(a, .{}, "git push origin feature"));
+    try std.testing.expectEqual(@as(?Group, .leaving), try group(a, .{}, "git push origin main"));
+    try std.testing.expectEqual(@as(?Group, .leaving), try group(a, .{}, "git push --force"));
+    try std.testing.expectEqual(@as(?Group, .leaving), try group(a, .{ .current = "main" }, "git push"));
     try std.testing.expectEqual(@as(?Group, .leaving), try group(a, .{}, "gh pr create --fill"));
     try std.testing.expectEqual(@as(?Group, .leaving), try group(a, .{}, "gh issue create -t x"));
     try std.testing.expectEqual(@as(?Group, null), try group(a, .{}, "gh pr view 12"));
@@ -829,35 +832,44 @@ test "guard catalog: leaving the Mac and merging" {
     try std.testing.expectEqual(@as(?Group, .leaving), try group(a, .{}, "gh pr merge 12"));
 }
 
-test "guard catalog: push relaxed to protected for a repo" {
+test "guard catalog: push set to all asks for every push" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
     const ctx: Ctx = .{ .alloc = a, .cwd = "/r", .home = "/Users/me", .tmpdir = null, .config = config.Config.parse(a,
-        \\{"repos":{"/r":{"push":"protected"}}}
+        \\{"repos":{"/r":{"push":"all"}}}
+    ) };
+    const global: Ctx = .{ .alloc = a, .cwd = "/r", .home = "/Users/me", .tmpdir = null, .config = config.Config.parse(a,
+        \\{"push":"all"}
     ) };
     const p = Fake{ .current = "feature" };
+    for ([_]Ctx{ ctx, global }) |c| {
+        for ([_][]const u8{ "git push", "git push -u origin feature", "git push origin main", "git push --force" }) |src| {
+            const cmds = try shell.parse(a, src, "/Users/me");
+            try std.testing.expect((try classify(c, p, cmds[0])) != null);
+        }
+    }
+    // The default asks only for force, tags and protected branches.
     const run = struct {
-        fn f(c: Ctx, probe: Fake, src: []const u8) !?Finding {
-            const cmds = try shell.parse(c.alloc, src, "/Users/me");
-            return classify(c, probe, cmds[0]);
+        fn f(al: Allocator, probe: Fake, src: []const u8) !?Finding {
+            return check(al, probe, "/r", src);
         }
     }.f;
-    try std.testing.expect((try run(ctx, p, "git push")) == null);
-    try std.testing.expect((try run(ctx, p, "git push -u origin feature")) == null);
-    try std.testing.expect((try run(ctx, p, "git push origin main")) != null);
-    try std.testing.expect((try run(ctx, p, "git push --force")) != null);
-    try std.testing.expect((try run(ctx, p, "git push --tags")) != null);
-    try std.testing.expect((try run(ctx, .{ .current = "main" }, "git push")) != null);
+    try std.testing.expect((try run(a, p, "git push")) == null);
+    try std.testing.expect((try run(a, p, "git push -u origin feature")) == null);
+    try std.testing.expect((try run(a, p, "git push origin main")) != null);
+    try std.testing.expect((try run(a, p, "git push --force")) != null);
+    try std.testing.expect((try run(a, p, "git push --tags")) != null);
+    try std.testing.expect((try run(a, .{ .current = "main" }, "git push")) != null);
 }
 
 test "guard catalog: wrappers, shells and unreadable commands" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    try std.testing.expectEqual(@as(?Group, .leaving), try group(a, .{}, "sudo env FOO=1 nohup git push"));
-    try std.testing.expectEqual(@as(?Group, .leaving), try group(a, .{}, "timeout 30 git push"));
-    try std.testing.expectEqual(@as(?Group, .leaving), try group(a, .{}, "bash -c 'git status && git push'"));
+    try std.testing.expectEqual(@as(?Group, .leaving), try group(a, .{}, "sudo env FOO=1 nohup git push --force"));
+    try std.testing.expectEqual(@as(?Group, .leaving), try group(a, .{}, "timeout 30 git push --force"));
+    try std.testing.expectEqual(@as(?Group, .leaving), try group(a, .{}, "bash -c 'git status && git push --force'"));
     try std.testing.expectEqual(@as(?Group, .unreadable), try group(a, .{}, "eval \"$CMD\""));
     try std.testing.expectEqual(@as(?Group, .unreadable), try group(a, .{}, "$TOOL --go"));
     try std.testing.expectEqual(@as(?Group, .deleting), try group(a, .{}, "docker volume rm data"));
@@ -942,9 +954,9 @@ test "guard catalog: wrapper flags don't hide the command" {
     defer arena.deinit();
     const a = arena.allocator();
     for ([_][]const u8{
-        "sudo -u root git push",       "sudo -E git push",     "sudo -n git push",
-        "env -u FOO git push",         "env -C /tmp git push", "env -S 'git push'",
-        "timeout -s KILL 30 git push", "command -p git push",  "nice -n 5 git push",
+        "sudo -u root git push --force",       "sudo -E git push --force",     "sudo -n git push --force",
+        "env -u FOO git push --force",         "env -C /tmp git push --force", "env -S 'git push --force'",
+        "timeout -s KILL 30 git push --force", "command -p git push --force",  "nice -n 5 git push --force",
     }) |src| {
         if ((try group(a, .{}, src)) != .leaving) {
             std.debug.print("missed: {s}\n", .{src});
@@ -983,7 +995,7 @@ test "guard catalog: rsync, git aliases and find -exec" {
     try std.testing.expectEqual(@as(?Group, null), try group(a, .{}, "git -c color.ui=never status"));
     try std.testing.expectEqual(@as(?Group, .deleting), try group(a, .{}, "find . -name '*.o' -exec rm {} ';'"));
     try std.testing.expectEqual(@as(?Group, .deleting), try group(a, .{}, "find . -exec sh -c 'rm {}' ';'"));
-    try std.testing.expectEqual(@as(?Group, .leaving), try group(a, .{}, "find . -exec git push ';'"));
+    try std.testing.expectEqual(@as(?Group, .leaving), try group(a, .{}, "find . -exec git push --force ';'"));
     try std.testing.expectEqual(@as(?Group, null), try group(a, .{}, "find . -name x -exec grep y {} +"));
 }
 
@@ -1039,12 +1051,12 @@ test "guard catalog: combined shell flags still read the command string" {
     const a = arena.allocator();
     try std.testing.expectEqual(@as(?Group, .deleting), try group(a, .{}, "bash -lc 'rm -rf ~/Documents'"));
     try std.testing.expectEqual(@as(?Group, .deleting), try group(a, .{}, "sh -ec 'rm -rf ~/Documents'"));
-    try std.testing.expectEqual(@as(?Group, .leaving), try group(a, .{}, "zsh -lc 'git push'"));
-    try std.testing.expectEqual(@as(?Group, .leaving), try group(a, .{}, "bash -c 'git push'"));
-    try std.testing.expectEqual(@as(?Group, .leaving), try group(a, .{}, "bash -l -c 'git push'"));
-    try std.testing.expectEqual(@as(?Group, .leaving), try group(a, .{}, "bash --login -c 'git push'"));
-    try std.testing.expectEqual(@as(?Group, .leaving), try group(a, .{}, "bash -o pipefail -c 'git push'"));
-    try std.testing.expectEqual(@as(?Group, .leaving), try group(a, .{}, "/bin/bash -xc 'git push'"));
+    try std.testing.expectEqual(@as(?Group, .leaving), try group(a, .{}, "zsh -lc 'git push --force'"));
+    try std.testing.expectEqual(@as(?Group, .leaving), try group(a, .{}, "bash -c 'git push --force'"));
+    try std.testing.expectEqual(@as(?Group, .leaving), try group(a, .{}, "bash -l -c 'git push --force'"));
+    try std.testing.expectEqual(@as(?Group, .leaving), try group(a, .{}, "bash --login -c 'git push --force'"));
+    try std.testing.expectEqual(@as(?Group, .leaving), try group(a, .{}, "bash -o pipefail -c 'git push --force'"));
+    try std.testing.expectEqual(@as(?Group, .leaving), try group(a, .{}, "/bin/bash -xc 'git push --force'"));
     try std.testing.expectEqual(@as(?Group, .unreadable), try group(a, .{}, "bash -lc"));
     try std.testing.expectEqual(@as(?Group, .unreadable), try group(a, .{}, "bash -lc \"$CMD\""));
     try std.testing.expectEqual(@as(?Group, .unreadable), try group(a, .{}, "bash $OPTS -c 'git push'"));

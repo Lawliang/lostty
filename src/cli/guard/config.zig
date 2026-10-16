@@ -44,7 +44,7 @@ pub const Config = struct {
     }
 
     pub fn forRepo(self: Config, alloc: Allocator, repo: ?[]const u8) Allocator.Error!Effective {
-        var push: Push = .all;
+        var push: Push = .protected;
         var protected: std.ArrayList([]const u8) = .empty;
         var commands: std.ArrayList([]const u8) = .empty;
         var deletable: std.ArrayList([]const u8) = .empty;
@@ -117,7 +117,7 @@ test "guard config: defaults" {
     defer arena.deinit();
     const a = arena.allocator();
     const e = try Config.parse(a, "").forRepo(a, "/r");
-    try std.testing.expectEqual(Push.all, e.push);
+    try std.testing.expectEqual(Push.protected, e.push);
     try std.testing.expect(contains(e.protected_branches, "main"));
     try std.testing.expect(contains(e.protected_branches, "master"));
     try std.testing.expect(contains(e.commands, "ship-phone.sh"));
@@ -125,23 +125,23 @@ test "guard config: defaults" {
     try std.testing.expect(!contains(e.deletable, "build"));
 }
 
-test "guard config: a repo adds to the global lists and can relax push" {
+test "guard config: a repo adds to the global lists and can widen push" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
     const cfg = Config.parse(a,
         \\{"protectedBranches":["release"],"commands":["deploy.sh"],
-        \\ "repos":{"/r":{"push":"protected","protectedBranches":["skins"],"deletable":["build"]}}}
+        \\ "repos":{"/r":{"push":"all","protectedBranches":["skins"],"deletable":["build"]}}}
     );
     const r = try cfg.forRepo(a, "/r");
-    try std.testing.expectEqual(Push.protected, r.push);
+    try std.testing.expectEqual(Push.all, r.push);
     try std.testing.expect(contains(r.protected_branches, "main"));
     try std.testing.expect(contains(r.protected_branches, "release"));
     try std.testing.expect(contains(r.protected_branches, "skins"));
     try std.testing.expect(contains(r.commands, "deploy.sh"));
     try std.testing.expect(contains(r.deletable, "build"));
     const other = try cfg.forRepo(a, "/other");
-    try std.testing.expectEqual(Push.all, other.push);
+    try std.testing.expectEqual(Push.protected, other.push);
     try std.testing.expect(!contains(other.deletable, "build"));
 }
 
@@ -150,7 +150,7 @@ test "guard config: a broken file falls back to defaults" {
     defer arena.deinit();
     const a = arena.allocator();
     const e = try Config.parse(a, "{ not json").forRepo(a, null);
-    try std.testing.expectEqual(Push.all, e.push);
+    try std.testing.expectEqual(Push.protected, e.push);
     try std.testing.expect(contains(e.protected_branches, "main"));
 }
 
@@ -160,9 +160,9 @@ test "guard config: repo keys match however the path is written" {
     const a = arena.allocator();
     // Trailing slashes, on either side.
     const slash = Config.parse(a,
-        \\{"repos":{"/r/":{"push":"protected","commands":["deploy.sh"]}}}
+        \\{"repos":{"/r/":{"push":"all","commands":["deploy.sh"]}}}
     );
-    try std.testing.expectEqual(Push.protected, (try slash.forRepo(a, "/r")).push);
+    try std.testing.expectEqual(Push.all, (try slash.forRepo(a, "/r")).push);
     try std.testing.expect(contains((try slash.forRepo(a, "/r//")).commands, "deploy.sh"));
     // A symlinked key finds the real repo, and the other way round.
     var tmp = std.testing.tmpDir(.{});
@@ -172,9 +172,9 @@ test "guard config: repo keys match however the path is written" {
     const base = try tmp.dir.realpathAlloc(a, ".");
     const real = try std.fs.path.join(a, &.{ base, "real" });
     const link = try std.fs.path.join(a, &.{ base, "link" });
-    const by_link = Config.parse(a, try std.fmt.allocPrint(a, "{{\"repos\":{{\"{s}/\":{{\"push\":\"protected\"}}}}}}", .{link}));
-    try std.testing.expectEqual(Push.protected, (try by_link.forRepo(a, real)).push);
-    const by_real = Config.parse(a, try std.fmt.allocPrint(a, "{{\"repos\":{{\"{s}\":{{\"push\":\"protected\"}}}}}}", .{real}));
-    try std.testing.expectEqual(Push.protected, (try by_real.forRepo(a, link)).push);
-    try std.testing.expectEqual(Push.all, (try by_real.forRepo(a, base)).push);
+    const by_link = Config.parse(a, try std.fmt.allocPrint(a, "{{\"repos\":{{\"{s}/\":{{\"push\":\"all\"}}}}}}", .{link}));
+    try std.testing.expectEqual(Push.all, (try by_link.forRepo(a, real)).push);
+    const by_real = Config.parse(a, try std.fmt.allocPrint(a, "{{\"repos\":{{\"{s}\":{{\"push\":\"all\"}}}}}}", .{real}));
+    try std.testing.expectEqual(Push.all, (try by_real.forRepo(a, link)).push);
+    try std.testing.expectEqual(Push.protected, (try by_real.forRepo(a, base)).push);
 }
