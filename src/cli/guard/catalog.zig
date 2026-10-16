@@ -122,10 +122,11 @@ pub fn classify(ctx: Ctx, probe: anytype, cmd: shell.Command) Error!?Finding {
     // Writes first: a redirect to a guardrail or outside is critical
     // whatever the command.
     for (cmd.writes) |w| if (try write(ctx, probe, w)) |f| return f;
-    return command(ctx, probe, cmd.argv);
+    return command(ctx, probe, cmd.argv, cmd.stdin);
 }
 
-fn command(ctx: Ctx, probe: anytype, argv_in: []const shell.Word) Error!?Finding {
+/// `stdin` is the command's heredoc body, if it has one.
+fn command(ctx: Ctx, probe: anytype, argv_in: []const shell.Word, stdin: ?shell.Word) Error!?Finding {
     var argv = argv_in;
     if (argv.len == 0) return null;
     // Unwrap commands that run another one.
@@ -176,26 +177,34 @@ fn command(ctx: Ctx, probe: anytype, argv_in: []const shell.Word) Error!?Finding
     if (listed(eff.commands, argv[0].text)) {
         return .{ .group = .leaving, .why = try std.fmt.allocPrint(ctx.alloc, "{s} is on your list of critical commands", .{name}) };
     }
-    // A listed script run through a shell: `bash ship.sh`, `source ship.sh`.
-    if (eq(name, "sh") or eq(name, "bash") or eq(name, "zsh") or eq(name, "dash") or eq(name, "source") or eq(name, ".")) {
-        var is_c = false;
-        for (args) |w| if (!w.dynamic and eq(w.text, "-c")) {
-            is_c = true;
-        };
-        if (!is_c) {
-            const ops = try operands(ctx.alloc, args);
-            if (ops.len > 0 and !ops[0].dynamic and listed(eff.commands, ops[0].text)) {
-                return .{ .group = .leaving, .why = try std.fmt.allocPrint(ctx.alloc, "{s} is on your list of critical commands", .{base(ops[0].text)}) };
-            }
-        }
+    // Codex's patch tool run from the shell: its patch is the argument or
+    // the heredoc on its stdin.
+    if (isPatchTool(name)) {
+        const text: ?shell.Word = if (args.len > 0) args[0] else stdin;
+        if (text) |t| if (!t.dynamic and isPatch(t.text)) return patch(ctx, probe, t.text);
+        return finding(.unreadable, "applies a patch Lostty can't read");
     }
 
-    if (eq(name, "sh") or eq(name, "bash") or eq(name, "zsh") or eq(name, "dash")) {
-        for (args, 0..) |w, i| if (!w.dynamic and eq(w.text, "-c")) {
-            if (i + 1 >= args.len or args[i + 1].dynamic) return finding(.unreadable, "runs a shell string Lostty can't read");
-            return inner(ctx, probe, args[i + 1].text);
-        };
+    const is_shell = eq(name, "sh") or eq(name, "bash") or eq(name, "zsh") or eq(name, "dash");
+    if (is_shell) {
+        const sa = shellArgs(args);
+        if (sa.unknown) return finding(.unreadable, "runs a shell with options Lostty can't read");
+        if (sa.c) {
+            if (sa.operand >= args.len or args[sa.operand].dynamic) return finding(.unreadable, "runs a shell string Lostty can't read");
+            return inner(ctx, probe, args[sa.operand].text);
+        }
+        // A listed script run through a shell: `bash ship.sh`.
+        if (sa.operand < args.len and !args[sa.operand].dynamic and listed(eff.commands, args[sa.operand].text)) {
+            return .{ .group = .leaving, .why = try std.fmt.allocPrint(ctx.alloc, "{s} is on your list of critical commands", .{base(args[sa.operand].text)}) };
+        }
         return null;
+    }
+    // `source ship.sh`, `. ship.sh`.
+    if (eq(name, "source") or eq(name, ".")) {
+        const ops = try operands(ctx.alloc, args);
+        if (ops.len > 0 and !ops[0].dynamic and listed(eff.commands, ops[0].text)) {
+            return .{ .group = .leaving, .why = try std.fmt.allocPrint(ctx.alloc, "{s} is on your list of critical commands", .{base(ops[0].text)}) };
+        }
     }
     if (eq(name, "eval")) {
         var parts: std.ArrayList([]const u8) = .empty;
@@ -214,7 +223,7 @@ fn command(ctx: Ctx, probe: anytype, argv_in: []const shell.Word) Error!?Finding
         if (i >= args.len) return null;
         const inner_name = base(args[i].text);
         if (isRemover(inner_name)) return finding(.deleting, "xargs deletes paths it reads from its input, which Lostty can't see");
-        return command(ctx, probe, args[i..]);
+        return command(ctx, probe, args[i..], null);
     }
 
     if (isRemover(name)) return deletion(ctx, probe, try operands(ctx.alloc, args));
@@ -247,7 +256,7 @@ fn command(ctx: Ctx, probe: anytype, argv_in: []const shell.Word) Error!?Finding
                     try sub.append(ctx.alloc, .{ .text = t, .dynamic = false });
                 }
             }
-            if (try command(ctx, probe, sub.items)) |f| return f;
+            if (try command(ctx, probe, sub.items, null)) |f| return f;
         };
         return null;
     }
@@ -298,6 +307,84 @@ fn command(ctx: Ctx, probe: anytype, argv_in: []const shell.Word) Error!?Finding
         for (args) |w| if (!w.dynamic and std.mem.startsWith(u8, w.text, "of=")) {
             return write(ctx, probe, .{ .text = w.text[3..], .dynamic = false });
         };
+    }
+    return null;
+}
+
+const ShellArgs = struct {
+    /// Any short-flag word holds `c` (`-c`, `-lc`, `-ec`): the first
+    /// operand is a command string.
+    c: bool,
+    /// Index of the first operand: the command string, or the script.
+    operand: usize,
+    /// A variable sits where options go and a `-c` may follow it.
+    unknown: bool = false,
+};
+
+/// Reads `sh`/`bash`/`zsh`/`dash` options the way they do: short flags
+/// may be bundled (`-lc`), each `o`/`O` in a bundle takes the next word
+/// (`-o pipefail`), `+` turns a flag off, and `--rcfile`/`--init-file`
+/// take a value. A variable ends the options.
+fn shellArgs(args: []const shell.Word) ShellArgs {
+    var c = false;
+    var i: usize = 0;
+    while (i < args.len) {
+        const w = args[i];
+        if (w.dynamic) {
+            // `bash $OPTS -c '…'`: the variable may be options.
+            for (args[i + 1 ..]) |x| if (!x.dynamic and x.text.len > 1 and x.text[0] == '-' and x.text[1] != '-' and
+                std.mem.indexOfScalar(u8, x.text[1..], 'c') != null) return .{ .c = c, .operand = i, .unknown = true };
+            break;
+        }
+        const t = w.text;
+        if (eq(t, "--") or eq(t, "-")) {
+            i += 1;
+            break;
+        }
+        if (std.mem.startsWith(u8, t, "--")) {
+            i += if (eq(t, "--rcfile") or eq(t, "--init-file")) 2 else 1;
+            continue;
+        }
+        if (t.len < 2 or (t[0] != '-' and t[0] != '+')) break;
+        if (t[0] == '-' and std.mem.indexOfScalar(u8, t[1..], 'c') != null) c = true;
+        var values: usize = 0;
+        for (t[1..]) |ch| if (ch == 'o' or ch == 'O') {
+            values += 1;
+        };
+        i += 1 + values;
+    }
+    return .{ .c = c, .operand = i };
+}
+
+fn isPatchTool(name: []const u8) bool {
+    return eq(name, "apply_patch") or eq(name, "applypatch");
+}
+
+const begin_patch = "*** Begin Patch";
+
+/// Text a patch tool reads as a patch: a `*** Begin Patch` line somewhere
+/// (Codex tolerates a heredoc wrapper around it).
+pub fn isPatch(text: []const u8) bool {
+    var it = std.mem.splitScalar(u8, text, '\n');
+    while (it.next()) |line| if (eq(std.mem.trim(u8, line, " \t\r"), begin_patch)) return true;
+    return false;
+}
+
+/// A Codex patch: adds, updates and moves are writes, deletes are
+/// deletions. Lines are trimmed, as Codex reads them.
+pub fn patch(ctx: Ctx, probe: anytype, text: []const u8) Error!?Finding {
+    var it = std.mem.splitScalar(u8, text, '\n');
+    while (it.next()) |raw| {
+        const line = std.mem.trim(u8, raw, " \t\r");
+        const writes = [_][]const u8{ "*** Add File:", "*** Update File:", "*** Move to:" };
+        for (writes) |p| if (std.mem.startsWith(u8, line, p)) {
+            if (try write(ctx, probe, .{ .text = std.mem.trim(u8, line[p.len..], " \t"), .dynamic = false })) |f| return f;
+        };
+        const del = "*** Delete File:";
+        if (std.mem.startsWith(u8, line, del)) {
+            const w = [_]shell.Word{.{ .text = std.mem.trim(u8, line[del.len..], " \t"), .dynamic = false }};
+            if (try deletion(ctx, probe, &w)) |f| return f;
+        }
     }
     return null;
 }
@@ -944,4 +1031,41 @@ test "guard catalog: a find from a variable folder stays unknown" {
         }
     }
     try std.testing.expectEqual(@as(?Group, null), try group(a, .{}, "find . -exec chmod +x {} ';'"));
+}
+
+test "guard catalog: combined shell flags still read the command string" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    try std.testing.expectEqual(@as(?Group, .deleting), try group(a, .{}, "bash -lc 'rm -rf ~/Documents'"));
+    try std.testing.expectEqual(@as(?Group, .deleting), try group(a, .{}, "sh -ec 'rm -rf ~/Documents'"));
+    try std.testing.expectEqual(@as(?Group, .leaving), try group(a, .{}, "zsh -lc 'git push'"));
+    try std.testing.expectEqual(@as(?Group, .leaving), try group(a, .{}, "bash -c 'git push'"));
+    try std.testing.expectEqual(@as(?Group, .leaving), try group(a, .{}, "bash -l -c 'git push'"));
+    try std.testing.expectEqual(@as(?Group, .leaving), try group(a, .{}, "bash --login -c 'git push'"));
+    try std.testing.expectEqual(@as(?Group, .leaving), try group(a, .{}, "bash -o pipefail -c 'git push'"));
+    try std.testing.expectEqual(@as(?Group, .leaving), try group(a, .{}, "/bin/bash -xc 'git push'"));
+    try std.testing.expectEqual(@as(?Group, .unreadable), try group(a, .{}, "bash -lc"));
+    try std.testing.expectEqual(@as(?Group, .unreadable), try group(a, .{}, "bash -lc \"$CMD\""));
+    try std.testing.expectEqual(@as(?Group, .unreadable), try group(a, .{}, "bash $OPTS -c 'git push'"));
+    try std.testing.expectEqual(@as(?Group, null), try group(a, .{}, "bash -lc 'git status'"));
+    // After the script, `-c` is the script's own argument.
+    try std.testing.expectEqual(@as(?Group, null), try group(a, .{}, "bash build.sh -c x"));
+}
+
+test "guard catalog: apply_patch run from the shell" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const del = "apply_patch <<'EOF'\n*** Begin Patch\n*** Delete File: notes.md\n*** End Patch\nEOF";
+    try std.testing.expectEqual(@as(?Group, .deleting), try group(a, .{ .dirty = &.{"notes.md"} }, del));
+    try std.testing.expectEqual(@as(?Group, null), try group(a, .{}, del));
+    try std.testing.expectEqual(@as(?Group, .outside), try group(a, .{}, "applypatch <<'EOF'\n*** Begin Patch\n*** Add File: ../x.txt\n+hi\n*** End Patch\nEOF"));
+    try std.testing.expectEqual(@as(?Group, .guardrails), try group(a, .{}, "apply_patch '*** Begin Patch\n*** Update File: /Users/me/.claude/settings.json\n*** End Patch'"));
+    try std.testing.expectEqual(@as(?Group, null), try group(a, .{}, "apply_patch '*** Begin Patch\n*** Update File: src/a.zig\n*** End Patch'"));
+    // A patch Lostty can't see: none, from a pipe, or expanded by the shell.
+    try std.testing.expectEqual(@as(?Group, .unreadable), try group(a, .{}, "apply_patch"));
+    try std.testing.expectEqual(@as(?Group, .unreadable), try group(a, .{}, "cat p.diff | apply_patch"));
+    try std.testing.expectEqual(@as(?Group, .unreadable), try group(a, .{}, "apply_patch <<EOF\n*** Begin Patch\n*** Add File: $HOME/x\n*** End Patch\nEOF"));
+    try std.testing.expectEqual(@as(?Group, .unreadable), try group(a, .{}, "apply_patch \"$P\""));
 }

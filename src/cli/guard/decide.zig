@@ -45,18 +45,25 @@ pub fn decide(alloc: Allocator, e: Env, probe: anytype, input_json: []const u8) 
     var input: []const u8 = "";
     var found: ?catalog.Finding = null;
     const is_mcp = std.mem.startsWith(u8, tool, "mcp__");
+    const is_bash = std.mem.eql(u8, tool, "Bash");
+    const is_patch_tool = std.mem.eql(u8, tool, "apply_patch") or std.mem.eql(u8, tool, "applypatch");
     if (isFileTool(tool)) {
         input = str(ti, "file_path") orelse str(ti, "notebook_path") orelse return unreadable(tool, input_json, cwd);
         found = try catalog.write(ctx, probe, .{ .text = input, .dynamic = false });
-    } else if (std.mem.eql(u8, tool, "Bash") or (!is_mcp and str(ti, "command") != null)) {
-        input = str(ti, "command") orelse return unreadable(tool, input_json, cwd);
-        found = try bashFinding(ctx, probe, input);
     } else if (is_mcp and mcpLooksCritical(alloc, tool)) {
         input = tool;
         found = .{ .group = .leaving, .why = "an MCP tool named like it deletes, publishes or merges" };
-    } else if (patchText(ti)) |patch| {
+    } else if (if (is_bash) null else patchText(ti, is_patch_tool)) |patch| {
+        // Before the `command` branch: Codex sends its patch as `command`.
         input = patch;
-        found = try patchFinding(ctx, probe, patch);
+        found = try catalog.patch(ctx, probe, patch);
+    } else if (is_patch_tool) {
+        input = "";
+        found = .{ .group = .unreadable, .why = "a patch Lostty can't read" };
+    } else if (is_bash or (!is_mcp and ti == .object and ti.object.get("command") != null)) {
+        // A `command` that isn't a string (an argv array, say) can't be read.
+        input = str(ti, "command") orelse return unreadable(tool, input_json, cwd);
+        found = try bashFinding(ctx, probe, input);
     } else if (is_mcp) {
         input = tool;
     }
@@ -146,28 +153,20 @@ fn cdTarget(argv: []const shell.Word) ?CdTarget {
     return .{ .dir = argv[i].text };
 }
 
-/// A Codex patch: the tool_input string that starts with "*** Begin Patch".
-fn patchText(ti: std.json.Value) ?[]const u8 {
-    if (ti == .string and std.mem.startsWith(u8, ti.string, "*** Begin Patch")) return ti.string;
+/// A Codex patch: a tool_input string (or any string field, `command`
+/// included) that starts with "*** Begin Patch". For apply_patch itself,
+/// any field holding a patch line counts (Codex tolerates a wrapper).
+fn patchText(ti: std.json.Value, patch_tool: bool) ?[]const u8 {
+    const ok = struct {
+        fn f(s: []const u8, lenient: bool) bool {
+            if (std.mem.startsWith(u8, std.mem.trimLeft(u8, s, " \t\r\n"), "*** Begin Patch")) return true;
+            return lenient and catalog.isPatch(s);
+        }
+    }.f;
+    if (ti == .string and ok(ti.string, patch_tool)) return ti.string;
     if (ti != .object) return null;
     var it = ti.object.iterator();
-    while (it.next()) |e| if (e.value_ptr.* == .string and std.mem.startsWith(u8, e.value_ptr.string, "*** Begin Patch")) return e.value_ptr.string;
-    return null;
-}
-
-fn patchFinding(ctx: catalog.Ctx, probe: anytype, patch: []const u8) Allocator.Error!?catalog.Finding {
-    var it = std.mem.splitScalar(u8, patch, '\n');
-    while (it.next()) |line| {
-        const writes = [_][]const u8{ "*** Add File: ", "*** Update File: ", "*** Move to: " };
-        for (writes) |p| if (std.mem.startsWith(u8, line, p)) {
-            if (try catalog.write(ctx, probe, .{ .text = std.mem.trim(u8, line[p.len..], " "), .dynamic = false })) |f| return f;
-        };
-        const del = "*** Delete File: ";
-        if (std.mem.startsWith(u8, line, del)) {
-            const w = [_]shell.Word{.{ .text = std.mem.trim(u8, line[del.len..], " "), .dynamic = false }};
-            if (try catalog.deletion(ctx, probe, &w)) |f| return f;
-        }
-    }
+    while (it.next()) |e| if (e.value_ptr.* == .string and ok(e.value_ptr.string, patch_tool)) return e.value_ptr.string;
     return null;
 }
 
@@ -291,7 +290,67 @@ test "guard decide: file tools" {
     try std.testing.expectEqualStrings("/Users/me/notes.md", (try decide(a, env(a), Fake{}, outside)).critical.input);
 }
 
-test "guard decide: apply_patch adds, moves and deletes" {
+test "guard decide: apply_patch as Codex sends it, in `command`" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const ok =
+        \\{"tool_name":"apply_patch","tool_input":{"command":"*** Begin Patch\n*** Update File: src/a.zig\n@@\n-x\n+y\n*** End Patch\n"},"cwd":"/r"}
+    ;
+    const del =
+        \\{"tool_name":"apply_patch","tool_input":{"command":"*** Begin Patch\n*** Delete File: notes.md\n*** End Patch\n"},"cwd":"/r"}
+    ;
+    const away =
+        \\{"tool_name":"apply_patch","tool_input":{"command":"*** Begin Patch\n*** Add File: /Users/me/x.txt\n+hi\n*** End Patch\n"},"cwd":"/r"}
+    ;
+    const guardrail =
+        \\{"tool_name":"apply_patch","tool_input":{"command":"*** Begin Patch\n*** Update File: /Users/me/.codex/hooks.json\n@@\n-a\n+b\n*** End Patch\n"},"cwd":"/r"}
+    ;
+    const wrapped =
+        \\{"tool_name":"apply_patch","tool_input":{"command":"<<'EOF'\n*** Begin Patch\n*** Add File: ../x.txt\n+hi\n*** End Patch\nEOF\n"},"cwd":"/r"}
+    ;
+    const junk =
+        \\{"tool_name":"apply_patch","tool_input":{"command":"rm -rf x"},"cwd":"/r"}
+    ;
+    const empty =
+        \\{"tool_name":"applypatch","tool_input":{},"cwd":"/r"}
+    ;
+    try std.testing.expect(try decide(a, env(a), Fake{}, ok) == .harmless);
+    try std.testing.expectEqual(catalog.Group.deleting, (try decide(a, env(a), Fake{ .dirty = &.{"notes.md"} }, del)).critical.group);
+    try std.testing.expect(try decide(a, env(a), Fake{}, del) == .harmless);
+    try std.testing.expectEqual(catalog.Group.outside, (try decide(a, env(a), Fake{}, away)).critical.group);
+    try std.testing.expectEqual(catalog.Group.guardrails, (try decide(a, env(a), Fake{}, guardrail)).critical.group);
+    try std.testing.expectEqual(catalog.Group.outside, (try decide(a, env(a), Fake{}, wrapped)).critical.group);
+    try std.testing.expectEqual(catalog.Group.unreadable, (try decide(a, env(a), Fake{}, junk)).critical.group);
+    try std.testing.expectEqual(catalog.Group.unreadable, (try decide(a, env(a), Fake{}, empty)).critical.group);
+    // A Bash command written as a patch is still read as Bash.
+    try std.testing.expectEqual(catalog.Group.leaving, (try decide(a, env(a), Fake{}, try bash(a, "*** Begin Patch\ngit push", "/r"))).critical.group);
+}
+
+test "guard decide: apply_patch through Bash" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const cmd = "apply_patch <<'EOF'\n*** Begin Patch\n*** Add File: /Users/me/x.txt\n+hi\n*** End Patch\nEOF\n";
+    try std.testing.expectEqual(catalog.Group.outside, (try decide(a, env(a), Fake{}, try bash(a, cmd, "/r"))).critical.group);
+    try std.testing.expect(try decide(a, env(a), Fake{}, try bash(a, "cd src && apply_patch <<'EOF'\n*** Begin Patch\n*** Add File: x.txt\n+hi\n*** End Patch\nEOF", "/r")) == .harmless);
+}
+
+test "guard decide: a command that isn't a string can't be read" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const arr =
+        \\{"tool_name":"shell","tool_input":{"command":["bash","-lc","rm -rf ~"]},"cwd":"/r"}
+    ;
+    const num =
+        \\{"tool_name":"Bash","tool_input":{"command":42},"cwd":"/r"}
+    ;
+    try std.testing.expectEqual(catalog.Group.unreadable, (try decide(a, env(a), Fake{}, arr)).critical.group);
+    try std.testing.expectEqual(catalog.Group.unreadable, (try decide(a, env(a), Fake{}, num)).critical.group);
+}
+
+test "guard decide: apply_patch in the older `input` shape" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();

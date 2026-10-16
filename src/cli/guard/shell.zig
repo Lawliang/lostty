@@ -23,6 +23,9 @@ pub const Command = struct {
     writes: []const Word,
     /// How many `( )` subshells it's inside.
     depth: u8,
+    /// The body of its last heredoc (`cmd <<'EOF' … EOF`), tabs stripped
+    /// for `<<-`. Dynamic when the shell would expand it.
+    stdin: ?Word = null,
 };
 
 pub const Error = error{Unparseable} || Allocator.Error;
@@ -60,7 +63,15 @@ fn isAssignmentAt(src: []const u8, i: usize) bool {
     return false;
 }
 
-const Heredoc = struct { delim: []const u8, strip_tabs: bool, quoted: bool };
+const Heredoc = struct {
+    delim: []const u8,
+    strip_tabs: bool,
+    quoted: bool,
+    /// Set when the command it belongs to ends: its index in `out`, or
+    /// none when that command was empty.
+    owner: ?usize = null,
+    claimed: bool = false,
+};
 
 /// `text` holds a command substitution (`$(`) or a backtick.
 fn hasSubstitution(text: []const u8) bool {
@@ -271,12 +282,17 @@ const Lexer = struct {
             self.argv = .empty;
             self.writes = .empty;
         }
-        if (self.argv.items.len == 0 and self.writes.items.len == 0) return;
-        try self.out.append(self.alloc, .{
+        const empty = self.argv.items.len == 0 and self.writes.items.len == 0;
+        if (!empty) try self.out.append(self.alloc, .{
             .argv = try self.argv.toOwnedSlice(self.alloc),
             .writes = try self.writes.toOwnedSlice(self.alloc),
             .depth = self.depth,
         });
+        // Heredocs opened by this command belong to it.
+        for (self.heredocs.items) |*h| if (!h.claimed) {
+            h.claimed = true;
+            h.owner = if (empty) null else self.out.items.len - 1;
+        };
     }
 
     /// After a newline, skips the bodies of heredocs opened on that line.
@@ -291,13 +307,31 @@ const Lexer = struct {
                 if (h.strip_tabs) line = std.mem.trimLeft(u8, line, "\t");
                 self.i = @min(eol + 1, self.src.len);
                 if (std.mem.eql(u8, line, h.delim)) {
+                    const raw = self.src[body_start..line_start];
                     // An unquoted delimiter means the shell expands the body.
-                    if (!h.quoted) try self.scanBody(self.src[body_start..line_start]);
+                    if (!h.quoted) try self.scanBody(raw);
+                    if (h.owner) |o| self.out.items[o].stdin = try self.heredocBody(raw, h);
                     break;
                 }
             }
         }
         self.heredocs.clearRetainingCapacity();
+    }
+
+    /// What a heredoc feeds its command: the body as written (less leading
+    /// tabs for `<<-`), or dynamic when the shell would expand it.
+    fn heredocBody(self: *Lexer, raw: []const u8, h: Heredoc) Error!Word {
+        if (!h.quoted and std.mem.indexOfAny(u8, raw, "$`\\") != null) return .{ .text = "", .dynamic = true };
+        if (!h.strip_tabs) return .{ .text = raw, .dynamic = false };
+        var buf: std.ArrayList(u8) = .empty;
+        var it = std.mem.splitScalar(u8, raw, '\n');
+        var first = true;
+        while (it.next()) |line| {
+            if (!first) try buf.append(self.alloc, '\n');
+            first = false;
+            try buf.appendSlice(self.alloc, std.mem.trimLeft(u8, line, "\t"));
+        }
+        return .{ .text = try buf.toOwnedSlice(self.alloc), .dynamic = false };
     }
 
     /// Finds the `$( )` and backtick substitutions in an expanding heredoc
@@ -407,7 +441,7 @@ const Lexer = struct {
     fn nested(self: *Lexer, inner: []const u8) Error!void {
         if (self.level >= max_level) return error.Unparseable;
         const cmds = try parseAt(self.alloc, inner, self.home, self.level + 1);
-        for (cmds) |c| try self.out.append(self.alloc, .{ .argv = c.argv, .writes = c.writes, .depth = c.depth +| self.depth });
+        for (cmds) |c| try self.out.append(self.alloc, .{ .argv = c.argv, .writes = c.writes, .depth = c.depth +| self.depth, .stdin = c.stdin });
     }
 
     /// One word, with quote removal. Stops at whitespace or an operator.
@@ -828,4 +862,22 @@ test "guard shell: a for header never swallows later commands" {
     // No `do` at all: the next command is still seen.
     const none = try parseOk(&arena, "for x in a; rm -rf /");
     try std.testing.expect(hasCommand(none, "rm"));
+}
+
+test "guard shell: a heredoc body is its command's stdin" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const q = try parseOk(&arena, "apply_patch <<'EOF'\n*** Begin Patch\n*** Delete File: x\n*** End Patch\nEOF\nls");
+    try std.testing.expectEqual(@as(usize, 2), q.len);
+    try std.testing.expectEqualStrings("*** Begin Patch\n*** Delete File: x\n*** End Patch\n", q[0].stdin.?.text);
+    try std.testing.expect(!q[0].stdin.?.dynamic);
+    try std.testing.expect(q[1].stdin == null);
+    // An expanding body can't be known.
+    const x = try parseOk(&arena, "apply_patch <<EOF\n*** Add File: $HOME/x\nEOF");
+    try std.testing.expect(x[0].stdin.?.dynamic);
+    // `<<-` strips leading tabs; the heredoc belongs to its own command.
+    const d = try parseOk(&arena, "ls; apply_patch <<-EOF && echo hi\n\t*** Begin Patch\n\tEOF");
+    try std.testing.expect(d[0].stdin == null);
+    try std.testing.expectEqualStrings("*** Begin Patch\n", d[1].stdin.?.text);
+    try std.testing.expect(d[2].stdin == null);
 }
