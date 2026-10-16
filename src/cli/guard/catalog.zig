@@ -650,12 +650,15 @@ fn push(ctx: Ctx, probe: anytype, rest: []const shell.Word) Error!?Finding {
     if (eff.push == .all) return finding(.leaving, if (forced) "git push --force overwrites the remote" else "git push sends commits off this Mac");
     // push = protected: only force, tags, deletes, and protected branches.
     if (forced) return finding(.leaving, "git push --force overwrites the remote");
-    if (has(rest, "--tags") or has(rest, "--delete") or hasShort(rest, 'd')) return finding(.leaving, "pushes tags or deletes on the remote");
+    if (has(rest, "--tags") or has(rest, "--delete") or has(rest, "--prune") or hasShort(rest, 'd')) return finding(.leaving, "pushes tags or deletes on the remote");
     if (ops.len >= 2) {
         for (ops[1..]) |w| {
             if (w.dynamic) return finding(.leaving, "pushes a branch named by a variable");
             const spec = if (w.text.len > 0 and w.text[0] == '+') w.text[1..] else w.text;
+            // `:x` has an empty source: it deletes the remote ref.
+            if (spec.len > 0 and spec[0] == ':') return finding(.leaving, "pushes a refspec that deletes a remote ref");
             const dst = if (std.mem.indexOfScalar(u8, spec, ':')) |i| spec[i + 1 ..] else spec;
+            if (std.mem.startsWith(u8, dst, "refs/tags/")) return finding(.leaving, "pushes a tag");
             const name = if (std.mem.startsWith(u8, dst, "refs/heads/")) dst["refs/heads/".len..] else dst;
             for (eff.protected_branches) |b| if (eq(b, name)) return .{ .group = .leaving, .why = try std.fmt.allocPrint(ctx.alloc, "pushes to {s}, a protected branch", .{name}) };
         }
@@ -1031,6 +1034,24 @@ test "guard catalog: a shell reading its script from stdin" {
         }
     }
     try std.testing.expectEqual(@as(?Group, .leaving), try group(a, .{}, "bash ship-phone.sh"));
+}
+
+test "guard catalog: refspecs that delete or tag ask under the default" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    for ([_][]const u8{
+        "git push origin :x",           "git push origin :refs/heads/x", "git push origin feature:refs/tags/v1",
+        "git push origin refs/tags/v1", "git push --prune origin",       "git push origin refs/heads/f:refs/tags/v2",
+    }) |src| {
+        if (try group(a, .{}, src) != Group.leaving) {
+            std.debug.print("should ask: {s}\n", .{src});
+            return error.TestUnexpectedResult;
+        }
+    }
+    for ([_][]const u8{ "git push origin feature", "git push origin HEAD:feature", "git push -u origin feature" }) |src| {
+        try std.testing.expectEqual(@as(?Group, null), try group(a, .{}, src));
+    }
 }
 
 test "guard catalog: forced pushes in protected mode" {
