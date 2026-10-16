@@ -8,11 +8,10 @@ struct ExtensionSidebarView: View {
 
     @ObservedObject var model: ExtensionSidebarModel
     @ObservedObject private var skins = SkinsRuntime.shared.manager
-    @State private var showingAddNote = false
 
     var body: some View {
         VStack(spacing: 12) {
-            ForEach(LosttyExtension.allCases) { ext in
+            ForEach(model.available) { ext in
                 ZStack(alignment: .leading) {
                     // Active indicator: only while this extension is open.
                     Capsule()
@@ -38,17 +37,6 @@ struct ExtensionSidebarView: View {
                     .frame(width: Self.width)
                 }
                 .frame(width: Self.width, height: 44)
-            }
-
-            Button { showingAddNote.toggle() } label: {
-                AddExtensionIcon()
-            }
-            .buttonStyle(IconButtonStyle())
-            .accessibilityLabel("Add extension")
-            .popover(isPresented: $showingAddNote, arrowEdge: .leading) {
-                Text("More extensions are on the way.")
-                    .font(.system(size: 12))
-                    .padding(12)
             }
 
             Spacer(minLength: 0)
@@ -163,20 +151,6 @@ private struct SkinsIcon: View {
                 .rotationEffect(.degrees(45))
                 .shadow(color: accent.opacity(0.6), radius: 4)
         }
-    }
-}
-
-private struct AddExtensionIcon: View {
-    var body: some View {
-        ZStack {
-            Color.white.opacity(0.07)
-            Image(systemName: "plus")
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(Color.white.opacity(0.62))
-        }
-        .frame(width: 44, height: 44)
-        .clipShape(iconShape)
-        .overlay(iconShape.strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5))
     }
 }
 

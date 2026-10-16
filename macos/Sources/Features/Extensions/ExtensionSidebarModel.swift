@@ -16,6 +16,12 @@ enum LosttyExtension: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
+    /// The extensions `channel` offers, in sidebar order: Branches is beta
+    /// only.
+    static func available(in channel: LosttyChannel) -> [LosttyExtension] {
+        allCases.filter { $0 != .branches || channel.hasBranches }
+    }
+
     var title: String {
         switch self {
         case .branches: "Branches"
@@ -68,12 +74,21 @@ final class ExtensionSidebarModel: ObservableObject {
     /// The Branches panel's state; idle until Branches opens.
     let branches: BranchesModel
 
-    init(branches: BranchesModel? = nil) {
+    /// The extensions this build offers, in sidebar order.
+    let available: [LosttyExtension]
+    /// The axolotl in the terminal's corner (beta only).
+    let showsMascot: Bool
+
+    init(branches: BranchesModel? = nil, channel: LosttyChannel = .current) {
         self.branches = branches ?? BranchesModel()
+        available = LosttyExtension.available(in: channel)
+        showsMascot = channel.showsMascot
     }
 
     /// Clicking an icon opens its extension; clicking the open one closes it.
+    /// One this build doesn't offer stays shut.
     func select(_ ext: LosttyExtension) {
+        guard available.contains(ext) else { return }
         active = active == ext ? nil : ext
     }
 
