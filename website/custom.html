@@ -328,8 +328,12 @@ p { margin: 0; }
    with the section's edge; Aurora's Mac and iPhone sit on the right, the iPhone
    ending at the right edge. The type scales with the width (70em across) */
 .ag-demo .wrap{position:relative; z-index:1; container-type:inline-size}
-.ag-stage-col{display:grid; grid-template-columns:minmax(max-content, 1fr) minmax(0, 49.6em); gap:1.5em; align-items:center;
+.ag-stage-col{display:grid; grid-template-columns:minmax(max-content, 1fr) minmax(0, 49.6em); gap:0 1.5em; align-items:center;
   min-width:0; font-size:clamp(6px, calc(100cqi / 70), 13px)}
+/* the section's heading sits over the lists; the devices span both rows */
+.ag-title{grid-column:1; grid-row:1; align-self:end; margin-bottom:28px}
+.ag-stage-col > .ag-stage{grid-column:2; grid-row:1 / span 2}
+.ag-stage-col > .ag-cats{grid-column:1; grid-row:2; align-self:start}
 /* Aurora's moving glow, drawn see-through over the paper and faded out at the
    section's top and bottom; the static gradients stand in without WebGL */
 .ag-demo{position:relative; overflow:hidden}
@@ -472,6 +476,10 @@ p { margin: 0; }
 /* narrower: the two lists go under the Mac and iPhone, still side by side */
 @container (max-width:1040px){
   .ag-stage-col{grid-template-columns:minmax(0, 49.6em); gap:24px; font-size:min(13px, calc(100cqi / 50))}
+  /* stacked: heading, then the devices, then the lists */
+  .ag-title{grid-row:1; margin-bottom:8px}
+  .ag-stage-col > .ag-stage{grid-column:1; grid-row:2}
+  .ag-stage-col > .ag-cats{grid-row:3}
   .ag-cats{order:0; width:auto; margin-right:0; grid-template-columns:auto 10px 1fr 10px 1fr}
 }
 @container (max-width:640px){
@@ -855,6 +863,7 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
     <div class="ag-aurora-fallback" id="ag-aurora-fallback" aria-hidden="true"></div>
     <div class="wrap">
       <div class="ag-stage-col">
+        <h2 class="ag-title" data-decode>Swap intuitively.</h2>
         <div class="ag-stage" id="ag-stage" data-step="0" aria-label="Animated example: Claude stops for permission on the Mac, the iPhone shows it waiting on you, you tap Yes on the phone and Claude carries on." role="img">
           <div class="ag-rig" id="ag-rig">
             <div class="ag-halo"></div>
