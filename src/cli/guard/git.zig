@@ -47,12 +47,10 @@ pub fn parseStatus(out: []const u8) Changes {
 pub const Live = struct {
     alloc: Allocator,
 
-    /// Runs `git -C cwd args`; stdout on exit 0, null otherwise.
+    /// Runs `git --no-optional-locks -C cwd args`; stdout on exit 0, null otherwise.
     fn git(self: Live, cwd: []const u8, args: []const []const u8) ?[]const u8 {
-        var argv: std.ArrayList([]const u8) = .empty;
-        argv.appendSlice(self.alloc, &.{ "git", "-C", cwd }) catch return null;
-        argv.appendSlice(self.alloc, args) catch return null;
-        const r = std.process.Child.run(.{ .allocator = self.alloc, .argv = argv.items, .max_output_bytes = 4 << 20 }) catch return null;
+        const argv = gitArgv(self.alloc, cwd, args) catch return null;
+        const r = std.process.Child.run(.{ .allocator = self.alloc, .argv = argv, .max_output_bytes = 4 << 20 }) catch return null;
         self.alloc.free(r.stderr);
         if (r.term != .Exited or r.term.Exited != 0) {
             self.alloc.free(r.stdout);
@@ -72,10 +70,8 @@ pub const Live = struct {
     }
 
     pub fn changes(self: Live, root: []const u8, paths: []const []const u8) ?Changes {
-        var args: std.ArrayList([]const u8) = .empty;
-        args.appendSlice(self.alloc, &.{ "status", "--porcelain=v1", "-z", "--ignored=matching", "--untracked-files=all", "--" }) catch return null;
-        args.appendSlice(self.alloc, paths) catch return null;
-        const out = self.git(root, args.items) orelse return null;
+        const args = statusArgs(self.alloc, paths) catch return null;
+        const out = self.git(root, args) orelse return null;
         return parseStatus(out);
     }
 
@@ -92,6 +88,43 @@ pub const Live = struct {
         return std.mem.trim(u8, out, " \n").len > 0;
     }
 };
+
+/// Every git the guard runs: `--no-optional-locks` so a check never takes
+/// the index lock from the agent's own git, in the folder given.
+pub fn gitArgv(alloc: Allocator, cwd: []const u8, args: []const []const u8) Allocator.Error![]const []const u8 {
+    var argv: std.ArrayList([]const u8) = .empty;
+    try argv.appendSlice(alloc, &.{ "git", "--no-optional-locks", "-C", cwd });
+    try argv.appendSlice(alloc, args);
+    return argv.toOwnedSlice(alloc);
+}
+
+/// What a path would lose, submodules included (their changes are work too).
+pub fn statusArgs(alloc: Allocator, paths: []const []const u8) Allocator.Error![]const []const u8 {
+    var args: std.ArrayList([]const u8) = .empty;
+    try args.appendSlice(alloc, &.{ "status", "--porcelain=v1", "-z", "--ignored=matching", "--untracked-files=all", "--ignore-submodules=none", "--" });
+    try args.appendSlice(alloc, paths);
+    return args.toOwnedSlice(alloc);
+}
+
+test "guard git: every call skips optional locks; status counts submodules" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const argv = try gitArgv(a, "/r", &.{ "rev-parse", "--show-toplevel" });
+    try std.testing.expectEqualStrings("git", argv[0]);
+    try std.testing.expectEqualStrings("--no-optional-locks", argv[1]);
+    try std.testing.expectEqualStrings("-C", argv[2]);
+    try std.testing.expectEqualStrings("rev-parse", argv[4]);
+    const st = try statusArgs(a, &.{"x"});
+    var flag: ?usize = null;
+    var dashdash: ?usize = null;
+    for (st, 0..) |w, i| {
+        if (std.mem.eql(u8, w, "--ignore-submodules=none")) flag = i;
+        if (std.mem.eql(u8, w, "--")) dashdash = i;
+    }
+    try std.testing.expect(flag.? < dashdash.?);
+    try std.testing.expectEqualStrings("x", st[st.len - 1]);
+}
 
 test "guard git: parseStatus counts each kind" {
     const out = "?? a.txt\x00?? b/c.txt\x00!! zig-out/\x00 M src/x.zig\x00M  y\x00R  new\x00old\x00";

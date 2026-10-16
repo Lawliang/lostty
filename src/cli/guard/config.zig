@@ -51,7 +51,7 @@ pub const Config = struct {
         try protected.appendSlice(alloc, &default_protected);
         try commands.appendSlice(alloc, &default_commands);
         try deletable.appendSlice(alloc, &default_deletable);
-        const layers = [_]?std.json.Value{ self.root, self.repoLayer(repo) };
+        const layers = [_]?std.json.Value{ self.root, try self.repoLayer(alloc, repo) };
         for (layers) |layer| {
             const obj = layer orelse continue;
             if (obj != .object) continue;
@@ -71,14 +71,35 @@ pub const Config = struct {
         };
     }
 
-    fn repoLayer(self: Config, repo: ?[]const u8) ?std.json.Value {
+    /// The `repos` entry for `repo`. Keys and the repo are compared after
+    /// dropping trailing slashes and resolving symlinks where they exist
+    /// (`/tmp/x` is `/private/tmp/x`), so a repo's settings aren't lost to
+    /// how its path was written.
+    fn repoLayer(self: Config, alloc: Allocator, repo: ?[]const u8) Allocator.Error!?std.json.Value {
         const root = self.root orelse return null;
         const r = repo orelse return null;
         const repos = root.object.get("repos") orelse return null;
         if (repos != .object) return null;
-        return repos.object.get(r);
+        if (repos.object.get(r)) |exact| return exact;
+        const want = try normalize(alloc, r);
+        var it = repos.object.iterator();
+        while (it.next()) |e| {
+            if (std.mem.eql(u8, try normalize(alloc, e.key_ptr.*), want)) return e.value_ptr.*;
+        }
+        return null;
     }
 };
+
+/// `path` without trailing slashes, symlinks resolved when it exists.
+pub fn normalize(alloc: Allocator, path: []const u8) Allocator.Error![]const u8 {
+    var p = path;
+    while (p.len > 1 and p[p.len - 1] == '/') p = p[0 .. p.len - 1];
+    if (p.len == 0 or p[0] != '/') return p;
+    return std.fs.cwd().realpathAlloc(alloc, p) catch |e| switch (e) {
+        error.OutOfMemory => error.OutOfMemory,
+        else => p,
+    };
+}
 
 fn addStrings(alloc: Allocator, list: *std.ArrayList([]const u8), v: ?std.json.Value) Allocator.Error!void {
     const arr = v orelse return;
@@ -131,4 +152,29 @@ test "guard config: a broken file falls back to defaults" {
     const e = try Config.parse(a, "{ not json").forRepo(a, null);
     try std.testing.expectEqual(Push.all, e.push);
     try std.testing.expect(contains(e.protected_branches, "main"));
+}
+
+test "guard config: repo keys match however the path is written" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    // Trailing slashes, on either side.
+    const slash = Config.parse(a,
+        \\{"repos":{"/r/":{"push":"protected","commands":["deploy.sh"]}}}
+    );
+    try std.testing.expectEqual(Push.protected, (try slash.forRepo(a, "/r")).push);
+    try std.testing.expect(contains((try slash.forRepo(a, "/r//")).commands, "deploy.sh"));
+    // A symlinked key finds the real repo, and the other way round.
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.makePath("real");
+    try tmp.dir.symLink("real", "link", .{ .is_directory = true });
+    const base = try tmp.dir.realpathAlloc(a, ".");
+    const real = try std.fs.path.join(a, &.{ base, "real" });
+    const link = try std.fs.path.join(a, &.{ base, "link" });
+    const by_link = Config.parse(a, try std.fmt.allocPrint(a, "{{\"repos\":{{\"{s}/\":{{\"push\":\"protected\"}}}}}}", .{link}));
+    try std.testing.expectEqual(Push.protected, (try by_link.forRepo(a, real)).push);
+    const by_real = Config.parse(a, try std.fmt.allocPrint(a, "{{\"repos\":{{\"{s}\":{{\"push\":\"protected\"}}}}}}", .{real}));
+    try std.testing.expectEqual(Push.protected, (try by_real.forRepo(a, link)).push);
+    try std.testing.expectEqual(Push.all, (try by_real.forRepo(a, base)).push);
 }
