@@ -37,7 +37,10 @@ else
   set --
 fi
 export PATH="$(brew --prefix zig@0.15)/bin:$PATH"
-zig build -Demit-macos-app=false -Doptimize=ReleaseFast
+# The engine takes its version from git and stops on any tag but its own
+# vX.Y.Z, such as Lostty's v0.4, v0.4-beta.1 and beta: name it instead.
+ENGINE_VERSION="$(sed -n 's/^ *\.version = "\(.*\)",$/\1/p' build.zig.zon)-dev+$(git rev-parse --short HEAD)"
+zig build -Demit-macos-app=false -Doptimize=ReleaseFast -Dversion-string="$ENGINE_VERSION"
 mkdir -p macos/build
 # The scheme turns code coverage on for every build. An instrumented Lostty
 # drops a default.profraw wherever its Claude hooks run, so switch it off.

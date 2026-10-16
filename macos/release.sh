@@ -35,11 +35,11 @@ while [ $# -gt 0 ]; do
 done
 mkdir -p "$OUT"
 
-# Set once stable is out, so a failure after it says how to finish the beta.
-STABLE_OUT=0
+# Once something is published, how to finish what's left after a failure.
+HINT=""
 fail() {
   echo "release: $*" >&2
-  [ "$STABLE_OUT" = 0 ] || echo "release: Lostty $VERSION is out; publish its beta with: macos/release.sh --beta" >&2
+  [ -z "$HINT" ] || echo "release: $HINT" >&2
   exit 1
 }
 step() { echo "==> $*"; }
@@ -124,7 +124,10 @@ ${EDITOR:-nano} "$NOTES"
 grep -q '[^[:space:]]' "$NOTES" || fail "the notes are empty; nothing was released."
 
 step "Building the engine"
-zig build -Demit-macos-app=false -Doptimize=ReleaseFast > "$OUT/zig.log" 2>&1 \
+# The engine takes its version from git and stops on any tag but its own
+# vX.Y.Z, such as Lostty's v0.4, v0.4-beta.1 and beta: name it instead.
+ENGINE_VERSION="$(sed -n 's/^ *\.version = "\(.*\)",$/\1/p' build.zig.zon)-dev+$(git rev-parse --short HEAD)"
+zig build -Demit-macos-app=false -Doptimize=ReleaseFast -Dversion-string="$ENGINE_VERSION" > "$OUT/zig.log" 2>&1 \
   || failed "$OUT/zig.log" "the engine build failed"
 cat > "$OUT/ExportOptions.plist" << EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -252,33 +255,47 @@ if [ "$BETA_ONLY" = 0 ]; then
   gh release create "$TAG" "$OUT/stable/Lostty.dmg" "$OUT/stable/appcast.xml" --repo "$REPO" --verify-tag \
     --title "Lostty $VERSION" --notes-file "$NOTES" > "$OUT/gh.log" 2>&1 || {
     cat "$OUT/gh.log" >&2
-    fail "the tag $TAG is on GitHub, but the release wasn't created. Retry with: gh release create $TAG '$OUT/stable/Lostty.dmg' '$OUT/stable/appcast.xml' --repo $REPO --verify-tag --title 'Lostty $VERSION' --notes-file '$NOTES'"
+    fail "the tag $TAG is on GitHub, but the release wasn't created. Retry with: gh release create $TAG '$OUT/stable/Lostty.dmg' '$OUT/stable/appcast.xml' --repo $REPO --verify-tag --title 'Lostty $VERSION' --notes-file '$NOTES'. Then publish its beta with: macos/release.sh --beta"
   }
+  # From here on stable is out, and a later failure leaves only its beta to do.
+  HINT="Lostty $VERSION is out; publish its beta with: macos/release.sh --beta"
   curl -fsSL "$FEED" | grep -q "<sparkle:shortVersionString>$VERSION<" \
     || fail "released, but $FEED doesn't show $VERSION yet; check https://github.com/$REPO/releases"
   echo "Released Lostty $VERSION: https://github.com/$REPO/releases/tag/$TAG"
-  STABLE_OUT=1
 fi
 
 BETA_NAME="Lostty $VERSION beta $BETA"
-step "Publishing $BETA_NAME"
-push_tag "$BETA_TAG" "$BETA_NAME"
-gh release create "$BETA_TAG" "$OUT/beta/Lostty-Beta.dmg" "$OUT/beta/appcast-beta.xml" --repo "$REPO" \
-  --verify-tag --prerelease --title "$BETA_NAME" --notes-file "$NOTES" > "$OUT/gh-beta.log" 2>&1 || {
-  cat "$OUT/gh-beta.log" >&2
-  fail "the tag $BETA_TAG is on GitHub, but its release wasn't created. Retry with: gh release create $BETA_TAG '$OUT/beta/Lostty-Beta.dmg' '$OUT/beta/appcast-beta.xml' --repo $REPO --verify-tag --prerelease --title '$BETA_NAME' --notes-file '$NOTES', then run this script's beta release step by hand: gh release upload beta … --clobber"
-}
-# The beta feed's fixed home: the newest beta's DMG and feed, replaced each time.
+BETA_TITLE="Lostty Beta ($VERSION beta $BETA)"
+BETA_FILES="'$OUT/beta/Lostty-Beta.dmg' '$OUT/beta/appcast-beta.xml'"
+# The commands that put this beta in the fixed `beta` release, for a hint.
 if gh release view beta --repo "$REPO" > /dev/null 2>&1; then
+  FEED_EXISTS=1
+  FEED_COMMANDS="gh release upload beta $BETA_FILES --repo $REPO --clobber && gh release edit beta --repo $REPO --title '$BETA_TITLE' --notes-file '$NOTES'"
+else
+  FEED_EXISTS=0
+  FEED_COMMANDS="gh release create beta $BETA_FILES --repo $REPO --prerelease --latest=false --target $COMMIT --title '$BETA_TITLE' --notes-file '$NOTES'"
+fi
+step "Publishing $BETA_NAME"
+# A tag that fails to push is deleted, so the hint above still holds.
+push_tag "$BETA_TAG" "$BETA_NAME"
+HINT="the tag $BETA_TAG is on GitHub, so don't run --beta (it would stop on that tag). Finish by hand: gh release create $BETA_TAG $BETA_FILES --repo $REPO --verify-tag --prerelease --title '$BETA_NAME' --notes-file '$NOTES', then: $FEED_COMMANDS"
+gh release create "$BETA_TAG" "$OUT/beta/Lostty-Beta.dmg" "$OUT/beta/appcast-beta.xml" --repo "$REPO" \
+  --verify-tag --prerelease --title "$BETA_NAME" --notes-file "$NOTES" > "$OUT/gh-beta.log" 2>&1 \
+  || failed "$OUT/gh-beta.log" "the beta's release $BETA_TAG wasn't created"
+# The beta is out; only its feed's fixed home may be left.
+HINT="$BETA_NAME is out (release $BETA_TAG); don't run --beta again. Finish its feed with: $FEED_COMMANDS"
+# The beta feed's fixed home: the newest beta's DMG and feed, replaced each time.
+if [ "$FEED_EXISTS" = 1 ]; then
   { gh release upload beta "$OUT/beta/Lostty-Beta.dmg" "$OUT/beta/appcast-beta.xml" --repo "$REPO" --clobber \
-    && gh release edit beta --repo "$REPO" --title "Lostty Beta ($VERSION beta $BETA)" --notes-file "$NOTES"; } \
-    > "$OUT/gh-beta-feed.log" 2>&1 || failed "$OUT/gh-beta-feed.log" "$BETA_NAME is out, but the beta release wasn't refreshed"
+    && gh release edit beta --repo "$REPO" --title "$BETA_TITLE" --notes-file "$NOTES"; } \
+    > "$OUT/gh-beta-feed.log" 2>&1 || failed "$OUT/gh-beta-feed.log" "the beta release wasn't refreshed"
 else
   gh release create beta "$OUT/beta/Lostty-Beta.dmg" "$OUT/beta/appcast-beta.xml" --repo "$REPO" \
-    --prerelease --latest=false --target "$COMMIT" --title "Lostty Beta ($VERSION beta $BETA)" \
+    --prerelease --latest=false --target "$COMMIT" --title "$BETA_TITLE" \
     --notes-file "$NOTES" > "$OUT/gh-beta-feed.log" 2>&1 \
-    || failed "$OUT/gh-beta-feed.log" "$BETA_NAME is out, but the beta release wasn't created"
+    || failed "$OUT/gh-beta-feed.log" "the beta release wasn't created"
 fi
+HINT=""
 curl -fsSL "$BETA_FEED" | grep -q "<sparkle:shortVersionString>$VERSION beta $BETA<" \
   || fail "released, but $BETA_FEED doesn't show $VERSION beta $BETA yet; check https://github.com/$REPO/releases/tag/beta"
 echo "Released $BETA_NAME: https://github.com/$REPO/releases/tag/beta"

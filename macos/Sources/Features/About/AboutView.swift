@@ -52,7 +52,7 @@ struct AboutView: View {
 
             VStack(alignment: .center, spacing: 32) {
                 VStack(alignment: .center, spacing: 8) {
-                    Text("Lostty")
+                    Text(LosttyChannel.current.appName)
                         .bold()
                         .font(.title)
                     Text("Your terminals, on your Mac\nand in your pocket.")

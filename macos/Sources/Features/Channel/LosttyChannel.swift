@@ -21,6 +21,8 @@ enum LosttyChannel: String, Equatable {
     static let current = LosttyChannel(info: Bundle.main.infoDictionary)
 
     var isBeta: Bool { self == .beta }
+    /// What the app calls itself where the build shows: the About window.
+    var appName: String { isBeta ? "Lostty Beta" : "Lostty" }
     /// The axolotl in each terminal's corner and the turn observer behind
     /// its bubble.
     var showsMascot: Bool { isBeta }

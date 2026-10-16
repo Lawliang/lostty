@@ -10,7 +10,7 @@ it is in.
 
 ## Install
 
-    macos/install.sh      # builds and installs /Applications/Lostty.app
+    macos/install.sh --stable   # builds and installs /Applications/Lostty.app
 
 Requires Xcode (with the Metal Toolchain component:
 `xcodebuild -downloadComponent MetalToolchain`), `brew install zig@0.15 nushell`.

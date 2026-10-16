@@ -38,7 +38,7 @@ cd lostty
 macos/setup.sh
 ```
 
-`setup.sh` installs the prerequisites below, then builds Lostty into `/Applications`. A copy built this way never checks for updates. To update it, `git pull`, run `macos/install.sh`, then choose **Restart to Update** in Lostty's menu bar. Don't Quit Lostty to update: quitting ends every terminal session.
+`setup.sh` installs the prerequisites below, then builds Lostty into `/Applications`. A copy built this way never checks for updates. To update it, `git pull`, run `macos/install.sh --stable` (plain `macos/install.sh` builds Lostty Beta; see [Stable and beta](#stable-and-beta)), then choose **Restart to Update** in Lostty's menu bar. Don't Quit Lostty to update: quitting ends every terminal session.
 
 ### Prerequisites
 
@@ -87,7 +87,8 @@ Lostty has two halves: the terminal engine (Zig, in `src/`), built into
 To build a release copy and install it as `/Applications/Lostty.app`:
 
 ```sh
-macos/install.sh
+macos/install.sh --stable   # Lostty, as people download it
+macos/install.sh            # Lostty Beta (see Stable and beta)
 ```
 
 ### Test
