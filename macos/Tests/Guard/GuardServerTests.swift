@@ -65,6 +65,35 @@ struct GuardServerTests {
         #expect(try send(ok, to: path).contains("allow"))
     }
 
+    @Test func aSocketAnotherCopyAnswersIsLeftAlone() throws {
+        let path = socketPath()
+        let first = GuardServer(path: path) { _ in .deny(1) }
+        try first.start()
+        defer { first.stop(); try? FileManager.default.removeItem(at: path.deletingLastPathComponent()) }
+        let second = GuardServer(path: path) { _ in .allow }
+        #expect(throws: GuardServer.Failure.self) { try second.start() }
+        // The first copy still answers its panes.
+        let ok = #"{"v":1,"pane":"P","agent":"claude","tool":"Bash","input":"x","cwd":"/r","group":"leaving","why":"w"}"#
+        #expect(try send(ok, to: path).contains(#""request":1"#))
+    }
+
+    @Test func eachBuildHasItsOwnSocket() {
+        let home = URL(fileURLWithPath: "/Users/me")
+        let release = GuardServer.path(bundleID: "com.lawliang.lostty", home: home)
+        let debug = GuardServer.path(bundleID: "com.lawliang.lostty.debug", home: home)
+        #expect(release.path == "/Users/me/.config/lostty/coord/guard-com.lawliang.lostty.sock")
+        #expect(release != debug)
+        // A path too long for a socket address falls back to a short hash.
+        let longHome = URL(fileURLWithPath: "/Users/" + String(repeating: "x", count: 40))
+        let long = GuardServer.path(bundleID: "com.lawliang.lostty.debug", home: longHome)
+        #expect(longHome.appendingPathComponent(".config/lostty/coord/guard-com.lawliang.lostty.debug.sock").path.utf8.count >= 104)
+        #expect(long.path.utf8.count < 104)
+        #expect(long.lastPathComponent.hasPrefix("guard-"))
+        #expect(long != GuardServer.path(bundleID: "com.lawliang.lostty", home: longHome))
+        #expect(GuardRuntime.storeURL(bundleID: "a").lastPathComponent == "guard-requests-a.json")
+        #expect(GuardRuntime.storeURL(bundleID: "a") != GuardRuntime.storeURL(bundleID: "b"))
+    }
+
     func connectRaw(_ path: URL) -> Int32 {
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
         var one: Int32 = 1

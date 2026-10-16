@@ -71,7 +71,7 @@ fn runFor(alloc: Allocator, pane: []const u8, agent: wire.Agent) !u8 {
         .critical => |c| c,
     };
     const request = try wire.encodeRequest(alloc, pane, agent, c);
-    const out = if (wire.ask(alloc, try wire.socketPath(alloc, home), request, 3000)) |reply| switch (reply) {
+    const out = if (wire.ask(alloc, try wire.socketPath(alloc, std.posix.getenv(wire.socket_env), home), request, 3000)) |reply| switch (reply) {
         .allow => return 0,
         .deny => |id| try wire.outputDeny(alloc, agent, id, c),
     } else try wire.outputUnreachable(alloc, agent, c);

@@ -50,17 +50,20 @@ final class GuardRuntime: ObservableObject {
 
     // MARK: Lifecycle
 
-    static var storeURL: URL {
+    /// One store per app build, like the socket.
+    nonisolated static func storeURL(bundleID: String) -> URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Lostty/guard-requests.json")
+            .appendingPathComponent("Lostty/guard-requests-\(bundleID).json")
     }
+
+    static var storeURL: URL { storeURL(bundleID: Bundle.main.bundleIdentifier ?? "lostty") }
 
     func start() {
         if let data = try? Data(contentsOf: Self.storeURL),
            let saved = try? JSONDecoder().decode(ApprovalBook.self, from: data) {
             book = saved
         }
-        let server = GuardServer(path: GuardServer.defaultPath()) { check in
+        let server = GuardServer(path: GuardServer.appPath) { check in
             await MainActor.run { GuardRuntime.shared.handle(check) }
         }
         do {

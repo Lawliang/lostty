@@ -1,4 +1,5 @@
 #if os(macOS)
+import CryptoKit
 import Darwin
 import Foundation
 
@@ -9,9 +10,23 @@ import Foundation
 final class GuardServer: @unchecked Sendable {
     typealias Handler = @Sendable (GuardCheck) async -> GuardReply
 
-    static func defaultPath(home: URL = FileManager.default.homeDirectoryForCurrentUser) -> URL {
-        home.appendingPathComponent(".config/lostty/coord/guard.sock")
+    /// Set in each pane so `+guard` asks this app, not another build's.
+    static let envKey = "LOSTTY_GUARD_SOCKET"
+
+    /// One socket per app build (bundle id), so a Debug and a Release
+    /// Lostty each answer their own panes. A path too long for a socket
+    /// address (104 bytes with its NUL) uses a short hash of the id.
+    static func path(bundleID: String, home: URL = FileManager.default.homeDirectoryForCurrentUser) -> URL {
+        let dir = home.appendingPathComponent(".config/lostty/coord")
+        let named = dir.appendingPathComponent("guard-\(bundleID).sock")
+        if named.path.utf8.count < maxPathBytes { return named }
+        let hex = SHA256.hash(data: Data(bundleID.utf8)).prefix(6).map { String(format: "%02x", $0) }.joined()
+        return dir.appendingPathComponent("guard-\(hex).sock")
     }
+
+    static var appPath: URL { path(bundleID: Bundle.main.bundleIdentifier ?? "lostty") }
+
+    private static let maxPathBytes = MemoryLayout.size(ofValue: sockaddr_un().sun_path)
 
     private let path: URL
     private let handler: Handler
@@ -29,12 +44,15 @@ final class GuardServer: @unchecked Sendable {
         self.handler = handler
     }
 
-    enum Failure: Error { case socket(Int32), pathTooLong }
+    enum Failure: Error { case socket(Int32), pathTooLong, inUse }
 
     func start() throws {
         let dir = path.deletingLastPathComponent()
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: dir.path)
+        // Another running copy of this build owns a socket that answers:
+        // leave it alone rather than take its panes' requests.
+        if Self.answers(path) { throw Failure.inUse }
         unlink(path.path)
 
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
@@ -70,6 +88,24 @@ final class GuardServer: @unchecked Sendable {
         source.setCancelHandler { close(fd) }
         source.resume()
         self.source = source
+    }
+
+    /// Something accepts connections at `path`.
+    static func answers(_ path: URL) -> Bool {
+        let fd = socket(AF_UNIX, SOCK_STREAM, 0)
+        guard fd >= 0 else { return false }
+        defer { close(fd) }
+        var addr = sockaddr_un()
+        addr.sun_family = sa_family_t(AF_UNIX)
+        let bytes = Array(path.path.utf8CString)
+        guard bytes.count <= MemoryLayout.size(ofValue: addr.sun_path) else { return false }
+        withUnsafeMutableBytes(of: &addr.sun_path) { raw in
+            bytes.withUnsafeBytes { raw.copyMemory(from: $0) }
+        }
+        let rc = withUnsafePointer(to: &addr) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { connect(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size)) }
+        }
+        return rc == 0
     }
 
     func stop() {

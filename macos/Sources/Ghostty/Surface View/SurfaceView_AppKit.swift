@@ -426,6 +426,8 @@ extension Ghostty {
             if let bin = Bundle.main.executableURL?.path {
                 surface_cfg.environmentVariables[ClaudeConstants.binEnvKey] = bin
             }
+            // Lostty Guard: `+guard` asks this app's socket, not another build's.
+            surface_cfg.environmentVariables[GuardServer.envKey] = GuardServer.appPath.path
             // Lostty Mobile: the launcher tags the pane's session with this pid.
             surface_cfg.environmentVariables[TmuxConstants.appPIDEnvKey] =
                 String(ProcessInfo.processInfo.processIdentifier)

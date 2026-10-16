@@ -11,7 +11,13 @@ const catalog = @import("catalog.zig");
 pub const Agent = enum { claude, codex };
 pub const Reply = union(enum) { allow, deny: u32 };
 
-pub fn socketPath(alloc: Allocator, home: []const u8) Allocator.Error![]const u8 {
+/// Set by the app in each pane: its own socket, so a Debug and a Release
+/// build each answer their own panes.
+pub const socket_env = "LOSTTY_GUARD_SOCKET";
+
+/// The app's socket: the pane's LOSTTY_GUARD_SOCKET, else the old shared path.
+pub fn socketPath(alloc: Allocator, from_env: ?[]const u8, home: []const u8) Allocator.Error![]const u8 {
+    if (from_env) |p| if (p.len > 0) return p;
     return std.fs.path.join(alloc, &.{ home, ".config", "lostty", "coord", "guard.sock" });
 }
 
@@ -286,4 +292,13 @@ test "guard wire: a request id out of range is no reply" {
     try std.testing.expect(parseReply(a, "{\"v\":1,\"decision\":\"deny\",\"request\":4294967296}") == null);
     try std.testing.expect(parseReply(a, "{\"v\":1,\"decision\":\"deny\",\"request\":-1}") == null);
     try std.testing.expectEqual(@as(u32, 4294967295), parseReply(a, "{\"v\":1,\"decision\":\"deny\",\"request\":4294967295}").?.deny);
+}
+
+test "guard wire: the pane's socket wins over the shared default" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    try std.testing.expectEqualStrings("/h/.config/lostty/coord/guard-com.x.debug.sock", try socketPath(a, "/h/.config/lostty/coord/guard-com.x.debug.sock", "/h"));
+    try std.testing.expectEqualStrings("/h/.config/lostty/coord/guard.sock", try socketPath(a, null, "/h"));
+    try std.testing.expectEqualStrings("/h/.config/lostty/coord/guard.sock", try socketPath(a, "", "/h"));
 }
