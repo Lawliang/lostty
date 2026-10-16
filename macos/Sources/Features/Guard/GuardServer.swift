@@ -13,11 +13,18 @@ final class GuardServer: @unchecked Sendable {
     /// Set in each pane so `+guard` asks this app, not another build's.
     static let envKey = "LOSTTY_GUARD_SOCKET"
 
+    /// The shipped build's bundle id. It keeps the shared path older
+    /// builds used, so terminal sessions started before per-build sockets
+    /// (which never got LOSTTY_GUARD_SOCKET) still reach it.
+    static let releaseBundleID = "com.lawliang.lostty"
+
     /// One socket per app build (bundle id), so a Debug and a Release
-    /// Lostty each answer their own panes. A path too long for a socket
-    /// address (104 bytes with its NUL) uses a short hash of the id.
+    /// Lostty each answer their own panes; the Release build uses the
+    /// legacy `guard.sock`. A path too long for a socket address (104
+    /// bytes with its NUL) uses a short hash of the id.
     static func path(bundleID: String, home: URL = FileManager.default.homeDirectoryForCurrentUser) -> URL {
         let dir = home.appendingPathComponent(".config/lostty/coord")
+        if bundleID == releaseBundleID { return dir.appendingPathComponent("guard.sock") }
         let named = dir.appendingPathComponent("guard-\(bundleID).sock")
         if named.path.utf8.count < maxPathBytes { return named }
         let hex = SHA256.hash(data: Data(bundleID.utf8)).prefix(6).map { String(format: "%02x", $0) }.joined()

@@ -81,7 +81,10 @@ struct GuardServerTests {
         let home = URL(fileURLWithPath: "/Users/me")
         let release = GuardServer.path(bundleID: "com.lawliang.lostty", home: home)
         let debug = GuardServer.path(bundleID: "com.lawliang.lostty.debug", home: home)
-        #expect(release.path == "/Users/me/.config/lostty/coord/guard-com.lawliang.lostty.sock")
+        // The shipped build keeps the old shared path, so terminal sessions
+        // started before per-build sockets still reach it.
+        #expect(release.path == "/Users/me/.config/lostty/coord/guard.sock")
+        #expect(debug.path == "/Users/me/.config/lostty/coord/guard-com.lawliang.lostty.debug.sock")
         #expect(release != debug)
         // A path too long for a socket address falls back to a short hash.
         let longHome = URL(fileURLWithPath: "/Users/" + String(repeating: "x", count: 40))
@@ -90,6 +93,7 @@ struct GuardServerTests {
         #expect(long.path.utf8.count < 104)
         #expect(long.lastPathComponent.hasPrefix("guard-"))
         #expect(long != GuardServer.path(bundleID: "com.lawliang.lostty", home: longHome))
+        #expect(long != GuardServer.path(bundleID: "com.lawliang.lostty.other", home: longHome))
         #expect(GuardRuntime.storeURL(bundleID: "a").lastPathComponent == "guard-requests-a.json")
         #expect(GuardRuntime.storeURL(bundleID: "a") != GuardRuntime.storeURL(bundleID: "b"))
     }

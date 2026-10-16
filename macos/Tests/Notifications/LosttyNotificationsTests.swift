@@ -134,12 +134,12 @@ struct HookNotificationsTests {
         [hooks.state."/Users/me/.codex/hooks.json:pre_tool_use:0"]
         trusted_hash = "abc123"
         """
-        #expect(HookNotifications.codexTrustsGuard(configToml: table))
+        #expect(HookNotifications.codexTrustsGuard(configToml: table, home: "/Users/me"))
         let inline = """
         [hooks.state]
         "/Users/me/.codex/hooks.json:pre_tool_use:0" = { trusted_hash = "abc" }
         """
-        #expect(HookNotifications.codexTrustsGuard(configToml: inline))
+        #expect(HookNotifications.codexTrustsGuard(configToml: inline, home: "/Users/me"))
         // Only the stop hook trusted, or the guard's table without a hash.
         let other = """
         [hooks.state."/Users/me/.codex/hooks.json:stop:0"]
@@ -151,8 +151,22 @@ struct HookNotificationsTests {
         [profiles.x]
         trusted_hash = "zzz"
         """
-        #expect(!HookNotifications.codexTrustsGuard(configToml: other))
-        #expect(!HookNotifications.codexTrustsGuard(configToml: ""))
+        #expect(!HookNotifications.codexTrustsGuard(configToml: other, home: "/Users/me"))
+        #expect(!HookNotifications.codexTrustsGuard(configToml: "", home: "/Users/me"))
+        // A project's hooks.json, or another user's, isn't the user's own.
+        let project = """
+        [hooks.state."/Users/me/work/app/.codex/hooks.json:pre_tool_use:0"]
+        trusted_hash = "abc"
+
+        [hooks.state."/Users/other/.codex/hooks.json:pre_tool_use:0"]
+        trusted_hash = "abc"
+        """
+        #expect(!HookNotifications.codexTrustsGuard(configToml: project, home: "/Users/me"))
+        let projectInline = """
+        [hooks.state]
+        "/Users/me/work/.codex/hooks.json:pre_tool_use:0" = { trusted_hash = "abc" }
+        """
+        #expect(!HookNotifications.codexTrustsGuard(configToml: projectInline, home: "/Users/me"))
     }
 
     @Test func failedConnectShowsTheReason() {

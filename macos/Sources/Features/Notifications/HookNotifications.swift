@@ -48,19 +48,21 @@ enum HookNotifications {
         return LosttyNotification(kind: .hooks(agent), style: .success, title: "\(agent.title) connected", detail: detail)
     }
 
-    /// Whether Codex's config.toml has trusted a PreToolUse hook from its
-    /// hooks.json: a `[hooks.state."…hooks.json:pre_tool_use:…"]` table (or
-    /// an inline entry) with a `trusted_hash`. Best effort, presence only;
-    /// the hash itself isn't checked.
-    static func codexTrustsGuard(configToml: String) -> Bool {
+    /// Whether Codex's config.toml has trusted a PreToolUse hook from the
+    /// user's own `<home>/.codex/hooks.json`: a
+    /// `[hooks.state."…/.codex/hooks.json:pre_tool_use:…"]` table (or an
+    /// inline entry) with a `trusted_hash`. A project's hooks.json doesn't
+    /// count. Best effort, presence only; the hash itself isn't checked.
+    static func codexTrustsGuard(configToml: String, home: String) -> Bool {
+        let key = "\(home)/.codex/hooks.json:pre_tool_use:"
         var inGuardTable = false
         for raw in configToml.split(whereSeparator: \.isNewline) {
             let line = raw.trimmingCharacters(in: .whitespaces)
             if line.hasPrefix("[") {
-                inGuardTable = line.hasPrefix("[hooks.state.") && line.contains("hooks.json:pre_tool_use:")
+                inGuardTable = line.hasPrefix("[hooks.state.") && line.contains("\"\(key)")
                 continue
             }
-            if line.contains("hooks.json:pre_tool_use:") && line.contains("trusted_hash") { return true }
+            if line.contains("\"\(key)") && line.contains("trusted_hash") { return true }
             if inGuardTable && line.hasPrefix("trusted_hash") { return true }
         }
         return false
@@ -70,7 +72,7 @@ enum HookNotifications {
     static func codexTrustsGuard(home: URL = FileManager.default.homeDirectoryForCurrentUser) -> Bool {
         let url = home.appendingPathComponent(".codex/config.toml")
         guard let text = try? String(contentsOf: url, encoding: .utf8) else { return false }
-        return codexTrustsGuard(configToml: text)
+        return codexTrustsGuard(configToml: text, home: home.path)
     }
 
     /// Run at launch: check each installed agent off the main thread, then
