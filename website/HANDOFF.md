@@ -35,7 +35,7 @@ Kinetic Mono as the base (JetBrains Mono, character-grid look, light "paper term
 
 **Hero** (`.hero`, glyph-field canvas `#field`)
 - Height 800px on desktop (`.hero-in`), content starts 72px from the top; on phones (<900px) it sizes to content.
-- Headline (Onest 700, clamp 38–72px): "Finally, you can touch some grass." / "With Lostty." It carries Aurora Glass's sheen (a rose-to-magenta glint sweeps across every 7s; `--rose`, `--sheen-hi`).
+- Headline (Onest 700, clamp 38–72px): "Finally, you can touch some grass." / "With Lostty." It is capped at `max-width: 9.2em` so the first sentence always breaks after "Finally, you can" (below ~720px the type stops at 38px and the sentence would otherwise fit on one line). It carries Aurora Glass's sheen (a rose-to-magenta glint sweeps across every 7s; `--rose`, `--sheen-hi`).
 - Description (JetBrains Mono 16px): "A fast, modern multi-agent terminal CLI coding harness designed to pair with our native iPhone app, for builders **on the go**."
 - Bullets (Neon Signal's body type: Bricolage Grotesque 18px; magenta `❯` markers):
   1. Install builds, view artifacts and simulators, & access your MCPs, remotely on your phone.
