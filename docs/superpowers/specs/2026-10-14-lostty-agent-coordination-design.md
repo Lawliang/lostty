@@ -546,18 +546,21 @@ lostty +merge status                   the line(s) for this repo
   coordination folder: `~/.config/lostty/coord/` for the release build, a
   per-build subfolder for others, given to panes as `LOSTTY_COORD_DIR` (as
   `LOSTTY_GUARD_SOCKET`). The guard already protects `~/.config/lostty/`
-  from agents' writes. `ready`, `done` and `note` wait up to 2 seconds for
+  from agents' writes. `ready`, `done` and `note` wait up to 5 seconds for
   the app to show the change there, then print the result ("You're 2nd in
   line to merge `feature` into `skins`, after lostty-13."), or say Lostty
   didn't answer and exit 1.
-- **The state hooks report the agent.** Codex's state hook becomes
-  `+claude-state <state> --agent=codex`, and both agents' state hooks send
-  the hook's `session_id` and `cwd`. Older installs, without the flag,
+- **The hooks report the agent.** A new `SessionStart` hook,
+  `+msg intro --agent=<claude|codex>`, prints §10.1's one-line note and
+  reports the pane's agent, `session_id` and `cwd`, so a pane is known from
+  the moment its session starts (and again after `/clear`). The state
+  hooks gain `--agent=<…>` (Codex's call becomes `+claude-state <state>
+  --agent=codex`) and send `session_id` and `cwd` too. Older installs
   show as "agent unknown" with no session; the usual Connect updates them.
 - **A Claude pane's name** is the session name in Claude's own
-  `~/.claude/sessions/<pid>.json` (`name`, e.g. `lostty-9a`), found by its
-  `sessionId`, or by its `tmux` pane when the id hasn't been seen. No
-  `--name` wrapper. A Codex pane is named by its pane title, made unique.
+  `~/.claude/sessions/<pid>.json` (`name`, e.g. `lostty-9a`), found by the
+  `sessionId` the hooks report. No `--name` wrapper. Any other pane is
+  named `<folder>-<4 hex of the pane id>` (e.g. `lostty-3f2a`), made unique.
 - **Folders and branches** come from the app's pane pwd (OSC 7) and git
   (`rev-parse --git-common-dir` groups worktrees into one repo).
 
@@ -566,6 +569,8 @@ lostty +merge status                   the line(s) for this repo
 - **One line per target branch per repo.** The target is the repo's
   **integration branch**: `"integration"` in `guard.json` (global, or per
   repo under `repos`), default `main`. For lostty it's set to `skins`.
+  A `repos` entry names the main checkout and covers its worktrees too
+  (this also fixes `protectedBranches` for agents working in worktrees).
   `--into` picks another.
 - **Getting in line:** the agent runs `lostty +merge ready`, or you mark a
   pane ready in the Branches panel. Lostty never guesses. Refused when the
