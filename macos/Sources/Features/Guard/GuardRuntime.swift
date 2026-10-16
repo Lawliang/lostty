@@ -144,6 +144,16 @@ final class GuardRuntime: ObservableObject {
         agentPanes[pane] = nil
     }
 
+    /// A pane's agent reported its state: remember the pane runs one, of
+    /// this kind when known. A known kind is never forgotten for unknown.
+    func agentSeen(_ pane: UUID, kind: HookAgent?) {
+        if let kind {
+            if agentPanes[pane] != kind.rawValue { agentPanes[pane] = kind.rawValue }
+        } else if agentPanes[pane] == nil {
+            agentPanes[pane] = GuardHealth.unknownAgent
+        }
+    }
+
     func pending(for pane: UUID) -> GuardRequest? {
         book.pending.first { $0.check.pane == pane.uuidString }
     }

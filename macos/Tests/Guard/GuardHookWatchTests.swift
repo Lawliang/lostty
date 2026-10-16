@@ -18,6 +18,18 @@ struct GuardHookWatchTests {
         #expect(GuardHealth.disconnected(after) == [.codex])
     }
 
+    @Test func theRedBadgeForAPaneByItsAgent() {
+        // Not known to run an agent: never.
+        #expect(!GuardHealth.showsDisconnected(agent: nil, disconnected: [.claude, .codex]))
+        // A known kind: only its own hooks count.
+        #expect(GuardHealth.showsDisconnected(agent: "claude", disconnected: [.claude]))
+        #expect(!GuardHealth.showsDisconnected(agent: "claude", disconnected: [.codex]))
+        #expect(GuardHealth.showsDisconnected(agent: "codex", disconnected: [.codex]))
+        // An agent of unknown kind: any disconnected agent counts.
+        #expect(GuardHealth.showsDisconnected(agent: GuardHealth.unknownAgent, disconnected: [.codex]))
+        #expect(!GuardHealth.showsDisconnected(agent: GuardHealth.unknownAgent, disconnected: []))
+    }
+
     @Test func reconnectingClearsIt() {
         let after: [HookAgent: ClaudeHooksStatus] = [.claude: .installed]
         #expect(GuardHealth.disconnected(after).isEmpty)

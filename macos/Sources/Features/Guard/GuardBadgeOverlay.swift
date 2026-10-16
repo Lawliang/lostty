@@ -16,8 +16,7 @@ struct GuardBadgeOverlay: View {
                 .buttonStyle(.plain)
                 .badgeStyle(.orange)
             }
-            if let agent = runtime.agentPanes[surfaceID], let kind = HookAgent(rawValue: agent),
-               runtime.disconnected.contains(kind) {
+            if GuardHealth.showsDisconnected(agent: runtime.agentPanes[surfaceID], disconnected: runtime.disconnected) {
                 Label("Guard disconnected", systemImage: "exclamationmark.shield.fill").badgeStyle(.red)
             }
         }

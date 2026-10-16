@@ -101,5 +101,20 @@ struct GuardRuntimeTests {
         #expect(GuardRuntime.outcomeText(42, approved: true) == "Approved #42 in Lostty. Run it now, exactly as before.")
         #expect(GuardRuntime.outcomeText(42, approved: false) == "Denied #42 in Lostty. Don't run it, and don't work around it.")
     }
+
+    @Test func statePanesAreAgentPanesAndAKnownKindSticks() {
+        let rt = make(Log())
+        let other = UUID()
+        rt.agentSeen(other, kind: nil)
+        #expect(rt.agentPanes[other] == GuardHealth.unknownAgent)
+        rt.agentSeen(other, kind: .codex)
+        #expect(rt.agentPanes[other] == "codex")
+        rt.agentSeen(other, kind: nil)
+        #expect(rt.agentPanes[other] == "codex")
+        rt.disconnected = [.codex]
+        #expect(GuardHealth.showsDisconnected(agent: rt.agentPanes[other], disconnected: rt.disconnected))
+        rt.agentGone(other)
+        #expect(rt.agentPanes[other] == nil)
+    }
 }
 #endif

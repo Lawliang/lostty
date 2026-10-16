@@ -16,6 +16,17 @@ enum GuardHealth {
 }
 
 extension GuardHealth {
+    /// A pane known to run an agent whose kind isn't known yet.
+    static let unknownAgent = "unknown"
+
+    /// Whether a pane's red "Guard disconnected" badge shows: its agent's
+    /// hooks aren't all there, or, its kind unknown, any agent's aren't.
+    static func showsDisconnected(agent: String?, disconnected: Set<HookAgent>) -> Bool {
+        guard let agent else { return false }
+        if let kind = HookAgent(rawValue: agent) { return disconnected.contains(kind) }
+        return !disconnected.isEmpty
+    }
+
     /// Folds a fresh round of checks into the previous statuses. A nil means
     /// the check itself failed to run, which says nothing about the hooks, so
     /// the previous status stands (and an agent never seen is omitted).

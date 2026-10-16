@@ -33,6 +33,10 @@ final class ClaudeRuntime: ObservableObject {
     /// finished): the guard stops typing outcomes into it. Set at launch.
     var agentGone: @MainActor (UUID) -> Void = { _ in }
 
+    /// A pane's agent sent a state message, naming which agent when it can
+    /// tell: the guard learns the pane runs an agent, for its badge.
+    var agentSeen: @MainActor (UUID, HookAgent?) -> Void = { _, _ in }
+
     private let now: () -> Date
     private let schedule: Scheduler
     /// Panes not focused right now. Panes start focused (SurfaceView does).
@@ -63,13 +67,14 @@ final class ClaudeRuntime: ObservableObject {
             // (it carries on after a permission prompt without one).
             if phase(id).isOff { apply(.busy, to: id) }
             setAction(action, for: id)
+            agentSeen(id, ClaudeMessage.agentKind(value))
             return
         }
         guard let state = ClaudeMessage.decode(value) else {
             Ghostty.logger.debug("claude: rejected malformed \(ClaudeConstants.userVarName) payload")
             return
         }
-        if state == .exit { agentGone(id) }
+        if state == .exit { agentGone(id) } else { agentSeen(id, ClaudeMessage.agentKind(value)) }
         // Only a turn that was under way ends: anything printed in a pane can
         // carry this user var, so an idle out of nowhere names no file.
         let turnUnderWay = !phase(id).isOff

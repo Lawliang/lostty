@@ -382,6 +382,7 @@ class AppDelegate: NSObject,
         HookNotifications.checkAtLaunch()
         GuardRuntime.shared.start()
         ClaudeRuntime.shared.agentGone = { GuardRuntime.shared.agentGone($0) }
+        ClaudeRuntime.shared.agentSeen = { GuardRuntime.shared.agentSeen($0, kind: $1) }
 
         // Lostty Mobile: after a crash, offer to reopen the tmux sessions
         // the previous Lostty left running.
