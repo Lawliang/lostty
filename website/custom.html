@@ -156,6 +156,8 @@ kbd, .kbd {
 .logo { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; font-weight: 800; font-size: 16px; letter-spacing: -.01em; }
 .logo svg { width: 34px; height: 24px; flex: none; }
 .logo .blink { color: var(--magenta); font-weight: 400; animation: blink 1.06s steps(1) infinite; }
+/* the wordmark in Aurora Glass's logo type: Onest 700, tight tracking */
+.logo .logo-word { font-family: "Onest", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; font-weight: 700; font-size: 17px; letter-spacing: -.02em; }
 .nav-links { display: flex; gap: 4px; margin-left: 8px; }
 .nav-links a { text-decoration: none; color: var(--ink-2); font-size: 14px; padding: 6px 10px; border-radius: 4px; }
 .nav-links a:hover { color: var(--ink); background: var(--paper-2); }
@@ -666,7 +668,7 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
   <div class="wrap nav-in">
     <a class="logo" href="#top" aria-label="Lostty home">
       <svg viewBox="0 12 100 58" aria-hidden="true"><use href="#axo"/></svg>
-      <span>lostty<span class="blink">_</span></span>
+      <span class="logo-word">Lostty<span class="blink">_</span></span>
     </a>
     <nav class="nav-links" aria-label="Main">
       <a class="hide-sm" href="#why" data-nav="home">Features</a>
