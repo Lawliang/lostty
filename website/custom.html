@@ -309,15 +309,15 @@ p { margin: 0; }
 @keyframes ag-gillR{50%{transform:rotate(12deg)}}
 @keyframes ag-bob{50%{transform:translateY(-6%)}}
 /* the steps stack on the left; the Mac with the iPhone over its corner sits on
-   the right, both turned toward the right. The steps line up with the section's
+   the right, both turned toward the left. The steps line up with the section's
    left edge and the iPhone with its right; the type scales with the width (70em across) */
 .ag-stage-col{min-width:0; container-type:inline-size}
 .ag-stage{position:relative; display:grid; grid-template-columns:max-content minmax(0, 59em); justify-content:space-between; gap:4em; align-items:center;
   font-size:clamp(6px, calc(100cqi / 70), 15px)}
-.ag-dev{order:1; perspective:1900px; min-width:0; padding:2em 17.5% 12.5em 0}
+.ag-dev{order:1; perspective:1900px; min-width:0; padding:2em 14% 12.5em 0}
 .ag-rig{position:relative; transform-style:preserve-3d;
-  transform:rotateY(calc(14deg + var(--px, 0) * 6deg)) rotateX(calc(8deg - var(--py, 0) * 5deg)) rotateZ(-.6deg)}
-.ag-halo{position:absolute; inset:10% 8% -2% -6%; border-radius:50%; filter:blur(50px); opacity:.55; transform:translateZ(-120px);
+  transform:rotateY(calc(-14deg + var(--px, 0) * 6deg)) rotateX(calc(8deg - var(--py, 0) * 5deg)) rotateZ(.6deg)}
+.ag-halo{position:absolute; inset:10% -6% -2% 8%; border-radius:50%; filter:blur(50px); opacity:.55; transform:translateZ(-120px);
   background:radial-gradient(closest-side, var(--magenta), color-mix(in srgb, var(--violet) 60%, transparent) 60%, transparent)}
 
 .ag-mac{position:relative; border-radius:1em; background:var(--term-bg); color:var(--term-fg); transform:translateZ(0);
@@ -362,7 +362,7 @@ p { margin: 0; }
 
 /* phone */
 .ag-phone{position:absolute; right:-14%; bottom:-12em; width:16em; height:33em; border-radius:2.7em; padding:.5em; background:#050407;
-  transform:translateZ(110px) rotateY(-5deg);
+  transform:translateZ(110px) rotateY(5deg);
   box-shadow:0 0 0 1px rgba(255,255,255,.12), inset 0 0 0 .18em #2A2330, 0 3em 6em -1.5em rgba(0,0,0,.75), 0 0 4em -1em color-mix(in srgb, var(--magenta) 50%, transparent)}
 .ag-pscreen{position:relative; height:100%; border-radius:2.25em; overflow:hidden; background:#0B0910; color:var(--term-fg)}
 .ag-island{position:absolute; top:.6em; left:50%; width:5.4em; height:1.5em; margin-left:-2.7em; border-radius:1em; background:#000; z-index:5}
@@ -416,8 +416,7 @@ p { margin: 0; }
 /* narrow: the steps go under the Mac and iPhone, side by side */
 @container (max-width:640px){
   .ag-stage{grid-template-columns:minmax(0, 1fr); gap:1em; font-size:calc(100cqi / 50)}
-  /* the Mac's near (left) edge looms past its box when it turns right */
-  .ag-dev{order:0; padding-right:22%; padding-left:.4em}
+  .ag-dev{order:0; padding-right:9%; padding-left:0}
   .ag-steps{flex-direction:row; gap:8px}
   .ag-steps li{flex:1; grid-template-columns:minmax(0, 1fr); grid-template-rows:2px auto; gap:8px; font-size:12.5px}
   .ag-steps li.ag-cur::before{background:linear-gradient(90deg, var(--magenta), var(--violet))}
