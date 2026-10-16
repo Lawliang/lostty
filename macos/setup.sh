@@ -1,7 +1,7 @@
 #!/bin/sh
 # Sets up this Mac to build Lostty, then builds and installs it: points the
 # command line at Xcode, adds the Metal Toolchain, Zig and tmux when they're
-# missing, and runs install.sh. Safe to run again.
+# missing, and runs install.sh --stable (the finished build). Safe to run again.
 #   --tools-only: just the tools (for the iPhone app, with Lostty for Mac downloaded)
 set -eu
 cd "$(dirname "$0")/.."
@@ -44,7 +44,7 @@ if [ "${1:-}" = "--tools-only" ]; then
   echo "The tools are ready. For the iPhone app: macos/install-phone.sh"
   exit 0
 fi
-macos/install.sh
+macos/install.sh --stable
 if ! pgrep -xf /Applications/Lostty.app/Contents/MacOS/lostty >/dev/null; then
   open /Applications/Lostty.app
 fi
