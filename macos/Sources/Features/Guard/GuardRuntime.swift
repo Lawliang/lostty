@@ -160,7 +160,4 @@ final class GuardRuntime: ObservableObject {
         if let data = try? JSONEncoder().encode(book) { try? data.write(to: url, options: .atomic) }
     }
 }
-
-// Temporary: Task 11 replaces this with the real request window.
-@MainActor enum GuardRequestWindow { static func show(_ id: Int) {} }
 #endif
