@@ -42,8 +42,17 @@ pub fn decide(alloc: Allocator, e: Env, probe: anytype, input_json: []const u8) 
     const root = std.json.parseFromSliceLeaky(std.json.Value, alloc, input_json, .{}) catch
         return unreadable(alloc, "?", input_json, "/");
     const tool = str(root, "tool_name") orelse return unreadable(alloc, "?", input_json, "/");
-    const cwd = str(root, "cwd") orelse e.home;
+    var cwd = str(root, "cwd") orelse e.home;
     const ti = if (root == .object) root.object.get("tool_input") orelse std.json.Value{ .null = {} } else std.json.Value{ .null = {} };
+    // Codex's shell tool runs in `workdir` when it has one, resolved
+    // against the hook's cwd: the folder for the whole decision, as a
+    // leading `cd` would be.
+    if (!std.mem.startsWith(u8, tool, "mcp__") and !isFileTool(tool) and ti == .object) {
+        if (ti.object.get("workdir")) |wd| {
+            if (wd != .string) return unreadable(alloc, tool, input_json, cwd);
+            cwd = try paths.resolve(alloc, cwd, wd.string);
+        }
+    }
     const ctx: catalog.Ctx = .{ .alloc = alloc, .cwd = cwd, .home = e.home, .tmpdir = e.tmpdir, .config = e.config };
 
     var input: []const u8 = "";
@@ -296,6 +305,30 @@ fn bash(a: Allocator, cmd: []const u8, cwd: []const u8) ![]const u8 {
     try obj.put("cwd", .{ .string = cwd });
     try obj.put("session_id", .{ .string = "s1" });
     return std.json.Stringify.valueAlloc(a, std.json.Value{ .object = obj }, .{});
+}
+
+fn shellIn(a: Allocator, cmd: []const u8, workdir: []const u8, cwd: []const u8) ![]const u8 {
+    return std.fmt.allocPrint(a, "{{\"tool_name\":\"shell\",\"tool_input\":{{\"command\":\"{s}\",\"workdir\":{s}}},\"cwd\":\"{s}\"}}", .{ cmd, workdir, cwd });
+}
+
+test "guard decide: Codex workdir is the folder the command runs in" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    // Elsewhere, outside any repo: the rm is critical, and says where.
+    const out = (try decide(a, env(a), Fake{}, try shellIn(a, "rm -rf src", "\"/elsewhere\"", "/r"))).critical;
+    try std.testing.expectEqual(catalog.Group.deleting, out.group);
+    try std.testing.expectEqualStrings("/elsewhere", out.cwd);
+    try std.testing.expect(out.repo == null);
+    // Inside the repo, a committed file goes through.
+    try std.testing.expect(try decide(a, env(a), Fake{}, try shellIn(a, "rm committed.zig", "\"/r/sub\"", "/elsewhere")) == .harmless);
+    // A relative workdir is resolved against cwd.
+    try std.testing.expect(try decide(a, env(a), Fake{}, try shellIn(a, "rm committed.zig", "\"sub\"", "/r")) == .harmless);
+    const rel = (try decide(a, env(a), Fake{}, try shellIn(a, "rm -rf src", "\"../elsewhere\"", "/r"))).critical;
+    try std.testing.expectEqualStrings("/elsewhere", rel.cwd);
+    // Not a string: unreadable.
+    try std.testing.expectEqual(catalog.Group.unreadable, (try decide(a, env(a), Fake{}, try shellIn(a, "ls", "5", "/r"))).critical.group);
+    try std.testing.expectEqual(catalog.Group.unreadable, (try decide(a, env(a), Fake{}, try shellIn(a, "ls", "null", "/r"))).critical.group);
 }
 
 test "guard decide: harmless and critical Bash" {
