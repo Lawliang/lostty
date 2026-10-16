@@ -39,6 +39,8 @@ final class GuardRuntime: ObservableObject {
     private let effects: Effects
     private var server: GuardServer?
     private var expiryTimer: Timer?
+    private var hookWatch: GuardHookWatch?
+    private var lastStatus: [HookAgent: ClaudeHooksStatus] = [:]
 
     init(book: ApprovalBook = .init(), effects: Effects = .live) {
         self.book = book
@@ -68,6 +70,31 @@ final class GuardRuntime: ObservableObject {
         }
         expiryTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { _ in
             MainActor.assumeIsolated { GuardRuntime.shared.tick() }
+        }
+        checkHooks(announce: false)
+        let watch = GuardHookWatch { GuardRuntime.shared.checkHooks(announce: true) }
+        watch.start()
+        hookWatch = watch
+    }
+
+    /// Checks each installed agent's hooks off the main thread, then flags
+    /// the panes of any agent not fully connected. Only a change made while
+    /// the app runs announces; checkAtLaunch already offers Connect at launch.
+    private func checkHooks(announce: Bool) {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let agents = HookAgent.allCases.filter {
+            FileManager.default.fileExists(atPath: home.appendingPathComponent($0.configDirectory).path)
+        }
+        Task.detached {
+            var current: [HookAgent: ClaudeHooksStatus] = [:]
+            for agent in agents { current[agent] = ClaudeHooksCLI().status(agent: agent) ?? .unreadable }
+            await MainActor.run {
+                let rt = GuardRuntime.shared
+                let lost = GuardHealth.newlyDisconnected(previous: rt.lastStatus, current: current)
+                rt.lastStatus = current
+                rt.disconnected = GuardHealth.disconnected(current)
+                if announce { for agent in lost { HookNotifications.announceMissing(agent) } }
+            }
         }
     }
 

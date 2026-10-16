@@ -65,6 +65,12 @@ enum HookNotifications {
         }
     }
 
+    /// Posts the "hooks missing" bubble for one agent, as checkAtLaunch does.
+    @MainActor
+    static func announceMissing(_ agent: HookAgent, center: LosttyNotifications = .shared) {
+        center.post(missing(agent, connect: { connect(agent, center: center) }))
+    }
+
     @MainActor
     static func connect(_ agent: HookAgent, center: LosttyNotifications = .shared) {
         DispatchQueue.global(qos: .userInitiated).async {
