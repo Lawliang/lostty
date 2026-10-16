@@ -70,6 +70,13 @@ pub fn decide(alloc: Allocator, e: Env, probe: anytype, input_json: []const u8) 
         // Before the `command` branch: Codex sends its patch as `command`.
         input = patch;
         found = try catalog.patch(ctx, probe, patch);
+        // Any other tool's `command` that starts like a patch is still a
+        // command the shell may run: read it as one too.
+        if (found == null and !is_patch_tool) {
+            if (str(ti, "command")) |cmd| if (cmd.ptr == patch.ptr) {
+                found = try bashFinding(ctx, probe, cmd);
+            };
+        }
     } else if (is_patch_tool) {
         input = "";
         found = .{ .group = .unreadable, .why = "a patch Lostty can't read" };
@@ -436,6 +443,20 @@ test "guard decide: apply_patch as Codex sends it, in `command`" {
     try std.testing.expectEqual(catalog.Group.unreadable, (try decide(a, env(a), Fake{}, empty)).critical.group);
     // A Bash command written as a patch is still read as Bash.
     try std.testing.expectEqual(catalog.Group.leaving, (try decide(a, env(a), Fake{}, try bash(a, "*** Begin Patch\ngit push --force", "/r"))).critical.group);
+}
+
+test "guard decide: a patch-looking command on another tool is also read as shell" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const push =
+        \\{"tool_name":"shell","tool_input":{"command":"*** Begin Patch\n*** Add File: x.txt\n+hi\n*** End Patch\ngit push --force"},"cwd":"/r"}
+    ;
+    try std.testing.expectEqual(catalog.Group.leaving, (try decide(a, env(a), Fake{}, push)).critical.group);
+    const plain =
+        \\{"tool_name":"shell","tool_input":{"command":"*** Begin Patch\n*** Add File: x.txt\n+hi\n*** End Patch\nls"},"cwd":"/r"}
+    ;
+    _ = try decide(a, env(a), Fake{}, plain);
 }
 
 test "guard decide: apply_patch through Bash" {
