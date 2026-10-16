@@ -112,6 +112,10 @@
 	<string>YmWYglrAW9/Psc9k26+jmzCnEEeo5rtIGHpxwAP4feo=</string>
 	<key>LosttyUpdateFeed</key>
 	<string>$(LOSTTY_UPDATE_FEED)</string>
+	<key>LosttyChannel</key>
+	<string>$(LOSTTY_CHANNEL)</string>
+	<key>LosttyBetaNumber</key>
+	<string>$(LOSTTY_BETA_NUMBER)</string>
 	<key>SUScheduledCheckInterval</key>
 	<integer>86400</integer>
 	<key>UTExportedTypeDeclarations</key>

@@ -10,7 +10,7 @@ struct AboutView: View {
     /// Read the commit from the bundle.
     private var build: String? { Bundle.main.infoDictionary?["CFBundleVersion"] as? String }
     private var commit: String? { Bundle.main.infoDictionary?["GhosttyCommit"] as? String }
-    private var version: String? { Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String }
+    private var version: String? { LosttyChannel.displayVersion(info: Bundle.main.infoDictionary) }
     private let copyright = "© 2026 Lawrence Liang"
 
     #if os(macOS)
