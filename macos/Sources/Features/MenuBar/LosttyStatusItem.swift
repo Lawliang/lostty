@@ -138,6 +138,12 @@ final class LosttyStatusItem: NSObject, NSMenuDelegate {
         let floorItem = NSMenuItem(title: "Battery Floor", action: nil, keyEquivalent: "")
         floorItem.submenu = floors
         menu.addItem(floorItem)
+
+        // As ⌘Q: ends this Lostty's terminals, and asks first when it should.
+        menu.addItem(.separator())
+        let quit = NSMenuItem(title: "Quit Lostty", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "")
+        quit.target = NSApp
+        menu.addItem(quit)
     }
 
     private func disabled(_ title: String) -> NSMenuItem {
