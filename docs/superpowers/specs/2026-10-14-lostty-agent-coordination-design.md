@@ -517,6 +517,7 @@ lostty +msg wait landed <branch> [--into <target>]
                                        tell me once when <branch> is in the target
 lostty +msg inbox                      what's been sent to this pane
 lostty +merge ready [--into <target>]  put my branch in line to merge
+lostty +merge hold [--into <target>]   I work on the target itself; others' merges wait
 lostty +merge done                     I merged; pass the turn on
 lostty +merge status                   the line(s) for this repo
 ```
@@ -591,6 +592,14 @@ lostty +merge status                   the line(s) for this repo
   the next pane gets its turn.
 - **A pane that closes** stays in line, marked "pane closed", until you
   remove it. The turn passes over it to the next open pane.
+- **Holds.** A pane working on the target itself (its folder has the
+  target checked out) runs `lostty +merge hold`. Until it runs
+  `lostty +msg done`, or you press Release in the panel, every other
+  pane's merge into that target is held, the pane whose turn it is
+  included; the holder still follows the line. One holder per target.
+  Nothing else ends a hold: a closed pane, or an agent idle 2 hours, keeps
+  it, marked **stale** in the panel and in the held request. The intro
+  line tells agents about `hold`.
 - **What counts as merging into the target:** `git merge` while the target
   is checked out; a push whose destination is the target (which covers a
   rebase then pushed onto it); `gh pr merge` (already critical, §7.2).
@@ -600,9 +609,11 @@ lostty +merge status                   the line(s) for this repo
 - The guard learns the integration target from `guard.json`. A merge into
   it (as §10.3 counts it) that the catalog wouldn't otherwise flag goes to
   the app as a **turn check**.
-- The app allows it when the line for that target is empty or the pane
-  holds the turn. Otherwise it's a normal guard request (§7.4), its detail
-  showing the line, and you decide. Approval covers that one call, as ever.
+- The app allows it when nobody else holds the target, and the line for
+  it is empty or the pane holds the turn. Otherwise it's a normal guard request (§7.4), its detail
+  showing the hold and the line, and you decide. Approval covers that one
+  call, as ever. A pane held by a hold also gets one notice: "Run `lostty
+  +msg wait done <holder>` to be told once when it's done."
 - A merge into a protected branch still asks, in turn or not: the line
   orders merges, it doesn't approve them.
 - If the app can't be reached, a turn check is allowed: before step 2 these
@@ -622,6 +633,16 @@ lostty +merge status                   the line(s) for this repo
   it starts a turn in an idle Codex TUI by itself, so no Wake it is needed
   when it works. When it fails, the message waits in the pane's inbox and
   the pane is badged, with Wake it as §5.
+- **Claude** stays on the messenger run. Claude's own messaging socket is
+  private (per-session key files, a versioned protocol) and has no
+  command, so Lostty doesn't speak it.
+- **Waking by itself** (supersedes decision 7 for this one line): after 3
+  failed deliveries Lostty types "Lostty has messages for you: run
+  `lostty +msg inbox`." into the pane, never the messages, and only when
+  the agent is idle, nobody has typed there since it went idle or in the
+  last 2 minutes, and the pane isn't the focused one. Otherwise the badge
+  waits for Wake it. Once per batch of failed mail. The badge stays until
+  the agent runs `lostty +msg inbox`.
 - Every delivery is wrapped as §5. Lostty's own notices (your turn,
   landed, moved, branch switched) are labeled "From Lostty" and travel as
   peer messages too: low authority, whatever the source.
@@ -633,7 +654,8 @@ lostty +merge status                   the line(s) for this repo
 
 - **Branches panel, "Merge line" section**, under Approvals: each line
   (`skins`: 1. lostty-13 `observer`, your turn · 2. lostty-9a
-  `project-pill`), with Mark ready, Move up/down, Skip, Mark done, Remove.
+  `project-pill`), with Mark ready, Move up/down, Skip, Mark done, Remove;
+  holds above them (`skins` held by lostty-13, stale or not) with Release.
 - **Notified only** for a held out-of-turn merge (the guard request) and a
   merge conflict (the turn's target folder has unmerged paths). Turns go
   to the agents; the panel shows the rest.
@@ -760,3 +782,16 @@ Step 2, settled on 2026-10-15:
 | 45 | What notifies you | Held out-of-turn merges and merge conflicts only |
 | 46 | What agents send | `note` and `done` (done wakes waiters); other kinds later |
 | 47 | Build order | As §9, asking before each install |
+
+Step 2, second grilling, 2026-10-16:
+
+| # | Question | Decision |
+| :- | :- | :- |
+| 48 | A pane working on the target itself | It says so: `lostty +merge hold`; no guessing from busy or uncommitted |
+| 49 | A merge held by a hold | A guard request ("X holds skins"); the held pane is told `wait done X` |
+| 50 | Who decides the order | Lostty's line (as 31); agents send notes, only you reorder |
+| 51 | A forgotten hold | Stays until done or Release; marked stale when its pane closed or it's idle 2 hours |
+| 52 | Waking after failed delivery | Automatic, guarded: the fixed line only, agent idle, no recent typing, pane not focused (supersedes 7 for this line) |
+| 53 | Asking and answering between agents | Later; step 2 has one-way notes |
+| 54 | Extras kept | Branch-switch notice, merge-conflict alert, the Mail waiting badge |
+| 55 | Claude delivery | The Haiku messenger run only; Claude's private messaging socket isn't used |

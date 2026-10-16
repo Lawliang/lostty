@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Agent panes in Lostty can see who else works on the same repo (`lostty +msg list`), leave each other short notes and one-time waits, and take turns merging into the repo's integration branch (`lostty +merge ready` … "Your turn" … `lostty +merge done`), with out-of-turn merges held by the guard for you to decide.
+**Goal:** Agent panes in Lostty can see who else works on the same repo (`lostty +msg list`), leave each other short notes and one-time waits, and take turns merging into the repo's integration branch (`lostty +merge ready` … "Your turn" … `lostty +merge done`), with out-of-turn merges held by the guard for you to decide. A pane working on the integration branch itself holds it (`lostty +merge hold` … `lostty +msg done`), so nobody merges into it under its feet.
 
 **Architecture:** Agents talk to the app the way `+claude-state` already does: `+msg`/`+merge` write an OSC 1337 `SetUserVar` (`LOSTTY_COORD`) to their own terminal, so the app knows the sender from the pane the bytes arrive on. The app answers by writing JSON files in the coordination folder (`panes.json`, `lines.json`, `inbox/<pane>.json`, `results/<pane>.json`), which the CLI reads. In the app, three pure value types hold the state (`PaneDirectory`, `MergeLines`, `Mailbox`) and `CoordRuntime` glues them to git, the files, delivery (a Haiku `SendMessage` run for Claude, `codex queue` for Codex) and the guard. The guard learns the integration branch from `guard.json`; a merge into it becomes a *turn check* the app allows when the line is empty or the pane holds the turn, and otherwise turns into a normal guard request.
 
@@ -21,6 +21,8 @@
 - Commit messages: `lostty: coord: <what>` (or `lostty: guard: <what>` for guard changes), ending with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Don't push, and don't install builds, unless the user asks.
 - Keep any agent test prompts tiny (the user pays for tokens). Never wrap commands in `sh -c`.
 - Spec values, verbatim: "One line per target branch per repo"; target default `main`, "For lostty it's set to `skins`"; "first ready, first served"; "Agents can't swap places"; "Lostty doesn't force the update"; "**Each branch's own agent merges it**, in the folder that has the target checked out"; a closed pane "stays in line, marked 'pane closed', until you remove it. The turn passes over it"; "A merge into a protected branch still asks, in turn or not"; "If the app can't be reached, a turn check is allowed"; a wait "fires once, delivers one message, and lapses after 24 hours. At most 5 open waits per pane"; "agents send `note` and `done` only"; `note` bodies at most 1 KB; "30-second batching, 20 deliveries per pane per hour"; Lostty's own notices are "labeled 'From Lostty' and travel as peer messages too"; "**Notified only** for a held out-of-turn merge (the guard request) and a merge conflict"; `ready`, `done` and `note` "wait up to 5 seconds for the app".
+- Holds, verbatim (decisions 48–51): "Only a pane whose folder has the target checked out can hold it"; a hold "stops everyone else's merges into the target, the pane whose turn it is included"; it ends with the holder's `lostty +msg done` or your Release, nothing else; a closed pane or an agent idle 2 hours keeps its hold, marked stale.
+- Waking (decision 52): the only text Lostty types by itself is "Lostty has messages for you: run `lostty +msg inbox`.", only after 3 failed deliveries, only while the agent is idle, nobody has typed in the pane since it went idle or in the last 2 minutes, and the pane isn't the focused one.
 - The approval rules of step 1 don't change: nothing in step 2 can approve a guard request. A turn check only *allows* a merge that wasn't critical before step 2.
 
 ## Decisions this plan adds (flag in review)
@@ -32,9 +34,12 @@ The spec leaves these to the build. Each is a default the user can veto:
 3. **Skip** sends a pane to the back of its line. **Remove** takes it out. **Mark done** counts as merged (the next pane hears "(X just merged Y)"); skip, remove, move and close don't name anyone.
 4. **A pane's own `ready` that makes it first** answers with the whole "Your turn …" text; no second message is delivered. A pane you mark ready from the panel gets the message delivered.
 5. **Merging the target's own upstream** (`git merge origin/skins` while on `skins`, `git merge @{u}`) isn't a turn check: it's an update, not a branch landing.
-6. **Delivery retries:** a failed delivery stays queued and is retried no sooner than 30 s later, up to 3 attempts, then it's marked failed. From its first failure the pane shows a "Mail waiting" badge with **Wake it**, which types one line ("Lostty has messages for you: run `lostty +msg inbox`.") and marks them delivered. Your click does the typing.
+6. **Delivery retries:** a failed delivery stays queued and is retried no sooner than 30 s later, up to 3 attempts, then it's marked failed. From its first failure the pane shows a "Mail waiting" badge with **Wake it**. After the third failure Lostty wakes the pane by itself when it safely can (Task 14). The badge stays until the agent runs `lostty +msg inbox`.
 7. **Not built in step 2:** counting the messenger runs' tokens as "Lostty" in the usage bar (§3), and §3's `reply` and `question` kinds. Listed in the ledger as deferred.
 8. **A pane is "busy"** from `busy`, `tool`, `agents` or `resumed` until `idle`; an agent that exits drops out of `list` (its line entry stays).
+9. **A held pane is told how to wait as soon as its merge is held**, not after you deny it: one "From Lostty" notice naming `lostty +msg wait done <holder>`. Repeats within 10 minutes are dropped by the mailbox.
+10. **A wake is once per batch of failed mail.** Mail that fails again later can wake the pane again; the same messages never do.
+11. **The intro names `+merge hold`**, since a pane on the target only holds it if its agent knows to.
 
 ## Review Focus
 
@@ -82,7 +87,7 @@ The spec leaves these to the build. Each is a default the user can veto:
 | `macos/Sources/Features/Guard/GuardRuntime.swift` (modify) | `turnAllowed` before the approval book. |
 | `macos/Sources/Features/Guard/GuardRequestView.swift` (modify) | Shows the line for a held turn check. |
 | `macos/Sources/Ghostty/Ghostty.App.swift` (modify) | Route user vars to `CoordRuntime`. |
-| `macos/Sources/Ghostty/Surface View/SurfaceView_AppKit.swift` (modify) | `LOSTTY_COORD_DIR` env; tell `CoordRuntime` a pane closed. |
+| `macos/Sources/Ghostty/Surface View/SurfaceView_AppKit.swift` (modify) | `LOSTTY_COORD_DIR` env; tell `CoordRuntime` a pane closed; `lastKeyDown` for auto-wake. |
 | `macos/Sources/Ghostty/Surface View/SurfaceView.swift` (modify) | Add `CoordBadgeOverlay`. |
 | `macos/Sources/App/macOS/AppDelegate.swift` (modify) | Start the runtime; chain `agentGone`; set `turnAllowed`. |
 | `macos/Sources/Features/Branches/BranchesPanel.swift` (modify) | Add `MergeLineSection()` under Approvals. |
@@ -102,10 +107,12 @@ All in the coordination folder (`$LOSTTY_COORD_DIR`, default `~/.config/lostty/c
 {"v":1,"lines":[{"repo":"/x/.git","target":"skins",
   "entries":[{"pane":"<UUID>","name":"lostty-13","branch":"observer","state":"turn"}]}]}
 // state: "turn" | "waiting" | "closed"
+// plus (Task 13) "holds":[{"repo":"/x/.git","target":"skins","pane":"<UUID>","name":"lostty-13","since":1792000000.5,"stale":"pane closed"}]
+// and panes.json rows gain "holds":"skins" for the holder
 
 // inbox/<UUID>.json
 {"v":1,"messages":[{"id":12,"from":"lostty-13","kind":"note","body":"…","created":1792000000.5,"state":"delivered"}]}
-// kind: "note" | "done" | "lostty"; state: "queued" | "delivered" | "failed" | "expired"
+// kind: "note" | "done" | "lostty"; state: "queued" | "delivered" | "failed" | "woken" (Task 14) | "expired"
 
 // results/<UUID>.json  (the last 10)
 {"v":1,"results":[{"rid":"ab12cd34","ok":true,"text":"You're 2nd in line to merge guard into skins, after lostty-13."}]}
@@ -115,7 +122,7 @@ The op an agent's command writes (`LOSTTY_COORD`, base64 JSON in OSC 1337 SetUse
 
 ```json
 {"v":1,"op":"ready","rid":"ab12cd34","into":"skins","cwd":"/x/wt"}
-// op: "hello" | "ready" | "mergeDone" | "note" | "done" | "waitDone" | "waitLanded"
+// op: "hello" | "ready" | "mergeDone" | "note" | "done" | "waitDone" | "waitLanded" | "hold" (Task 13) | "seen" (Task 14)
 // other fields: "to" (pane name), "text", "branch", "agent", "session"
 ```
 
@@ -4689,7 +4696,891 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 ---
 
-### Task 13: Docs, the full test pass, and the hands-on check
+### Task 13: Holds: a pane working on the target itself
+
+The case that started step 2: lostty-13 works directly on `skins` while lostty-9a wants to merge into it. A pane on the target can't get in line, so without this an empty line lets anyone merge. With it, the pane on the target runs `lostty +merge hold`; until it runs `lostty +msg done` (or you release it in the panel), every other pane's merge into that target is held as a guard request, and the held pane is told how to wait.
+
+**Files:**
+- Modify: `src/cli/coord/wire.zig` (`Op.hold`; test)
+- Modify: `src/cli/coord/files.zig` (`HoldRow`, `LinesFile.holds`, `PaneRow.holds`, `holdsFor`, `formatHolds`, `formatList`; tests)
+- Modify: `src/cli/merge.zig` (`hold`; status prints holds; test)
+- Modify: `src/cli/msg.zig` (`intro_text`, `usage_text`; test)
+- Modify: `macos/Sources/Features/Coord/CoordWire.swift` (`Kind.hold`, `HoldRow`, `LinesFile.holds`, `PaneRow.holds`)
+- Modify: `macos/Sources/Features/Coord/MergeLines.swift` (`LineHold`, `HoldOutcome`, `holds`, `holder`, `hold`, `release`, `allowsMerge`)
+- Modify: `macos/Sources/Features/Coord/CoordFiles.swift` (`snapshot` writes holds)
+- Modify: `macos/Sources/Features/Coord/CoordRuntime.swift` (the `hold` op, `done` releases, `holdStale`, `releaseHold`, `turnHeld`, `lineSummary`)
+- Modify: `macos/Sources/Features/Coord/MergeLineSection.swift` (hold rows with Release)
+- Modify: `macos/Sources/App/macOS/AppDelegate.swift` (`turnAllowed` tells the held pane)
+- Test: `macos/Tests/Coord/MergeLinesTests.swift`, `macos/Tests/Coord/CoordRuntimeTests.swift`, `macos/Tests/Coord/CoordFilesTests.swift`, `macos/Tests/Coord/MergeLineRowsTests.swift`
+
+**Interfaces:**
+- Consumes: Tasks 3–12 as written.
+- Produces: `wire.Op.hold` (`"hold"`); `files.HoldRow`, `files.holdsFor(alloc, holds, repo)`, `files.formatHolds(alloc, holds, me)`; `merge.Cmd.hold: ?[]const u8`; `LineHold(key:pane:since:)`, `HoldOutcome` (`.held`, `.already`, `.heldBy(UUID)`), `MergeLines.holds`, `holder(_:) -> LineHold?`, `hold(_:key:now:) -> HoldOutcome`, `release(_ pane: UUID) -> [LineKey]`, `release(_ key: LineKey) -> UUID?`; `CoordRuntime.holdStale(_:) -> String?`, `releaseHold(_:)`, `turnHeld(_:)`, `CoordRuntime.holdStaleAfter`; `CoordFiles.snapshot(directory:lines:mailbox:names:stale:)`; `MergeLineRows.build(lines:directory:names:stale:)` returning `(lines:, holds:, notInLine:)`.
+
+Rules (spec §10.3, decisions 48–51):
+- Only a pane whose folder has the target checked out can hold it. One holder per target per repo.
+- A hold stops everyone else's merges into the target, the pane whose turn it is included. The holder itself still follows the line.
+- `lostty +msg done` releases every hold the pane has. You can release one in the Branches panel. Nothing else does: a closed pane or an agent idle 2 hours keeps its hold, marked **stale** in the panel and in the held request.
+- A held merge is an ordinary guard request. Its detail shows the hold above the line. The held pane also gets one notice: "Run `lostty +msg wait done <holder>` to be told once when it's done."
+
+- [ ] **Step 1: Write the failing tests**
+
+In `src/cli/coord/wire.zig`, add:
+
+```zig
+test "coord wire: hold is its own op" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const seq = try encode(a, .hold, .{ .rid = "ab12cd34" }, false);
+    const prefix = "\x1b]1337;SetUserVar=LOSTTY_COORD=";
+    const b64 = seq[prefix.len .. seq.len - 1];
+    const json = try a.alloc(u8, try std.base64.standard.Decoder.calcSizeForSlice(b64));
+    try std.base64.standard.Decoder.decode(json, b64);
+    try std.testing.expectEqualStrings(
+        \\{"v":1,"op":"hold","rid":"ab12cd34"}
+    , json);
+}
+```
+
+In `src/cli/coord/files.zig`, add:
+
+```zig
+test "coord files: holds, in status and in the list" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const f = parse(LinesFile, a,
+        \\{"v":1,"lines":[],"holds":[
+        \\ {"repo":"/x/.git","target":"skins","pane":"B","name":"lostty-13","since":1},
+        \\ {"repo":"/x/.git","target":"main","pane":"A","name":"lostty-9a","since":2,"stale":"pane closed"},
+        \\ {"repo":"/y/.git","target":"main","pane":"D","name":"other-1","since":3}]}
+    ).?;
+    const mine = try holdsFor(a, f.holds, "/x/.git");
+    try std.testing.expectEqual(@as(usize, 2), mine.len);
+    try std.testing.expectEqualStrings(
+        \\skins is held by lostty-13 while it works on it.
+        \\main is held by lostty-9a (you) while it works on it. Stale: pane closed.
+        \\
+    , try formatHolds(a, mine, "A"));
+    try std.testing.expectEqualStrings("", try formatHolds(a, &.{}, "A"));
+    // An older app writes no holds: still parses.
+    try std.testing.expectEqual(@as(usize, 0), parse(LinesFile, a, "{\"v\":1,\"lines\":[]}").?.holds.len);
+    const p = parse(PanesFile, a,
+        \\{"v":1,"panes":[{"pane":"B","name":"lostty-13","agent":"codex","busy":true,"worktree":"/x","repo":"/x/.git","branch":"skins","holds":"skins"}]}
+    ).?;
+    try std.testing.expectEqualStrings(
+        \\1 agent pane on this repo:
+        \\- lostty-13 · Codex · busy · skins · holds skins
+        \\
+    , try formatList(a, p.panes, "Z", &.{null}));
+}
+```
+
+(`formatList` puts "(you)" only on the caller's pane; `"Z"` matches none, so the row prints in file order with no "(you)".)
+
+In `src/cli/merge.zig`, extend `test "coord merge: parse"`:
+
+```zig
+    try t.expect(parse(&.{ "lostty", "+merge", "hold" }).hold == null);
+    try t.expectEqualStrings("main", parse(&.{ "lostty", "+merge", "hold", "--into=main" }).hold.?);
+    try t.expect(parse(&.{ "lostty", "+merge", "hold", "x" }) == .usage);
+```
+
+In `src/cli/msg.zig`, change `test "coord msg: the intro is one short paragraph naming the commands"`: the length bound becomes `intro_text.len < 500`, and add:
+
+```zig
+    try std.testing.expect(std.mem.indexOf(u8, intro_text, "lostty +merge hold") != null);
+```
+
+`macos/Tests/Coord/MergeLinesTests.swift`, add:
+
+```swift
+    @Test func aHoldStopsEveryoneElsesMergesTurnHolderIncluded() {
+        var l = line(a, b)
+        #expect(l.hold(c, key: key, now: t0) == .held)
+        #expect(!l.allowsMerge(by: a, into: key))
+        #expect(!l.allowsMerge(by: b, into: key))
+        #expect(l.hold(c, key: key, now: t0 + 1) == .already)
+        #expect(l.hold(a, key: key, now: t0 + 1) == .heldBy(c))
+        #expect(l.release(c) == [key])
+        #expect(l.holder(key) == nil)
+        #expect(l.allowsMerge(by: a, into: key))
+    }
+
+    @Test func theHolderStillFollowsTheLine() {
+        var l = line(a)
+        _ = l.hold(c, key: key, now: t0)
+        #expect(!l.allowsMerge(by: c, into: key))
+        var empty = MergeLines()
+        _ = empty.hold(c, key: key, now: t0)
+        #expect(empty.allowsMerge(by: c, into: key))
+        // A hold isn't a place in line.
+        #expect(empty.keys.isEmpty)
+    }
+
+    @Test func youReleaseAHoldByItsLine() {
+        var l = MergeLines()
+        _ = l.hold(c, key: key, now: t0)
+        #expect(l.release(key) == c)
+        #expect(l.release(key) == nil)
+        #expect(l.release(c).isEmpty)
+    }
+
+    @Test func aHoldOutlivesItsPaneAndRoundTrips() throws {
+        var l = line(a)
+        _ = l.hold(c, key: key, now: t0)
+        _ = l.paneClosed(c)
+        #expect(l.holder(key)?.pane == c)
+        let back = try JSONDecoder().decode(MergeLines.self, from: try JSONEncoder().encode(l))
+        #expect(back == l)
+    }
+```
+
+`macos/Tests/Coord/CoordRuntimeTests.swift`, add (at struct level, next to `answer`):
+
+```swift
+    func turnCheck(_ pane: UUID) -> GuardCheck {
+        var c = GuardCheck(v: 1, pane: pane.uuidString, agent: "claude", session: nil, tool: "Bash", input: "git merge x",
+                           cwd: "/x", repo: "/x", branch: "skins", group: "merging", why: "w", lost: nil, reason: nil)
+        c.turn = "skins"
+        return c
+    }
+
+    func holdOnSkins(_ rt: CoordRuntime, _ pane: UUID, rid: String = "h") async {
+        probe.locations["/x/t"] = RepoLocation(worktree: "/x/t", repo: "/x/.git", branch: "skins")
+        await rt.handle(CoordOp(kind: .hold, rid: rid, cwd: "/x/t"), from: pane)
+    }
+
+    @Test func aHoldMakesOtherMergesWaitUntilDone() async {
+        let rt = make()
+        await hello(rt)
+        await holdOnSkins(rt, a)
+        #expect(answer(rt, a, "h")?.text.hasPrefix("You hold skins.") == true)
+        #expect(!rt.allowsTurn(turnCheck(b)))
+        #expect(rt.lineSummary(for: turnCheck(b)) == ["Held by lostty-9a, working on skins"])
+        rt.turnHeld(turnCheck(b))
+        #expect(rt.mailbox.inbox(b).first?.body.contains("Run `lostty +msg wait done lostty-9a`") == true)
+        // The holder isn't told about its own merges.
+        rt.turnHeld(turnCheck(a))
+        #expect(rt.mailbox.inbox(a).isEmpty)
+        await rt.handle(CoordOp(kind: .done, rid: "d", cwd: "/x/t"), from: a)
+        #expect(answer(rt, a, "d")?.text.hasPrefix("Released your hold on skins.") == true)
+        #expect(rt.allowsTurn(turnCheck(b)))
+    }
+
+    @Test func onlyThePaneOnTheTargetCanHoldIt() async {
+        let rt = make()
+        await hello(rt)
+        await rt.handle(CoordOp(kind: .hold, rid: "off", cwd: "/x/a"), from: a)
+        #expect(answer(rt, a, "off")?.ok == false)
+        #expect(answer(rt, a, "off")?.text.contains("lostty +merge ready") == true)
+        await holdOnSkins(rt, b, rid: "hb")
+        await holdOnSkins(rt, a, rid: "ha")
+        #expect(answer(rt, a, "ha")?.ok == false)
+        #expect(answer(rt, a, "ha")?.text.contains("already holds skins") == true)
+    }
+
+    @Test func aForgottenHoldIsShownStaleAndStillHolds() async {
+        let rt = make()
+        await hello(rt)
+        await holdOnSkins(rt, a)
+        log.now += CoordRuntime.holdStaleAfter + 1
+        #expect(rt.lineSummary(for: turnCheck(b)).first == "Held by lostty-9a, working on skins (stale: idle 2 h)")
+        log.alive.remove(a)
+        #expect(rt.lineSummary(for: turnCheck(b)).first == "Held by lostty-9a, working on skins (stale: pane closed)")
+        #expect(!rt.allowsTurn(turnCheck(b)))
+        rt.releaseHold(LineKey(repo: "/x/.git", target: "skins"))
+        #expect(rt.allowsTurn(turnCheck(b)))
+    }
+
+    @Test func aBusyHolderIsNeverStale() async {
+        let rt = make()
+        await hello(rt)
+        await holdOnSkins(rt, a)
+        rt.userVarChanged(a, name: ClaudeConstants.userVarName, value: #"{"v":1,"state":"busy"}"#)
+        log.now += CoordRuntime.holdStaleAfter * 3
+        #expect(rt.lineSummary(for: turnCheck(b)).first == "Held by lostty-9a, working on skins")
+    }
+```
+
+`macos/Tests/Coord/CoordFilesTests.swift`, add:
+
+```swift
+    @Test func holdsAreWrittenForTheCLI() {
+        var d = PaneDirectory()
+        d.report(a, agent: "claude", session: "s", cwd: "/x")
+        _ = d.located(a, worktree: "/x", repo: "/x/.git", branch: "skins")
+        var lines = MergeLines()
+        let key = LineKey(repo: "/x/.git", target: "skins")
+        _ = lines.hold(a, key: key, now: Date(timeIntervalSince1970: 7))
+        let s = CoordFiles.snapshot(directory: d, lines: lines, mailbox: Mailbox(), names: [a: "lostty-9a"],
+                                    stale: { _ in "pane closed" })
+        #expect(s.lines.holds == [HoldRow(repo: "/x/.git", target: "skins", pane: a.uuidString, name: "lostty-9a",
+                                          since: Date(timeIntervalSince1970: 7), stale: "pane closed")])
+        #expect(s.panes.panes.first?.holds == "skins")
+    }
+```
+
+`macos/Tests/Coord/MergeLineRowsTests.swift`, add:
+
+```swift
+    @Test func holdsGetTheirOwnRows() {
+        var d = PaneDirectory()
+        d.report(a, agent: "claude", session: nil, cwd: "/x")
+        _ = d.located(a, worktree: "/x", repo: "/x/.git", branch: "skins")
+        var lines = MergeLines()
+        _ = lines.hold(a, key: LineKey(repo: "/x/.git", target: "skins"), now: Date())
+        let rows = MergeLineRows.build(lines: lines, directory: d, names: [a: "A"], stale: { _ in "idle 3 h" })
+        #expect(rows.holds.map(\.label) == ["x · skins held by A (stale: idle 3 h)"])
+        #expect(rows.lines.isEmpty)
+    }
+```
+
+- [ ] **Step 2: Run the tests to see them fail**
+
+Run: `zig build test -Dtest-filter="coord"`, then `MergeLinesTests`, `CoordRuntimeTests`, `CoordFilesTests`, `MergeLineRowsTests`.
+Expected: compile errors (`hold`, `holds`, `HoldRow`, `turnHeld`, …).
+
+- [ ] **Step 3: Implement, CLI side**
+
+`src/cli/coord/wire.zig`: `pub const Op = enum { hello, ready, merge_done, note, done, wait_done, wait_landed, hold };` and `.hold => "hold",` in `opName`.
+
+`src/cli/coord/files.zig`:
+
+```zig
+pub const PaneRow = struct {
+    // … the fields as before, then:
+    /// The target this pane holds, if any.
+    holds: ?[]const u8 = null,
+};
+
+pub const HoldRow = struct {
+    repo: []const u8,
+    target: []const u8,
+    pane: []const u8,
+    name: []const u8,
+    since: f64 = 0,
+    /// Why the hold looks forgotten ("pane closed", "idle 3 h"); null when it doesn't.
+    stale: ?[]const u8 = null,
+};
+
+pub const LinesFile = struct { v: u32 = 1, lines: []LineRow = &.{}, holds: []HoldRow = &.{} };
+
+pub fn holdsFor(alloc: Allocator, holds: []const HoldRow, repo: []const u8) Allocator.Error![]HoldRow {
+    var out: std.ArrayList(HoldRow) = .empty;
+    for (holds) |h| if (std.mem.eql(u8, h.repo, repo)) try out.append(alloc, h);
+    return out.toOwnedSlice(alloc);
+}
+
+pub fn formatHolds(alloc: Allocator, holds: []const HoldRow, me: []const u8) Allocator.Error![]const u8 {
+    var out: std.ArrayList(u8) = .empty;
+    const w = out.writer(alloc);
+    for (holds) |h| {
+        try w.print("{s} is held by {s}{s} while it works on it.", .{ h.target, h.name, if (std.mem.eql(u8, h.pane, me)) " (you)" else "" });
+        if (h.stale) |s| try w.print(" Stale: {s}.", .{s});
+        try w.writeAll("\n");
+    }
+    return out.toOwnedSlice(alloc);
+}
+```
+
+and in `formatList`, after the `if (r.line) |l| { … }` block:
+
+```zig
+        if (r.holds) |t| try w.print(" · holds {s}", .{t});
+```
+
+`src/cli/merge.zig`:
+
+```zig
+pub const Cmd = union(enum) { usage, status, ready: ?[]const u8, done: ?[]const u8, hold: ?[]const u8 };
+```
+
+in `parse`, before the final `return .usage;`:
+
+```zig
+    if (std.mem.eql(u8, a[0], "hold")) return .{ .hold = (msg.intoFlag(a[1..]) orelse return .usage).value };
+```
+
+the usage line becomes `"Usage: lostty +merge ready [--into <target>] | hold [--into <target>] | done | status\n"`, the doc comment gains
+
+```zig
+///   lostty +merge hold [--into <target>]    you work on the target itself; others' merges wait
+///                                           until you run `lostty +msg done`
+```
+
+`run` gains `.hold => |into| return msg.send(alloc, out, dir, pane, .hold, .{ .into = into }),`, and `.status` prints the holds before the lines:
+
+```zig
+            const all = files.parse(files.LinesFile, alloc, text) orelse files.LinesFile{};
+            out.writeAll(try files.formatHolds(alloc, try files.holdsFor(alloc, all.holds, repo), pane)) catch {};
+            out.writeAll(try files.formatStatus(alloc, try files.linesFor(alloc, all.lines, repo), pane)) catch {};
+```
+
+(replacing the two lines that parsed `lines` and printed `formatStatus`).
+
+`src/cli/msg.zig`: `usage_text` gains, after the `+merge ready` line,
+
+```
+    \\  lostty +merge hold [--into <target>]  you work on the target itself; others' merges wait
+```
+
+and `intro_text` becomes:
+
+```zig
+pub const intro_text =
+    "Lostty: other agent panes may work on this repo. `lostty +msg list` shows who's here. " ++
+    "When your branch is ready to merge, run `lostty +merge ready`; Lostty tells you when it's your turn " ++
+    "and where to merge. After merging, run `lostty +merge done`. If you work on the target branch itself, " ++
+    "run `lostty +merge hold` so others' merges wait, and `lostty +msg done` when you're finished. " ++
+    "`lostty +msg --help` lists the rest.\n";
+```
+
+- [ ] **Step 4: Implement, app side**
+
+`CoordWire.swift`: `Kind` gains `hold`. `PaneRow` gains `var holds: String? = nil` as its last property (the memberwise init keeps working for existing calls). `LinesFile` gains `var holds: [HoldRow] = []`. Add:
+
+```swift
+struct HoldRow: Codable, Equatable, Sendable {
+    var repo: String
+    var target: String
+    var pane: String
+    var name: String
+    var since: Date
+    /// Why the hold looks forgotten; nil when it doesn't.
+    var stale: String?
+}
+```
+
+`MergeLines.swift`, next to `LineEntry`:
+
+```swift
+/// A pane working on the target itself (spec §10.3): until it says done or
+/// you release it, everyone else's merges into the target wait for you.
+struct LineHold: Codable, Equatable, Sendable {
+    var key: LineKey
+    var pane: UUID
+    var since: Date
+}
+
+enum HoldOutcome: Equatable, Sendable {
+    case held, already
+    case heldBy(UUID)
+}
+```
+
+and in `MergeLines`:
+
+```swift
+    private(set) var holds: [LineHold] = []
+
+    func holder(_ key: LineKey) -> LineHold? { holds.first { $0.key == key } }
+
+    mutating func hold(_ pane: UUID, key: LineKey, now: Date) -> HoldOutcome {
+        if let h = holder(key) { return h.pane == pane ? .already : .heldBy(h.pane) }
+        holds.append(LineHold(key: key, pane: pane, since: now))
+        return .held
+    }
+
+    /// Every hold `pane` has (its `lostty +msg done`).
+    mutating func release(_ pane: UUID) -> [LineKey] {
+        let keys = holds.filter { $0.pane == pane }.map(\.key)
+        holds.removeAll { $0.pane == pane }
+        return keys
+    }
+
+    /// Yours, from the panel: the holder, if there was one.
+    mutating func release(_ key: LineKey) -> UUID? {
+        guard let h = holder(key) else { return nil }
+        holds.removeAll { $0.key == key }
+        return h.pane
+    }
+```
+
+and `allowsMerge` becomes:
+
+```swift
+    /// A merge into the target goes through without asking when nobody else
+    /// holds the target, and no open pane is in line or `pane` holds the
+    /// turn (spec §10.3, §10.4).
+    func allowsMerge(by pane: UUID, into key: LineKey) -> Bool {
+        if let h = holder(key), h.pane != pane { return false }
+        guard let first = turn(key) else { return true }
+        return first.pane == pane
+    }
+```
+
+(No coordination store has shipped, so `MergeLines`' synthesized decoding may require the new `holds` key.)
+
+`CoordFiles.swift`: `snapshot` gains a last parameter `stale: (LineHold) -> String? = { _ in nil }`; each `PaneRow` gets `holds: lines.holds.first { $0.pane == r.pane }?.key.target`, and the `LinesFile` gets
+
+```swift
+        let holdRows = lines.holds.map { h in
+            HoldRow(repo: h.key.repo, target: h.key.target, pane: h.pane.uuidString, name: name(h.pane),
+                    since: h.since, stale: stale(h))
+        }
+```
+
+as `LinesFile(lines: lineRows, holds: holdRows)`.
+
+`CoordRuntime.swift`:
+
+```swift
+    /// A hold whose agent has been idle this long shows as stale.
+    static let holdStaleAfter: TimeInterval = 2 * 3600
+    /// The last time each pane's agent was busy or sent an op.
+    private var lastActive: [UUID: Date] = [:]
+```
+
+In `agentReported`, after `setBusy`: `if directory.records[pane]?.busy == true { lastActive[pane] = effects.now() }`. In `handle`, first line: `lastActive[pane] = effects.now()`. The `switch` gains `case .hold: answer = await hold(pane, into: op.into)`. Add:
+
+```swift
+    private func hold(_ pane: UUID, into: String?) async -> (ok: Bool, text: String) {
+        await relocate(pane)
+        guard let r = directory.records[pane], let worktree = r.worktree, let repo = r.repo else {
+            return (false, "This folder isn't in a git repo Lostty can read.")
+        }
+        let target = into ?? effects.integration(worktree)
+        guard r.branch == target else {
+            return (false, "You're on \(r.branch ?? "a detached HEAD"), not \(target). A hold is for a pane working on \(target) itself; to merge your branch into it, run `lostty +merge ready`.")
+        }
+        switch lines.hold(pane, key: LineKey(repo: repo, target: target), now: effects.now()) {
+        case .held:
+            return (true, "You hold \(target). Other panes' merges into it wait for your user until you run `lostty +msg done`.")
+        case .already:
+            return (true, "You already hold \(target). Run `lostty +msg done` when you're finished with it.")
+        case .heldBy(let other):
+            let who = displayName(other)
+            return (false, "\(who) already holds \(target). `lostty +msg wait done \(who)` tells you once when it's done.")
+        }
+    }
+```
+
+`done` releases first:
+
+```swift
+    private func done(_ pane: UUID, text: String?) -> (ok: Bool, text: String) {
+        let released = lines.release(pane).map(\.target)
+        let fired = mailbox.takeWaits { $0.what == .done(pane) }
+        for w in fired { _ = send(from: pane, to: w.waiter, kind: .done, body: text ?? "\(displayName(pane)) is done.") }
+        var parts: [String] = []
+        if !released.isEmpty { parts.append("Released your hold on \(released.joined(separator: ", ")).") }
+        if !fired.isEmpty { parts.append("Told \(fired.map { displayName($0.waiter) }.joined(separator: ", ")).") }
+        return (true, parts.isEmpty ? "Noted. Nobody was waiting on you." : parts.joined(separator: " "))
+    }
+```
+
+Under `// MARK: The panel`:
+
+```swift
+    func releaseHold(_ key: LineKey) {
+        _ = lines.release(key)
+        changed()
+    }
+```
+
+Under `// MARK: The guard`:
+
+```swift
+    /// Why a hold looks forgotten, or nil. It still holds either way: only
+    /// its pane's done or your Release ends it.
+    func holdStale(_ h: LineHold) -> String? {
+        guard effects.paneAlive(h.pane) else { return "pane closed" }
+        guard let r = directory.records[h.pane] else { return "no agent running there" }
+        if r.busy { return nil }
+        let idle = effects.now().timeIntervalSince(max(lastActive[h.pane] ?? h.since, h.since))
+        return idle >= Self.holdStaleAfter ? "idle \(Int(idle / 3600)) h" : nil
+    }
+
+    /// A turn check was held. When a hold is why, tell the pane how to wait.
+    func turnHeld(_ c: GuardCheck) {
+        guard let key = lineKey(for: c), let pane = UUID(uuidString: c.pane),
+              let h = lines.holder(key), h.pane != pane else { return }
+        let who = displayName(h.pane)
+        notice(pane, "Your merge into \(key.target) is waiting for your user: \(who) holds \(key.target) while it works on it. Run `lostty +msg wait done \(who)` to be told once when it's done.")
+        changed()
+    }
+```
+
+`lineSummary` puts the hold first:
+
+```swift
+    func lineSummary(for c: GuardCheck) -> [String] {
+        guard let key = lineKey(for: c) else { return [] }
+        var out: [String] = []
+        if let h = lines.holder(key) {
+            out.append("Held by \(displayName(h.pane)), working on \(key.target)" + (holdStale(h).map { " (stale: \($0))" } ?? ""))
+        }
+        return out + lines.entries(key).enumerated().map { i, e in
+            let state = e.closed ? "pane closed" : (lines.turn(key)?.pane == e.pane ? "its turn" : "waiting")
+            return "\(i + 1). \(displayName(e.pane)) · \(e.branch) · \(state)"
+        }
+    }
+```
+
+`changed()` passes `stale: { [unowned self] in self.holdStale($0) }` to `CoordFiles.snapshot`. `tick()` calls `changed()` already, so staleness in `lines.json` is at most 30 s old.
+
+`MergeLineSection.swift`: `MergeLineRows` gains
+
+```swift
+    struct Hold: Identifiable, Equatable {
+        var id: LineKey { key }
+        var key: LineKey
+        /// "<repo folder> · <target> held by <name>", plus " (stale: …)".
+        var label: String
+    }
+```
+
+`build` gains `stale: (LineHold) -> String? = { _ in nil }` and returns `(lines: [Line], holds: [Hold], notInLine: [Pane])`, with
+
+```swift
+        let holds = lines.holds.map { h in
+            let repoName = URL(fileURLWithPath: h.key.repo).deletingLastPathComponent().lastPathComponent
+            return Hold(key: h.key, label: "\(repoName) · \(h.key.target) held by \(name(h.pane))" + (stale(h).map { " (stale: \($0))" } ?? ""))
+        }
+```
+
+`MergeLineSection` passes `stale: { runtime.holdStale($0) }`, shows the section when `rows.holds` isn't empty too, and draws the holds above the lines:
+
+```swift
+                ForEach(rows.holds) { h in
+                    HStack(spacing: 6) {
+                        Image(systemName: "lock").foregroundStyle(.secondary)
+                        Text(h.label).font(.caption).lineLimit(1).truncationMode(.middle)
+                        Spacer(minLength: 4)
+                        Button("Release") { runtime.releaseHold(h.key) }
+                            .controlSize(.small)
+                    }
+                }
+```
+
+`AppDelegate.swift`: the `turnAllowed` line from Task 11 becomes
+
+```swift
+        GuardRuntime.shared.turnAllowed = { check in
+            let ok = CoordRuntime.shared.allowsTurn(check)
+            if !ok { CoordRuntime.shared.turnHeld(check) }
+            return ok
+        }
+```
+
+- [ ] **Step 5: Run the tests and build**
+
+Run: `zig build test -Dtest-filter="coord"`, `zig build -Demit-macos-app=false`, then `MergeLinesTests`, `CoordRuntimeTests`, `CoordFilesTests`, `MergeLineRowsTests`, `GuardRuntimeTests`, and `macos/build.nu`.
+Expected: all pass; the builds succeed.
+
+- [ ] **Step 6: Commit**
+
+```bash
+zig fmt src/cli
+swiftlint lint --strict --fix macos/Sources/Features/Coord macos/Tests/Coord
+git add src/cli macos/Sources macos/Tests/Coord
+git commit -m "lostty: coord: holds, for a pane working on the target itself
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+---
+
+### Task 14: Waking a pane by itself
+
+Lostty never types an agent's message into a pane. When delivery has failed 3 times, it types one fixed line, "Lostty has messages for you: run `lostty +msg inbox`.", by itself, but only when all of these hold: the agent is idle, nobody has typed in that pane since it went idle or in the last 2 minutes, and you aren't looking at it. Otherwise the badge waits for your Wake it. The badge stays until the agent reads its inbox (`lostty +msg inbox` tells the app). Each wake costs the agent one turn. A pane is woken once per batch of failed mail, never again for the same messages.
+
+**Files:**
+- Modify: `src/cli/coord/wire.zig` (`Op.seen`; test)
+- Modify: `src/cli/msg.zig` (`inbox` tells the app it was read)
+- Modify: `macos/Sources/Features/Coord/CoordWire.swift` (`Kind.seen`)
+- Modify: `macos/Sources/Features/Coord/Mailbox.swift` (`State.woken`, `needsWake`, `mailWaiting`, `wokeUp`, `seen`)
+- Modify: `macos/Sources/Features/Coord/CoordRuntime.swift` (`Effects.lastKeystroke`, `Effects.isFocused`, `idleSince`, `autoWake`, the `seen` op, `wakeLine`)
+- Modify: `macos/Sources/Features/Coord/CoordBadgeOverlay.swift` (shows `mailWaiting`)
+- Modify: `macos/Sources/Ghostty/Surface View/SurfaceView_AppKit.swift` (`lastKeyDown`)
+- Test: `macos/Tests/Coord/MailboxTests.swift`, `macos/Tests/Coord/CoordRuntimeTests.swift`
+
+**Interfaces:**
+- Consumes: Tasks 7, 10, 12, 13.
+- Produces: `wire.Op.seen` (`"seen"`); `CoordMessage.State.woken`; `Mailbox.needsWake: Set<UUID>`, `Mailbox.mailWaiting: Set<UUID>`, `Mailbox.wokeUp(_:)`, `Mailbox.seen(_:)`; `CoordRuntime.Effects.lastKeystroke: @MainActor (UUID) -> Date?`, `CoordRuntime.Effects.isFocused: @MainActor (UUID) -> Bool`; `CoordRuntime.autoWake()`, `CoordRuntime.wakeLine`, `CoordRuntime.wakeQuiet`; `Ghostty.SurfaceView.lastKeyDown: Date?`.
+
+- [ ] **Step 1: Write the failing tests**
+
+In `src/cli/coord/wire.zig`, extend `test "coord wire: hold is its own op"` (rename it `"coord wire: hold and seen are their own ops"`) with:
+
+```zig
+    const seen = try encode(a, .seen, .{}, false);
+    const b64s = seen[prefix.len .. seen.len - 1];
+    const js = try a.alloc(u8, try std.base64.standard.Decoder.calcSizeForSlice(b64s));
+    try std.base64.standard.Decoder.decode(js, b64s);
+    try std.testing.expectEqualStrings(
+        \\{"v":1,"op":"seen"}
+    , js);
+```
+
+`macos/Tests/Coord/MailboxTests.swift`: replace `wakeItMarksAPanesMailDelivered` with:
+
+```swift
+    @Test func failedMailNeedsAWakeAndTheBadgeStaysUntilRead() {
+        var box = Mailbox()
+        _ = note(&box, a, b, "hi", at: t0)
+        box.failed([1], now: t0)
+        #expect(box.mailWaiting == [b])
+        #expect(box.needsWake.isEmpty)
+        box.failed([1], now: t0 + 30)
+        box.failed([1], now: t0 + 60)
+        #expect(box.needsWake == [b])
+        box.wokeUp(b)
+        #expect(box.inbox(b).first?.state == .woken)
+        #expect(box.needsWake.isEmpty)
+        #expect(box.mailWaiting == [b])
+        box.seen(b)
+        #expect(box.inbox(b).first?.state == .delivered)
+        #expect(box.mailWaiting.isEmpty)
+    }
+
+    @Test func readingTheInboxSettlesQueuedMailToo() {
+        var box = Mailbox()
+        _ = note(&box, a, b, "hi", at: t0)
+        box.seen(b)
+        #expect(box.inbox(b).first?.state == .delivered)
+        #expect(box.due(now: t0 + 60).isEmpty)
+    }
+```
+
+and in `failuresRetryAfter30SecondsThenGiveUp`, after the existing `#expect(box.undelivered.isEmpty)`, add `#expect(box.needsWake == [b])`.
+
+`macos/Tests/Coord/CoordRuntimeTests.swift`:
+
+- `CoordLog` gains `var keys: [UUID: Date] = [:]` and `var focused: Set<UUID> = []`.
+- `make` passes `lastKeystroke: { log.keys[$0] }, isFocused: { log.focused.contains($0) },` (after `type:`).
+- `aFailedDeliveryBadgesThePaneAndWakeItTypesOneLine` keeps its body, but its last line becomes `#expect(rt.mailbox.mailWaiting == [a])` (the badge stays until the inbox is read), and add after it:
+
+```swift
+        await rt.handle(CoordOp(kind: .seen), from: a)
+        #expect(rt.mailbox.mailWaiting.isEmpty)
+```
+
+Add:
+
+```swift
+    /// Note → three failed deliveries, 30 s apart, to lostty-9a (pane a), idle since t0.
+    func failThreeTimes(_ rt: CoordRuntime) async {
+        rt.userVarChanged(a, name: ClaudeConstants.userVarName, value: #"{"v":1,"state":"idle"}"#)
+        log.deliverOK = false
+        await rt.handle(CoordOp(kind: .note, to: "lostty-9a", text: "hi", cwd: "/x/b"), from: b)
+        for _ in 0..<3 {
+            await rt.deliverDue()
+            await rt.settleDeliveries()
+            log.now += 31
+        }
+        log.now += CoordRuntime.wakeQuiet
+    }
+
+    @Test func anIdleUnwatchedPaneIsWokenOnceByItself() async {
+        let rt = make()
+        await hello(rt)
+        await failThreeTimes(rt)
+        #expect(rt.mailbox.needsWake == [a])
+        rt.autoWake()
+        #expect(log.typed.map(\.1) == [CoordRuntime.wakeLine])
+        #expect(log.typed.first?.0 == a)
+        rt.autoWake()
+        #expect(log.typed.count == 1)
+        #expect(rt.mailbox.mailWaiting == [a])
+    }
+
+    @Test func noWakeWhileBusyWatchedOrRecentlyTyped() async {
+        let rt = make()
+        await hello(rt)
+        await failThreeTimes(rt)
+        log.focused = [a]
+        rt.autoWake()
+        log.focused = []
+        log.keys[a] = log.now - 10
+        rt.autoWake()
+        // Typed after it went idle, over 2 minutes ago: there may be a draft.
+        log.keys[a] = log.now - 100
+        rt.autoWake()
+        rt.userVarChanged(a, name: ClaudeConstants.userVarName, value: #"{"v":1,"state":"busy"}"#)
+        log.keys[a] = nil
+        rt.autoWake()
+        #expect(log.typed.isEmpty)
+        #expect(rt.mailbox.needsWake == [a])
+    }
+
+    @Test func aPaneWithAnUnknownIdleTimeIsntWoken() async {
+        let rt = make()
+        await hello(rt)
+        log.deliverOK = false
+        await rt.handle(CoordOp(kind: .note, to: "lostty-9a", text: "hi", cwd: "/x/b"), from: b)
+        for _ in 0..<3 {
+            await rt.deliverDue()
+            await rt.settleDeliveries()
+            log.now += 31
+        }
+        rt.autoWake()
+        #expect(log.typed.isEmpty)
+    }
+```
+
+(`failThreeTimes` reports idle at some time T and leaves `log.now` at T + 213 s, so `now - 100` is a keystroke after the agent went idle and more than 2 minutes ago.)
+
+- [ ] **Step 2: Run the tests to see them fail**
+
+Run: `zig build test -Dtest-filter="coord"`, `MailboxTests`, `CoordRuntimeTests`. Expected: compile errors.
+
+- [ ] **Step 3: Implement**
+
+`src/cli/coord/wire.zig`: `Op` gains `seen`, and `.seen => "seen",` in `opName`.
+
+`src/cli/msg.zig`, in `inbox`, after printing:
+
+```zig
+    // Tell the app this pane read its inbox (no answer awaited), so the
+    // "Mail waiting" badge goes away.
+    if (msgs.len > 0) markSeen(alloc);
+    return 0;
+```
+
+with
+
+```zig
+fn markSeen(alloc: Allocator) void {
+    const seq = wire.encode(alloc, .seen, .{}, std.posix.getenv("TMUX") != null) catch return;
+    const tty = claude_state.openTerminal(alloc) orelse return;
+    defer tty.close();
+    tty.writeAll(seq) catch {};
+}
+```
+
+`CoordWire.swift`: `Kind` gains `seen`.
+
+`Mailbox.swift`: `State` becomes `enum State: String, Codable, Sendable { case queued, delivered, failed, woken, expired }` with a doc line on `woken`: "Lostty typed the wake line; the agent hasn't read its inbox yet." Then:
+
+```swift
+    /// Panes whose mail failed all its tries and nobody has woken yet.
+    var needsWake: Set<UUID> {
+        Set(messages.filter { $0.state == .failed }.map(\.to))
+    }
+
+    /// Panes with mail Lostty couldn't hand over that the agent hasn't
+    /// read: the "Mail waiting" badge.
+    var mailWaiting: Set<UUID> {
+        Set(messages.filter {
+            $0.state == .failed || $0.state == .woken || ($0.state == .queued && $0.attempts > 0)
+        }.map(\.to))
+    }
+
+    /// The wake line was typed into the pane (by you or by Lostty): its
+    /// mail stops being retried and waits for the agent to read it.
+    mutating func wokeUp(_ pane: UUID) {
+        for i in messages.indices where messages[i].to == pane
+            && (messages[i].state == .queued || messages[i].state == .failed) {
+            messages[i].state = .woken
+        }
+    }
+
+    /// The agent ran `lostty +msg inbox`: everything waiting for it is read.
+    mutating func seen(_ pane: UUID) {
+        for i in messages.indices where messages[i].to == pane
+            && [.queued, .failed, .woken].contains(messages[i].state) {
+            messages[i].state = .delivered
+        }
+    }
+```
+
+(replacing the old `wokeUp`). `trim()` keeps counting everything that isn't `.queued` as settled; that's fine for `.woken` too.
+
+`CoordRuntime.swift`:
+
+```swift
+    /// The only text Lostty ever types into a pane by itself.
+    static let wakeLine = "Lostty has messages for you: run `lostty +msg inbox`."
+    /// No auto-wake within this long of a keystroke in the pane.
+    static let wakeQuiet: TimeInterval = 120
+    /// When each pane's agent last went idle.
+    private var idleSince: [UUID: Date] = [:]
+```
+
+`Effects` gains, after `type`:
+
+```swift
+        /// When you last pressed a key in the pane; nil if never.
+        var lastKeystroke: @MainActor (UUID) -> Date?
+        /// The pane is the focused one in the key window of the active app.
+        var isFocused: @MainActor (UUID) -> Bool
+```
+
+and `live` gains:
+
+```swift
+                lastKeystroke: { (NSApp.delegate as? AppDelegate)?.findSurface(forUUID: $0)?.lastKeyDown },
+                isFocused: { pane in
+                    guard NSApp.isActive, let v = (NSApp.delegate as? AppDelegate)?.findSurface(forUUID: pane) else { return false }
+                    return v.focused && v.window?.isKeyWindow == true
+                },
+```
+
+In `agentReported`, after `setBusy`:
+
+```swift
+        if directory.records[pane]?.busy == false {
+            if idleSince[pane] == nil || before?.busy == true { idleSince[pane] = effects.now() }
+        } else {
+            idleSince[pane] = nil
+        }
+```
+
+`agentGone` and `surfaceClosed` add `idleSince[pane] = nil`. `handle`'s `switch` gains:
+
+```swift
+        case .seen:
+            mailbox.seen(pane)
+            changed()
+            return
+```
+
+`wakeIt` uses `Self.wakeLine`. `deliverDue` calls `autoWake()` as its first line (before the early return), and add:
+
+```swift
+    /// Mail Lostty couldn't deliver (spec §10.6). The fixed wake line, never
+    /// the messages, typed only while the agent is idle, nobody has typed in
+    /// the pane since it went idle or in the last 2 minutes, and you aren't
+    /// looking at it. Otherwise the badge waits for your Wake it.
+    func autoWake() {
+        let now = effects.now()
+        for pane in mailbox.needsWake.sorted(by: { $0.uuidString < $1.uuidString }) {
+            guard let r = directory.records[pane], !r.busy, let idle = idleSince[pane] else { continue }
+            guard !effects.isFocused(pane) else { continue }
+            if let key = effects.lastKeystroke(pane), key >= idle || now.timeIntervalSince(key) < Self.wakeQuiet { continue }
+            guard effects.type(pane, Self.wakeLine) else { continue }
+            mailbox.wokeUp(pane)
+            changed()
+        }
+    }
+```
+
+`SurfaceView_AppKit.swift`: add `private(set) var lastKeyDown: Date?` next to `focused`, and set `lastKeyDown = Date()` as the first line of `keyDown(with:)`. Then find how typing from the phone reaches a pane (`grep -rn "sendText\|send-keys" macos/Sources | grep -v "/iOS/"`, and the Remote feature folder). If phone input lands on the Mac surface, stamp `lastKeyDown` there too. If it goes straight to tmux, leave it and add one line to the ledger: "phone typing doesn't hold off an auto-wake".
+
+`CoordBadgeOverlay.swift`: show the badge for `runtime.mailbox.mailWaiting.contains(id)` (was `undelivered`); its doc comment becomes "Mail waiting" on a pane whose messages Lostty couldn't deliver and the agent hasn't read; Lostty wakes it by itself when it safely can (`CoordRuntime.autoWake`), and Wake it does it now.
+
+- [ ] **Step 4: Run the tests and build**
+
+Run: `zig build test -Dtest-filter="coord"`, `zig build -Demit-macos-app=false`, `MailboxTests`, `CoordRuntimeTests`, `macos/build.nu`.
+Expected: all pass; the builds succeed.
+
+- [ ] **Step 5: Commit**
+
+```bash
+zig fmt src/cli
+swiftlint lint --strict --fix macos/Sources/Features/Coord macos/Tests/Coord
+git add src/cli macos/Sources macos/Tests/Coord
+git commit -m "lostty: coord: wake a pane by itself when its mail can't be delivered
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+---
+
+### Task 15: Docs, the full test pass, and the hands-on check
 
 **Files:**
 - Modify: `SKINS.md` (a "Merge Turns" section after "Guard")
@@ -4703,7 +5594,7 @@ In `SKINS.md`, after the "Guard" section, add a "Merge Turns" section in the sam
 { "repos": { "/Users/lawliang/projectrepos/lostty": { "integration": "skins" } } }
 ```
 
-that out-of-turn merges become guard requests showing the line; what notifies you (held merges, conflicts); the Branches panel section and the "Mail waiting · Wake it" badge; and that **after installing, run Connect** so the hooks gain `--agent=` and the `SessionStart` intro (Codex will ask to trust the changed hooks once: "Trust all and continue").
+that out-of-turn merges become guard requests showing the line; holds (`lostty +merge hold` while working on the target itself, released by `lostty +msg done` or the panel's Release, stale after 2 idle hours); what notifies you (held merges, conflicts); the Branches panel section and the "Mail waiting · Wake it" badge, and that Lostty types the one wake line by itself only when the agent is idle and you aren't typing there; and that **after installing, run Connect** so the hooks gain `--agent=` and the `SessionStart` intro (Codex will ask to trust the changed hooks once: "Trust all and continue").
 
 - [ ] **Step 2: Run everything**
 
@@ -4743,12 +5634,15 @@ Side by side with the Debug build, as the guard check did (the user's installed 
 2. In two Debug-app panes, `cd` into worktrees for `fa` and `fb` and run `lostty +merge ready` by hand in each: the first says "Your turn to merge fa into main … Merge in <main folder>", the second "You're 2nd in line … after <name>". `lostty +msg list` and `lostty +merge status` show both.
 3. In the `fb` pane, `git -C <main folder> merge fb` through a Haiku Claude run with the guard settings: it's held as "Merging out of turn", with the line in the request. Deny it (Return).
 4. Merge `fa` into `main` by hand, wait up to 30 s: the `fb` pane's inbox (`lostty +msg inbox`) has "Your turn to merge fb into main (… just merged fa)." For a Claude pane with a session name, check the messenger run delivered it (it arrives as a peer message).
-5. Codex: in a Codex pane, `codex queue` delivery of a note (`lostty +msg note <codex pane> "hi"` from the other pane) starts a turn in the idle Codex TUI. Record whether `codex queue --thread` accepted the hook's `session_id` (spec §10.9 fact 1).
-6. Quit the Debug app, delete the scratch folder, and report what passed and what didn't.
+5. Hold: in a pane whose folder has `main` checked out, run `lostty +merge hold`. From the `fb` pane, `git -C <main folder> merge fb` through a Haiku run: held, the request shows "Held by …". `lostty +msg inbox` in `fb` has the wait hint. `lostty +msg done` in the holder; the same merge (now in turn) goes through.
+6. Codex: in a Codex pane, `codex queue` delivery of a note (`lostty +msg note <codex pane> "hi"` from the other pane) starts a turn in the idle Codex TUI. Record whether `codex queue --thread` accepted the hook's `session_id` (spec §10.9 fact 1).
+7. Wake: the unit tests cover the rules; there's no clean way to make a delivery fail by hand. If one fails during steps 4–6, check that the badge shows, nothing is typed while that pane is focused, and the wake line is typed once after you focus another pane and leave it 2 minutes. Wake it on the badge types it at once.
+8. Quit the Debug app, delete the scratch folder, and report what passed and what didn't.
 
 ---
 
 ## Self-review notes (for the reviewer of this plan)
 
-- Spec §10.1 (commands): Tasks 3–4 (CLI), 10 (app). §10.2 (identity, files, hooks, names): Tasks 2, 3, 5, 8, 10. §10.3 (lines): Tasks 6, 10. §10.4 (turn checks): Tasks 1, 11. §10.5 (shared folders): Tasks 8, 10. §10.6 (delivery, limits): Tasks 7, 9, 10. §10.7 (what you see): Tasks 10 (conflict notification), 11 (request detail), 12 (panel, badge). §10.8 (testing): every task; the manual part is Task 13. §10.9 (facts): Task 13 step 4.
+- Holds (spec §10.3, decisions 48–51): Task 13. Waking by itself (§10.6, decision 52): Task 14.
+- Spec §10.1 (commands): Tasks 3–4 (CLI), 10, 13 (app). §10.2 (identity, files, hooks, names): Tasks 2, 3, 5, 8, 10. §10.3 (lines): Tasks 6, 10. §10.4 (turn checks): Tasks 1, 11. §10.5 (shared folders): Tasks 8, 10. §10.6 (delivery, limits): Tasks 7, 9, 10. §10.7 (what you see): Tasks 10 (conflict notification), 11 (request detail), 12 (panel, badge). §10.8 (testing): every task; the manual part is Task 13. §10.9 (facts): Task 13 step 4.
 - Deferred on purpose (Decisions 7): usage-bar accounting for messenger runs; `reply`/`question` kinds.
