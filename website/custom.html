@@ -249,7 +249,10 @@ p { margin: 0; }
 .hero-cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 40px; }
 /* hero buttons round into full pills on hover and keyboard focus */
 .hero-cta .btn, .dl-card .btn { transition: border-radius .35s cubic-bezier(.3, .7, .2, 1), transform .15s, background-color .15s, color .15s; }
-.hero-cta .btn:hover, .hero-cta .btn:focus-visible, .dl-card .btn:hover, .dl-card .btn:focus-visible { border-radius: 999px; }
+/* just over half the button height: a full pill, without a long dead stretch
+   (999px would spend most of the way back above the visible maximum) */
+.hero-cta .btn:hover, .hero-cta .btn:focus-visible { border-radius: 24px; }
+.dl-card .btn:hover, .dl-card .btn:focus-visible { border-radius: 20px; }
 /* no box behind the buttons, so the outlined one needs its own fill to keep the field out */
 .hero-cta .btn:not(.primary) { background: var(--paper); }
 .hero-cta .btn:not(.primary):hover { background: var(--ink); }
