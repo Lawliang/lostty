@@ -22,6 +22,10 @@ pub const Critical = struct {
     branch: ?[]const u8 = null,
     reason: ?[]const u8 = null,
     session: ?[]const u8 = null,
+    /// The whole tool input, as an approval keys it (see `toolInput`).
+    tool_input: ?[]const u8 = null,
+    /// Its size, when `tool_input` is only its hash.
+    tool_input_bytes: ?usize = null,
 };
 
 pub const Verdict = union(enum) { harmless, critical: Critical };
@@ -36,8 +40,8 @@ fn str(obj: std.json.Value, key: []const u8) ?[]const u8 {
 
 pub fn decide(alloc: Allocator, e: Env, probe: anytype, input_json: []const u8) Allocator.Error!Verdict {
     const root = std.json.parseFromSliceLeaky(std.json.Value, alloc, input_json, .{}) catch
-        return unreadable("?", input_json, "/");
-    const tool = str(root, "tool_name") orelse return unreadable("?", input_json, "/");
+        return unreadable(alloc, "?", input_json, "/");
+    const tool = str(root, "tool_name") orelse return unreadable(alloc, "?", input_json, "/");
     const cwd = str(root, "cwd") orelse e.home;
     const ti = if (root == .object) root.object.get("tool_input") orelse std.json.Value{ .null = {} } else std.json.Value{ .null = {} };
     const ctx: catalog.Ctx = .{ .alloc = alloc, .cwd = cwd, .home = e.home, .tmpdir = e.tmpdir, .config = e.config };
@@ -48,7 +52,7 @@ pub fn decide(alloc: Allocator, e: Env, probe: anytype, input_json: []const u8) 
     const is_bash = std.mem.eql(u8, tool, "Bash");
     const is_patch_tool = std.mem.eql(u8, tool, "apply_patch") or std.mem.eql(u8, tool, "applypatch");
     if (isFileTool(tool)) {
-        input = str(ti, "file_path") orelse str(ti, "notebook_path") orelse return unreadable(tool, input_json, cwd);
+        input = str(ti, "file_path") orelse str(ti, "notebook_path") orelse return unreadable(alloc, tool, input_json, cwd);
         found = try catalog.write(ctx, probe, .{ .text = input, .dynamic = false });
     } else if (is_mcp and mcpLooksCritical(alloc, tool)) {
         input = tool;
@@ -62,12 +66,13 @@ pub fn decide(alloc: Allocator, e: Env, probe: anytype, input_json: []const u8) 
         found = .{ .group = .unreadable, .why = "a patch Lostty can't read" };
     } else if (is_bash or (!is_mcp and ti == .object and ti.object.get("command") != null)) {
         // A `command` that isn't a string (an argv array, say) can't be read.
-        input = str(ti, "command") orelse return unreadable(tool, input_json, cwd);
+        input = str(ti, "command") orelse return unreadable(alloc, tool, input_json, cwd);
         found = try bashFinding(ctx, probe, input);
     } else if (is_mcp) {
         input = tool;
     }
     const f = found orelse return .harmless;
+    const whole = try toolInput(alloc, ti);
     const repo = probe.repoRoot(cwd);
     return .{ .critical = .{
         .group = f.group,
@@ -80,11 +85,74 @@ pub fn decide(alloc: Allocator, e: Env, probe: anytype, input_json: []const u8) 
         .branch = if (repo) |r| probe.branch(r) else null,
         .reason = str(ti, "description"),
         .session = str(root, "session_id"),
+        .tool_input = whole.text,
+        .tool_input_bytes = whole.bytes,
     } };
 }
 
-fn unreadable(tool: []const u8, input: []const u8, cwd: []const u8) Verdict {
-    return .{ .critical = .{ .group = .unreadable, .why = "Lostty couldn't read this tool call", .tool = tool, .input = input[0..@min(input.len, 4096)], .cwd = cwd } };
+/// What an approval keys beyond `input`: the whole tool input, so an
+/// approval for one Write or MCP call never covers different content.
+/// Above this size it is its SHA-256 instead.
+pub const tool_input_cap = 200 * 1024;
+
+pub const ToolInput = struct { text: []const u8, bytes: ?usize = null };
+
+/// `tool_input` re-serialized canonically (object keys sorted), or
+/// `sha256:<hex>` and its size when larger than the cap.
+pub fn toolInput(alloc: Allocator, v: std.json.Value) Allocator.Error!ToolInput {
+    const text = try std.json.Stringify.valueAlloc(alloc, try canonical(alloc, v), .{});
+    return capped(alloc, text);
+}
+
+fn capped(alloc: Allocator, text: []const u8) Allocator.Error!ToolInput {
+    if (text.len <= tool_input_cap) return .{ .text = text };
+    var digest: [std.crypto.hash.sha2.Sha256.digest_length]u8 = undefined;
+    std.crypto.hash.sha2.Sha256.hash(text, &digest, .{});
+    return .{ .text = try std.fmt.allocPrint(alloc, "sha256:{s}", .{std.fmt.bytesToHex(digest, .lower)}), .bytes = text.len };
+}
+
+fn canonical(alloc: Allocator, v: std.json.Value) Allocator.Error!std.json.Value {
+    switch (v) {
+        .object => |o| {
+            const keys = try alloc.dupe([]const u8, o.keys());
+            std.mem.sort([]const u8, keys, {}, struct {
+                fn lt(_: void, x: []const u8, y: []const u8) bool {
+                    return std.mem.order(u8, x, y) == .lt;
+                }
+            }.lt);
+            var out = std.json.ObjectMap.init(alloc);
+            for (keys) |k| try out.put(k, try canonical(alloc, o.get(k).?));
+            return .{ .object = out };
+        },
+        .array => |arr| {
+            var out = std.json.Array.init(alloc);
+            for (arr.items) |item| try out.append(try canonical(alloc, item));
+            return .{ .array = out };
+        },
+        else => return v,
+    }
+}
+
+/// At most `max` bytes of `s`, cut on a UTF-8 character boundary.
+pub fn truncateUtf8(s: []const u8, max: usize) []const u8 {
+    if (s.len <= max) return s;
+    var n = max;
+    while (n > 0 and (s[n] & 0xC0) == 0x80) n -= 1;
+    return s[0..n];
+}
+
+fn unreadable(alloc: Allocator, tool: []const u8, input: []const u8, cwd: []const u8) Allocator.Error!Verdict {
+    // The raw input is what an approval keys, so it covers all of it.
+    const whole = try capped(alloc, input);
+    return .{ .critical = .{
+        .group = .unreadable,
+        .why = "Lostty couldn't read this tool call",
+        .tool = tool,
+        .input = truncateUtf8(input, 4096),
+        .cwd = cwd,
+        .tool_input = whole.text,
+        .tool_input_bytes = whole.bytes,
+    } };
 }
 
 fn isFileTool(tool: []const u8) bool {
@@ -469,4 +537,57 @@ test "guard decide: file tools win over a command field; more cd forms" {
     try std.testing.expect(try decide(a, e, Fake{}, try bash(a, "cd -- /elsewhere/-d && rm x", "/r")) == .critical);
     // A lone `-` is unknown.
     try std.testing.expect(try decide(a, e, Fake{}, try bash(a, "cd - && rm x", "/r")) == .critical);
+}
+
+test "guard decide: the whole tool input goes with the request" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const w1 =
+        \\{"tool_name":"Write","tool_input":{"file_path":"/Users/me/notes.md","content":"one"},"cwd":"/r"}
+    ;
+    const w2 =
+        \\{"tool_name":"Write","tool_input":{"content":"two","file_path":"/Users/me/notes.md"},"cwd":"/r"}
+    ;
+    const c1 = (try decide(a, env(a), Fake{}, w1)).critical;
+    const c2 = (try decide(a, env(a), Fake{}, w2)).critical;
+    try std.testing.expectEqualStrings(c1.input, c2.input);
+    // Keys sorted, whatever order the agent sent them in.
+    try std.testing.expectEqualStrings("{\"content\":\"one\",\"file_path\":\"/Users/me/notes.md\"}", c1.tool_input.?);
+    try std.testing.expectEqualStrings("{\"content\":\"two\",\"file_path\":\"/Users/me/notes.md\"}", c2.tool_input.?);
+    try std.testing.expect(c1.tool_input_bytes == null);
+    const m =
+        \\{"tool_name":"mcp__gh__delete_branch","tool_input":{"repo":"o/r","branch":"x"},"cwd":"/r"}
+    ;
+    try std.testing.expectEqualStrings("{\"branch\":\"x\",\"repo\":\"o/r\"}", (try decide(a, env(a), Fake{}, m)).critical.tool_input.?);
+    // Bash keeps the command as input and sends the tool input too.
+    const b = (try decide(a, env(a), Fake{}, try bash(a, "git push", "/r"))).critical;
+    try std.testing.expectEqualStrings("git push", b.input);
+    try std.testing.expect(std.mem.indexOf(u8, b.tool_input.?, "\"command\":\"git push\"") != null);
+}
+
+test "guard decide: a huge tool input is sent as its hash" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const big = try a.alloc(u8, tool_input_cap + 10);
+    @memset(big, 'x');
+    const json = try std.fmt.allocPrint(a, "{{\"tool_name\":\"Write\",\"tool_input\":{{\"file_path\":\"/Users/me/x\",\"content\":\"{s}\"}},\"cwd\":\"/r\"}}", .{big});
+    const c = (try decide(a, env(a), Fake{}, json)).critical;
+    try std.testing.expect(std.mem.startsWith(u8, c.tool_input.?, "sha256:"));
+    try std.testing.expectEqual(@as(usize, "sha256:".len + 64), c.tool_input.?.len);
+    try std.testing.expect(c.tool_input_bytes.? > tool_input_cap);
+}
+
+test "guard decide: unreadable input is cut on a character boundary" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    // 4095 ASCII bytes, then a 3-byte character across the 4096 cap.
+    const junk = try std.mem.concat(a, u8, &.{ "x" ** 4095, "\u{2603}", "tail" });
+    const c = (try decide(a, env(a), Fake{}, junk)).critical;
+    try std.testing.expectEqual(catalog.Group.unreadable, c.group);
+    try std.testing.expectEqual(@as(usize, 4095), c.input.len);
+    try std.testing.expect(std.unicode.utf8ValidateSlice(c.input));
+    try std.testing.expectEqualStrings(junk, c.tool_input.?);
 }

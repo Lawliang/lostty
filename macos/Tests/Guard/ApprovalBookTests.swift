@@ -101,12 +101,59 @@ struct ApprovalBookTests {
         #expect(book.nextID == 151)
     }
 
+    func write(_ content: String, tool: String = "Write", input: String = "/Users/me/notes.md") -> GuardCheck {
+        var c = check(input)
+        c.tool = tool
+        c.toolInput = #"{"content":"\#(content)","file_path":"/Users/me/notes.md"}"#
+        return c
+    }
+
+    @Test func twoWritesToOnePathWithDifferentContentDontShareAnApproval() {
+        var book = ApprovalBook()
+        _ = book.check(write("one"), now: t0)
+        _ = book.approve(1, now: t0 + 1)
+        #expect(book.check(write("two"), now: t0 + 2).reply == .deny(2))
+        #expect(book.check(write("one"), now: t0 + 3).reply == .allow)
+    }
+
+    @Test func mcpCallsWithDifferentArgumentsDontShareAnApproval() {
+        func mcp(_ branch: String) -> GuardCheck {
+            var c = check("mcp__gh__delete_branch")
+            c.tool = "mcp__gh__delete_branch"
+            c.toolInput = #"{"branch":"\#(branch)","repo":"o/r"}"#
+            return c
+        }
+        var book = ApprovalBook()
+        _ = book.check(mcp("old"), now: t0)
+        _ = book.approve(1, now: t0 + 1)
+        #expect(book.check(mcp("main"), now: t0 + 2).reply == .deny(2))
+        #expect(book.check(mcp("old"), now: t0 + 3).reply == .allow)
+    }
+
+    @Test func theKeyComparesFieldsNotAJoinedString() {
+        // Joined with a separator these two would be the same string.
+        var a = check("b\u{1F}c")
+        a.cwd = "/r"
+        var b = check("c")
+        b.cwd = "/r\u{1F}b"
+        #expect(a.key != b.key)
+        var withInput = check()
+        withInput.toolInput = #"{"command":"git push"}"#
+        #expect(withInput.key != check().key)
+        #expect(withInput.key == withInput.key)
+    }
+
     @Test func wireDecodesTheGuardsRequest() throws {
         let line = #"{"v":1,"pane":"P","agent":"codex","tool":"Bash","input":"rm x","cwd":"/r","group":"deleting","why":"w","lost":"1 untracked files"}"#
         let c = try JSONDecoder().decode(GuardCheck.self, from: Data(line.utf8))
         #expect(c.agent == "codex")
         #expect(c.repo == nil)
         #expect(c.groupLabel == "Deleting")
+        #expect(c.toolInput == nil)
+        let big = #"{"v":1,"pane":"P","agent":"claude","tool":"Write","input":"/x","cwd":"/r","group":"outside","why":"w","toolInput":"sha256:ab","toolInputBytes":300000}"#
+        let h = try JSONDecoder().decode(GuardCheck.self, from: Data(big.utf8))
+        #expect(h.toolInput == "sha256:ab")
+        #expect(h.toolInputBytes == 300_000)
         let reply = String(decoding: try JSONEncoder().encode(GuardReply.deny(3)), as: UTF8.self)
         #expect(reply.contains(#""decision":"deny""#))
         #expect(reply.contains(#""request":3"#))

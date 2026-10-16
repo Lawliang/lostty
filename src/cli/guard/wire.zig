@@ -18,19 +18,37 @@ pub fn socketPath(alloc: Allocator, home: []const u8) Allocator.Error![]const u8
 pub fn encodeRequest(alloc: Allocator, pane: []const u8, agent: Agent, c: decide.Critical) Allocator.Error![]const u8 {
     var o = std.json.ObjectMap.init(alloc);
     try o.put("v", .{ .integer = 1 });
-    try o.put("pane", .{ .string = pane });
-    try o.put("agent", .{ .string = @tagName(agent) });
-    try o.put("tool", .{ .string = c.tool });
-    try o.put("input", .{ .string = c.input });
-    try o.put("cwd", .{ .string = c.cwd });
-    try o.put("group", .{ .string = @tagName(c.group) });
-    try o.put("why", .{ .string = c.why });
-    const optional = [_]struct { []const u8, ?[]const u8 }{
-        .{ "session", c.session }, .{ "repo", c.repo },     .{ "branch", c.branch },
-        .{ "lost", c.lost },       .{ "reason", c.reason },
+    const fields = [_]struct { []const u8, ?[]const u8 }{
+        .{ "pane", pane },              .{ "agent", @tagName(agent) }, .{ "tool", c.tool },
+        .{ "input", c.input },          .{ "cwd", c.cwd },             .{ "group", @tagName(c.group) },
+        .{ "why", c.why },              .{ "session", c.session },     .{ "repo", c.repo },
+        .{ "branch", c.branch },        .{ "lost", c.lost },           .{ "reason", c.reason },
+        .{ "toolInput", c.tool_input },
     };
-    for (optional) |kv| if (kv[1]) |v| try o.put(kv[0], .{ .string = v });
+    // Every string is valid UTF-8 on the wire, or the app can't decode it.
+    for (fields) |kv| if (kv[1]) |v| try o.put(kv[0], .{ .string = try validUtf8(alloc, v) });
+    if (c.tool_input_bytes) |n| try o.put("toolInputBytes", .{ .integer = std.math.cast(i64, n) orelse std.math.maxInt(i64) });
     return std.json.Stringify.valueAlloc(alloc, std.json.Value{ .object = o }, .{});
+}
+
+/// `s` with each invalid UTF-8 sequence replaced by U+FFFD.
+pub fn validUtf8(alloc: Allocator, s: []const u8) Allocator.Error![]const u8 {
+    if (std.unicode.utf8ValidateSlice(s)) return s;
+    var out: std.ArrayList(u8) = .empty;
+    var i: usize = 0;
+    while (i < s.len) {
+        const n = std.unicode.utf8ByteSequenceLength(s[i]) catch 0;
+        if (n > 0 and i + n <= s.len) {
+            if (std.unicode.utf8Decode(s[i .. i + n])) |_| {
+                try out.appendSlice(alloc, s[i .. i + n]);
+                i += n;
+                continue;
+            } else |_| {}
+        }
+        try out.appendSlice(alloc, "\u{FFFD}");
+        i += 1;
+    }
+    return out.toOwnedSlice(alloc);
 }
 
 pub fn parseReply(alloc: Allocator, line: []const u8) ?Reply {
@@ -42,7 +60,7 @@ pub fn parseReply(alloc: Allocator, line: []const u8) ?Reply {
     if (!std.mem.eql(u8, d.string, "deny")) return null;
     const id = v.object.get("request") orelse return null;
     if (id != .integer or id.integer <= 0) return null;
-    return .{ .deny = @intCast(id.integer) };
+    return .{ .deny = std.math.cast(u32, id.integer) orelse return null };
 }
 
 pub const Output = struct { stdout: []const u8 = "", stderr: []const u8 = "", exit: u8 = 0 };
@@ -119,6 +137,11 @@ const sample: decide.Critical = .{
     .session = "s1",
 };
 
+/// A unique socket path under /tmp, short enough for sun_path.
+fn testSocketPath(alloc: Allocator) ![]const u8 {
+    return std.fmt.allocPrint(alloc, "/tmp/lg-{x}.sock", .{std.crypto.random.int(u64)});
+}
+
 test "guard wire: request is one JSON line with optional fields omitted" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
@@ -172,10 +195,9 @@ test "guard wire: ask talks to a socket, and an absent one is unreachable" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    var tmp = std.testing.tmpDir(.{});
-    defer tmp.cleanup();
-    const dir = try tmp.dir.realpathAlloc(a, ".");
-    const path = try std.fs.path.join(a, &.{ dir, "g.sock" });
+    // A short path: a worktree's tmp folder can pass the 104-byte limit.
+    const path = try testSocketPath(a);
+    defer std.fs.deleteFileAbsolute(path) catch {};
     try std.testing.expect(ask(a, path, "{}", 500) == null);
 
     const addr = try std.net.Address.initUnix(path);
@@ -200,10 +222,8 @@ test "guard wire: a peer that trickles one byte then stalls hits the deadline" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    var tmp = std.testing.tmpDir(.{});
-    defer tmp.cleanup();
-    const dir = try tmp.dir.realpathAlloc(a, ".");
-    const path = try std.fs.path.join(a, &.{ dir, "g.sock" });
+    const path = try testSocketPath(a);
+    defer std.fs.deleteFileAbsolute(path) catch {};
     const addr = try std.net.Address.initUnix(path);
     var server = try addr.listen(.{});
     defer server.deinit();
@@ -224,4 +244,46 @@ test "guard wire: a peer that trickles one byte then stalls hits the deadline" {
     th.join();
     try std.testing.expect(r == null);
     try std.testing.expect(took < 1000);
+}
+
+test "guard wire: the whole tool input and its size go on the wire" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var c = sample;
+    c.tool_input = "{\"command\":\"rm -rf \\\"tmp dir\\\"\"}";
+    const v = try std.json.parseFromSliceLeaky(std.json.Value, a, try encodeRequest(a, "P", .claude, c), .{});
+    try std.testing.expectEqualStrings(c.tool_input.?, v.object.get("toolInput").?.string);
+    try std.testing.expect(v.object.get("toolInputBytes") == null);
+    c.tool_input = "sha256:abc";
+    c.tool_input_bytes = 300000;
+    const h = try std.json.parseFromSliceLeaky(std.json.Value, a, try encodeRequest(a, "P", .claude, c), .{});
+    try std.testing.expectEqual(@as(i64, 300000), h.object.get("toolInputBytes").?.integer);
+}
+
+test "guard wire: invalid UTF-8 becomes U+FFFD" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    try std.testing.expectEqualStrings("ok \u{2603}", try validUtf8(a, "ok \u{2603}"));
+    // One U+FFFD per bad byte.
+    try std.testing.expectEqualStrings("a\u{FFFD}b\u{FFFD}\u{FFFD}", try validUtf8(a, "a\xffb\xe2\x98"));
+    var c = sample;
+    c.input = "rm \xff\xfe";
+    c.cwd = "/r/\xc3";
+    c.tool_input = "\xe2\x98";
+    const line = try encodeRequest(a, "P", .codex, c);
+    try std.testing.expect(std.unicode.utf8ValidateSlice(line));
+    const v = try std.json.parseFromSliceLeaky(std.json.Value, a, line, .{});
+    try std.testing.expectEqualStrings("rm \u{FFFD}\u{FFFD}", v.object.get("input").?.string);
+    try std.testing.expectEqualStrings("/r/\u{FFFD}", v.object.get("cwd").?.string);
+}
+
+test "guard wire: a request id out of range is no reply" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    try std.testing.expect(parseReply(a, "{\"v\":1,\"decision\":\"deny\",\"request\":4294967296}") == null);
+    try std.testing.expect(parseReply(a, "{\"v\":1,\"decision\":\"deny\",\"request\":-1}") == null);
+    try std.testing.expectEqual(@as(u32, 4294967295), parseReply(a, "{\"v\":1,\"decision\":\"deny\",\"request\":4294967295}").?.deny);
 }

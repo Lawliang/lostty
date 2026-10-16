@@ -17,9 +17,24 @@ struct GuardCheck: Codable, Equatable, Sendable {
     var why: String
     var lost: String?
     var reason: String?
+    /// The whole tool input, canonical JSON (or `sha256:<hex>` when large).
+    /// An approval keys it, so one for a Write or an MCP call never covers
+    /// different content or arguments.
+    var toolInput: String? = nil
+    /// The tool input's size when `toolInput` is only its hash.
+    var toolInputBytes: Int? = nil
 
-    /// "Exactly this call": the same pane, tool, input and folder.
-    var key: String { [pane, tool, cwd, input].joined(separator: "\u{1F}") }
+    /// "Exactly this call": the same pane, tool, folder, input and whole
+    /// tool input, compared field by field.
+    struct Key: Equatable, Sendable {
+        var pane: String
+        var tool: String
+        var cwd: String
+        var input: String
+        var toolInput: String?
+    }
+
+    var key: Key { Key(pane: pane, tool: tool, cwd: cwd, input: input, toolInput: toolInput) }
 
     /// As the guard's catalog labels its groups.
     var groupLabel: String {

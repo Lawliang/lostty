@@ -11,16 +11,33 @@ struct GuardRequestViewTests {
                      created: Date(), state: .pending, decided: nil)
     }
 
-    @Test func factsInOrderWithTheAgentsWordsLabeled() {
-        let rows = GuardRequestFacts.rows(request())
-        #expect(rows.map(\.label) == ["Why", "Would lose", "Folder", "Repo", "How it came about", "The agent says"])
+    @Test func theGuardsAssessmentIsLabeledApartFromTheContext() {
+        let r = request()
+        #expect(GuardRequestFacts.assessment(r).map(\.label) == ["Kind", "Why", "Would lose"])
+        #expect(GuardRequestFacts.assessment(r).first?.value == "Deleting")
+        let rows = GuardRequestFacts.context(r)
+        #expect(rows.map(\.label) == ["Folder", "Repo", "How it came about", "The agent says"])
         #expect(rows.first { $0.label == "Repo" }?.value == "/r · feature")
         #expect(rows.last?.value == "Clear the cache")
     }
 
     @Test func optionalFactsAreLeftOut() {
-        let rows = GuardRequestFacts.rows(request(lost: nil, reason: nil, repo: nil))
-        #expect(rows.map(\.label) == ["Why", "Folder", "How it came about"])
+        let r = request(lost: nil, reason: nil, repo: nil)
+        #expect(GuardRequestFacts.assessment(r).map(\.label) == ["Kind", "Why"])
+        #expect(GuardRequestFacts.context(r).map(\.label) == ["Folder", "How it came about"])
+    }
+
+    @Test func theWholeToolInputIsShownForAllButBash() {
+        var c = request().check
+        c.toolInput = #"{"command":"rm -rf cache"}"#
+        #expect(GuardRequestFacts.toolInput(c) == nil)
+        c.tool = "Write"
+        c.input = "/Users/me/notes.md"
+        c.toolInput = #"{"content":"hello","file_path":"/Users/me/notes.md"}"#
+        #expect(GuardRequestFacts.toolInput(c) == .text(#"{"content":"hello","file_path":"/Users/me/notes.md"}"#))
+        c.toolInput = "sha256:abc"
+        c.toolInputBytes = 300_000
+        #expect(GuardRequestFacts.toolInput(c) == .tooLarge(300_000))
     }
 }
 #endif

@@ -3,15 +3,34 @@ import AppKit
 import SwiftUI
 
 enum GuardRequestFacts {
-    static func rows(_ r: GuardRequest) -> [(label: String, value: String)] {
+    /// What the guard made of the call: its judgement, not what's approved.
+    static func assessment(_ r: GuardRequest) -> [(label: String, value: String)] {
         let c = r.check
-        var rows: [(String, String)] = [("Why", c.why)]
+        var rows: [(String, String)] = [("Kind", c.groupLabel), ("Why", c.why)]
         if let lost = c.lost { rows.append(("Would lose", lost)) }
-        rows.append(("Folder", c.cwd))
+        return rows
+    }
+
+    static func context(_ r: GuardRequest) -> [(label: String, value: String)] {
+        let c = r.check
+        var rows: [(String, String)] = [("Folder", c.cwd)]
         if let repo = c.repo { rows.append(("Repo", [repo, c.branch].compactMap { $0 }.joined(separator: " · "))) }
         rows.append(("How it came about", "You prompted it"))
         if let reason = c.reason { rows.append(("The agent says", reason)) }
         return rows
+    }
+
+    enum ToolInput: Equatable {
+        case text(String)
+        case tooLarge(Int)
+    }
+
+    /// The whole tool input, shown for every tool but Bash (whose command
+    /// is its input).
+    static func toolInput(_ c: GuardCheck) -> ToolInput? {
+        guard c.tool != "Bash", let input = c.toolInput else { return nil }
+        if let bytes = c.toolInputBytes { return .tooLarge(bytes) }
+        return .text(input)
     }
 }
 
@@ -26,31 +45,25 @@ struct GuardRequestView: View {
         if let request = runtime.book.request(id) {
             VStack(alignment: .leading, spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("\(request.check.agentName) wants to: \(request.check.groupLabel)").font(.headline)
-                    Text("Request #\(request.id)").font(.subheadline).foregroundStyle(.secondary)
+                    Text("\(request.check.agentName) needs your approval").font(.headline)
+                    Text("Request #\(request.id) · \(request.check.tool)").font(.subheadline).foregroundStyle(.secondary)
                 }
-                ScrollView {
-                    Text(request.check.input)
-                        .font(.system(.body, design: .monospaced))
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(8)
-                }
-                .frame(minHeight: 44, maxHeight: 160)
-                .background(RoundedRectangle(cornerRadius: 6).fill(Color(nsColor: .textBackgroundColor)))
-                Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 6) {
-                    ForEach(Array(GuardRequestFacts.rows(request).enumerated()), id: \.offset) { _, row in
-                        GridRow {
-                            Text(row.label).foregroundStyle(.secondary)
-                            if row.label == "The agent says" {
-                                Text(row.value).italic().textSelection(.enabled)
-                            } else {
-                                Text(row.value).textSelection(.enabled)
-                            }
-                        }
+                inputBox(request.check.input, maxHeight: 160)
+                if let whole = GuardRequestFacts.toolInput(request.check) {
+                    switch whole {
+                    case .text(let text):
+                        inputBox(text, maxHeight: 280)
+                    case .tooLarge(let bytes):
+                        Text("Too large to show (\(bytes) bytes)").font(.callout).foregroundStyle(.secondary)
                     }
                 }
-                .font(.callout)
+                Text("Approving lets exactly what's shown above through, once, in this pane, within 10 minutes.")
+                    .font(.caption).foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("The guard's assessment").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    facts(GuardRequestFacts.assessment(request))
+                }
+                facts(GuardRequestFacts.context(request))
                 HStack {
                     Spacer()
                     if request.state == .pending {
@@ -66,10 +79,38 @@ struct GuardRequestView: View {
                 }
             }
             .padding(16)
-            .frame(width: 460)
+            .frame(width: 520)
         } else {
             Text("This request is gone.").padding(16)
         }
+    }
+
+    private func inputBox(_ text: String, maxHeight: CGFloat) -> some View {
+        ScrollView {
+            Text(text)
+                .font(.system(.body, design: .monospaced))
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(8)
+        }
+        .frame(minHeight: 44, maxHeight: maxHeight)
+        .background(RoundedRectangle(cornerRadius: 6).fill(Color(nsColor: .textBackgroundColor)))
+    }
+
+    private func facts(_ rows: [(label: String, value: String)]) -> some View {
+        Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 6) {
+            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                GridRow {
+                    Text(row.label).foregroundStyle(.secondary)
+                    if row.label == "The agent says" {
+                        Text(row.value).italic().textSelection(.enabled)
+                    } else {
+                        Text(row.value).textSelection(.enabled)
+                    }
+                }
+            }
+        }
+        .font(.callout)
     }
 }
 
