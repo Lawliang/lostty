@@ -434,12 +434,14 @@ p { margin: 0; }
 .ag-stage[data-focus="phone"] .ag-mac{transform:translateZ(-90px)}
 .ag-stage[data-focus="mac"] .ag-phone{transform:translateZ(110px) rotateY(5deg) scale(.92)}
 .ag-stage[data-focus="phone"] .ag-mac::after,.ag-stage[data-focus="mac"] .ag-phone::after{opacity:.68}
-.ag-steps{display:flex; flex-direction:column; margin:0; list-style:none; padding:0}
-.ag-steps li{font-size:17px; line-height:1.4; color:var(--faint); display:grid; grid-template-columns:2px minmax(0, 1fr); gap:16px; padding-block:12px; transition:color .3s; min-width:0}
-.ag-steps li::before{content:""; border-radius:2px; background:var(--hair); transition:background .4s}
-.ag-steps li.ag-cur{color:var(--fg)}
-.ag-steps li.ag-cur::before{background:linear-gradient(180deg, var(--magenta), var(--violet))}
-.ag-steps li.ag-done::before{background:color-mix(in srgb, var(--magenta) 45%, var(--hair))}
+/* Kinetic Mono's axolotl, centred over both lists; it changes with the step */
+.ag-cats-mascot{grid-column:1 / -1; justify-self:center; width:64px; height:64px; object-fit:contain; margin-bottom:14px}
+/* the steps as Kinetic Mono's numbered boxes; the current one gets the magenta edge */
+.ag-steps{display:flex; flex-direction:column; gap:8px; margin:0; list-style:none; padding:0}
+.ag-steps li{border:1px solid var(--rule); border-radius:4px; padding:10px 12px; font:400 14px/1.4 var(--font-mono); color:var(--ink-2); background:transparent;
+  transition:border-color .3s, color .3s, background-color .3s; min-width:0}
+.ag-steps .ag-n{display:block; color:var(--magenta-ink); font-weight:700; margin-bottom:2px}
+.ag-steps li.ag-cur{border-color:var(--magenta); color:var(--ink); background:var(--paper)}
 
 /* narrow: Aurora's own phone layout, the steps in a row under the Mac and iPhone */
 /* narrower: the two lists go under the Mac and iPhone, still side by side */
@@ -450,7 +452,7 @@ p { margin: 0; }
 @container (max-width:640px){
   .ag-stage{padding-right:1.5%}
   .ag-cat-h{font-size:16px}
-  .ag-steps li{font-size:14px; gap:10px; padding-block:8px}
+  .ag-steps li{font-size:13px; padding:8px 10px}
 }
 
 /* ---------- why ---------- */
@@ -920,22 +922,23 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
           </div>
         </div>
         <div class="ag-cats" id="ag-cats" role="group" aria-label="What the animation shows, on each device">
+          <img class="ag-cats-mascot" id="ag-mascot" alt="" hidden>
           <div class="ag-cat" data-cat="mac">
             <button class="ag-cat-h" type="button" aria-pressed="false">On Mac</button>
             <ol class="ag-steps">
-              <li class="ag-cur">Claude works</li>
-              <li>Stops to ask</li>
-              <li>Carries on</li>
-              <li>Ready</li>
+              <li class="ag-cur"><span class="ag-n">1</span>Claude works</li>
+              <li><span class="ag-n">2</span>Stops to ask</li>
+              <li><span class="ag-n">3</span>Carries on</li>
+              <li><span class="ag-n">4</span>Ready</li>
             </ol>
           </div>
           <div class="ag-cat" data-cat="phone">
             <button class="ag-cat-h" type="button" aria-pressed="false">On iPhone</button>
             <ol class="ag-steps">
-              <li class="ag-cur">Shows it working</li>
-              <li>Puts it first</li>
-              <li>You tap Yes</li>
-              <li>Back in your pocket</li>
+              <li class="ag-cur"><span class="ag-n">1</span>Shows it working</li>
+              <li><span class="ag-n">2</span>Puts it first</li>
+              <li><span class="ag-n">3</span>You tap Yes</li>
+              <li><span class="ag-n">4</span>Back in your pocket</li>
             </ol>
           </div>
         </div>
@@ -2090,6 +2093,13 @@ void main(){
     ];
     const cats = $('#ag-cats');
     const lists = $$('.ag-steps', cats).map(ol => $$('li', ol));
+    // the page's own axolotl pictures (the why section and footer hold them)
+    const mascotImg = $('#ag-mascot');
+    const MASCOT = {
+      working: ['m-happy', 'The axolotl, happy: Claude is working'],
+      waiting: ['m-wait', 'The axolotl waving: a session is waiting on you'],
+      ready: ['m-ready', 'The axolotl standing ready']
+    };
     const onEls = $$('[data-on]', stage);
     function setStep(s) {
       stage.dataset.step = s;
@@ -2104,6 +2114,8 @@ void main(){
       lsSt.textContent = STATE_TXT[p.l];
       p.o.forEach((k, i) => pc[k].style.setProperty('--i', i));
       lists.forEach(lis => lis.forEach((li, i) => { li.classList.toggle('ag-cur', i === p.p); li.classList.toggle('ag-done', i < p.p); }));
+      const [mid, malt] = MASCOT[p.l], msrc = $('#' + mid);
+      if (mascotImg && msrc && mascotImg.getAttribute('src') !== msrc.getAttribute('src')) { mascotImg.src = msrc.src; mascotImg.alt = malt; mascotImg.hidden = false; }
       if (pm) pm.setAttribute('class', 'ag-mascot' + (p.l === 'waiting' ? ' ag-wave' : ''));
     }
 
