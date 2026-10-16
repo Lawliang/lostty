@@ -76,8 +76,11 @@ pub const EditError = error{Malformed} || Allocator.Error;
 
 /// The hook command for event `e`. A state hook is a no-op outside Lostty
 /// (no LOSTTY_SURFACE) and when the binary is gone, and always exits 0. The
-/// guard hook is a no-op in the same cases but otherwise `exec`s the guard,
-/// so its exit code (2 blocks a Codex call) reaches the agent.
+/// guard hook is a no-op outside Lostty, and otherwise `exec`s the guard, so
+/// its exit code (2 blocks a Codex call) reaches the agent. Inside Lostty
+/// with the binary gone (the app moved or was deleted) it fails closed, as
+/// the guard does when the app can't be reached: Claude asks you, Codex
+/// stays blocked.
 pub fn command(alloc: Allocator, agent: Agent, e: Event) Allocator.Error![]u8 {
     return switch (e.kind) {
         .state => std.fmt.allocPrint(
@@ -85,13 +88,22 @@ pub fn command(alloc: Allocator, agent: Agent, e: Event) Allocator.Error![]u8 {
             "[ -n \"$LOSTTY_SURFACE\" ] && [ -x \"$LOSTTY_BIN\" ] && \"$LOSTTY_BIN\" +claude-state {s}; exit 0",
             .{e.state},
         ),
-        .guard => std.fmt.allocPrint(
-            alloc,
-            "[ -n \"$LOSTTY_SURFACE\" ] && [ -x \"$LOSTTY_BIN\" ] || exit 0; exec \"$LOSTTY_BIN\" +guard --agent={s}",
-            .{@tagName(agent)},
-        ),
+        .guard => alloc.dupe(u8, switch (agent) {
+            .claude => guard_claude_command,
+            .codex => guard_codex_command,
+        }),
     };
 }
+
+const guard_claude_command =
+    "[ -n \"$LOSTTY_SURFACE\" ] || exit 0; [ -x \"$LOSTTY_BIN\" ] || { printf '%s\\n' " ++
+    "'{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"ask\"," ++
+    "\"permissionDecisionReason\":\"Lostty is not reachable (its app moved or was deleted), so it is asking you directly.\"}}'; " ++
+    "exit 0; }; exec \"$LOSTTY_BIN\" +guard --agent=claude";
+
+const guard_codex_command =
+    "[ -n \"$LOSTTY_SURFACE\" ] || exit 0; [ -x \"$LOSTTY_BIN\" ] || { echo 'Blocked by Lostty: its app moved or was deleted, " ++
+    "so this cannot be checked. Do not try another way.' >&2; exit 2; }; exec \"$LOSTTY_BIN\" +guard --agent=codex";
 
 /// Lostty's entries, in any version, mention LOSTTY_SURFACE and one of its
 /// commands.
@@ -584,4 +596,59 @@ test "claude hooks: remove takes out the guard too" {
     _ = try install(a, .codex, &root);
     try std.testing.expect(try remove(&root));
     try std.testing.expect(std.mem.indexOf(u8, try stringify(a, root), "+guard") == null);
+}
+
+test "claude hooks: the guard command is exactly the one specified" {
+    try std.testing.expectEqualStrings(
+        \\[ -n "$LOSTTY_SURFACE" ] || exit 0; [ -x "$LOSTTY_BIN" ] || { printf '%s\n' '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"Lostty is not reachable (its app moved or was deleted), so it is asking you directly."}}'; exit 0; }; exec "$LOSTTY_BIN" +guard --agent=claude
+    , guard_claude_command);
+    try std.testing.expectEqualStrings(
+        \\[ -n "$LOSTTY_SURFACE" ] || exit 0; [ -x "$LOSTTY_BIN" ] || { echo 'Blocked by Lostty: its app moved or was deleted, so this cannot be checked. Do not try another way.' >&2; exit 2; }; exec "$LOSTTY_BIN" +guard --agent=codex
+    , guard_codex_command);
+}
+
+fn runHook(alloc: Allocator, cmd: []const u8, surface: ?[]const u8) !std.process.Child.RunResult {
+    var env = std.process.EnvMap.init(alloc);
+    try env.put("PATH", "/usr/bin:/bin");
+    try env.put("LOSTTY_BIN", "/nonexistent/lostty");
+    if (surface) |s| try env.put("LOSTTY_SURFACE", s);
+    return std.process.Child.run(.{ .allocator = alloc, .argv = &.{ "/bin/sh", "-c", cmd }, .env_map = &env });
+}
+
+test "claude hooks: a guard hook whose Lostty is gone fails closed" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const guard_event: Event = .{ .name = "PreToolUse", .kind = .guard, .timeout = guard_timeout_seconds };
+    // Claude: asks, with valid hook JSON.
+    const c = try runHook(a, try command(a, .claude, guard_event), "S");
+    try std.testing.expectEqual(@as(u8, 0), c.term.Exited);
+    const j = try std.json.parseFromSliceLeaky(Value, a, c.stdout, .{});
+    try std.testing.expectEqualStrings("ask", j.object.get("hookSpecificOutput").?.object.get("permissionDecision").?.string);
+    // Codex: blocked.
+    const x = try runHook(a, try command(a, .codex, guard_event), "S");
+    try std.testing.expectEqual(@as(u8, 2), x.term.Exited);
+    try std.testing.expect(std.mem.startsWith(u8, x.stderr, "Blocked by Lostty"));
+    // Outside Lostty both do nothing.
+    for ([_]Agent{ .claude, .codex }) |agent| {
+        const o = try runHook(a, try command(a, agent, guard_event), null);
+        try std.testing.expectEqual(@as(u8, 0), o.term.Exited);
+        try std.testing.expectEqualStrings("", o.stdout);
+        try std.testing.expectEqualStrings("", o.stderr);
+    }
+}
+
+test "codex hooks: an older guard hook is partial and gets replaced" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var root = try parseFixture(a, "{}");
+    _ = try install(a, .codex, &root);
+    const old = "[ -n \"$LOSTTY_SURFACE\" ] && [ -x \"$LOSTTY_BIN\" ] || exit 0; exec \"$LOSTTY_BIN\" +guard --agent=codex";
+    const text = try std.mem.replaceOwned(u8, a, try stringify(a, root), "[ -n \\\"$LOSTTY_SURFACE\\\" ] || exit 0; [ -x \\\"$LOSTTY_BIN\\\" ] || { echo 'Blocked by Lostty: its app moved or was deleted, so this cannot be checked. Do not try another way.' >&2; exit 2; }; exec \\\"$LOSTTY_BIN\\\" +guard --agent=codex", try std.mem.replaceOwned(u8, a, old, "\"", "\\\""));
+    var stale = try parseFixture(a, text);
+    try std.testing.expectEqual(Status.partial, try status(a, .codex, stale));
+    try std.testing.expect(try install(a, .codex, &stale));
+    try std.testing.expectEqual(Status.installed, try status(a, .codex, stale));
+    try std.testing.expect(std.mem.indexOf(u8, try stringify(a, stale), "exit 2") != null);
 }
