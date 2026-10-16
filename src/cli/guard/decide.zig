@@ -72,7 +72,9 @@ pub fn decide(alloc: Allocator, e: Env, probe: anytype, input_json: []const u8) 
         input = tool;
     }
     const f = found orelse return .harmless;
-    const whole = try toolInput(alloc, ti);
+    // Bash's `description` is the agent's own words about the command, not
+    // part of what runs: a retry that rewords it is still the same call.
+    const whole = try toolInput(alloc, if (is_bash) try without(ti, "description") else ti);
     const repo = probe.repoRoot(cwd);
     return .{ .critical = .{
         .group = f.group,
@@ -102,6 +104,14 @@ pub const ToolInput = struct { text: []const u8, bytes: ?usize = null };
 pub fn toolInput(alloc: Allocator, v: std.json.Value) Allocator.Error!ToolInput {
     const text = try std.json.Stringify.valueAlloc(alloc, try canonical(alloc, v), .{});
     return capped(alloc, text);
+}
+
+/// `v` without the top-level field `key`.
+fn without(v: std.json.Value, key: []const u8) Allocator.Error!std.json.Value {
+    if (v != .object or v.object.get(key) == null) return v;
+    var out = try v.object.clone();
+    _ = out.orderedRemove(key);
+    return .{ .object = out };
 }
 
 fn capped(alloc: Allocator, text: []const u8) Allocator.Error!ToolInput {
@@ -564,6 +574,20 @@ test "guard decide: the whole tool input goes with the request" {
     const b = (try decide(a, env(a), Fake{}, try bash(a, "git push", "/r"))).critical;
     try std.testing.expectEqualStrings("git push", b.input);
     try std.testing.expect(std.mem.indexOf(u8, b.tool_input.?, "\"command\":\"git push\"") != null);
+    // A reworded description is the same call; a different timeout isn't.
+    try std.testing.expect(std.mem.indexOf(u8, b.tool_input.?, "Clean up") == null);
+    const t1 =
+        \\{"tool_name":"Bash","tool_input":{"command":"git push","description":"Push","timeout":1000},"cwd":"/r"}
+    ;
+    const t2 =
+        \\{"tool_name":"Bash","tool_input":{"command":"git push","description":"Push it now","timeout":1000},"cwd":"/r"}
+    ;
+    const t3 =
+        \\{"tool_name":"Bash","tool_input":{"command":"git push","description":"Push","timeout":2000},"cwd":"/r"}
+    ;
+    const k1 = (try decide(a, env(a), Fake{}, t1)).critical.tool_input.?;
+    try std.testing.expectEqualStrings(k1, (try decide(a, env(a), Fake{}, t2)).critical.tool_input.?);
+    try std.testing.expect(!std.mem.eql(u8, k1, (try decide(a, env(a), Fake{}, t3)).critical.tool_input.?));
 }
 
 test "guard decide: a huge tool input is sent as its hash" {
