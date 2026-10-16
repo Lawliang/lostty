@@ -163,8 +163,9 @@ A red **Guard disconnected** badge means an agent's guard hook isn't
 installed. That includes an agent you never connected. Fix it from
 **Lostty → Claude Integration…** by installing or updating the hooks.
 
-If Lostty isn't running (say, during Restart to Update), Claude asks you in
-its own prompt and Codex stays blocked until Lostty is back.
+If Lostty isn't running (say, during Restart to Update) or its app was moved
+or deleted, Claude asks you in its own prompt and Codex stays blocked until
+Lostty is back.
 
 Settings live in `~/.config/lostty/guard.json`:
 
@@ -181,10 +182,15 @@ Settings live in `~/.config/lostty/guard.json`:
 `"push": "protected"` asks only for force pushes, tags, deletes and pushes
 to protected branches. `deletable` folders (by default `node_modules`,
 `zig-out`, `.zig-cache`, `zig-cache`, `DerivedData`, `.build`, `__pycache__`)
-can be deleted without asking. The guard is Connect's `PreToolUse` hook; Codex
-asks you to trust it the first time. It defends against mistakes and
-misled agents, not a process set on getting around it: it isn't a
-sandbox.
+can be deleted without asking.
+
+Connecting an agent (the bubble at launch, or **Lostty → Claude
+Integration…**) sets up its guard along with the trace. Agents already
+running pick up new hooks only after you restart them. Codex asks you once
+to trust Lostty's hooks; until you do, its guard doesn't run.
+
+The guard defends against mistakes and misled agents, not a process set on
+getting around it: it isn't a sandbox.
 
 ## Project Pill
 
