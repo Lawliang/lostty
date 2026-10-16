@@ -1,6 +1,7 @@
 # Lostty agent coordination — design
 
-Status: decisions settled in review (2026-10-14); see "Decisions" at the end
+Status: decisions settled in review (2026-10-14); step 2 settled
+2026-10-15 (§10). See "Decisions" at the end
 
 Builds on the agent hooks Lostty installs (`src/cli/claude/hooks.zig`,
 `protocol.zig`), the per-pane agent state they report, the Branches panel,
@@ -487,20 +488,177 @@ agent calls a tool ─▶ guard: critical?
 
 ## 9. Building it in steps
 
-1. **The guard, alone.** It's useful even without messaging. Catalog,
-   Claude `PreToolUse`, the deny-and-approve flow on the Mac, fail closed,
+1. **The guard, alone** (built, branch `guard`). Catalog, Claude and Codex
+   `PreToolUse`, the deny-and-approve flow on the Mac, fail closed,
    protection of the guard's own files.
-2. **The core and Claude.** Pane identities, the mailbox, `+msg`, the Claude
-   adapter (messenger run), rules, and the board.
-3. **Codex.** The Codex guard hook, the Codex adapter, and Wake it (which
-   also serves every CLI's basic adapter).
+2. **Who's here and merge turns** (§10). A slice of §2–§6 and §8, settled
+   on 2026-10-15 (decisions 24–47). It replaces the old step 2 ("the core
+   and Claude": rules and the board wait).
+3. **Rules and handoffs.** §6's rules, the full board, "Hand off now".
 4. **The phone.** Approvals and coordination notifications.
 5. **Later.** The MCP server, agents proposing rules, more adapters.
+
+## 10. Step 2: who's here and taking turns to merge
+
+**Purpose.** Agent terminals mostly ignore each other. When one is ready
+to merge, it can see who else works on the same repo, and they take
+turns merging into the integration branch instead of racing. Everything
+else in §1–§8 (the provider-neutral core, adapters, the envelope, cost
+limits) stays the architecture; step 2 builds only this slice.
+
+### 10.1 What an agent can do
+
+```
+lostty +msg list                       who's on this repo (see below)
+lostty +msg note <pane> "<text>"       a short note to another pane
+lostty +msg done ["<text>"]            I'm done; wakes whoever waits on me
+lostty +msg wait done <pane>           tell me once when <pane> says done
+lostty +msg wait landed <branch> [--into <target>]
+                                       tell me once when <branch> is in the target
+lostty +msg inbox                      what's been sent to this pane
+lostty +merge ready [--into <target>]  put my branch in line to merge
+lostty +merge done                     I merged; pass the turn on
+lostty +merge status                   the line(s) for this repo
+```
+
+- **`list`** shows, for each agent pane on the same repo (worktrees
+  count as the same repo): its name, branch, agent kind, busy or idle,
+  ready to merge and its place in line, and uncommitted changes (a count).
+  Panes sharing one working tree are marked as such. Not prompts or output.
+- Awareness is **pull on demand** plus one-time waits. There's no live
+  feed of what other panes are doing.
+- A **wait** fires once, delivers one message, and lapses after 24 hours.
+  At most 5 open waits per pane. What can be waited on: another pane
+  saying `done`; a branch landing in a target. Being idle is not done (§6).
+  "Your turn to merge" needs no wait: a pane in line always gets it.
+- **Kinds:** agents send `note` and `done` only. Other kinds in §3 wait.
+- Same-project only, as §2: `note` and `wait` refuse a pane on another repo.
+- Agents learn the commands from one short line Lostty's `SessionStart` hook
+  adds, as §4 says.
+
+### 10.2 Who's who
+
+- Pane identity as §2: sends travel as an OSC 1337 `SetUserVar`
+  (`LOSTTY_COORD`, base64 JSON) written to the caller's own terminal, the
+  `+claude-state` path. The app takes `from` from the pane the bytes
+  arrived on. Nothing the caller passes names the sender.
+- Reads (`list`, `inbox`, `status`) read files the app writes in the
+  coordination folder: `~/.config/lostty/coord/` for the release build, a
+  per-build subfolder for others, given to panes as `LOSTTY_COORD_DIR` (as
+  `LOSTTY_GUARD_SOCKET`). The guard already protects `~/.config/lostty/`
+  from agents' writes. `ready`, `done` and `note` wait up to 2 seconds for
+  the app to show the change there, then print the result ("You're 2nd in
+  line to merge `feature` into `skins`, after lostty-13."), or say Lostty
+  didn't answer and exit 1.
+- **The state hooks report the agent.** Codex's state hook becomes
+  `+claude-state <state> --agent=codex`, and both agents' state hooks send
+  the hook's `session_id` and `cwd`. Older installs, without the flag,
+  show as "agent unknown" with no session; the usual Connect updates them.
+- **A Claude pane's name** is the session name in Claude's own
+  `~/.claude/sessions/<pid>.json` (`name`, e.g. `lostty-9a`), found by its
+  `sessionId`, or by its `tmux` pane when the id hasn't been seen. No
+  `--name` wrapper. A Codex pane is named by its pane title, made unique.
+- **Folders and branches** come from the app's pane pwd (OSC 7) and git
+  (`rev-parse --git-common-dir` groups worktrees into one repo).
+
+### 10.3 The merge line
+
+- **One line per target branch per repo.** The target is the repo's
+  **integration branch**: `"integration"` in `guard.json` (global, or per
+  repo under `repos`), default `main`. For lostty it's set to `skins`.
+  `--into` picks another.
+- **Getting in line:** the agent runs `lostty +merge ready`, or you mark a
+  pane ready in the Branches panel. Lostty never guesses. Refused when the
+  pane is on the target, detached, or the target already has the branch.
+  Ready again just reports the place. The branch is the one checked out
+  when the pane got in line.
+- **Order:** first ready, first served. You can reorder or skip from the
+  panel. Agents can't swap places.
+- **Whose turn:** the first pane in line. It gets: "Your turn to merge
+  `feature` into `skins` (lostty-13 just merged `observer`). Merge in
+  `<folder>`, which has `skins` checked out." When `skins` has commits
+  the branch doesn't, it adds: "`skins` moved since you branched; update
+  first." Lostty doesn't force the update. **Each branch's own agent
+  merges it**, in the folder that has the target checked out.
+- **Done:** the agent runs `lostty +merge done`, or git shows the target
+  contains the branch (checked when the repo's refs change, and every 30
+  seconds while a line isn't empty). You can also mark done or skip. Then
+  the next pane gets its turn.
+- **A pane that closes** stays in line, marked "pane closed", until you
+  remove it. The turn passes over it to the next open pane.
+- **What counts as merging into the target:** `git merge` while the target
+  is checked out; a push whose destination is the target (which covers a
+  rebase then pushed onto it); `gh pr merge` (already critical, §7.2).
+
+### 10.4 Out-of-turn merges and the guard
+
+- The guard learns the integration target from `guard.json`. A merge into
+  it (as §10.3 counts it) that the catalog wouldn't otherwise flag goes to
+  the app as a **turn check**.
+- The app allows it when the line for that target is empty or the pane
+  holds the turn. Otherwise it's a normal guard request (§7.4), its detail
+  showing the line, and you decide. Approval covers that one call, as ever.
+- A merge into a protected branch still asks, in turn or not: the line
+  orders merges, it doesn't approve them.
+- If the app can't be reached, a turn check is allowed: before step 2 these
+  merges weren't critical, and the line is coordination, not a guardrail.
+
+### 10.5 Shared working trees
+
+- Panes in one folder share its checkout. `list` marks them.
+- When a pane's branch changes in a shared folder, the others in that
+  folder get a notice ("lostty-13 switched `<folder>` from `feature` to
+  `skins`; your files there changed"). It isn't a guard prompt.
+
+### 10.6 Delivering
+
+- **Claude:** the messenger run of §5, sent to the session name from §10.2.
+- **Codex:** `codex queue --thread <session id> --message <text>`. Tried:
+  it starts a turn in an idle Codex TUI by itself, so no Wake it is needed
+  when it works. When it fails, the message waits in the pane's inbox and
+  the pane is badged, with Wake it as §5.
+- Every delivery is wrapped as §5. Lostty's own notices (your turn,
+  landed, moved, branch switched) are labeled "From Lostty" and travel as
+  peer messages too: low authority, whatever the source.
+- §3's limits apply: 30-second batching, 20 deliveries per pane per hour,
+  loop and repeat limits, 24-hour expiry, 4 KB bodies (1 KB for `note`, so
+  the send fits in one OSC).
+
+### 10.7 What you see
+
+- **Branches panel, "Merge line" section**, under Approvals: each line
+  (`skins`: 1. lostty-13 `observer`, your turn · 2. lostty-9a
+  `project-pill`), with Mark ready, Move up/down, Skip, Mark done, Remove.
+- **Notified only** for a held out-of-turn merge (the guard request) and a
+  merge conflict (the turn's target folder has unmerged paths). Turns go
+  to the agents; the panel shows the rest.
+- The log (§8) records every send, wait, line change and delivery.
+
+### 10.8 Testing
+
+- Line logic (unit): order, reorder and skip, done by command and by git,
+  closed panes passed over, one line per target, refusals.
+- Turn checks (unit): in turn, out of turn, empty line, protected target,
+  app unreachable; the catalog's "merge into target" detection for merge,
+  push refspecs and pushes from the target.
+- Identity (unit): `from` comes from the arriving pane; Claude session
+  names from a sample `~/.claude/sessions/*.json`.
+- End to end (manual, Haiku, tiny prompts): two panes in line, the first
+  merges, the second is told its turn; an out-of-turn merge is held.
+  Codex delivery with `codex queue`.
+
+### 10.9 Facts to find while building
+
+1. `codex queue --thread` takes the `session_id` Codex hooks report.
+2. `SendMessage` from the messenger run under `--setting-sources ""` and
+   `--strict-mcp-config` (open question 1).
+3. Agents' Bash tools find the pane's terminal the way hooks do
+   (`findTty`).
 
 ## Out of scope
 
 - Sessions outside Lostty: other terminals, VS Code, cloud, other Macs.
-- Merge queues, branch locks, and resolving conflicts.
+- Branch locks and resolving conflicts. (Merge turns are in step 2, §10.)
 - Channels (research preview).
 - Sandboxing agents.
 
@@ -568,3 +726,32 @@ Settled in review on 2026-10-14:
 | 21 | Approving from a Mac notification | Deny only; Approve opens the detail |
 | 22 | Touch ID on the Mac | No |
 | 23 | Several requests | A list, any order, no "approve all" |
+
+Step 2, settled on 2026-10-15:
+
+| # | Question | Decision |
+| :- | :- | :- |
+| 24 | Order of work | Guard first (fix, check, merge), then step 2 |
+| 25 | `git push` default | Protected (supersedes 3); `"push": "all"` asks for every push |
+| 26 | Awareness | Pull on demand and one-time waits; no live feed |
+| 27 | What `list` shows | Name, branch, agent kind, busy/idle, ready, place in line, uncommitted changes |
+| 28 | Shared working trees | Marked in `list`; a branch switch there tells the others, no guard prompt |
+| 29 | Step 2's scope | Who's here, waits, notes, the merge line. Later: handoff rules, MCP, phone |
+| 30 | Getting in line | `lostty +merge ready`, or you mark ready in the panel; no guessing |
+| 31 | Order | First ready first; you reorder or skip; agents can't swap |
+| 32 | How many lines | One per target branch per repo |
+| 33 | Out-of-turn merge | A guard request showing the line; you decide |
+| 34 | What's merging | `git merge` on the target, a push to it, `gh pr merge`, a rebase pushed onto it |
+| 35 | Done | `lostty +merge done`, or git shows the target has the branch; you can mark done or skip |
+| 36 | The next pane | "Your turn to merge into X (Y just merged)", plus "X moved, update first"; no forced update |
+| 37 | A closed pane in line | Stays, marked "pane closed", until you remove it |
+| 38 | Claude pane names | From `~/.claude/sessions/<pid>.json`; no `--name` wrapper |
+| 39 | Codex delivery | `codex queue --thread`; hooks and Wake it as fallback |
+| 40 | Agent kind | The state hooks report it (`--agent=codex`); older installs show partial |
+| 41 | Lostty's own notices | Peer messages labeled "From Lostty" |
+| 42 | What can be waited on | Another pane's done; a branch landing in the target; your turn. Not idle |
+| 43 | The target | Per-repo integration branch in `guard.json` (default `main`; lostty `skins`); `--into` overrides |
+| 44 | Who merges | Each branch's own agent, in the folder that has the target checked out |
+| 45 | What notifies you | Held out-of-turn merges and merge conflicts only |
+| 46 | What agents send | `note` and `done` (done wakes waiters); other kinds later |
+| 47 | Build order | As §9, asking before each install |
