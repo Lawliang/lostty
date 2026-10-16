@@ -31,6 +31,7 @@
   --rose: #FF73B2;
   --sheen-hi: #8A4DFF;
   --ag-shadow: 0 40px 80px -34px rgba(110, 30, 90, .35);
+  --ag-platform: rgba(60, 20, 70, .32);
   /* product screens: same in both themes */
   --scr-bg: #120E17;
   --scr-bg-2: #1C1724;
@@ -83,6 +84,7 @@
     --sel: rgba(229, 25, 156, .32);
     --sheen-hi: #FFFFFF;
     --ag-shadow: 0 40px 90px -30px rgba(0, 0, 0, .8);
+    --ag-platform: rgba(229, 25, 156, .3);
     color-scheme: dark;
   }
 }
@@ -107,6 +109,7 @@
   --sel: rgba(229, 25, 156, .32);
   --sheen-hi: #FFFFFF;
   --ag-shadow: 0 40px 90px -30px rgba(0, 0, 0, .8);
+  --ag-platform: rgba(229, 25, 156, .3);
   color-scheme: dark;
 }
 
@@ -465,7 +468,11 @@ p { margin: 0; }
 .ag-stage[data-focus="mac"] .ag-phone{transform:translateZ(110px) rotateY(5deg) scale(.92)}
 .ag-stage[data-focus="phone"] .ag-mac::after,.ag-stage[data-focus="mac"] .ag-phone::after{opacity:.68}
 /* Kinetic Mono's axolotl, centred over both lists; it changes with the step */
-.ag-cats-mascot{grid-column:3 / -1; grid-row:1; justify-self:center; width:64px; height:64px; object-fit:contain; margin-bottom:14px}
+.ag-cats-mascot{grid-column:3 / -1; grid-row:1; justify-self:center; position:relative; width:64px; height:64px; margin-bottom:16px}
+.ag-cats-mascot img{position:relative; z-index:1; display:block; width:64px; height:64px; object-fit:contain}
+/* the shadow it stands on */
+.ag-cats-mascot::after{content:""; position:absolute; left:50%; bottom:-5px; width:58px; height:13px; transform:translateX(-50%); border-radius:50%;
+  background:radial-gradient(closest-side, var(--ag-platform), transparent)}
 /* the steps as Kinetic Mono's numbered boxes; the current one gets the magenta edge */
 .ag-steps{grid-row:2 / span 4; display:grid; grid-template-rows:subgrid; margin:0; list-style:none; padding:0}
 .ag-steps li{border:1px solid var(--rule); border-radius:4px; padding:10px 12px; font:400 14px/1.4 var(--font-mono); color:var(--ink-2); background:transparent;
@@ -957,7 +964,7 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
           </div>
         </div>
         <div class="ag-cats" id="ag-cats" role="group" aria-label="What the animation shows, on each device">
-          <img class="ag-cats-mascot" id="ag-mascot" alt="" hidden>
+          <div class="ag-cats-mascot"><img id="ag-mascot" alt="" hidden></div>
           <ol class="ag-nums" aria-hidden="true"><li>1</li><li>2</li><li>3</li><li>4</li></ol>
           <div class="ag-cat" data-cat="mac">
             <button class="ag-cat-h" type="button" aria-pressed="false">On Mac</button>
