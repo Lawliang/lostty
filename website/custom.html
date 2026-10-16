@@ -190,13 +190,7 @@ kbd, .kbd {
 }
 
 /* ---------- shared type ---------- */
-.prompt { margin: 0; font-size: 14px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pr { color: var(--cyan); }
 .pr-c { color: var(--magenta-ink); }
-.cmd { color: var(--ink); font-weight: 600; }
-.cmd .ch { transition: color .12s; }
-.cmd.typing .ch { color: var(--ink-2); }
-.cmd.typing .ch.on { color: var(--ink); }
 .caret {
   display: inline-block; width: 1ch; height: 1.15em; vertical-align: -0.2em; margin-left: 2px;
   background: var(--magenta); animation: blink 1.06s steps(1) infinite;
@@ -206,7 +200,7 @@ kbd, .kbd {
 h1, h2 { font-family: var(--font-display); font-stretch: 75%; text-wrap: balance; margin: 0; }
 h2 {
   font-size: clamp(32px, 5vw, 60px); line-height: .98; font-weight: 760; letter-spacing: -.012em;
-  max-width: 21ch; margin-top: 14px;
+  max-width: 21ch; margin-top: 0;
 }
 h3 { font-size: 17px; line-height: 1.35; margin: 0; font-weight: 700; letter-spacing: -.01em; }
 p { margin: 0; }
@@ -626,7 +620,7 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
 
 /* ---------- download ---------- */
 .dl .sec-head { margin-bottom: 40px; }
-.dl-title { font-family: "Onest", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; font-stretch: normal; font-size: clamp(36px, 4.6vw, 56px); line-height: 1.02; font-weight: 700; letter-spacing: -.04em; margin-top: 14px; }
+.dl-title { font-family: "Onest", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; font-stretch: normal; font-size: clamp(36px, 4.6vw, 56px); line-height: 1.02; font-weight: 700; letter-spacing: -.04em; margin-top: 0; }
 .dl-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
 @media (max-width: 760px) { .dl-grid { grid-template-columns: minmax(0, 1fr); } }
 .dl-card { border: 1px solid var(--rule); border-radius: 8px; background: var(--paper); padding: 24px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
@@ -744,7 +738,6 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
   <section class="sec demo-wrap" id="demo" data-state="wait" style="border-top:0">
     <div class="wrap">
       <header class="sec-head">
-        <p class="prompt"><span class="pr">~/lostty</span> <span class="pr-c">❯</span> <span class="cmd" data-type>watch</span></p>
         <h2 data-decode>Claude stopped to ask. Your phone already knows.</h2>
         <p class="lede">This is the loop Lostty is built for. Let it play, or tap the green card and answer it yourself.</p>
       </header>
@@ -845,7 +838,6 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
   <section class="sec" id="why">
     <div class="wrap">
       <header class="sec-head">
-        <p class="prompt"><span class="pr">~/lostty</span> <span class="pr-c">❯</span> <span class="cmd" data-type>why</span></p>
         <h2 data-decode>Four things kept going wrong when I walked away.</h2>
         <p class="lede">Coding agents work best when you let them run. The trouble is, they don't run for long before they need you. I built Lostty to fix what kept breaking whenever I left an agent running and went somewhere else.</p>
       </header>
@@ -972,7 +964,6 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
   <section class="sec" id="skins">
     <div class="wrap">
       <header class="sec-head">
-        <p class="prompt"><span class="pr">~/lostty</span> <span class="pr-c">❯</span> <span class="cmd" data-type>skins list</span></p>
         <h2 data-decode>Twelve skins. Every project gets its own room.</h2>
         <p class="lede"><code>cd</code> into a project and the pane re-skins; leave and it reverts. Each skin sets the background, texture, the 16-color ANSI palette, cursor and selection, and your phone shows the same colors. Hover a row to preview it, click to equip.</p>
       </header>
@@ -1022,7 +1013,6 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
   <section class="sec" id="how">
     <div class="wrap">
       <header class="sec-head">
-        <p class="prompt"><span class="pr">~/lostty</span> <span class="pr-c">❯</span> <span class="cmd" data-type>how</span></p>
         <h2 data-decode>Your Mac, your phone, your tailnet. Nothing in between.</h2>
         <p class="lede">Your phone talks to your Mac directly, over SSH, inside your own private Tailscale network. There's no Lostty server in the middle. There isn't one.</p>
       </header>
@@ -1077,7 +1067,6 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
   <section class="sec" id="ghostty">
     <div class="wrap">
       <header class="sec-head">
-        <p class="prompt"><span class="pr">~/lostty</span> <span class="pr-c">❯</span> <span class="cmd" data-type>cat CREDITS</span></p>
         <h2 data-decode>Built on Ghostty.</h2>
       </header>
       <div class="credit">
@@ -1102,7 +1091,6 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
   <section class="sec" id="install">
     <div class="wrap">
       <header class="sec-head">
-        <p class="prompt"><span class="pr">~/lostty</span> <span class="pr-c">❯</span> <span class="cmd" data-type>install</span></p>
         <h2 data-decode>Clone it, build it, go take a walk.</h2>
       </header>
       <div class="inst">
@@ -1143,7 +1131,6 @@ macos/setup.sh</code></pre>
   <section class="sec dl" style="border-top:0">
     <div class="wrap">
       <header class="sec-head">
-        <p class="prompt"><span class="pr">~/lostty</span> <span class="pr-c">❯</span> <span class="cmd">download</span></p>
         <h1 class="dl-title">Download Lostty for Mac</h1>
         <p class="lede">A notarized disk image. Open it and drag Lostty to Applications. Needs macOS 14 or later.</p>
       </header>
@@ -2085,14 +2072,9 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
     });
   });
 
-  /* ---------------- type-in + decode ---------------- */
+  /* ---------------- headline decode ---------------- */
+  // each section headline scrambles briefly into place as it scrolls into view
   (function () {
-    var cmds = $$('.cmd[data-type]');
-    var caret = document.createElement('span'); caret.className = 'caret'; caret.setAttribute('aria-hidden', 'true');
-    cmds.forEach(function (el) {
-      var txt = el.textContent; el.textContent = '';
-      for (var i = 0; i < txt.length; i++) { var s = document.createElement('span'); s.className = 'ch'; s.textContent = txt[i]; el.appendChild(s); }
-    });
     if (reduce || !('IntersectionObserver' in window)) return;
     var GL = '!<>-_\\/[]{}=+*^?#%$01';
     function decode(h) {
@@ -2111,22 +2093,10 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
       }
       requestAnimationFrame(step);
     }
-    function typeIt(el) {
-      var chs = $$('.ch', el), i = 0;
-      el.classList.add('typing');
-      el.after(caret);
-      var iv = setInterval(function () {
-        if (i < chs.length) { chs[i].classList.add('on'); i++; }
-        else { clearInterval(iv); el.classList.remove('typing'); chs.forEach(function (c) { c.classList.remove('on'); }); }
-      }, 55);
-      var head = el.closest('.sec-head');
-      var h2 = head && $('h2[data-decode]', head);
-      if (h2) setTimeout(function () { decode(h2); }, chs.length * 55 + 80);
-    }
     var io = new IntersectionObserver(function (es) {
-      es.forEach(function (e) { if (e.isIntersecting) { io.unobserve(e.target); typeIt(e.target); } });
+      es.forEach(function (e) { if (e.isIntersecting) { io.unobserve(e.target); decode(e.target); } });
     }, { rootMargin: '0px 0px -18% 0px' });
-    cmds.forEach(function (c) { io.observe(c); });
+    $$('h2[data-decode]').forEach(function (h) { io.observe(h); });
   })();
 
   /* ---------------- views + docs ---------------- */
