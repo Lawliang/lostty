@@ -294,6 +294,8 @@ p { margin: 0; }
   --font-ui: "Onest", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --ease: cubic-bezier(.22, .8, .2, 1);
   font-family: var(--font-ui); line-height: 1.6;
+  /* closer to the hero than other sections: the Mac's tilt already adds air above it */
+  padding-top: clamp(48px, 5vw, 72px);
 }
 .ag-mascot{display:block; overflow:visible}
 .ag-mascot .ag-gl{transform-origin:24px 40px}
