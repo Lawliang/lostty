@@ -312,10 +312,10 @@ p { margin: 0; }
    right; the steps stack on the right. The Mac lines up with the section's left
    edge and the steps with its right; the type scales with the width (70em across) */
 .ag-stage-col{min-width:0; container-type:inline-size}
-.ag-stage{position:relative; display:grid; grid-template-columns:minmax(0, 52em) max-content; justify-content:space-between; gap:4em; align-items:center;
+.ag-stage{position:relative; display:grid; grid-template-columns:minmax(0, 56em) max-content; justify-content:space-between; gap:4em; align-items:center;
   font-size:clamp(6px, calc(100cqi / 70), 15px)}
 /* the Mac's near (left) edge looms about .8em past its box when it turns right */
-.ag-dev{perspective:1900px; min-width:0; padding:2em 6% 7em .8em}
+.ag-dev{perspective:1900px; min-width:0; padding:2em 13% 10em .8em}
 .ag-rig{position:relative; transform-style:preserve-3d;
   transform:rotateY(calc(14deg + var(--px, 0) * 6deg)) rotateX(calc(8deg - var(--py, 0) * 5deg)) rotateZ(-.6deg)}
 .ag-halo{position:absolute; inset:10% 8% -2% -6%; border-radius:50%; filter:blur(50px); opacity:.55; transform:translateZ(-120px);
@@ -362,7 +362,7 @@ p { margin: 0; }
 @keyframes ag-spin{to{--ang:360deg}}
 
 /* phone */
-.ag-phone{position:absolute; right:-5%; bottom:-6.5em; width:16em; height:33em; border-radius:2.7em; padding:.5em; background:#050407;
+.ag-phone{position:absolute; right:-14%; bottom:-9.5em; width:16em; height:33em; border-radius:2.7em; padding:.5em; background:#050407;
   transform:translateZ(110px) rotateY(-5deg);
   box-shadow:0 0 0 1px rgba(255,255,255,.12), inset 0 0 0 .18em #2A2330, 0 3em 6em -1.5em rgba(0,0,0,.75), 0 0 4em -1em color-mix(in srgb, var(--magenta) 50%, transparent)}
 .ag-pscreen{position:relative; height:100%; border-radius:2.25em; overflow:hidden; background:#0B0910; color:var(--term-fg)}
@@ -417,7 +417,7 @@ p { margin: 0; }
 /* narrow: the steps go under the Mac and iPhone, side by side */
 @container (max-width:640px){
   .ag-stage{grid-template-columns:minmax(0, 1fr); gap:1em; font-size:calc(100cqi / 50)}
-  .ag-dev{padding-right:12%; padding-left:.4em}
+  .ag-dev{padding-right:20%; padding-left:.4em}
   .ag-steps{flex-direction:row; gap:8px}
   .ag-steps li{flex:1; grid-template-columns:minmax(0, 1fr); grid-template-rows:2px auto; gap:8px; font-size:12.5px}
   .ag-steps li.ag-cur::before{background:linear-gradient(90deg, var(--magenta), var(--violet))}
