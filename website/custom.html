@@ -236,6 +236,10 @@ p { margin: 0; }
   max-width: none; margin-top: 0;
 }
 .hero .lede { font-size: 16px; color: var(--ink); max-width: 46ch; margin-top: 40px; }
+.hero .lede b { font-weight: 800; }
+.hero-points { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 4px; }
+.hero-points li { display: grid; grid-template-columns: 2ch minmax(0, 1fr); }
+.hero-points .pt-mark { color: var(--magenta-ink); }
 .hero-cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 40px; }
 /* hero buttons round into full pills on hover and keyboard focus */
 .hero-cta .btn { transition: border-radius .35s cubic-bezier(.3, .7, .2, 1), transform .15s, background-color .15s, color .15s; }
@@ -688,7 +692,15 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
     <div class="wrap hero-in">
       <div class="hero-copy" id="hero-copy">
         <h1>Go touch grass,<br>with Lostty.</h1>
-        <p class="lede">A fast, native Mac terminal coding harness in sync with an iPhone app, built for people who run Claude Code and Codex CLI on the go. Every terminal keeps running on your Mac, your data connects directly from Mac to iPhone. Everything your Mac can access, your phone can access too.</p>
+        <div class="lede">
+          <p>A fast, native Mac terminal coding harness that syncs with our iPhone app, built for people who run Claude Code and Codex CLI <b>on the go</b>.</p>
+          <ul class="hero-points">
+            <li><span class="pt-mark" aria-hidden="true">❯</span><span>Every terminal stays running on your Mac.</span></li>
+            <li><span class="pt-mark" aria-hidden="true">❯</span><span>Your Mac and iPhone stay in sync with SSH.</span></li>
+            <li><span class="pt-mark" aria-hidden="true">❯</span><span>Install builds, view artifacts, access MCPs, all remotely.</span></li>
+            <li><span class="pt-mark" aria-hidden="true">❯</span><span>Oh. Check out our sick skins too.</span></li>
+          </ul>
+        </div>
         <div class="hero-cta">
           <a class="btn primary" href="#install">Get started</a>
           <a class="btn" href="#docs">Read the docs <kbd>/</kbd></a>
@@ -1526,13 +1538,19 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
       var m = mc.measureText(el.textContent.trim());
       var ti = Math.max(0, (m.fontBoundingBoxAscent || 0) - m.actualBoundingBoxAscent);
       var bi = Math.max(0, (m.fontBoundingBoxDescent || 0) - m.actualBoundingBoxDescent);
-      var out = [];
-      Array.prototype.forEach.call(rg.getClientRects(), function (r) {
-        if (r.width < 1) return;
-        var l = out.find(function (o) { return Math.abs(o.top0 - r.top) < 3; });
-        if (l) { l.left = Math.min(l.left, r.left); l.right = Math.max(l.right, r.right); }
-        else out.push({ top0: r.top, left: r.left, right: r.right, top: r.top + ti, bottom: r.bottom - bi });
-      });
+      // only text: a range over a whole element would also report the boxes of
+      // the paragraphs and list items inside it, which are full width
+      var out = [], tw = document.createTreeWalker(el, NodeFilter.SHOW_TEXT), tn;
+      while ((tn = tw.nextNode())) {
+        if (!tn.nodeValue.trim()) continue;
+        rg.selectNodeContents(tn);
+        Array.prototype.forEach.call(rg.getClientRects(), function (r) {
+          if (r.width < 1) return;
+          var l = out.find(function (o) { return Math.abs(o.top0 - r.top) < 3; });
+          if (l) { l.left = Math.min(l.left, r.left); l.right = Math.max(l.right, r.right); }
+          else out.push({ top0: r.top, left: r.left, right: r.right, top: r.top + ti, bottom: r.bottom - bi });
+        });
+      }
       return out.sort(function (a, b) { return a.top - b.top; });
     }
     function quietZone() {
