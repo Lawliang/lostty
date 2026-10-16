@@ -59,8 +59,7 @@ final class GuardRuntime: ObservableObject {
     static var storeURL: URL { storeURL(bundleID: Bundle.main.bundleIdentifier ?? "lostty") }
 
     func start() {
-        if let data = try? Data(contentsOf: Self.storeURL),
-           let saved = try? JSONDecoder().decode(ApprovalBook.self, from: data) {
+        if let data = try? Data(contentsOf: Self.storeURL), let saved = Self.load(data) {
             book = saved
         }
         let server = GuardServer(path: GuardServer.appPath) { check in
@@ -79,6 +78,11 @@ final class GuardRuntime: ObservableObject {
         let watch = GuardHookWatch { GuardRuntime.shared.checkHooks(announce: true) }
         watch.start()
         hookWatch = watch
+    }
+
+    /// The saved book, restored: approvals come back pending.
+    nonisolated static func load(_ data: Data) -> ApprovalBook? {
+        (try? JSONDecoder().decode(ApprovalBook.self, from: data))?.restored()
     }
 
     /// Checks each installed agent's hooks off the main thread, then flags

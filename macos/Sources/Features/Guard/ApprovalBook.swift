@@ -86,6 +86,15 @@ struct ApprovalBook: Codable, Equatable, Sendable {
         return copy
     }
 
+    /// A book read back from disk: what `persisted()` would have saved
+    /// (an approval never survives a restart, whatever the file says), with
+    /// ids that never repeat one already in it.
+    func restored() -> ApprovalBook {
+        var copy = persisted()
+        copy.nextID = max(copy.nextID, (copy.requests.map(\.id).max() ?? 0) + 1)
+        return copy
+    }
+
     /// Keeps every open request and the most recent decided ones.
     private mutating func trim() {
         let decided = requests.filter { $0.state != .pending && $0.state != .approved }

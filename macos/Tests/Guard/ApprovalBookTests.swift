@@ -91,6 +91,28 @@ struct ApprovalBookTests {
         #expect(r14 == .deny(1))
     }
 
+    @Test func aSavedApprovalLoadsAsPending() throws {
+        var book = ApprovalBook()
+        _ = book.check(check(), now: t0)
+        _ = book.approve(1, now: t0)
+        // A file written with the approval in it (not through persisted()).
+        let data = try JSONEncoder().encode(book)
+        var loaded = try #require(GuardRuntime.load(data))
+        #expect(loaded.request(1)?.state == .pending)
+        #expect(loaded.request(1)?.decided == nil)
+        #expect(loaded.check(check(), now: t0 + 1).reply == .deny(1))
+    }
+
+    @Test func loadingNeverReusesAnID() throws {
+        var book = ApprovalBook()
+        for i in 0..<5 { _ = book.check(check("cmd \(i)"), now: t0) }
+        var json = try #require(try JSONSerialization.jsonObject(with: JSONEncoder().encode(book)) as? [String: Any])
+        json["nextID"] = 1
+        var loaded = try #require(GuardRuntime.load(try JSONSerialization.data(withJSONObject: json)))
+        #expect(loaded.nextID == 6)
+        #expect(loaded.check(check("new"), now: t0 + 1).reply == .deny(6))
+    }
+
     @Test func historyIsCapped() {
         var book = ApprovalBook()
         for i in 0..<150 {
