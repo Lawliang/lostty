@@ -2127,6 +2127,8 @@ void main(){
       i = (i + 1) % DUR.length;
     }
     $$('.ag-cat', cats).forEach(c => c.querySelector('.ag-cat-h').addEventListener('click', () => {
+      // tapping the lit one again puts both back
+      if (focus === c.dataset.cat) { if (RM) clearTimeout(timer); setFocus(''); return; }
       setFocus(c.dataset.cat);
       if (RM) { clearTimeout(timer); timer = setTimeout(() => setFocus(''), DUR.reduce((a, b) => a + b)); return; }
       left = DUR.length - 1;
