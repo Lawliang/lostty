@@ -13,7 +13,7 @@ Last updated 2026-10-15. Branch: `website`. Everything below is committed.
 | Concept 4 · Handoff | `website/concepts/4-handoff.html` (built by `concepts/handoff-build/gen.py`) | https://claude.ai/artifact/8kJMCvbFpxQuPpJZdYoTtU |
 | Concept 5 · Kinetic Mono | `website/concepts/5-kinetic-mono.html` | https://claude.ai/artifact/2gDLx5dDfdpUWw3H4E6AH5 |
 
-- Every change to Custom is its own commit on `website` (`git log --oneline -- website/custom.html`), so any earlier state can be restored with `git show <sha>:website/custom.html`. The artifact also keeps its own version history (version 61 at handoff).
+- Every change to Custom is its own commit on `website` (`git log --oneline -- website/custom.html`), so any earlier state can be restored with `git show <sha>:website/custom.html`. The artifact also keeps its own version history (version 70 at the last handoff update).
 - The concepts are frozen drafts; only Custom is being edited.
 - `website/concepts/BRIEF.md` is the brief the five concepts were built from.
 
@@ -35,10 +35,10 @@ Kinetic Mono as the base (JetBrains Mono, character-grid look, light "paper term
 
 **Hero** (`.hero`, glyph-field canvas `#field`)
 - Height 800px on desktop (`.hero-in`), content starts 72px from the top; on phones (<900px) it sizes to content.
-- Headline (Onest 700, clamp 38–72px): "Finally, go touch some grass." / "with Lostty."
-- Description: "A fast, modern multi-agent terminal CLI coding harness designed to pair with our native iPhone app, for builders **on the go**."
-- Bullets (magenta `❯` markers):
-  1. Install builds, view artifacts & simulators, & access your MCPs, remotely on your phone.
+- Headline (Onest 700, clamp 38–72px): "Finally, you can touch some grass." / "With Lostty." It carries Aurora Glass's sheen (a rose-to-magenta glint sweeps across every 7s; `--rose`, `--sheen-hi`).
+- Description (JetBrains Mono 16px): "A fast, modern multi-agent terminal CLI coding harness designed to pair with our native iPhone app, for builders **on the go**."
+- Bullets (Neon Signal's body type: Bricolage Grotesque 18px; magenta `❯` markers):
+  1. Install builds, view artifacts and simulators, & access your MCPs, remotely on your phone.
   2. Built-in caffeinate and auto-hotspot-switch designed for your Mac to keep running.
   3. Supports Claude Code & Codex CLI.
 - Buttons: **Download for Mac** (magenta, laptop icon, goes to `#download`) and **Read docs** (`/` hint, solid page-colored fill). Both round into pills on hover (radius = half the button height, so there's no dead time leaving hover).
@@ -53,21 +53,21 @@ Kinetic Mono as the base (JetBrains Mono, character-grid look, light "paper term
 - The buttons keep their place in this layout but get **no** box.
 - Known limit, explained to the owner: top/bottom can't exactly equal left/right because of the 18px rows; they land within a few px. One offered but undone fix: tweak headline font size per width so it fits rows evenly.
 
-**Sections below the hero**: as in Kinetic Mono, minus the `~/lostty ❯ …` prompt lines (removed). Headings still do the brief scramble when they scroll into view.
+**Demo** (`#demo`, right under the hero): Aurora Glass's hero animation, ported whole with every class, id and keyframe prefixed `ag-` (CSS block "demo (Aurora Glass's hero animation)"; script block of the same name). The section has no title or lede. The Mac with the iPhone over its lower-right corner sits on the left, both turned toward the right and leaning toward the pointer; the four steps (Working / Waiting on you / Answered from iPhone / Ready) stack in a column on the right. Type scales with the width (`container-type: inline-size`, 70em across); under 640px the steps go back to a row beneath. The old Kinetic Mono demo (clickable card, Yes key, step buttons, mascot) is gone.
+
+**Sections below the demo**: as in Kinetic Mono, minus the `~/lostty ❯ …` prompt lines (removed). Headings still do the brief scramble when they scroll into view.
+
+**Footer logo**: same as the header (Onest "Lostty" plus the blinking `_`).
 
 **Download page** (`#download`, a view like Docs)
 - Stable: https://github.com/Lawliang/lostty/releases/latest/download/Lostty.dmg
 - Beta: https://github.com/Lawliang/lostty/releases/download/beta/Lostty-Beta.dmg (fixed `beta` pre-release; each beta is tagged `vX.Y-beta.N`; beta replaces stable, shows as "Lostty Beta")
-- Copy says macOS 14 or later (from the release session). Docs' Getting Started still says macOS 15 (build from source) — the owner may want these to agree.
+- Copy says macOS 14 or later. That's right for the app (deployment target 14.0); Docs' Getting Started says macOS 15 because building from source needs Xcode 26, matching the README.
 - **Both links 404 until the first release**; beta work is on branch `lostty-beta`, the first release waits on a signing fix (per the session doing release work).
 
-## Open questions left with the owner
-- Footer `❯ exit … [Process completed]`, docs `LOSTTY(1)` man bar, and the bullets' `❯` markers: keep or remove?
-- Second headline line "with Lostty." is lowercase after a period — capitalize?
-- First bullet has two `&` in a row ("artifacts & simulators, & access") — change the first to "and"?
-- Footer logo still uses the old lowercase "lostty" type.
-- Hero button now goes to the Download page instead of the install section — confirm.
-- Safety improvement offered: start the field animation even if the box measurement throws (once, after a refresh, the owner saw the animation not start; it couldn't be reproduced in Chrome).
+## Settled with the owner (2026-10-15, on recommendation)
+- Kept: the footer `❯ exit … [Process completed]`, the docs `LOSTTY(1)` man bar, the bullets' `❯` markers, and the hero button going to the Download page.
+- The field starts even if measuring the hero boxes throws (`try { quietZone(); } catch …` in `resize`).
 
 ## Checking changes (`website/tools/`)
 
