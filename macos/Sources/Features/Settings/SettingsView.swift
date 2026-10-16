@@ -6,6 +6,8 @@ import SwiftUI
 struct SettingsView: View {
     @ObservedObject var sidebar: SidebarPreferences
     @ObservedObject var observer: ObserverPreferences
+    /// The Mascot section is for the beta, the only build with the mascot.
+    var showsMascot = LosttyChannel.current.showsMascot
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -17,13 +19,15 @@ struct SettingsView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                Section("Mascot") {
-                    Toggle("Summarize turns in the background", isOn: $observer.background)
-                    Text("After each turn, Claude Haiku (or Codex, or Apple Intelligence) updates what the "
-                         + "mascot tells you when you tap it, using your own subscription. "
-                         + "Off, it summarizes only when you tap.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                if showsMascot {
+                    Section("Mascot") {
+                        Toggle("Summarize turns in the background", isOn: $observer.background)
+                        Text("After each turn, Claude Haiku (or Codex, or Apple Intelligence) updates what the "
+                             + "mascot tells you when you tap it, using your own subscription. "
+                             + "Off, it summarizes only when you tap.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
             .formStyle(.grouped)

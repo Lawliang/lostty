@@ -354,15 +354,15 @@ class AppDelegate: NSObject,
         SettingsUI.installMenuItem(after: menuOpenConfig)
         // Restart to Update in the app menu, once a new build is installed.
         RestartUI.installMenuItem(after: menuOpenConfig)
-        // The mascot's turn observer: hears each turn's end from the agent
-        // hooks, and finds out which summarizer it can use. Before the
-        // restart resume, which hands it each pane's conversation.
-        ClaudeRuntime.shared.turnEnded = { pane, path in
-            TurnObserver.shared.turnEnded(pane: pane, path: path)
-            // The usage breakdown counts this conversation as Claude Code in Lostty.
-            UsageLedger.shared.reported(path)
-        }
-        TurnObserver.shared.start()
+        // Each turn's end, from the agent hooks: the usage breakdown, and in
+        // the beta the mascot's turn observer, which also finds out which
+        // summarizer it can use. Before the restart resume, which hands it
+        // each pane's conversation.
+        ClaudeRuntime.shared.turnEnded = TurnEnd.handler(
+            channel: .current,
+            observe: { pane, path in TurnObserver.shared.turnEnded(pane: pane, path: path) },
+            report: { UsageLedger.shared.reported($0) })
+        if LosttyChannel.current.showsMascot { TurnObserver.shared.start() }
         // Restart to Update: put back what window restoration doesn't
         // (Claude's state, Stay Awake, the window setting, hooks). Before
         // Stay Awake's crash restore, the hooks check and the Claude sync.

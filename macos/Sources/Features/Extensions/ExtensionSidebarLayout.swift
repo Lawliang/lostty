@@ -43,9 +43,11 @@ struct ExtensionSidebarLayout<Content: View>: View {
                     // The overlay is only as big as the axolotl, which takes
                     // clicks (its bubble); the rest of the terminal keeps them.
                     .overlay(alignment: .bottomTrailing) {
-                        SidebarMascot(surfaceID: model.focusedSurfaceID, bubbleMaxHeight: max(160, terminalHeight / 2))
-                            .padding(.trailing, 14)
-                            .padding(.bottom, 10)
+                        if model.showsMascot {
+                            SidebarMascot(surfaceID: model.focusedSurfaceID, bubbleMaxHeight: max(160, terminalHeight / 2))
+                                .padding(.trailing, 14)
+                                .padding(.bottom, 10)
+                        }
                     }
                     .overlay {
                         if let ext = model.active, ext.presentation == .overlay {
