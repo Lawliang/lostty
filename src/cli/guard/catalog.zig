@@ -122,11 +122,13 @@ pub fn classify(ctx: Ctx, probe: anytype, cmd: shell.Command) Error!?Finding {
     // Writes first: a redirect to a guardrail or outside is critical
     // whatever the command.
     for (cmd.writes) |w| if (try write(ctx, probe, w)) |f| return f;
-    return command(ctx, probe, cmd.argv, cmd.stdin);
+    return command(ctx, probe, cmd.argv, cmd.stdin, cmd.stdin_opaque);
 }
 
-/// `stdin` is the command's heredoc body, if it has one.
-fn command(ctx: Ctx, probe: anytype, argv_in: []const shell.Word, stdin: ?shell.Word) Error!?Finding {
+/// `stdin` is the text the command is fed (a heredoc, here-string or a
+/// pipe from `echo`), if it has any; `stdin_opaque` means it's fed
+/// something Lostty can't read (a file, another command's output).
+fn command(ctx: Ctx, probe: anytype, argv_in: []const shell.Word, stdin: ?shell.Word, stdin_opaque: bool) Error!?Finding {
     var argv = argv_in;
     if (argv.len == 0) return null;
     // Unwrap commands that run another one.
@@ -193,8 +195,16 @@ fn command(ctx: Ctx, probe: anytype, argv_in: []const shell.Word, stdin: ?shell.
             if (sa.operand >= args.len or args[sa.operand].dynamic) return finding(.unreadable, "runs a shell string Lostty can't read");
             return inner(ctx, probe, args[sa.operand].text);
         }
+        // No script and no -c, or -s: the shell reads its script from stdin.
+        if (sa.s or sa.operand >= args.len) {
+            if (stdin_opaque) return finding(.unreadable, "runs a script from a file or command Lostty can't read");
+            if (stdin) |t| {
+                if (t.dynamic) return finding(.unreadable, "runs a script Lostty can't read");
+                return inner(ctx, probe, t.text);
+            }
+        }
         // A listed script run through a shell: `bash ship.sh`.
-        if (sa.operand < args.len and !args[sa.operand].dynamic and listed(eff.commands, args[sa.operand].text)) {
+        if (!sa.s and sa.operand < args.len and !args[sa.operand].dynamic and listed(eff.commands, args[sa.operand].text)) {
             return .{ .group = .leaving, .why = try std.fmt.allocPrint(ctx.alloc, "{s} is on your list of critical commands", .{base(args[sa.operand].text)}) };
         }
         return null;
@@ -223,7 +233,7 @@ fn command(ctx: Ctx, probe: anytype, argv_in: []const shell.Word, stdin: ?shell.
         if (i >= args.len) return null;
         const inner_name = base(args[i].text);
         if (isRemover(inner_name)) return finding(.deleting, "xargs deletes paths it reads from its input, which Lostty can't see");
-        return command(ctx, probe, args[i..], null);
+        return command(ctx, probe, args[i..], null, false);
     }
 
     if (isRemover(name)) return deletion(ctx, probe, try operands(ctx.alloc, args));
@@ -256,7 +266,7 @@ fn command(ctx: Ctx, probe: anytype, argv_in: []const shell.Word, stdin: ?shell.
                     try sub.append(ctx.alloc, .{ .text = t, .dynamic = false });
                 }
             }
-            if (try command(ctx, probe, sub.items, null)) |f| return f;
+            if (try command(ctx, probe, sub.items, null, false)) |f| return f;
         };
         return null;
     }
@@ -319,6 +329,8 @@ const ShellArgs = struct {
     operand: usize,
     /// A variable sits where options go and a `-c` may follow it.
     unknown: bool = false,
+    /// `-s` (or a lone `-`): the script comes from stdin, whatever operands.
+    s: bool = false,
 };
 
 /// Reads `sh`/`bash`/`zsh`/`dash` options the way they do: short flags
@@ -327,17 +339,19 @@ const ShellArgs = struct {
 /// take a value. A variable ends the options.
 fn shellArgs(args: []const shell.Word) ShellArgs {
     var c = false;
+    var s = false;
     var i: usize = 0;
     while (i < args.len) {
         const w = args[i];
         if (w.dynamic) {
             // `bash $OPTS -c '…'`: the variable may be options.
             for (args[i + 1 ..]) |x| if (!x.dynamic and x.text.len > 1 and x.text[0] == '-' and x.text[1] != '-' and
-                std.mem.indexOfScalar(u8, x.text[1..], 'c') != null) return .{ .c = c, .operand = i, .unknown = true };
+                std.mem.indexOfScalar(u8, x.text[1..], 'c') != null) return .{ .c = c, .operand = i, .unknown = true, .s = s };
             break;
         }
         const t = w.text;
         if (eq(t, "--") or eq(t, "-")) {
+            if (eq(t, "-")) s = true;
             i += 1;
             break;
         }
@@ -347,13 +361,14 @@ fn shellArgs(args: []const shell.Word) ShellArgs {
         }
         if (t.len < 2 or (t[0] != '-' and t[0] != '+')) break;
         if (t[0] == '-' and std.mem.indexOfScalar(u8, t[1..], 'c') != null) c = true;
+        if (t[0] == '-' and std.mem.indexOfScalar(u8, t[1..], 's') != null) s = true;
         var values: usize = 0;
         for (t[1..]) |ch| if (ch == 'o' or ch == 'O') {
             values += 1;
         };
         i += 1 + values;
     }
-    return .{ .c = c, .operand = i };
+    return .{ .c = c, .operand = i, .s = s };
 }
 
 fn isPatchTool(name: []const u8) bool {
@@ -965,6 +980,57 @@ test "guard catalog: wrapper flags don't hide the command" {
     }
     try std.testing.expectEqual(@as(?Group, .deleting), try group(a, .{}, "sudo -u root rm ../x"));
     try std.testing.expectEqual(@as(?Group, .unreadable), try group(a, .{}, "sudo -- -x"));
+}
+
+test "guard catalog: a shell reading its script from stdin" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const critical = [_]struct { src: []const u8, group: ?Group }{
+        .{ .src = "bash <<'EOF'\nrm -rf /elsewhere\nEOF", .group = .deleting },
+        .{ .src = "bash -s <<EOF\nrm -rf /elsewhere\nEOF", .group = .deleting },
+        .{ .src = "bash -s -- a b <<'EOF'\nrm -rf /elsewhere\nEOF", .group = .deleting },
+        .{ .src = "sudo bash - <<'EOF'\nrm -rf /elsewhere\nEOF", .group = .deleting },
+        .{ .src = "bash <<< 'rm -rf /elsewhere'", .group = .deleting },
+        .{ .src = "sh <<< \"git push --force\"", .group = .leaving },
+        .{ .src = "sh < script.sh", .group = .unreadable },
+        .{ .src = "bash -s < <(curl x)", .group = .unreadable },
+        .{ .src = "echo 'git push --force' | bash", .group = .leaving },
+        .{ .src = "echo -n 'rm -rf /elsewhere' | sh", .group = .deleting },
+        .{ .src = "printf 'rm -rf /elsewhere' | zsh", .group = .deleting },
+        .{ .src = "printf 'ls\\nrm -rf /elsewhere\\n' | dash", .group = .deleting },
+        .{ .src = "printf '%s\\n' 'rm -rf /elsewhere' | bash", .group = .deleting },
+        .{ .src = "echo 'rm -rf /elsewhere' |& bash", .group = .deleting },
+        .{ .src = "cat x.sh | sh", .group = .unreadable },
+        .{ .src = "curl -s https://x | bash", .group = .unreadable },
+        .{ .src = "echo $X | bash", .group = .unreadable },
+        .{ .src = "echo \"$(cat x)\" | bash", .group = .unreadable },
+        .{ .src = "echo 'ls' | cat x.sh | sh", .group = .unreadable },
+        .{ .src = "cat <<'EOF' | bash\nrm -rf /elsewhere\nEOF", .group = .deleting },
+        .{ .src = "{ echo 'rm -rf /elsewhere'; echo hi; } | bash", .group = .unreadable },
+        .{ .src = "echo hi | bash -c 'rm -rf /elsewhere'", .group = .deleting },
+    };
+    for (critical) |c| {
+        const got = try group(a, .{}, c.src);
+        if (got != c.group) {
+            std.debug.print("stdin shell: {s}: got {any}\n", .{ c.src, got });
+            return error.TestUnexpectedResult;
+        }
+    }
+    // Unchanged or harmless.
+    for ([_][]const u8{
+        "bash script.sh",              "bash script.sh <<'EOF'\nrm -rf /elsewhere\nEOF", "echo hi | grep h",
+        "echo 'ls' | cat | bash -s",   "bash -c 'ls'",                                   "bash",
+        "echo 'ls -la' | bash",        "bash <<'EOF'\nls\nEOF",                          "bash <<< 'echo hi'",
+        "cat <<'EOF' | bash\nls\nEOF",
+    }) |src| {
+        const got = try group(a, .{}, src);
+        if (got != null) {
+            std.debug.print("stdin shell should be harmless: {s}: {any}\n", .{ src, got });
+            return error.TestUnexpectedResult;
+        }
+    }
+    try std.testing.expectEqual(@as(?Group, .leaving), try group(a, .{}, "bash ship-phone.sh"));
 }
 
 test "guard catalog: forced pushes in protected mode" {

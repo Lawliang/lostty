@@ -26,6 +26,12 @@ pub const Command = struct {
     /// The body of its last heredoc (`cmd <<'EOF' … EOF`), tabs stripped
     /// for `<<-`. Dynamic when the shell would expand it.
     stdin: ?Word = null,
+    /// It is the right side of a pipe (`a | cmd`).
+    piped_in: bool = false,
+    /// Its stdin is something Lostty can't read as text: a file
+    /// (`< script.sh`), or a pipe from anything but `echo`/`printf`/
+    /// `cat` of static text.
+    stdin_opaque: bool = false,
 };
 
 pub const Error = error{Unparseable} || Allocator.Error;
@@ -51,6 +57,12 @@ fn isOneOf(s: []const u8, list: []const []const u8) bool {
     return false;
 }
 
+fn isEchoFlag(t: []const u8) bool {
+    if (t.len < 2 or t[0] != '-') return false;
+    for (t[1..]) |c| if (c != 'n' and c != 'e' and c != 'E') return false;
+    return true;
+}
+
 /// The raw text at `i` starts `NAME=` (before any quoting or expansion).
 fn isAssignmentAt(src: []const u8, i: usize) bool {
     var j = i;
@@ -62,6 +74,8 @@ fn isAssignmentAt(src: []const u8, i: usize) bool {
     }
     return false;
 }
+
+const Pipe = struct { to: usize, from: ?usize };
 
 const Heredoc = struct {
     delim: []const u8,
@@ -109,7 +123,16 @@ const Lexer = struct {
     writes: std.ArrayList(Word) = .empty,
     heredocs: std.ArrayList(Heredoc) = .empty,
     /// The next word is a redirect target: .write, .read, or .heredoc.
-    pending: enum { none, write, read, heredoc, heredoc_dash } = .none,
+    pending: enum { none, write, read, herestring, heredoc, heredoc_dash } = .none,
+    /// The current command reads its stdin from a file.
+    cur_read: bool = false,
+    /// The current command's here-string (`<<< word`).
+    cur_stdin: ?Word = null,
+    /// The next command is the right side of a pipe, fed by the command at
+    /// `piped_from` (none when that isn't a plain command: `} | cmd`).
+    piped: bool = false,
+    piped_from: ?usize = null,
+    pipes: std.ArrayList(Pipe) = .empty,
     /// Inside a `for` header (up to its `;` or newline) words are not a command.
     in_for: enum { none, header, after } = .none,
 
@@ -165,6 +188,72 @@ const Lexer = struct {
         if (self.heredocs.items.len != 0) return error.Unparseable;
         if (self.depth != 0) return error.Unparseable;
         try self.end();
+        self.resolvePipes();
+    }
+
+    /// Gives each piped command the text its left side prints, when that
+    /// is static `echo`/`printf`/`cat` text; otherwise its stdin is opaque.
+    fn resolvePipes(self: *Lexer) void {
+        for (self.pipes.items) |p| {
+            const cmd = &self.out.items[p.to];
+            cmd.piped_in = true;
+            if (cmd.stdin != null) continue; // a heredoc or here-string wins
+            const text = if (p.from) |f| self.pipeText(self.out.items[f]) else null;
+            if (text) |t| cmd.stdin = t else cmd.stdin_opaque = true;
+        }
+    }
+
+    /// What `echo`, `printf` or a bare `cat` prints, if it is all static.
+    fn pipeText(self: *Lexer, prev: Command) ?Word {
+        const argv = prev.argv;
+        if (argv.len == 0 or argv[0].dynamic) return null;
+        const name = std.fs.path.basename(argv[0].text);
+        var buf: std.ArrayList(u8) = .empty;
+        if (std.mem.eql(u8, name, "cat")) {
+            if (argv.len != 1 or prev.stdin_opaque) return null;
+            const t = prev.stdin orelse return null;
+            if (t.dynamic) return null;
+            return t;
+        }
+        var rest = argv[1..];
+        for (rest) |w| if (w.dynamic) return null;
+        if (std.mem.eql(u8, name, "echo")) {
+            while (rest.len > 0 and isEchoFlag(rest[0].text)) rest = rest[1..];
+            for (rest, 0..) |w, i| {
+                // zsh's echo (and `echo -e`) read backslashes.
+                if (std.mem.indexOfScalar(u8, w.text, '\\') != null) return null;
+                if (i > 0) buf.append(self.alloc, ' ') catch return null;
+                buf.appendSlice(self.alloc, w.text) catch return null;
+            }
+            buf.append(self.alloc, '\n') catch return null;
+            return .{ .text = buf.toOwnedSlice(self.alloc) catch return null, .dynamic = false };
+        }
+        if (std.mem.eql(u8, name, "printf")) {
+            if (rest.len > 0 and std.mem.eql(u8, rest[0].text, "--")) rest = rest[1..];
+            if (rest.len == 0) return null;
+            const fmt = rest[0].text;
+            const args = rest[1..];
+            if (std.mem.eql(u8, fmt, "%s\\n") or std.mem.eql(u8, fmt, "%s")) {
+                const nl = fmt.len == 4;
+                for (args) |a| {
+                    buf.appendSlice(self.alloc, a.text) catch return null;
+                    if (nl) buf.append(self.alloc, '\n') catch return null;
+                }
+            } else {
+                if (std.mem.indexOfScalar(u8, fmt, '%') != null) return null;
+                var i: usize = 0;
+                while (i < fmt.len) : (i += 1) {
+                    if (fmt[i] != '\\') {
+                        buf.append(self.alloc, fmt[i]) catch return null;
+                    } else if (i + 1 < fmt.len and fmt[i + 1] == 'n') {
+                        buf.append(self.alloc, '\n') catch return null;
+                        i += 1;
+                    } else return null;
+                }
+            }
+            return .{ .text = buf.toOwnedSlice(self.alloc) catch return null, .dynamic = false };
+        }
+        return null;
     }
 
     fn operator(self: *Lexer) Error!void {
@@ -174,9 +263,16 @@ const Lexer = struct {
             return self.redirect();
         }
         if (c == ';' and self.i + 1 < self.src.len and self.src[self.i + 1] == ';') return error.Unparseable;
+        const had = self.argv.items.len != 0 or self.writes.items.len != 0;
         try self.end();
         self.i += 1;
-        if (self.i < self.src.len and (self.src[self.i] == c)) self.i += 1; // && ||
+        const doubled = self.i < self.src.len and self.src[self.i] == c;
+        if (doubled) self.i += 1; // && ||
+        if (c == '|' and !doubled) {
+            if (self.i < self.src.len and self.src[self.i] == '&') self.i += 1; // |&
+            self.piped = true;
+            self.piped_from = if (had) self.out.items.len - 1 else null;
+        }
     }
 
     fn redirect(self: *Lexer) Error!void {
@@ -187,7 +283,7 @@ const Lexer = struct {
                 self.i += 1;
                 if (self.i < self.src.len and self.src[self.i] == '<') {
                     self.i += 1; // <<< here-string: next word is data
-                    self.pending = .read;
+                    self.pending = .herestring;
                     return;
                 }
                 if (self.i < self.src.len and self.src[self.i] == '-') {
@@ -243,6 +339,12 @@ const Lexer = struct {
             },
             .read => {
                 self.pending = .none;
+                self.cur_read = true;
+                return;
+            },
+            .herestring => {
+                self.pending = .none;
+                self.cur_stdin = w;
                 return;
             },
             .heredoc, .heredoc_dash => {
@@ -281,13 +383,23 @@ const Lexer = struct {
         defer {
             self.argv = .empty;
             self.writes = .empty;
+            self.cur_read = false;
+            self.cur_stdin = null;
         }
         const empty = self.argv.items.len == 0 and self.writes.items.len == 0;
-        if (!empty) try self.out.append(self.alloc, .{
-            .argv = try self.argv.toOwnedSlice(self.alloc),
-            .writes = try self.writes.toOwnedSlice(self.alloc),
-            .depth = self.depth,
-        });
+        if (!empty) {
+            if (self.piped) {
+                try self.pipes.append(self.alloc, .{ .to = self.out.items.len, .from = self.piped_from });
+                self.piped = false;
+            }
+            try self.out.append(self.alloc, .{
+                .argv = try self.argv.toOwnedSlice(self.alloc),
+                .writes = try self.writes.toOwnedSlice(self.alloc),
+                .depth = self.depth,
+                .stdin = self.cur_stdin,
+                .stdin_opaque = self.cur_read,
+            });
+        }
         // Heredocs opened by this command belong to it.
         for (self.heredocs.items) |*h| if (!h.claimed) {
             h.claimed = true;
@@ -441,7 +553,7 @@ const Lexer = struct {
     fn nested(self: *Lexer, inner: []const u8) Error!void {
         if (self.level >= max_level) return error.Unparseable;
         const cmds = try parseAt(self.alloc, inner, self.home, self.level + 1);
-        for (cmds) |c| try self.out.append(self.alloc, .{ .argv = c.argv, .writes = c.writes, .depth = c.depth +| self.depth, .stdin = c.stdin });
+        for (cmds) |c| try self.out.append(self.alloc, .{ .argv = c.argv, .writes = c.writes, .depth = c.depth +| self.depth, .stdin = c.stdin, .piped_in = c.piped_in, .stdin_opaque = c.stdin_opaque });
     }
 
     /// One word, with quote removal. Stops at whitespace or an operator.
@@ -880,4 +992,18 @@ test "guard shell: a heredoc body is its command's stdin" {
     try std.testing.expect(d[0].stdin == null);
     try std.testing.expectEqualStrings("*** Begin Patch\n", d[1].stdin.?.text);
     try std.testing.expect(d[2].stdin == null);
+}
+
+test "guard shell: what a command is fed on stdin" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const p = try parse(a, "echo 'git push' | bash; cat f | sh; bash < s.sh; bash <<< hi; ls", "/h");
+    try std.testing.expect(p[1].piped_in);
+    try std.testing.expectEqualStrings("git push\n", p[1].stdin.?.text);
+    try std.testing.expect(!p[1].stdin_opaque);
+    try std.testing.expect(p[3].piped_in and p[3].stdin_opaque and p[3].stdin == null);
+    try std.testing.expect(!p[4].piped_in and p[4].stdin_opaque);
+    try std.testing.expectEqualStrings("hi", p[5].stdin.?.text);
+    try std.testing.expect(!p[6].piped_in and !p[6].stdin_opaque and p[6].stdin == null);
 }
