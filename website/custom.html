@@ -1777,7 +1777,9 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
       v = new Float32Array(N); cls = new Uint8Array(N); prevT = new Uint8Array(N); nextT = new Uint8Array(N);
       swAt = new Float32Array(N); rnd = new Float32Array(N);
       for (var i = 0; i < N; i++) rnd[i] = Math.random();
-      buildMasks(); quietZone();
+      buildMasks();
+      // a failed measurement only costs the dark boxes; the field still runs
+      try { quietZone(); } catch (e) { qz = []; }
       var now = performance.now();
       setPhase(reduce ? 1 : phaseIdx, now, true);
       if (reduce || !running) drawFrame(now, true);
