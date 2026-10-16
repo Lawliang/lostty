@@ -161,6 +161,8 @@ kbd, .kbd {
 .nav-links { display: flex; gap: 4px; margin-left: 8px; }
 .nav-links a { text-decoration: none; color: var(--ink-2); font-size: 14px; padding: 6px 10px; border-radius: 4px; white-space: nowrap; }
 .nav-links a:hover { color: var(--ink); background: var(--paper-2); }
+/* Download stands out: full-strength text even when it is not the current page */
+.nav-links a.nav-dl { color: var(--ink); }
 .nav-links a[aria-current="page"] { color: var(--ink); }
 .nav-links a[aria-current="page"]::before { content: "❯ "; color: var(--magenta-ink); }
 .nav-tools { margin-left: auto; display: flex; align-items: center; gap: 8px; }
@@ -694,7 +696,7 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
       <span class="logo-word">Lostty<span class="blink">_</span></span>
     </a>
     <nav class="nav-links" aria-label="Main">
-      <a href="#download" data-nav="download">Download</a>
+      <a class="nav-dl" href="#download" data-nav="download">Download</a>
       <a class="hide-sm" href="#why" data-nav="home">Features</a>
       <a class="hide-sm" href="#skins" data-nav="home">Skins</a>
       <a href="#docs" data-nav="docs">Docs</a>
