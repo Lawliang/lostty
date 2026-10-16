@@ -15,6 +15,19 @@ enum GuardHealth {
     }
 }
 
+extension GuardHealth {
+    /// Folds a fresh round of checks into the previous statuses. A nil means
+    /// the check itself failed to run, which says nothing about the hooks, so
+    /// the previous status stands (and an agent never seen is omitted).
+    static func merge(previous: [HookAgent: ClaudeHooksStatus], fresh: [HookAgent: ClaudeHooksStatus?]) -> [HookAgent: ClaudeHooksStatus] {
+        var out: [HookAgent: ClaudeHooksStatus] = [:]
+        for (agent, status) in fresh {
+            if let status { out[agent] = status } else if let old = previous[agent] { out[agent] = old }
+        }
+        return out
+    }
+}
+
 extension HookAgent {
     /// The file the agent reads its hooks from, inside `configDirectory`.
     var hooksFile: String {

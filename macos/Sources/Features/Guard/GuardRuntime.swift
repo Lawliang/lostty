@@ -40,6 +40,7 @@ final class GuardRuntime: ObservableObject {
     private var server: GuardServer?
     private var expiryTimer: Timer?
     private var hookWatch: GuardHookWatch?
+    private var checkGeneration = 0
     private var lastStatus: [HookAgent: ClaudeHooksStatus] = [:]
 
     init(book: ApprovalBook = .init(), effects: Effects = .live) {
@@ -85,11 +86,15 @@ final class GuardRuntime: ObservableObject {
         let agents = HookAgent.allCases.filter {
             FileManager.default.fileExists(atPath: home.appendingPathComponent($0.configDirectory).path)
         }
+        checkGeneration += 1
+        let generation = checkGeneration
         Task.detached {
-            var current: [HookAgent: ClaudeHooksStatus] = [:]
-            for agent in agents { current[agent] = ClaudeHooksCLI().status(agent: agent) ?? .unreadable }
+            var fresh: [HookAgent: ClaudeHooksStatus?] = [:]
+            for agent in agents { fresh[agent] = ClaudeHooksCLI().status(agent: agent) }
             await MainActor.run {
                 let rt = GuardRuntime.shared
+                guard generation == rt.checkGeneration else { return }
+                let current = GuardHealth.merge(previous: rt.lastStatus, fresh: fresh)
                 let lost = GuardHealth.newlyDisconnected(previous: rt.lastStatus, current: current)
                 rt.lastStatus = current
                 rt.disconnected = GuardHealth.disconnected(current)
