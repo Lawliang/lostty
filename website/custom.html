@@ -307,11 +307,13 @@ p { margin: 0; }
 @keyframes ag-gillR{50%{transform:rotate(12deg)}}
 @keyframes ag-bob{50%{transform:translateY(-6%)}}
 /* the Mac with the iPhone over its corner on the left, both turned toward the
-   right; the steps stack on the right. The type scales with the width (70em across) */
+   right; the steps stack on the right. The Mac lines up with the section's left
+   edge and the steps with its right; the type scales with the width (70em across) */
 .ag-stage-col{min-width:0; container-type:inline-size}
-.ag-stage{position:relative; display:grid; grid-template-columns:minmax(0, 52em) 11em; justify-content:center; gap:4em; align-items:center;
+.ag-stage{position:relative; display:grid; grid-template-columns:minmax(0, 52em) max-content; justify-content:space-between; gap:4em; align-items:center;
   font-size:clamp(6px, calc(100cqi / 70), 15px)}
-.ag-dev{perspective:1900px; min-width:0; padding:2em 6% 7em 0}
+/* the Mac's near (left) edge looms about .8em past its box when it turns right */
+.ag-dev{perspective:1900px; min-width:0; padding:2em 6% 7em .8em}
 .ag-rig{position:relative; transform-style:preserve-3d;
   transform:rotateY(calc(14deg + var(--px, 0) * 6deg)) rotateX(calc(8deg - var(--py, 0) * 5deg)) rotateZ(-.6deg)}
 .ag-halo{position:absolute; inset:10% 8% -2% -6%; border-radius:50%; filter:blur(50px); opacity:.55; transform:translateZ(-120px);
@@ -413,7 +415,7 @@ p { margin: 0; }
 /* narrow: the steps go under the Mac and iPhone, side by side */
 @container (max-width:640px){
   .ag-stage{grid-template-columns:minmax(0, 1fr); gap:1em; font-size:calc(100cqi / 50)}
-  .ag-dev{padding-right:12%}
+  .ag-dev{padding-right:12%; padding-left:.4em}
   .ag-steps{flex-direction:row; gap:8px}
   .ag-steps li{flex:1; grid-template-columns:minmax(0, 1fr); grid-template-rows:2px auto; gap:8px; font-size:12.5px}
   .ag-steps li.ag-cur::before{background:linear-gradient(90deg, var(--magenta), var(--violet))}
