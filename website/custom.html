@@ -241,11 +241,11 @@ p { margin: 0; }
 .hero h1 {
   font-family: "Onest", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   font-stretch: normal; font-size: clamp(38px, 5.3vw, 72px); line-height: 1.02; font-weight: 700; letter-spacing: -.04em;
-  /* in em so it scales with the type: wide enough for "touch some grass."
-     (8.0em), too narrow for "Finally, you can touch" (9.6em), so the first
-     sentence always breaks after "can". Below ~720px the type stops shrinking
+  /* in em so it scales with the type: wide enough for "Finally, you can go"
+     (8.25em), too narrow for "Finally, you can go touch" (11.0em), so the first
+     sentence always breaks after "go". Below ~720px the type stops shrinking
      at 38px while the column stays wide, which let the sentence fit on one line */
-  max-width: 9.2em; margin-top: 0;
+  max-width: 9.6em; margin-top: 0;
   /* Aurora Glass's sheen: a rose-to-magenta glint sweeps across every 7s */
   background: linear-gradient(105deg, var(--ink) 0%, var(--ink) 40%, var(--rose) 46%, var(--sheen-hi) 50%, var(--magenta) 55%, var(--ink) 62%, var(--ink) 100%);
   background-size: 300% 100%; background-position: 0% 0;
@@ -820,7 +820,7 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
     <canvas id="field" aria-hidden="true"></canvas>
     <div class="wrap hero-in">
       <div class="hero-copy" id="hero-copy">
-        <h1>Finally, you can touch some grass.<br>With Lostty.</h1>
+        <h1>Finally, you can go touch some grass.<br>With Lostty.</h1>
         <div class="lede">
           <p>A Mac-native terminal-based coding harness supporting multi-agent orchestration, designed in sync with our iPhone app.<br>For serious builders <b>on the go</b>.</p>
           <ul class="hero-points">
