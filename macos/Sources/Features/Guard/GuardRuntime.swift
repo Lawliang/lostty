@@ -63,7 +63,7 @@ final class GuardRuntime: ObservableObject {
             book = saved
         }
         let server = GuardServer(path: GuardServer.appPath) { check in
-            await MainActor.run { GuardRuntime.shared.handle(check) }
+            GuardRuntime.shared.handle(check)
         }
         do {
             try server.start()

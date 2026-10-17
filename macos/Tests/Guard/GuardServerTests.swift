@@ -177,5 +177,33 @@ struct GuardServerTests {
         #expect(reply.contains("allow"))
         #expect(Date().timeIntervalSince(start) < 1, "took \(Date().timeIntervalSince(start))s, reply \(reply)")
     }
+
+    /// Swift's shared thread pool can be busy (a full test run; in the app,
+    /// blocking work in detached tasks): replies still go out on time.
+    @Test(.timeLimit(.minutes(1))) func aBusyThreadPoolDoesNotHoldReplies() throws {
+        let path = socketPath()
+        // Main-actor work, like the live handler.
+        let server = GuardServer(path: path) { @MainActor _ in .allow }
+        try server.start()
+        defer { server.stop(); try? FileManager.default.removeItem(at: path.deletingLastPathComponent()) }
+        // Longer than the 4 s limit below, so a reply that waits for a free
+        // pool thread shows.
+        for _ in 0..<ProcessInfo.processInfo.activeProcessorCount * 2 {
+            Task.detached { usleep(5_000_000) }
+        }
+        Thread.sleep(forTimeInterval: 0.1)
+        let connected = Date()
+        let silent = connectRaw(path)
+        defer { close(silent) }
+        let ok = #"{"v":1,"pane":"P","agent":"claude","tool":"Bash","input":"x","cwd":"/r","group":"leaving","why":"w"}"#
+        let start = Date()
+        let reply = try send(ok, to: path)
+        let took = Date().timeIntervalSince(start)
+        #expect(reply.contains("allow"))
+        #expect(took < 1, "took \(took)s, reply \(reply)")
+        _ = timeToClose(silent, trickle: false)
+        let t = Date().timeIntervalSince(connected)
+        #expect(t >= 1.5 && t < 4, "closed after \(t)s")
+    }
 }
 #endif

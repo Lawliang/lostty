@@ -8,7 +8,9 @@ import Foundation
 /// can only *ask*: the handler answers from the approval book, and nothing
 /// a caller sends can grant. Only your own user's processes may connect.
 final class GuardServer: @unchecked Sendable {
-    typealias Handler = @Sendable (GuardCheck) async -> GuardReply
+    /// Main-actor work, so a reply never waits for a free thread in Swift's
+    /// shared pool (busy with blocking work in detached tasks, say).
+    typealias Handler = @MainActor @Sendable (GuardCheck) async -> GuardReply
 
     /// Set in each pane so `+guard` asks this app, not another build's.
     static let envKey = "LOSTTY_GUARD_SOCKET"
@@ -38,8 +40,6 @@ final class GuardServer: @unchecked Sendable {
     private let path: URL
     private let handler: Handler
     private let queue = DispatchQueue(label: "com.lawliang.lostty.guard-server")
-    /// Blocking reads happen here, never on the global pool.
-    private let readQueue = DispatchQueue(label: "com.lawliang.lostty.guard-reads", attributes: .concurrent)
     private let lock = NSLock()
     private var inFlight = 0
     static let maxInFlight = 32
@@ -138,23 +138,33 @@ final class GuardServer: @unchecked Sendable {
             var one: Int32 = 1
             setsockopt(conn, SOL_SOCKET, SO_NOSIGPIPE, &one, socklen_t(MemoryLayout<Int32>.size))
             let handler = self.handler
-            readQueue.async {
-                let line = Self.readLine(conn, deadline: Self.deadline)
-                Task.detached {
-                    let reply: GuardReply
-                    if let line, let check = try? JSONDecoder().decode(GuardCheck.self, from: line) {
-                        reply = await handler(check)
-                    } else {
-                        reply = .deny(0)
-                    }
-                    var out = (try? JSONEncoder().encode(reply)) ?? Data()
-                    out.append(0x0A)
-                    out.withUnsafeBytes { _ = write(conn, $0.baseAddress, $0.count) }
-                    close(conn)
-                    self.release()
+            // Blocking reads and writes happen here, never on the global
+            // pool (or the main thread). Each connection gets a serial queue
+            // of its own: those always get a thread, where one shared
+            // concurrent queue waited for threads behind a busy Swift pool.
+            let connQueue = DispatchQueue(label: "com.lawliang.lostty.guard-conn")
+            connQueue.async {
+                // A missing or garbled line never needs the handler.
+                guard let line = Self.readLine(conn, deadline: Self.deadline),
+                      let check = try? JSONDecoder().decode(GuardCheck.self, from: line) else {
+                    self.finish(conn, .deny(0))
+                    return
+                }
+                Task { @MainActor in
+                    let reply = await handler(check)
+                    connQueue.async { self.finish(conn, reply) }
                 }
             }
         }
+    }
+
+    /// Writes `reply` as one line and closes `conn`; runs on its queue.
+    private func finish(_ conn: Int32, _ reply: GuardReply) {
+        var out = (try? JSONEncoder().encode(reply)) ?? Data()
+        out.append(0x0A)
+        out.withUnsafeBytes { _ = write(conn, $0.baseAddress, $0.count) }
+        close(conn)
+        release()
     }
 
     private func reserve() -> Bool {
