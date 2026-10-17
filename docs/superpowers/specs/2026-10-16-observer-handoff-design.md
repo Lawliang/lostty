@@ -90,11 +90,20 @@ Checked against Claude Code's hooks documentation
 - `/clear` "starts a new conversation with empty context … while keeping
   project memory"; the previous conversation is saved and `/resume` reaches
   it (https://code.claude.com/docs/en/commands.md, …/sessions.md).
-- Not documented: how Claude's TUI takes `/clear` typed into the pane (the
-  slash-command menu may want an extra Return), and whether `/clear` keeps
-  the permission mode, the model and `/add-dir` folders (the docs hint the
-  mode carries). Settled by the desk check (§9); §4 step 6 handles what
-  doesn't carry.
+- Settled by the desk check (§9), Claude Code 2.1.302, 2026-10-17: `/clear`
+  typed into the pane and one Return runs it (no extra Return for the
+  slash-command menu). It keeps the permission mode (accept-edits), the
+  model (Sonnet, started with `--model sonnet`) and `/add-dir` folders, so
+  §4 step 6 types no `/model` and the Settings caption needs no warning.
+- Also from the desk check: at a permission prompt Claude's title stops
+  spinning, so Lostty's trace ends before the Notification hook reports the
+  prompt, and Claude carries on after you approve with no new prompt. Which
+  turn a Stop ends is therefore tracked from the hooks alone (a prompt or a
+  tool start opens it, a Stop closes it), not from the trace.
+- Claude's own context in a fresh window is about 45k here (system prompt,
+  tools, memory, skills). A limit below that re-arms every fresh window at
+  once and hands off in a loop; the 200k minimum keeps real settings clear of
+  it, but a Debug override must stay above it (use 60000).
 
 And in Lostty today (beta branch, main `c52b00ef5`):
 

@@ -451,6 +451,22 @@ struct ClaudeRuntimeTests {
         #expect(signals == [.prompted, .stopped(transcript: "/t.jsonl")])
     }
 
+    // The title stops spinning at the permission prompt, which ends the
+    // trace before the hook says why: the handoff's turn is the hooks'.
+    @Test func aTraceStoppedByTheTitleStillEndsTheHandoffsTurn() {
+        let runtime = makeRuntime()
+        var signals: [ContextHandoffSignal] = []
+        runtime.handoffSignal = { _, signal in signals.append(signal) }
+        runtime.userVarChanged(pane, name: ClaudeConstants.userVarName, value: payload("busy"))
+        runtime.titleChanged(pane, title: "◐ Working")
+        runtime.titleChanged(pane, title: "✳ Working")
+        runtime.userVarChanged(pane, name: ClaudeConstants.userVarName,
+                               value: #"{"v":1,"state":"idle","permission":true,"transcript":"/t.jsonl"}"#)
+        runtime.userVarChanged(pane, name: ClaudeConstants.userVarName,
+                               value: #"{"v":1,"state":"idle","transcript":"/t.jsonl"}"#)
+        #expect(signals == [.prompted, .stopped(transcript: "/t.jsonl")])
+    }
+
     @Test func aPermissionPromptOutOfNowhereStartsNoTurn() {
         let runtime = makeRuntime()
         var signals: [ContextHandoffSignal] = []

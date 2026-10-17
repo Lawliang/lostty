@@ -41,10 +41,11 @@ final class ClaudeRuntime: ObservableObject {
     private var seen: Set<UUID> = []
     /// Panes whose title has shown a working spinner since the trace started.
     private var sawSpinner: Set<UUID> = []
-    /// Panes whose turn stopped to ask permission. Claude carries on after
-    /// you approve without a new prompt (or a tool start, when the approved
-    /// call is its last), so the Stop that follows still ends that turn.
-    private var askedPermission: Set<UUID> = []
+    /// Panes whose hooks said a turn began (a prompt or a tool start) and no
+    /// Stop has ended it: the handoff's turns. Not the trace: the title or
+    /// working line stops that at a permission prompt, and Claude carries on
+    /// after you approve with no new prompt.
+    private var hookTurns: Set<UUID> = []
 
     init(
         now: @escaping () -> Date = Date.init,
@@ -74,6 +75,7 @@ final class ClaudeRuntime: ObservableObject {
             // A tool starting means Claude works, even with no new prompt
             // (it carries on after a permission prompt without one).
             if phase(id).isOff { apply(.busy, to: id) }
+            hookTurns.insert(id)
             setAction(action, for: id)
             return
         }
@@ -85,20 +87,24 @@ final class ClaudeRuntime: ObservableObject {
         // carry this user var, so an idle out of nowhere names no file.
         let turnUnderWay = !phase(id).isOff
         let permission = ClaudeMessage.isPermission(value)
-        let afterPermission = askedPermission.remove(id) != nil
-        if state == .idle, permission, turnUnderWay { askedPermission.insert(id) }
         apply(state, to: id, permission: permission)
-        if state == .busy { handoffSignal(id, .prompted) }
+        switch state {
+        case .busy:
+            hookTurns.insert(id)
+            handoffSignal(id, .prompted)
+        case .exit: hookTurns.remove(id)
+        default: break
+        }
         guard state == .idle, let path = ClaudeMessage.transcript(value) else { return }
         if turnUnderWay { turnEnded(id, path) }
-        if turnUnderWay || afterPermission, !permission { handoffSignal(id, .stopped(transcript: path)) }
+        if !permission, hookTurns.remove(id) != nil { handoffSignal(id, .stopped(transcript: path)) }
     }
 
     /// The pane's shell reported a command finished, so whatever ran there
     /// (claude included) is gone: a racing trace must not stay up.
     func commandFinished(_ id: UUID) {
         apply(.exit, to: id)
-        askedPermission.remove(id)
+        hookTurns.remove(id)
         handoffSignal(id, .gone)
     }
 
@@ -108,7 +114,7 @@ final class ClaudeRuntime: ObservableObject {
         seen.remove(id)
         awaiting.remove(id)
         sawSpinner.remove(id)
-        askedPermission.remove(id)
+        hookTurns.remove(id)
         setAction(nil, for: id)
         handoffSignal(id, .gone)
     }
