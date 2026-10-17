@@ -41,6 +41,10 @@ final class ClaudeRuntime: ObservableObject {
     private var seen: Set<UUID> = []
     /// Panes whose title has shown a working spinner since the trace started.
     private var sawSpinner: Set<UUID> = []
+    /// Panes whose turn stopped to ask permission. Claude carries on after
+    /// you approve without a new prompt (or a tool start, when the approved
+    /// call is its last), so the Stop that follows still ends that turn.
+    private var askedPermission: Set<UUID> = []
 
     init(
         now: @escaping () -> Date = Date.init,
@@ -81,18 +85,20 @@ final class ClaudeRuntime: ObservableObject {
         // carry this user var, so an idle out of nowhere names no file.
         let turnUnderWay = !phase(id).isOff
         let permission = ClaudeMessage.isPermission(value)
+        let afterPermission = askedPermission.remove(id) != nil
+        if state == .idle, permission, turnUnderWay { askedPermission.insert(id) }
         apply(state, to: id, permission: permission)
         if state == .busy { handoffSignal(id, .prompted) }
-        if state == .idle, turnUnderWay, let path = ClaudeMessage.transcript(value) {
-            turnEnded(id, path)
-            if !permission { handoffSignal(id, .stopped(transcript: path)) }
-        }
+        guard state == .idle, let path = ClaudeMessage.transcript(value) else { return }
+        if turnUnderWay { turnEnded(id, path) }
+        if turnUnderWay || afterPermission, !permission { handoffSignal(id, .stopped(transcript: path)) }
     }
 
     /// The pane's shell reported a command finished, so whatever ran there
     /// (claude included) is gone: a racing trace must not stay up.
     func commandFinished(_ id: UUID) {
         apply(.exit, to: id)
+        askedPermission.remove(id)
         handoffSignal(id, .gone)
     }
 
@@ -102,6 +108,7 @@ final class ClaudeRuntime: ObservableObject {
         seen.remove(id)
         awaiting.remove(id)
         sawSpinner.remove(id)
+        askedPermission.remove(id)
         setAction(nil, for: id)
         handoffSignal(id, .gone)
     }
