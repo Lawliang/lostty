@@ -1,6 +1,6 @@
 # Lostty observer handoff — design
 
-Status: approved in conversation, written for review (2026-10-16)
+Status: approved in conversation and grilled; for review (2026-10-16)
 
 Builds on docs/superpowers/specs/2026-10-14-lostty-mascot-observer-design.md
 (the turn observer and the mascot's bubble),
@@ -37,6 +37,13 @@ a bad moment, and usage.
 - Mid-debugging, with a half-made edit, or while a build or subagent runs,
   the agent does not hand off.
 - Typing in the pane during the grace period cancels the clear.
+- "Hand off at next break" in the bubble arms any Claude pane at once, with
+  the setting on or off; "Don't hand off this conversation" disarms it.
+- At the ceiling, a turn that ends idle without a handoff gets one typed
+  nudge, and the agent hands off in that short turn.
+- A fresh agent re-enters the workflow the old one was in (the skill it was
+  following, its ledger), and after a waiting break restates the open
+  question word for word.
 - Nothing is written into the user's repo. The old conversation stays on
   disk (`claude --resume` reaches it); every handoff is kept in Lostty's
   handoffs folder.
@@ -50,6 +57,12 @@ a bad moment, and usage.
   conversation file, start fresh with `/new`, and has no after-tool or
   session-start hook). Codex is not built here.
 - Beta only (`LosttyChannel.current.showsMascot`).
+- Only panes open in a window on this Mac: hooks reach the app through the
+  pane's terminal, so a tmux session with no Mac window attached (one
+  started from the phone and never opened here) never arms. Settings says
+  "in terminals open on this Mac".
+- Nothing new on the phone in v1. A failed handoff leaves Claude waiting,
+  which the phone's existing Waiting on You note already reports.
 - Needs Lostty's Claude hooks installed (the existing Settings check) and
   the usage feed (the `+claude-usage` status line). A pane without either
   never arms.
@@ -74,9 +87,14 @@ Checked against Claude Code's hooks documentation
   to read the file.
 - Auto-compact: at the model's window; for 1M-window models at about 967k by
   default. Not something Lostty changes.
+- `/clear` "starts a new conversation with empty context … while keeping
+  project memory"; the previous conversation is saved and `/resume` reaches
+  it (https://code.claude.com/docs/en/commands.md, …/sessions.md).
 - Not documented: how Claude's TUI takes `/clear` typed into the pane (the
-  slash-command menu may want an extra Return). Settled by the desk check
-  (§9).
+  slash-command menu may want an extra Return), and whether `/clear` keeps
+  the permission mode, the model and `/add-dir` folders (the docs hint the
+  mode carries). Settled by the desk check (§9); §4 step 6 handles what
+  doesn't carry.
 
 And in Lostty today (beta branch, main `c52b00ef5`):
 
@@ -132,6 +150,11 @@ Only what git can't tell the next agent, under 8,000 characters:
 5. **Open threads**: a question waiting on the user, a hand test pending.
 6. **Gotchas**: traps found (sandbox refusals, a flaky test, a wrong path).
 7. **Pointers**: branch, worktree, spec, plan, key files.
+8. **Active workflow**: the skill or process it was following and where it
+   stood (for example "superpowers:executing-plans on <plan>, ledger at
+   <path>, Task 3 next"), or "none". Required: without it the fresh agent
+   carries on the work but drops the discipline (TDD gates, ledger lines,
+   approval gates).
 
 No code dumps, nothing `git log` or the files already say.
 
@@ -155,6 +178,8 @@ The agent ends its turn with the handoff as the last thing in its reply:
 …
 ## Pointers
 …
+## Active workflow
+…
 ## Next
 continue | wait
 </lostty-handoff>
@@ -162,15 +187,19 @@ continue | wait
 
 `Next` is `continue` (the fresh agent carries on with the next step) or
 `wait` (it was waiting on the user; the fresh agent loads the handoff and
-waits). Missing or unknown means `wait`.
+waits). Missing or unknown means `wait`. With `wait`, **Open threads** must
+hold the open question word for word.
 
 ### What the fresh agent is told
 
 The start hook gives it the handoff, prefixed: "You're continuing from a
-handoff Lostty saved at <path> when the last window reached <used>. Check the
-branch and `git status` against it before acting. If anything disagrees,
-say so and wait." Then Lostty types `Continue from the handoff.` (for
-`continue`) or `Read the handoff and wait for me.` (for `wait`).
+handoff Lostty saved at <path> when the last window reached <used>. First
+re-enter the Active workflow (invoke that skill again, read its ledger).
+Check the branch and `git status` against the handoff before acting. If
+anything disagrees, say so and wait." Then Lostty types
+`Continue from the handoff.` (for `continue`) or
+`Read the handoff, restate the open question word for word, and wait for me.`
+(for `wait`).
 
 ## 2. Limits
 
@@ -193,6 +222,14 @@ Per pane, from the reported `size`:
 A Debug-only defaults key (`LosttyHandoffLimitOverride`, tokens) replaces the
 setting for desk checks; release builds ignore it.
 
+**On demand.** The bubble of any Claude pane (that qualifies, §Scope) shows
+**"Hand off at next break"**, whether the setting is on or off: it arms the
+pane at the limit level now, whatever its size. It has no ceiling and no
+reminders after the first; the agent still picks the break. An armed pane's
+bubble shows **"Don't hand off this conversation"** instead: it disarms the
+pane until its conversation ends (the next conversation file), whichever way
+it was armed.
+
 ## 3. What the user sees
 
 - **Armed**: the usage bar's context figure gets a small handoff mark
@@ -204,10 +241,14 @@ setting for desk checks; release builds ignore it.
   window's size.
 - **Saved**: each handoff is kept at
   `~/Library/Application Support/Lostty/handoffs/<project>/<yyyy-MM-dd HHmm>.md`
-  (`<project>` is the pane's working directory's last component). The bubble
-  links to the folder.
+  (`<project>` is the pane's working directory's last component). The last
+  50 per project are kept; older ones are deleted when a new one is saved.
+  The bubble links to the folder.
+- **Buttons**: "Hand off at next break" / "Don't hand off this
+  conversation" (§2).
 - **Failure**: "Handoff saved, but the fresh window didn't start. It's at
-  <path>." (§5).
+  <path>." in the bubble, and a Mac notification with the same words and the
+  terminal's name (§4 step 7). Handoffs that work notify nothing.
 
 ## 4. How it runs
 
@@ -231,7 +272,13 @@ Per pane, the coordinator holds one state:
 3. **Handoff.** On a turn end (`Stop` with a transcript path) in an armed
    pane, the coordinator reads that turn's last assistant reply and looks for
    one `<lostty-handoff>` block (§6). Found and valid: it saves the handoff
-   (§3) and moves to `pending`. Not found: stays armed.
+   (§3) and moves to `pending`. Not found: stays armed, except at the
+   ceiling (below).
+   - **Ceiling nudge.** At the ceiling level, the first turn that ends idle
+     without a handoff gets one typed prompt (after the same grace as
+     step 4): `Write your handoff now: this window is at the Lostty context
+     ceiling.` and Return. Once per arming; if that turn ends without a
+     handoff too, nothing more is typed.
 4. **Grace.** 3 s. Any key typed in that pane, or a new `UserPromptSubmit`,
    cancels: back to armed, with `remindAt` = `used` + 25k.
 5. **Clear.** The coordinator writes the handoff text and path into the
@@ -240,8 +287,13 @@ Per pane, the coordinator holds one state:
    `+claude-state`, which finds the handoff in the state file, prints it as
    `additionalContext` (prefixed, §1), and reports that it did. Over 9,000
    characters: the first 7,500 plus "The full handoff is at <path>. Read it
-   before acting." The coordinator then types the continue line (§1) and
-   Return, deletes the state file, and goes back to idle. The observer is
+   before acting." The coordinator then types, each followed by Return,
+   whatever the desk check showed `/clear` doesn't keep (`/model <model>`
+   from the usage feed's model; `/add-dir <dir>` for folders the handoff's
+   Pointers name outside the working directory), then the continue line
+   (§1). It deletes the state file and goes back to idle. If the desk check
+   shows the permission mode doesn't survive `/clear`, that is stated in
+   Settings as a known limitation; Lostty does not try to restore it. The observer is
    told the pane's conversation file is changing on purpose, so the 30 s
    switch limit doesn't hold the pane on the old file.
 7. **No fresh window.** No `SessionStart` report within 15 s of typing
@@ -258,7 +310,8 @@ pending handoff's path) like the observer's.
 ## 5. Safety rules
 
 - Lostty types only into the pane the handoff came from, only after a Stop,
-  and only `/clear`, Return and one continue line.
+  and only `/clear`, the restore commands of §4 step 6, the continue line,
+  and the one ceiling nudge, each followed by Return.
 - Never while the agent is waiting on a permission prompt (the Notification
   state) or has subagents working (`agents`).
 - One handoff per arming; no retries after a failed fresh window.
@@ -281,14 +334,16 @@ Each has one job and is tested alone.
   numbers. Kept under 4,000 characters. Written into the state file so the
   Zig hook only copies it.
 - **`HandoffExtract`** (Swift, pure): the last `<lostty-handoff>` block in a
-  reply that is not inside a code fence; requires `Where we are` and `Next`
-  (other sections may be missing); reads `Next`; returns the text or why not.
-- **`HandoffStore`** (Swift): saves handoffs (§3) and reads/writes/deletes
-  state files, atomically.
+  reply that is not inside a code fence; requires `Where we are`,
+  `Active workflow` and `Next` (other sections may be missing; with
+  `wait`, `Open threads` too); reads `Next`; returns the text or why not.
+- **`HandoffStore`** (Swift): saves handoffs (§3), keeping the last 50 per
+  project, and reads/writes/deletes state files, atomically.
 - **`HandoffCoordinator`** (Swift, `@MainActor`, app): per-pane states (§4).
   Watches `ClaudeUsageRuntime.contexts`, turn ends and the hook reports;
-  runs grace, clear and continue through an injected typist and clock;
-  updates the bubble and the usage bar's mark. Agent-specific steps go
+  runs grace, clear, restore, continue and the ceiling nudge through an
+  injected typist and clock; takes the bubble's two buttons; updates the
+  bubble and the usage bar's mark; posts the failure notification. Agent-specific steps go
   through a `HandoffAgent` adapter (Claude: `/clear`, the continue lines,
   the context source).
 - **`+claude-state` speak path** (Zig): for `prompt`, `tool-done` and
@@ -307,7 +362,9 @@ Each has one job and is tested alone.
 | Case | What happens |
 | --- | --- |
 | No usage feed or hooks in the pane | Never arms. |
-| Handoff block invalid (no `Where we are`) | Not taken; stays armed; the next directive says why ("Your handoff had no 'Where we are'"). |
+| Handoff block invalid (no `Where we are` or `Active workflow`, or `wait` with no `Open threads`) | Not taken; stays armed; the next directive says why ("Your handoff had no 'Active workflow'"). |
+| Ceiling turn ends idle without a handoff | One typed nudge (§4 step 3); never a second. |
+| "Don't hand off this conversation" while pending | Cancels the clear; nothing typed; disarmed until the next conversation. |
 | Two blocks in one reply | The last one outside a code fence. |
 | Saving the handoff fails | Stays armed, no clear; bubble: "Couldn't save the handoff: <reason>." |
 | User types during grace | Cancelled; re-arms 25k later. |
@@ -318,9 +375,12 @@ Each has one job and is tested alone.
 
 ## 8. Out of scope
 
-Codex (adapter later); choosing a different limit per project or model;
-editing a handoff before it's used; showing past handoffs inside Lostty
-(the folder is enough); changing Claude's auto-compact settings.
+Codex (adapter later); tmux sessions with no Mac window attached; the
+phone showing the armed mark or handoffs (later, from the same data);
+choosing a different limit per project or model; editing a handoff before
+it's used; adding the observer's notes to a handoff; showing past handoffs
+inside Lostty (the folder is enough); restoring a permission mode `/clear`
+dropped; changing Claude's auto-compact settings.
 
 ## 9. Testing
 
@@ -328,13 +388,20 @@ editing a handoff before it's used; showing past handoffs inside Lostty
   140k, ceiling caps, reminder steps, dropping below the limit);
   `HandoffDirective` (both levels, numbers, length); `HandoffExtract` (valid,
   missing sections, `Next` missing → wait, two blocks, a block inside a code
-  fence); `HandoffCoordinator` with a fake typist and clock (arm → pending →
-  grace → clear → loaded → continue; typing cancels; no fresh window in 15 s;
-  setting off mid-pending; pane closed).
+  fence, missing Active workflow, `wait` without Open threads);
+  `HandoffStore` (keeps 50 per project); `HandoffCoordinator` with a fake
+  typist and clock (arm → pending → grace → clear → loaded → restore →
+  continue; typing cancels; no fresh window in 15 s → notification;
+  setting off mid-pending; pane closed; the button arms with the setting
+  off; "Don't hand off" disarms until the next conversation; the ceiling
+  nudge is typed once and only once).
 - **Unit (Zig):** the speak path's output for each event, with and without a
   state file, at both levels, with a handoff over the cap; the installer's
   new events and the partial status.
 - **Desk check (real pane, Debug override at 20k):** run a small task to
   past 20k, see the mark and the directive; see it not hand off mid-edit;
   let it finish and commit; watch the handoff, `/clear`, and the fresh agent
-  continue. This settles how the TUI takes the typed `/clear`.
+  continue. This settles how the TUI takes the typed `/clear`, and whether
+  `/clear` keeps the permission mode (start the agent in accept-edits), the
+  model (pick a non-default one) and an `/add-dir` folder; record the
+  answers in this spec's Facts and wire §4 step 6 to them.
