@@ -4,7 +4,7 @@ Last updated 2026-10-16. Branch: `website`. Everything below is committed.
 
 ## lostty.org (owner, 2026-10-16)
 
-- Hosted on **Cloudflare Pages**, built from GitHub: repo `Lawliang/lostty`, production branch **`website`**, build command `node website/build.mjs`, build output directory `website/dist`. Domains: `lostty.org` and `www.lostty.org` (the domain is on the owner's Cloudflare account).
+- Hosted on **Cloudflare Pages**, built from GitHub: repo `Lawliang/lostty`, production branch **`website`**, build command `node website/build.mjs`, build output directory `website/dist`. Domains: `lostty.org` and `www.lostty.org` (the domain is on the owner's Cloudflare account). The project (`lostty`, also at https://lostty.pages.dev) was created through the API with the Wrangler login (2026-10-16); preview deployments are off, so only pushes to `website` build. The Wrangler login can't edit DNS (`zone:read` only), so the domains' CNAME records were added by the owner.
 - `website/build.mjs` wraps `custom.html` (a fragment; the artifact host adds the skeleton) in a real document: doctype, charset, viewport, canonical, `<title>Lostty</title>`, drops the `claude:` meta, and writes `favicon.svg` from the page's `<g id="axo">`. `website/dist/` is git-ignored.
 - So a change goes live by: edit `custom.html`, publish the artifact as before, commit, then `git push origin website` (push only when the owner asks). Pages rebuilds on the push.
 - The saved launch version is tag `website-v1`.
