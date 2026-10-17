@@ -1115,9 +1115,8 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
 .sup-mascot .ag-mascot { position: relative; z-index: 1; width: 96px; height: 96px; }
 .sup-mascot::after { content: ""; position: absolute; left: 50%; bottom: -6px; width: 80px; height: 16px; transform: translateX(-50%); border-radius: 50%;
   background: radial-gradient(closest-side, var(--ag-platform), transparent); }
-.sup .setup-k { font-family: inherit; font-size: 12.5px; margin-bottom: 10px; }
 .sup-title { font-size: clamp(36px, 5vw, 56px); line-height: 1.04; font-weight: 700; letter-spacing: -.04em; }
-.sup-lede { max-width: 46ch; margin: 16px auto 0; font-size: 18px; line-height: 1.6; color: var(--ink-2); }
+.sup-lede { max-width: 46ch; margin: 28px auto 0; font-size: 18px; line-height: 1.6; color: var(--ink-2); }
 .sup-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 40px; text-align: left; }
 @media (max-width: 720px) { .sup-grid { grid-template-columns: minmax(0, 1fr); } }
 .sup-block { padding: 22px; border-radius: 16px; background: color-mix(in srgb, var(--ink) 4%, transparent); border: 1px solid var(--g-hair); }
@@ -1126,7 +1125,7 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
 .sup-block p + p { margin-top: 10px; }
 .sup-ic { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 10px; color: var(--magenta-ink); background: color-mix(in srgb, var(--magenta) 12%, transparent); }
 .sup-ic svg { width: 20px; height: 20px; }
-.sup-cta { margin-top: 36px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.sup-cta { margin-top: 24px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
 .sup-btn { font: 600 16px/1 "Onest", ui-sans-serif, system-ui, sans-serif; padding: 16px 26px; border-radius: 999px; transition: transform .2s, box-shadow .25s, background-color .15s; }
 .sup-btn:hover { transform: translateY(-1px); box-shadow: 0 16px 36px -14px var(--magenta); background: var(--btn-bg); border-color: var(--btn-bg); color: var(--btn-fg); }
 .sup-btn .btn-ic { width: 18px; height: 18px; }
@@ -1497,8 +1496,12 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
     <div class="wrap">
       <div class="sup-card glass">
         <div class="sup-mascot"><span class="ag-mascot-slot" data-mascot="ag-wave"></span></div>
-        <p class="setup-k">Support</p>
         <h1 class="sup-title">Thanks for being here.</h1>
+        <div class="sup-cta">
+          <!-- the Stripe Checkout link goes in href (and data-checkout); until then the button does nothing -->
+          <a class="btn primary sup-btn" href="#support" data-checkout=""><svg class="btn-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z" fill="currentColor"/></svg>Support Lostty</a>
+          <p class="sup-note">Secure checkout by Stripe. Thank you, truly.</p>
+        </div>
         <p class="sup-lede">Lostty is a small, independent project, made by one developer. It's free, open source and MIT licensed, and it'll stay that way.</p>
         <div class="sup-grid">
           <div class="sup-block">
@@ -1513,11 +1516,6 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
             <p>If Lostty has given you a few more walks outside and you'd like to support it, I'd really appreciate it. It helps keep the lights on, like the Apple Developer membership the iPhone app needs for TestFlight.</p>
             <p>No pressure at all. Using it, telling a friend, or filing a good bug report helps too.</p>
           </div>
-        </div>
-        <div class="sup-cta">
-          <!-- the Stripe Checkout link goes in href (and data-checkout); until then the button does nothing -->
-          <a class="btn primary sup-btn" href="#support" data-checkout=""><svg class="btn-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z" fill="currentColor"/></svg>Support Lostty</a>
-          <p class="sup-note">Secure checkout by Stripe. Thank you, truly.</p>
         </div>
       </div>
     </div>
