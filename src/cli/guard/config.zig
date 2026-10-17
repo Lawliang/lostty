@@ -6,7 +6,8 @@ const Allocator = std.mem.Allocator;
 // protects, so an agent can't loosen it. A missing or broken file means
 // the defaults: the guard never turns itself off over a typo.
 //
-//   { "push": "all" | "protected",
+//   { "enabled": false,   (pauses the guard: every call goes through)
+//     "push": "all" | "protected",
 //     "protectedBranches": ["release"],
 //     "commands": ["deploy.sh"],
 //     "deletable": ["vendor"],
@@ -41,6 +42,15 @@ pub const Config = struct {
     pub fn parse(alloc: Allocator, text: []const u8) Config {
         const v = std.json.parseFromSliceLeaky(std.json.Value, alloc, text, .{}) catch return .{ .root = null };
         return .{ .root = if (v == .object) v else null };
+    }
+
+    /// False only for an exact top-level `"enabled": false`: the guard then
+    /// lets every call through (paused). Anything else, a broken file
+    /// included, keeps it on.
+    pub fn enabled(self: Config) bool {
+        const root = self.root orelse return true;
+        const v = root.object.get("enabled") orelse return true;
+        return !(v == .bool and !v.bool);
     }
 
     pub fn forRepo(self: Config, alloc: Allocator, repo: ?[]const u8) Allocator.Error!Effective {
@@ -123,6 +133,22 @@ test "guard config: defaults" {
     try std.testing.expect(contains(e.commands, "ship-phone.sh"));
     try std.testing.expect(contains(e.deletable, "node_modules"));
     try std.testing.expect(!contains(e.deletable, "build"));
+}
+
+test "guard config: only an exact top-level \"enabled\": false turns the guard off" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    try std.testing.expect(!Config.parse(a, "{\"enabled\":false}").enabled());
+    try std.testing.expect(Config.parse(a, "{\"enabled\":true}").enabled());
+    try std.testing.expect(Config.parse(a, "{}").enabled());
+    try std.testing.expect(Config.parse(a, "not json").enabled());
+    try std.testing.expect((Config{ .root = null }).enabled());
+    // Anything but the boolean false keeps it on: a typo never disarms it.
+    try std.testing.expect(Config.parse(a, "{\"enabled\":\"false\"}").enabled());
+    try std.testing.expect(Config.parse(a, "{\"enabled\":0}").enabled());
+    // Only the global setting counts, not a repo's.
+    try std.testing.expect(Config.parse(a, "{\"repos\":{\"/r\":{\"enabled\":false}}}").enabled());
 }
 
 test "guard config: a repo adds to the global lists and can widen push" {

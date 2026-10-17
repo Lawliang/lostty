@@ -60,11 +60,15 @@ test "guard args: only an exact --agent=claude is Claude" {
 
 fn runFor(alloc: Allocator, pane: []const u8, agent: wire.Agent) !u8 {
     const home = std.posix.getenv("HOME") orelse return error.NoHome;
+    const cfg = config.Config.load(alloc, home);
+    // Paused (`"enabled": false` in guard.json): the hooks stay installed,
+    // so Lostty doesn't see them as disconnected, and every call goes through.
+    if (!cfg.enabled()) return 0;
     // As claude_state.hookInput reads it.
     var buf: [4096]u8 = undefined;
     var reader = std.fs.File.stdin().reader(&buf);
     const input = try reader.interface.allocRemaining(alloc, .limited(8 << 20));
-    const env: decide.Env = .{ .home = home, .tmpdir = std.posix.getenv("TMPDIR"), .config = config.Config.load(alloc, home) };
+    const env: decide.Env = .{ .home = home, .tmpdir = std.posix.getenv("TMPDIR"), .config = cfg };
     const verdict = try decide.decide(alloc, env, git.Live{ .alloc = alloc }, input);
     const c = switch (verdict) {
         .harmless => return 0,
