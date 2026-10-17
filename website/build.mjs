@@ -4,7 +4,7 @@
 //
 // custom.html is a fragment (the artifact host adds the document skeleton),
 // so this wraps it in a real document, retitles it and drops the
-// artifact-only meta. It also writes a favicon from the page's axolotl.
+// artifact-only meta. It also copies in the tab and home-screen icons.
 import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -27,21 +27,17 @@ const head = [
   '<meta charset="utf-8">',
   '<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">',
   '<link rel="icon" href="/favicon.svg" type="image/svg+xml">',
+  '<link rel="apple-touch-icon" href="/apple-touch-icon.png">',
   '<link rel="canonical" href="https://lostty.org/">',
   "",
 ].join("\n");
 
-// the page's axolotl (<g id="axo">, no longer shown in the nav), cropped to
-// its head and centred in a square
-const axo = page.match(/<g id="axo">[\s\S]*?<\/g>/);
-if (!axo) throw new Error('build: <g id="axo"> not found in custom.html');
-const favicon =
-  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">' +
-  '<svg y="21" width="100" height="58" viewBox="0 12 100 58">' + axo[0] + "</svg></svg>\n";
-
 mkdirSync(out, { recursive: true });
 writeFileSync(join(out, "index.html"), head + page);
-writeFileSync(join(out, "favicon.svg"), favicon);
+// the tab icon (the "Prompt" mark from concepts/tab-icons.html) and its
+// full-bleed 180px PNG for iPhone home screens
+copyFileSync(join(here, "favicon.svg"), join(out, "favicon.svg"));
+copyFileSync(join(here, "apple-touch-icon.png"), join(out, "apple-touch-icon.png"));
 // the Endorse popup's Stripe Checkout route (Pages runs _worker.js in front of the files)
 copyFileSync(join(here, "worker.js"), join(out, "_worker.js"));
-console.log(`built ${join(out, "index.html")} (${(head + page).length} bytes), favicon.svg and _worker.js`);
+console.log(`built ${join(out, "index.html")} (${(head + page).length} bytes), the icons and _worker.js`);
