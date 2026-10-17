@@ -336,13 +336,13 @@ p { margin: 0; }
    screen of a phone. The field script tightens the boxes to match */
 /* The hero then fills exactly what the first screen has left after the nav
    and the skin strip's cards (--strip-run-h: the cards plus their 16px above
-   and below), with the copy centred in it, so hero and carousel fit the
+   and below), with the copy at its bottom, just over the cards, so hero and carousel fit the
    screen together. svh is the screen with the browser's bars showing; a
    screen too short for the copy just lets it run on */
 :root { --strip-run-h: 108px; }
 @media (max-width: 640px) { :root { --strip-run-h: 100px; } }
 @media (max-width: 899px) {
-  .hero-in { height: auto; align-items: center; padding-block: 16px;
+  .hero-in { height: auto; align-items: flex-end; padding-block: 16px;
     min-height: calc(100vh - var(--nav-h) - var(--strip-run-h));
     min-height: calc(100svh - var(--nav-h) - env(safe-area-inset-top, 0px) - var(--strip-run-h)); }
   .hero-copy { --hero-gap: 28px; }
@@ -1924,8 +1924,10 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
         var I = v[i] + boost * 0.9;
         if (I > 1) I = 1;
         var inQ = inQuiet(c, r);
-        // the axolotl is dimmed in the boxes too where it sits behind the copy (narrow)
-        if (inQ && (!dc || artUnder)) I *= 0.13;
+        // narrow, the axolotl sits behind the copy: nothing at all is drawn in
+        // the boxes, so they stay solid like the desktop ones
+        if (inQ && artUnder) continue;
+        if (inQ && !dc) I *= 0.13;
         if (I < 0.07) continue;
         var colr, ch;
         if (!dc) {
