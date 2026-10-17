@@ -702,8 +702,8 @@ p { margin: 0; }
 /* a mini-title: it scales with the column (a size container), 26px across
    a desktop column, down to 18px on phones */
 .skstrip-head{container-type:inline-size}
-.skstrip h2{margin:0 auto; max-width:none; text-align:center; font-size:clamp(18px, 2.25cqi, 26px); letter-spacing:-.03em}
-/* one title, "Unlock skins by spending tokens.", centred under the cards */
+.skstrip h2{margin:0 auto; max-width:none; text-align:center; font-size:clamp(15px, 1.75cqi, 20px); letter-spacing:-.03em}
+/* one title, "We are unaffiliated, fully open source. So here are our coolest skins.", centred under the cards */
 .skstrip-foot h2{margin:0; text-align:center}
 /* hidden until the strip is hovered for a second or a card is tapped (.show,
    set by the script), then it slides down into place from above, and goes
@@ -1280,7 +1280,7 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
   <!-- SKIN STRIP: cards drift right to left; tapping one re-skins the site and the demo's Mac -->
   <section class="skstrip" id="skin-strip">
     <div class="skstrip-run"><div class="skstrip-track" id="skstrip-track"></div></div>
-    <div class="wrap skstrip-head skstrip-foot"><h2>Fun: Unlock skins by spending tokens.</h2></div>
+    <div class="wrap skstrip-head skstrip-foot"><h2>We are unaffiliated, fully open source. So here are our coolest skins.</h2></div>
   </section>
 
   <!-- DEMO -->
@@ -3158,7 +3158,7 @@ void main(){
       INDEX.push({ t: h.textContent, path: 'docs › ' + title, page: id, anchor: h.id, text: body.toLowerCase() });
     });
   });
-  [['demo', 'Watch the loop', 'home'], ['skin-strip', 'Fun: Unlock skins by spending tokens', 'home'], ['install', 'Get started', 'home']].forEach(function (s) {
+  [['demo', 'Watch the loop', 'home'], ['skin-strip', 'Our coolest skins', 'home'], ['install', 'Get started', 'home']].forEach(function (s) {
     var el = document.getElementById(s[0]);
     INDEX.push({ t: s[1], path: s[2], home: s[0], text: el ? el.textContent.slice(0, 900).toLowerCase() : '' });
   });
