@@ -358,6 +358,13 @@ p { margin: 0; }
   .hero .lede, .hero-points, .hero-cta { margin-top: var(--hero-gap); }
   .hero .lede { font-size: 14px; }
   .hero-points { font-size: 15px; }
+  /* centred across the screen: headline, description, bullets (each with
+     its ❯ in front of its first line) and buttons */
+  .hero-copy { text-align: center; margin-inline: auto; }
+  .hero h1, .hero .lede { margin-inline: auto; }
+  .hero-points li { display: block; }
+  .hero-points .pt-mark { margin-right: .6ch; }
+  .hero-cta { justify-content: center; }
   /* both buttons on one row */
   .hero-cta { gap: 10px; }
   .hero-cta .btn { padding-inline: 14px; }
