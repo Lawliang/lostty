@@ -605,35 +605,36 @@ p { margin: 0; }
 }
 
 /* ---------- skin strip (under the demo) ---------- */
-/* a short strip of skin cards drifting right to left, edge to edge, faded at
-   both ends. Every card is dim except the one under the pointer; the drift
-   stops while the pointer is on the strip. The track holds the list twice and
-   moves by half its width, so it wraps without a seam (each card carries its
-   gap as margin, so the halves are exactly equal) */
-.skstrip{position:relative; overflow:hidden; padding-block:26px 30px; border-top:1px dashed var(--rule);
+/* a centred heading over a short strip of skin cards drifting right to left,
+   edge to edge, faded at both ends. No divider above or below. Every card is
+   dim except the one under the pointer; the drift stops while the pointer is
+   on the strip. The track holds the list twice and moves by half its width,
+   so it wraps without a seam (each card carries its gap as margin, so the
+   halves are exactly equal) */
+.skstrip{position:relative; padding-block:26px 30px; border-top:0}
+.skstrip + .sec{border-top:0}
+.skstrip h2{margin:0 auto 28px; text-align:center}
+.skstrip-run{overflow:hidden; padding-block:8px;
   -webkit-mask-image:linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent); mask-image:linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent)}
 .skstrip-track{display:flex; width:max-content; animation:skstrip-drift 110s linear infinite}
-.skstrip:hover .skstrip-track,.skstrip:focus-within .skstrip-track{animation-play-state:paused}
+.skstrip-run:hover .skstrip-track,.skstrip-run:focus-within .skstrip-track{animation-play-state:paused}
 @keyframes skstrip-drift{to{transform:translateX(-50%)}}
-.skc{position:relative; isolation:isolate; overflow:hidden; flex:none; width:208px; height:70px; margin-right:14px; padding:11px 14px;
-  display:flex; flex-direction:column; justify-content:space-between; text-align:left; cursor:pointer;
+.skc{position:relative; isolation:isolate; overflow:hidden; flex:none; width:208px; height:52px; margin-right:14px; padding:0 14px;
+  display:flex; align-items:center; text-align:left; cursor:pointer;
   border:1px solid color-mix(in srgb, var(--sk-fg) 16%, transparent); border-radius:8px; background:var(--sk-bg); color:var(--sk-fg);
   font:600 13.5px/1.3 var(--font-mono); opacity:.36; transition:opacity .3s, transform .3s, box-shadow .3s}
 .skc:hover,.skc:focus-visible{opacity:1; transform:translateY(-2px)}
 /* the skin being worn keeps a ring in its own accent, dim or not */
 .skc[aria-pressed="true"]{box-shadow:0 0 0 2px var(--paper), 0 0 0 4px var(--sk-a1)}
-.skc-n{display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.skc-n{display:block; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
 .skc-n i{font-style:normal; color:var(--sk-a1)}
-.skc-m{display:flex; align-items:center; gap:6px; font:500 11.5px/1 var(--font-mono); color:var(--sk-a2)}
-.skc-m b{width:16px; height:6px; border-radius:3px; background:var(--sk-a1)}
-.skc-m b + b{background:var(--sk-a2); margin-right:4px}
 @media (prefers-reduced-motion: reduce){
   /* no drift: the strip scrolls by hand, and the second copy goes */
-  .skstrip{overflow-x:auto}
+  .skstrip-run{overflow-x:auto}
   .skstrip-track{animation:none; padding-inline:7vw}
   .skc[data-copy]{display:none}
 }
-@media (max-width: 640px){ .skstrip{padding-block:20px 24px} .skc{width:184px; height:64px; margin-right:12px} }
+@media (max-width: 640px){ .skstrip{padding-block:20px 24px} .skstrip h2{margin-bottom:20px} .skc{width:184px; height:48px; margin-right:12px} }
 
 /* ---------- why ---------- */
 .issues { display: flex; flex-direction: column; }
@@ -1131,8 +1132,9 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
   </section>
 
   <!-- SKIN STRIP: cards drift right to left; tapping one re-skins the site and the demo's Mac -->
-  <section class="skstrip" id="skin-strip" aria-label="Try a skin">
-    <div class="skstrip-track" id="skstrip-track"></div>
+  <section class="skstrip" id="skin-strip">
+    <div class="wrap"><h2 data-decode>Unlock premium skins.</h2></div>
+    <div class="skstrip-run"><div class="skstrip-track" id="skstrip-track"></div></div>
   </section>
 
   <!-- WHY -->
@@ -2519,7 +2521,7 @@ void main(){
   (function () {
     var track = $('#skstrip-track');
     if (!track) return;
-    var OWN = { id: 'lostty', r: 'default', bg: '#120a2a', fg: '#f3ecff', a1: '#ff3df2', a2: '#28e7ff', tex: 'grid' };
+    var OWN = { id: 'lostty', bg: '#120a2a', fg: '#f3ecff', a1: '#ff3df2', a2: '#28e7ff', tex: 'grid' };
     var list = [OWN].concat(SKINS);
     var macTex = $$('.ag-mac-body .tex');
     var KEYS = ['bg', 'fg', 'a1', 'a2'];
@@ -2533,7 +2535,7 @@ void main(){
       b.type = 'button'; b.className = 'skc'; b.setAttribute('data-id', s.id);
       KEYS.forEach(function (k) { b.style.setProperty('--sk-' + k, s[k]); });
       b.innerHTML = '<span class="tex a"></span><span class="tex b"></span>' +
-        '<span class="skc-n"><i>❯</i> ' + s.id + '</span><span class="skc-m"><b></b><b></b>' + s.r + '</span>';
+        '<span class="skc-n"><i>❯</i> ' + s.id + '</span>';
       setTex($$('.tex', b), s.tex);
       if (copy) { b.tabIndex = -1; b.setAttribute('aria-hidden', 'true'); b.setAttribute('data-copy', ''); }
       else b.setAttribute('aria-label', s === OWN ? 'Lostty’s own look' : 'Wear the ' + s.id + ' skin');
