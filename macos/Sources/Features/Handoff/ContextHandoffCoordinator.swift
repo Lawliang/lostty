@@ -299,9 +299,8 @@ final class ContextHandoffCoordinator: ObservableObject {
 }
 
 extension ContextHandoffCoordinator.Dependencies {
-    /// The app's: files under Application Support, the real clock and
-    /// main-queue scheduling. Typing, the model and notifications are
-    /// connected by `ContextHandoffWiring` (Task 7).
+    /// The app's: files under Application Support, typing into the pane's
+    /// terminal, the observer and notification bubbles.
     static var live: Self {
         Self(
             enabled: { ContextHandoffPreferences.shared.enabled },
@@ -313,11 +312,14 @@ extension ContextHandoffCoordinator.Dependencies {
                     await MainActor.run { done(reply) }
                 }
             },
-            type: { _, _ in },
-            project: { _ in "Terminal" },
+            type: { ContextHandoffWiring.type($0, $1) },
+            project: { ContextHandoffWiring.project(pwd: ContextHandoffWiring.surface($0)?.pwd) },
             model: { ClaudeUsageRuntime.shared.models[$0] },
-            notify: { _ in },
-            conversationChanging: { _ in },
+            notify: { message in
+                LosttyNotifications.shared.post(LosttyNotification(
+                    kind: .handoff(UUID()), style: .failure, title: "Handoff didn't finish", detail: message))
+            },
+            conversationChanging: { TurnObserver.shared.conversationChanging($0) },
             schedule: { delay, work in
                 DispatchQueue.main.asyncAfter(deadline: .now() + delay) { MainActor.assumeIsolated { work() } }
             })

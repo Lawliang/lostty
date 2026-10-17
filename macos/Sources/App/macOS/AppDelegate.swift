@@ -363,6 +363,9 @@ class AppDelegate: NSObject,
             observe: { pane, path in TurnObserver.shared.turnEnded(pane: pane, path: path) },
             report: { UsageLedger.shared.reported($0) })
         if LosttyChannel.current.showsMascot { TurnObserver.shared.start() }
+        // The context handoff (beta): before the restart resume's hook
+        // reinstall, which brings in the handoff's hook events.
+        ContextHandoffWiring.start()
         // Restart to Update: put back what window restoration doesn't
         // (Claude's state, Stay Awake, the window setting, hooks). Before
         // Stay Awake's crash restore, the hooks check and the Claude sync.

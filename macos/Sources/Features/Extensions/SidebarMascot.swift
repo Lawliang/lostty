@@ -37,7 +37,13 @@ struct SidebarMascot: View {
                 .accessibilityLabel(state?.title ?? "Lostty")
                 .accessibilityHint("Shows what's been done in this terminal")
                 .popover(isPresented: bubbleShown, arrowEdge: .top) {
-                    MascotBubble(content: bubbleContent, maxHeight: bubbleMaxHeight)
+                    VStack(alignment: .leading, spacing: 0) {
+                        MascotBubble(content: bubbleContent, maxHeight: bubbleMaxHeight)
+                        if let id = openPane, ContextHandoffWiring.showsRow(
+                            channel: .current, isClaude: ClaudeUsageRuntime.shared.sessions.contains(id)) {
+                            ContextHandoffBubbleRow(pane: id)
+                        }
+                    }
                 }
                 .transition(.opacity)
                 // Belt and braces: the bubble's anchor gone means it's closed.
