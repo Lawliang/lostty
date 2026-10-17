@@ -235,7 +235,7 @@ kbd, .kbd {
 a.menu-row:hover { background: var(--paper-2); }
 /* on phones "Support" moves from the bar into the menu */
 .menu-row.show-sm { display: none; }
-@media (max-width: 640px) { .menu-row.show-sm { display: flex; } }
+@media (max-width: 389px) { .menu-row.show-sm { display: flex; } }
 .menu-ic { width: 16px; height: 16px; color: var(--ink-2); }
 /* light | dark: a thumb slides under the one that's on */
 .theme-sw { position: relative; display: inline-grid; grid-template-columns: 1fr 1fr; width: 68px; height: 30px; padding: 2px; border: 1px solid var(--rule); border-radius: 999px; background: var(--paper-2); cursor: pointer; }
@@ -245,13 +245,15 @@ a.menu-row:hover { background: var(--paper-2); }
 .ts-ic svg { width: 14px; height: 14px; }
 .theme-sw[aria-checked="false"] .ts-light, .theme-sw[aria-checked="true"] .ts-dark { color: var(--ink); }
 @media (max-width: 640px) {
-  .nav-in { gap: 10px; }
-  .nav-links a.hide-sm { display: none; }
-  /* tighter, so the centred links clear the logo on narrow phones */
+  /* phones: the links sit on the right, just left of the menu button */
+  .nav-in { gap: 10px; grid-template-columns: auto minmax(0, 1fr) auto; }
+  .nav-links { justify-self: end; }
   .nav-links a { padding-inline: 6px; }
   .nav-links { gap: 2px; }
   .nav-links a[aria-current="page"]::before { content: none; }
 }
+/* narrow phones: "Support" moves from the bar into the menu */
+@media (max-width: 389px) { .nav-links a.hide-sm { display: none; } }
 /* the very narrowest phones (320px): the axolotl alone, so the links don't run into the wordmark */
 @media (max-width: 340px) {
   .nav .logo-word { display: none; }
