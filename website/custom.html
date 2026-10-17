@@ -636,8 +636,11 @@ p { margin: 0; }
   .ag-cats{order:0; width:100%}
 }
 @container (max-width:640px){
-  /* on phones the heading stops filling the column: 36px */
-  .ag-title{font-size:36px}
+  /* on phones the heading stops filling the column (36px), and goes under
+     the Mac and iPhone, centred: devices, then heading, then the lists */
+  .ag-title{font-size:36px; text-align:center; justify-self:center}
+  .ag-stage-col > .ag-stage{grid-row:1}
+  .ag-stage-col > .ag-title{grid-row:2}
   .ag-stage{padding-right:1.5%}
   .ag-cat-h{font-size:16px}
   .ag-car{--ag-row:70px}
