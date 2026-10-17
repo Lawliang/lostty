@@ -281,7 +281,11 @@ Per pane, the coordinator holds one state:
      ceiling.` and Return. Once per arming; if that turn ends without a
      handoff too, nothing more is typed.
 4. **Grace.** 3 s. Any key typed in that pane, or a new `UserPromptSubmit`,
-   cancels: back to armed; the next reminder 25k later.
+   cancels: back to armed; the next reminder 25k later. And Lostty never
+   types into a pane with keys typed since its last prompt (its prompt may
+   hold half a message): a handoff then isn't taken; the bubble says
+   "Didn't hand off: you were typing…" and the directive is queued again.
+   The same holds for the ceiling nudge.
 5. **Clear.** The coordinator queues the fresh window's text (the handoff,
    prefixed, §1) as `panes/<pane>.start`, then types `/clear` and Return
    into the pane.
@@ -370,6 +374,9 @@ Each has one job and is tested alone.
 | Two blocks in one reply | The last one outside a code fence. |
 | Saving the handoff fails | Stays armed, no clear; bubble: "Couldn't save the handoff: <reason>." |
 | User types during grace | Cancelled; re-arms 25k later. |
+| User typed (unsent) before the turn ended | Not taken; "Didn't hand off: you were typing…"; asked again at the next break. |
+| Your own `/clear` in an armed pane | The start hook reports `cleared`; disarmed; the old window's context figure doesn't arm the new one. |
+| After a handoff, the old context figure comes back | Ignored until the fresh window reports a new one. |
 | `/clear` typed, no fresh window in 15 s | Idle, failure line, no retry in this conversation. |
 | Pane closed or agent exits while pending | Idle; the saved handoff stays. |
 | Handoff over the 10k hook cap | First 7,500 characters + "read the full one at <path>". |
