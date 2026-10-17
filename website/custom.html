@@ -626,12 +626,11 @@ p { margin: 0; }
   .skstrip h2{font-size:calc(min(644.8px, 99.2cqi) / 7.276)}
 }
 /* hidden until the strip is hovered for a second or a card is tapped (.show,
-   set by the script), then it slides in from the right, and goes again 3s after the
+   set by the script), then it slides down into place from above, and goes again 3s after the
    last of either. It keeps its space, so nothing moves when it comes and goes */
 .skstrip h2{transition:opacity .5s, transform .7s cubic-bezier(.22, .8, .2, 1)}
-.skstrip:not(.show) .skstrip-head h2{opacity:0; transform:translateX(-48px)}
-.skstrip:not(.show) .skstrip-foot h2{transform:translateX(48px)}
-@media (prefers-reduced-motion: reduce){ .skstrip:not(.show) .skstrip-head h2,.skstrip:not(.show) .skstrip-foot h2{transform:none} }
+.skstrip:not(.show) .skstrip-foot h2{opacity:0; transform:translateY(-28px)}
+@media (prefers-reduced-motion: reduce){ .skstrip:not(.show) .skstrip-foot h2{transform:none} }
 /* on phones, the size of the other section headings instead */
 @container (max-width:640px){ .skstrip h2{font-size:clamp(32px, 5vw, 60px)} }
 /* room above and below for the cards' tilt */
