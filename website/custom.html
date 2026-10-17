@@ -472,19 +472,12 @@ p { margin: 0; }
 .ag-n-home{position:absolute; bottom:2.917cqw; left:50%; width:38.333cqw; height:1.667cqw; border-radius:1.25cqw; background:#ffffffcc; transform:translateX(-50%)}
 
 /* hero progress */
-/* both lists are lit until someone picks one; then the other list and its
-   device step back for one loop */
-/* one grid: the numbers, then On Mac, then On iPhone. Shrink-wrapped, so the
-   two 1fr columns both take the wider list's width; the lists and the numbers
-   are subgrids, so every row lines up across all three even when text wraps */
-.ag-cats{order:-1; display:grid; grid-template-columns:auto 14px 1fr 14px 1fr; grid-template-rows:auto auto repeat(4, auto); gap:8px 0; width:max-content; position:relative; z-index:1;
-  /* the lists keep their size and may touch the Mac; the Mac gives up width instead */
-  margin-right:-1.5em}
-.ag-cat{grid-row:2 / span 5; display:grid; grid-template-rows:subgrid; min-width:0}
-.ag-cat[data-cat="mac"]{grid-column:3}
-.ag-cat[data-cat="phone"]{grid-column:5}
-.ag-nums{grid-column:1; grid-row:3 / span 4; display:grid; grid-template-rows:subgrid; margin:0; padding:0; list-style:none}
-.ag-nums li{align-self:center; width:26px; height:26px; border-radius:50%; background:var(--magenta); color:#fff; display:grid; place-items:center; font:700 12.5px/1 var(--font-mono)}
+/* the loop's stages in one column under the On Mac / On iPhone headings (which
+   pick a device, as tapping it does). It's a vertical carousel: the current
+   stage on top, the next ones under it, dimmer the further away they are;
+   when the stage moves on, the top one slides up and out and the rest follow */
+.ag-cats{order:-1; display:flex; flex-direction:column; width:24rem; max-width:100%; position:relative; z-index:1}
+.ag-cat-tabs{display:flex; gap:28px; margin-bottom:12px}
 .ag-cat{transition:opacity .4s}
 .ag-cats[data-focus="mac"] .ag-cat[data-cat="phone"],.ag-cats[data-focus="phone"] .ag-cat[data-cat="mac"]{opacity:.38}
 .ag-cats[data-focus] .ag-cat:hover{opacity:1}
@@ -516,20 +509,28 @@ p { margin: 0; }
    front out and back in, and flips data-front while it's clear of the other */
 .ag-stage[data-front="mac"] .ag-phone{transform:translate(-7.72%, -4.49%) translateZ(-1.5em) rotateY(5deg) scale(1.0759)}
 .ag-stage[data-focus="phone"] .ag-mac::after,.ag-stage[data-focus="mac"] .ag-phone::after{opacity:.68}
-/* Kinetic Mono's axolotl, centred over both lists; it changes with the step */
-.ag-cats-mascot{grid-column:3 / -1; grid-row:1; justify-self:center; position:relative; width:64px; height:64px; margin-bottom:16px}
+/* Kinetic Mono's axolotl, centred over the list; it changes with the step */
+.ag-cats-mascot{align-self:center; position:relative; width:64px; height:64px; margin-bottom:16px}
 .ag-cats-mascot img{position:relative; z-index:1; display:block; width:64px; height:64px; object-fit:contain}
 /* the shadow it stands on */
 .ag-cats-mascot::after{content:""; position:absolute; left:50%; bottom:-5px; width:58px; height:13px; transform:translateX(-50%); border-radius:50%;
   background:radial-gradient(closest-side, var(--ag-platform), transparent)}
-/* the steps as Kinetic Mono's numbered boxes; the current one gets the magenta edge */
-.ag-steps{grid-row:2 / span 4; display:grid; grid-template-rows:subgrid; margin:0; list-style:none; padding:0}
-.ag-steps li{border:1px solid var(--rule); border-radius:4px; padding:10px 12px; font:400 14px/1.4 var(--font-mono); color:var(--ink-2); background:transparent;
-  transition:border-color .3s, color .3s, background-color .3s; min-width:0}
-.ag-steps li.ag-cur{border-color:var(--magenta); color:var(--ink); background:var(--paper)}
+/* stages are 66px tall with 10px between, four in view, the fourth fading out */
+.ag-car{--ag-row:76px; position:relative; height:calc(var(--ag-row) * 4 - 10px); overflow:hidden;
+  -webkit-mask-image:linear-gradient(#000 72%, transparent); mask-image:linear-gradient(#000 72%, transparent)}
+.ag-car-track{display:flex; flex-direction:column; gap:10px; margin:0; padding:0; list-style:none}
+.ag-car-i{height:calc(var(--ag-row) - 10px); display:grid; grid-template-columns:26px minmax(0, 1fr) auto; gap:14px; align-items:center; padding:0 12px;
+  border:1px solid var(--rule); border-radius:4px; background:var(--paper); transition:opacity .5s, border-color .4s}
+.ag-car-i[data-d="0"]{border-color:var(--magenta)}
+.ag-car-i[data-d="1"]{opacity:.55} .ag-car-i[data-d="2"]{opacity:.32} .ag-car-i[data-d="3"]{opacity:.16}
+.ag-car-i[data-d="4"],.ag-car-i[data-d="out"]{opacity:0}
+.ag-car-n{width:26px; height:26px; border-radius:50%; background:var(--magenta); color:#fff; display:grid; place-items:center; font:700 12.5px/1 var(--font-mono)}
+.ag-car-t{min-width:0}
+.ag-car-t b{display:block; font:600 15.5px/1.3 var(--font-ui); letter-spacing:-.01em; color:var(--ink)}
+.ag-car-t small{display:block; margin-top:2px; font:400 12.5px/1.4 var(--font-mono); color:var(--ink-2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.ag-car-where{font:600 11px/1 var(--font-mono); color:var(--magenta-ink); border:1px solid currentColor; border-radius:999px; padding:4px 8px; white-space:nowrap}
 
-/* narrow: Aurora's own phone layout, the steps in a row under the Mac and iPhone */
-/* narrower: the two lists go under the Mac and iPhone, still side by side */
+/* narrower: the list goes under the Mac and iPhone */
 @container (max-width:1040px){
   .ag-stage-col{grid-template-columns:minmax(0, 49.6em); gap:24px; font-size:min(13px, calc(100cqi / 50))}
   /* stacked, the iPhone comes back inside the margin, as Aurora does below 1000px */
@@ -539,13 +540,15 @@ p { margin: 0; }
   .ag-title{grid-row:1; margin-bottom:8px}
   .ag-stage-col > .ag-stage{grid-column:1; grid-row:2}
   .ag-stage-col > .ag-cats{grid-row:3}
-  .ag-cats{order:0; width:auto; margin-right:0; grid-template-columns:auto 10px 1fr 10px 1fr}
+  .ag-cats{order:0; width:100%}
 }
 @container (max-width:640px){
   .ag-stage{padding-right:1.5%}
   .ag-cat-h{font-size:16px}
-  .ag-steps li{font-size:13px; padding:8px 10px}
-  .ag-nums li{width:22px; height:22px; font-size:11.5px}
+  .ag-car{--ag-row:70px}
+  .ag-car-i{gap:10px; padding:0 10px}
+  .ag-car-t b{font-size:14.5px}
+  .ag-car-t small{font-size:11.5px}
 }
 
 /* ---------- why ---------- */
@@ -1022,25 +1025,19 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
             </div>
           </div>
         </div>
-        <div class="ag-cats" id="ag-cats" role="group" aria-label="What the animation shows, on each device">
+        <div class="ag-cats" id="ag-cats" role="group" aria-label="The loop, step by step">
           <div class="ag-cats-mascot"><img id="ag-mascot" alt="" hidden></div>
-          <ol class="ag-nums" aria-hidden="true"><li>1</li><li>2</li><li>3</li><li>4</li></ol>
-          <div class="ag-cat" data-cat="mac">
-            <button class="ag-cat-h" type="button" aria-pressed="false">On Mac</button>
-            <ol class="ag-steps">
-              <li class="ag-cur">Claude works</li>
-              <li>Stops to ask</li>
-              <li>Carries on</li>
-              <li>Ready</li>
-            </ol>
+          <div class="ag-cat-tabs">
+            <div class="ag-cat" data-cat="mac"><button class="ag-cat-h" type="button" aria-pressed="false">On Mac</button></div>
+            <div class="ag-cat" data-cat="phone"><button class="ag-cat-h" type="button" aria-pressed="false">On iPhone</button></div>
           </div>
-          <div class="ag-cat" data-cat="phone">
-            <button class="ag-cat-h" type="button" aria-pressed="false">On iPhone</button>
-            <ol class="ag-steps">
-              <li class="ag-cur">Shows it working</li>
-              <li>Puts it first</li>
-              <li>You tap Allow</li>
-              <li>Back in your pocket</li>
+          <div class="ag-car" id="ag-car">
+            <ol class="ag-car-track">
+              <li class="ag-car-i" data-d="0"><span class="ag-car-n">1</span><span class="ag-car-t"><b>Working…</b><small>Claude edits your code</small></span><span class="ag-car-where">Mac</span></li>
+              <li class="ag-car-i" data-d="1"><span class="ag-car-n">2</span><span class="ag-car-t"><b>Waiting for response</b><small>Claude stops to ask you</small></span><span class="ag-car-where">Mac → iPhone</span></li>
+              <li class="ag-car-i" data-d="2"><span class="ag-car-n">3</span><span class="ag-car-t"><b>You tap Allow</b><small>Right from your phone</small></span><span class="ag-car-where">iPhone → Mac</span></li>
+              <li class="ag-car-i" data-d="3"><span class="ag-car-n">4</span><span class="ag-car-t"><b>Running tests…</b><small>Claude picks back up</small></span><span class="ag-car-where">Mac</span></li>
+              <li class="ag-car-i" data-d="4"><span class="ag-car-n">5</span><span class="ag-car-t"><b>Ready</b><small>Phone back in your pocket</small></span><span class="ag-car-where">Mac → iPhone</span></li>
             </ol>
           </div>
         </div>
@@ -2220,7 +2217,28 @@ void main(){
       { l: 'ready', o: ['api', 'lostty', 'docs', 'dots'], p: 3 }
     ];
     const cats = $('#ag-cats');
-    const lists = $$('.ag-steps', cats).map(ol => $$('li', ol));
+    // the carousel: which stage each of the seven steps belongs to
+    const STAGE = [0, 1, 1, 2, 3, 3, 4];
+    const carTrack = $('#ag-car .ag-car-track'), carItems = $$('.ag-car-i', carTrack);
+    let carAt = 0, carAnim = null;
+    function carLay() {
+      carItems.forEach((li, k) => {
+        const d = (k - carAt + carItems.length) % carItems.length;
+        li.style.order = d; li.dataset.d = d;
+        if (d === 0) li.setAttribute('aria-current', 'step'); else li.removeAttribute('aria-current');
+      });
+    }
+    function carShow(st) {
+      if (st === carAt) return;
+      if (carAnim) { carAnim.finish(); }
+      if (RM || st !== (carAt + 1) % carItems.length) { carAt = st; carLay(); return; }
+      // the top stage slides up and out, every other one moves up a place and brightens
+      carItems.forEach(li => { const d = +li.dataset.d; li.dataset.d = d === 0 ? 'out' : d - 1; });
+      const row = carItems[0].offsetHeight + parseFloat(getComputedStyle(carTrack).rowGap || 10);
+      carAnim = carTrack.animate([{ transform: 'none' }, { transform: `translateY(${-row}px)` }], { duration: 650, easing: 'cubic-bezier(.45, 0, .2, 1)' });
+      carAnim.onfinish = () => { carAnim = null; carAt = st; carLay(); };
+    }
+    carLay();
     // the page's own axolotl pictures (the why section and footer hold them)
     const mascotImg = $('#ag-mascot');
     const MASCOT = {
@@ -2253,7 +2271,7 @@ void main(){
         const d = before.get(c) - c.offsetTop;
         if (Math.abs(d) > 1) c.animate([{ transform: `translateY(${d}px)` }, { transform: 'none' }], { duration: 700, easing: 'cubic-bezier(.22, .8, .2, 1)' });
       });
-      lists.forEach(lis => lis.forEach((li, i) => { li.classList.toggle('ag-cur', i === p.p); li.classList.toggle('ag-done', i < p.p); }));
+      carShow(STAGE[s]);
       // the Mac tells the phone it's waiting, the phone sends Allow back, the Mac says it's done
       if (s === 1 || s === 6) pulse(1); else if (s === 3) pulse(-1);
       const [mid, malt] = MASCOT[p.l], msrc = $('#' + mid);
