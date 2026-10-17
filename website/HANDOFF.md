@@ -38,7 +38,7 @@ Kinetic Mono as the base (JetBrains Mono, character-grid look, light "paper term
 - Headline (Onest 700, clamp 38–72px): "Finally, you can go touch some grass." / "With Lostty." "With Lostty." is its own block (`.h1-tail`, not a `<br>`) with a slight gap above it (`margin-top: .14em`; owner, 2026-10-16). It is capped at `max-width: 9.6em` so the first sentence always breaks after "Finally, you can go" (below ~720px the type stops at 38px and the sentence would otherwise fit on one line). "grass." (with its period) is filled with a photo of grass (`.grass`: CC0 "Green grass texture (Unsplash)" from Wikimedia Commons, 560px JPEG inlined) with a white glint that sweeps in time with the sheen. It carries Aurora Glass's sheen (a rose-to-magenta glint sweeps across every 7s; `--rose`, `--sheen-hi`).
 - Description (JetBrains Mono 16px): "A Mac-native terminal-based coding harness that supports multi-agent orchestration, designed in sync with our iPhone app" then, on its own line, "— for builders **constantly on the go**."
 - Bullets (Neon Signal's body type: Bricolage Grotesque 16px; magenta `❯` markers):
-  1. Install builds, view artifacts and simulators, & access your skills and MCPs, all remotely on your phone.
+  1. Install builds, view artifacts and simulators, & access your skills and MCPs, in one UI on your phone.
   2. Native caffeinate and auto-hotspot designed to keep your MacBook running even when closed.
   3. Supports Claude Code & Codex CLI.
 - Buttons: **Download for Mac** (magenta, laptop icon, goes to `#download`; rounds into a pill on hover). The **Read docs** button was replaced (owner, 2026-10-16) by a **GitHub** button (outlined, GitHub's mark, opens the repo in a new tab); `/` still opens docs search.
