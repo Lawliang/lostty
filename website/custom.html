@@ -927,23 +927,15 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
 .next li::before { content: counter(n) "."; color: var(--magenta-ink); font-weight: 700; }
 .next b { color: var(--ink); font-weight: 600; }
 
-/* ---------- footer ---------- */
-.foot { border-top: 1px solid var(--rule); padding-block: 48px 40px; background: var(--paper); }
-.foot-grid { display: grid; grid-template-columns: minmax(0, 1.4fr) repeat(3, minmax(0, 1fr)); gap: 32px; }
-@media (max-width: 760px) { .foot-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .foot-brand { grid-column: 1 / -1; } }
-.foot-brand p { color: var(--ink-2); margin-top: 12px; font-size: 14px; max-width: 34ch; }
-.foot h4 { margin: 0 0 10px; font-size: 13px; color: var(--ink-2); font-weight: 500; }
-.foot ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
-.foot ul a { text-decoration: none; }
-.foot ul a:hover { color: var(--magenta-ink); text-decoration: underline; }
-/* phones: compact, the three link columns side by side in smaller type */
-@media (max-width: 640px) {
-  .foot { padding-block: 28px 24px; }
-  .foot-grid { grid-template-columns: minmax(0, .9fr) minmax(0, 1.25fr) minmax(0, .85fr); gap: 20px 12px; }
-  .foot-brand p { margin-top: 8px; font-size: 13px; line-height: 1.55; max-width: none; }
-  .foot h4 { margin-bottom: 6px; font-size: 12px; }
-  .foot ul { gap: 3px; font-size: 12.5px; line-height: 1.45; }
-}
+/* ---------- footer (Aurora Glass's) ---------- */
+.foot { padding-block: 0 40px; font-family: "Onest", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+.foot-row { display: flex; flex-wrap: wrap; gap: 24px 40px; align-items: flex-start; justify-content: space-between; padding-top: 28px; border-top: 1px solid var(--rule); }
+.foot-logo { display: inline-flex; align-items: center; gap: 8px; text-decoration: none; font-weight: 700; font-size: 17px; letter-spacing: -.02em; }
+.foot-logo .ag-mascot { width: 40px; height: 40px; }
+.foot-brand p { color: var(--ink-2); font-size: 14px; line-height: 1.6; max-width: 46ch; margin-top: 8px; }
+.foot-nav { display: flex; flex-wrap: wrap; gap: 8px 22px; font-size: 14px; }
+.foot-nav a { color: var(--ink-2); text-decoration: none; }
+.foot-nav a:hover { color: var(--ink); }
 
 /* ---------- docs ---------- */
 .docs-grid { display: grid; grid-template-columns: 230px minmax(0, 1fr) 210px; gap: clamp(24px, 3vw, 48px); padding-block: 32px 80px; align-items: start; }
@@ -1584,16 +1576,22 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
   </div>
 </main>
 
+<!-- Aurora Glass's footer: a rule across the content, its axolotl and wordmark
+     with one line about the project, and a row of links -->
 <footer class="foot">
   <div class="wrap">
-    <div class="foot-grid">
+    <div class="foot-row">
       <div class="foot-brand">
-        <a class="logo" href="#top" aria-label="Lostty home"><svg viewBox="0 12 100 58" aria-hidden="true"><use href="#axo"/></svg><span class="logo-word">Lostty<span class="blink">_</span></span></a>
-        <p>Leave your desk, not your terminal. A Mac terminal and iPhone app for people who run coding agents.</p>
+        <a class="foot-logo" href="#top" aria-label="Lostty home"><span class="ag-mascot-slot" data-mascot=""></span><span>Lostty</span></a>
+        <p>Leave your desk, not your terminal. MIT licensed. Built on Ghostty by Mitchell Hashimoto and the Ghostty contributors.</p>
       </div>
-      <div><h4>Product</h4><ul><li><a href="#download">Download</a></li><li><a href="#demo">Features</a></li><li><a href="#skin-strip">Skins</a></li><li><a href="#install">Get started</a></li></ul></div>
-      <div><h4>Docs</h4><ul><li><a href="#docs">Getting Started</a></li><li><a href="#docs-phone-access">Phone Access</a></li><li><a href="#docs-skins">Skins</a></li><li><a href="#docs-manual-setup">Manual Mac setup</a></li><li><a href="#docs-build-from-source">Build from source</a></li><li><a href="#docs-contributing">Contributing</a></li></ul></div>
-      <div><h4>Project</h4><ul><li><a href="https://github.com/Lawliang/lostty" target="_blank" rel="noopener">GitHub</a></li><li><a href="https://github.com/Lawliang/lostty/blob/main/LICENSE" target="_blank" rel="noopener">MIT License</a></li><li><a href="https://ghostty.org" target="_blank" rel="noopener">Ghostty</a></li></ul></div>
+      <nav class="foot-nav" aria-label="Footer">
+        <a href="#demo">Features</a>
+        <a href="#skin-strip">Skins</a>
+        <a href="#docs">Docs</a>
+        <a href="https://github.com/Lawliang/lostty" target="_blank" rel="noopener">GitHub</a>
+        <a href="https://ghostty.org" target="_blank" rel="noopener">Ghostty</a>
+      </nav>
     </div>
   </div>
 </footer>
