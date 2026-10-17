@@ -2170,6 +2170,12 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
         best = { list: B.slice(1).map(function (b) { return { t: b.y0, z: rowsAt(b, b.y0) }; }) };
       }
       place = place.concat(best.list);
+      // narrow, the buttons never end up below where the layout put them (on
+      // some widths they moved down into the space under them: ~10px left on an
+      // iPhone SE instead of ~22px). If they would, every block goes up by
+      // whole rows, which keeps each box's fit to the rows
+      var last = place.length - 1, lift = Math.ceil((place[last].t - B[last].y0 - 0.5) / chh);
+      if (narrow && lift > 0) place.forEach(function (p) { p.t -= lift * chh; p.z = { r0: p.z.r0 - lift, r1: p.z.r1 - lift }; });
       B.forEach(function (b, i) {
         var p = place[i], d = p.t - b.y0;
         if (Math.abs(d) > 0.5) b.el.style.transform = 'translateY(' + d.toFixed(2) + 'px)';

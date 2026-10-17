@@ -61,6 +61,7 @@ Kinetic Mono as the base (JetBrains Mono, character-grid look, light "paper term
 - Boxes are measured from the letters' ink (canvas font metrics), not line boxes, so the gap is even on all sides: ~14px target (`G = 14`), snapped to cells.
 - Rows are 18px tall, so vertical gaps can only move in ~9px steps. To make top = bottom, the headline is nudged down (<1 row, `translateY`) and the later blocks are placed one shared distance `D` apart (searched 30–60px) chosen so their boxes also fit the rows. Gaps between blocks come out equal (~45px desktop).
 - At least one row of field always runs between blocks.
+- Narrow, the buttons never end up below their layout spot (owner, 2026-10-17: on an iPhone SE they were pushed ~6px down, leaving ~10px under them instead of ~22px). If the placement would move them down, every block goes up by whole rows (`lift` in `quietZone()`), keeping the row fit. Under the buttons now: 25px at 375×667, 16px at 375×553, 26px at 375×548, 22–23px on wider phones.
 - The buttons keep their place in this layout but get **no** box.
 - Known limit, explained to the owner: top/bottom can't exactly equal left/right because of the 18px rows; they land within a few px. One offered but undone fix: tweak headline font size per width so it fits rows evenly.
 
