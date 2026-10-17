@@ -957,8 +957,8 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
   /* the two tabs split the row, each centred in its half, with a divider under them */
   .setup-tabs { display: grid; grid-template-columns: 1fr 1fr; grid-column: 1 / -1; padding-bottom: 12px; border-bottom: 1px solid var(--g-hair); }
   .setup-tab { width: 100%; text-align: center; }
-  /* as much room under the tabs' divider as above the requirements' one (the row gap plus the 20px there) */
-  .setup-tabs { margin-bottom: 20px; }
+  /* the requirements' divider sits as close to the steps as the tabs' divider does (the 32px row gap, no extra) */
+  .setup-reqs { margin-top: 0; }
   .setup .setup-quick > .setup-k, .setup .setup-gh > .setup-k { display: none; }
   .setup[data-pane="quick"] .setup-gh, .setup[data-pane="cli"] .setup-quick { display: none; }
 }
