@@ -9,10 +9,12 @@ struct GuardServerTests {
         URL(fileURLWithPath: "/tmp/lostty-guard-test-\(UUID().uuidString.prefix(8))/g.sock")
     }
 
-    func send(_ line: String, to path: URL) throws -> String {
+    func send(_ line: String, to path: URL, timeout: Int = 0) throws -> String {
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
         #expect(fd >= 0)
         defer { close(fd) }
+        var tv = timeval(tv_sec: timeout, tv_usec: 0)
+        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
         var addr = sockaddr_un()
         addr.sun_family = sa_family_t(AF_UNIX)
         withUnsafeMutableBytes(of: &addr.sun_path) { raw in
@@ -178,6 +180,12 @@ struct GuardServerTests {
         #expect(Date().timeIntervalSince(start) < 1, "took \(Date().timeIntervalSince(start))s, reply \(reply)")
     }
 
+    /// Blocks the calling thread (a pool thread, in a task) until `gate` opens.
+    static func hold(started: DispatchSemaphore, until gate: DispatchSemaphore) {
+        started.signal()
+        gate.wait()
+    }
+
     /// Swift's shared thread pool can be busy (a full test run; in the app,
     /// blocking work in detached tasks): replies still go out on time.
     @Test(.timeLimit(.minutes(1))) func aBusyThreadPoolDoesNotHoldReplies() throws {
@@ -186,18 +194,25 @@ struct GuardServerTests {
         let server = GuardServer(path: path) { @MainActor _ in .allow }
         try server.start()
         defer { server.stop(); try? FileManager.default.removeItem(at: path.deletingLastPathComponent()) }
-        // Longer than the 4 s limit below, so a reply that waits for a free
-        // pool thread shows.
-        for _ in 0..<ProcessInfo.processInfo.activeProcessorCount * 2 {
-            Task.detached { usleep(5_000_000) }
+        // Hold every pool thread until the checks are done. The test itself
+        // may hold one already, so not every task may start: wait at most 2 s.
+        let width = ProcessInfo.processInfo.activeProcessorCount
+        let started = DispatchSemaphore(value: 0)
+        let gate = DispatchSemaphore(value: 0)
+        for _ in 0..<width {
+            Task.detached { Self.hold(started: started, until: gate) }
         }
-        Thread.sleep(forTimeInterval: 0.1)
+        defer { for _ in 0..<width { gate.signal() } }
+        let waitUntil = DispatchTime.now() + 2
+        var running = 0
+        while running < width, started.wait(timeout: waitUntil) == .success { running += 1 }
         let connected = Date()
         let silent = connectRaw(path)
         defer { close(silent) }
         let ok = #"{"v":1,"pane":"P","agent":"claude","tool":"Bash","input":"x","cwd":"/r","group":"leaving","why":"w"}"#
         let start = Date()
-        let reply = try send(ok, to: path)
+        // Waiting for the pool, a reply would never come: give up at 3 s.
+        let reply = try send(ok, to: path, timeout: 3)
         let took = Date().timeIntervalSince(start)
         #expect(reply.contains("allow"))
         #expect(took < 1, "took \(took)s, reply \(reply)")

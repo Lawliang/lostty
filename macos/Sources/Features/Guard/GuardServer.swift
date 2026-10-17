@@ -150,6 +150,8 @@ final class GuardServer: @unchecked Sendable {
                     self.finish(conn, .deny(0))
                     return
                 }
+                // An isolated task starts on its actor's executor (the main
+                // thread), not the pool; aBusyThreadPoolDoesNotHoldReplies pins it.
                 Task { @MainActor in
                     let reply = await handler(check)
                     connQueue.async { self.finish(conn, reply) }
