@@ -620,7 +620,7 @@ p { margin: 0; }
    this wrap is a size container too and follows the same rules */
 .skstrip-head{container-type:inline-size}
 .skstrip h2{margin:0 auto; max-width:none; text-align:center; font-size:calc(24rem / 7.276)}
-/* "Unlock skins" over the cards, "by spending tokens." under them */
+/* "Unlock skins..." over the cards, "... by spending tokens." under them */
 /* staggered: "Unlock skins" is centred in the left three quarters of the
    column, so it leans left, and "by spending tokens." in the right three
    quarters, so it leans right. Narrower (where the type grows to fill the
@@ -1151,9 +1151,9 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
 
   <!-- SKIN STRIP: cards drift right to left; tapping one re-skins the site and the demo's Mac -->
   <section class="skstrip" id="skin-strip">
-    <div class="wrap skstrip-head"><h2 data-decode>Unlock skins</h2></div>
+    <div class="wrap skstrip-head"><h2 data-decode>Unlock skins...</h2></div>
     <div class="skstrip-run"><div class="skstrip-track" id="skstrip-track"></div></div>
-    <div class="wrap skstrip-head skstrip-foot"><h2 data-decode>by spending tokens.</h2></div>
+    <div class="wrap skstrip-head skstrip-foot"><h2 data-decode>... by spending tokens.</h2></div>
   </section>
 
   <!-- WHY -->
@@ -2585,9 +2585,9 @@ void main(){
 
     // The drift: right to left at one half-track (one copy of the list) per
     // 110s. With the pointer or focus on the strip the speed eases down to
-    // zero, and off it eases back up (about half a second either way); the
+    // zero, and off it eases back up (about a second and a half either way); the
     // offset wraps by half the track, where the two copies line up.
-    var run = track.parentNode, PERIOD = 110, TAU = 0.18;
+    var run = track.parentNode, PERIOD = 110, TAU = 0.55;
     var half = 0, x = 0, v = 0, hold = 0, last = 0, raf = 0, seen = false;
     function measure() { half = track.scrollWidth / 2; }
     function frame(t) {
