@@ -1140,15 +1140,12 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
 @media (max-width: 640px) {
   .sup-row { flex-direction: column; align-items: center; }
 }
-/* each button its own colour: Endorse the accent, Share violet, Join the team teal */
-.sup-btn.sup-c2 { background: #6B3CC4; border-color: #6B3CC4; color: #fff; }
-.sup-btn.sup-c3 { background: #0B7A86; border-color: #0B7A86; color: #fff; }
+/* Endorse in the accent; Share and Join the team grey */
+.sup-btn.sup-c2, .sup-btn.sup-c3 { background: #6B6573; border-color: #6B6573; color: #fff; }
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .sup-btn.sup-c2 { background: #8A5CF6; border-color: #8A5CF6; }
-  :root:not([data-theme="light"]) .sup-btn.sup-c3 { background: #0F8A96; border-color: #0F8A96; }
+  :root:not([data-theme="light"]) .sup-btn.sup-c2, :root:not([data-theme="light"]) .sup-btn.sup-c3 { background: #4A4452; border-color: #4A4452; }
 }
-:root[data-theme="dark"] .sup-btn.sup-c2 { background: #8A5CF6; border-color: #8A5CF6; }
-:root[data-theme="dark"] .sup-btn.sup-c3 { background: #0F8A96; border-color: #0F8A96; }
+:root[data-theme="dark"] .sup-btn.sup-c2, :root[data-theme="dark"] .sup-btn.sup-c3 { background: #4A4452; border-color: #4A4452; }
 .sup-btn.sup-c2:hover, .sup-btn.sup-c2:focus-visible, .sup-btn.sup-c3:hover, .sup-btn.sup-c3:focus-visible { background: var(--ink); border-color: var(--ink); color: var(--paper); }
 /* a small inline GitHub avatar after "one developer", linking to the profile */
 .sup-nb { white-space: nowrap; } /* "developer" and the avatar stay together */
