@@ -485,13 +485,15 @@ p { margin: 0; }
 .ag-cat-h:hover{color:var(--magenta-ink)}
 .ag-cat-h[aria-pressed="true"]{color:var(--magenta-ink)}
 /* the tether: a cable from the bottom centre of the Mac to the bottom centre
-   of the iPhone, behind both, with Neon's dashed rail and a pulse that runs
-   along it when one tells the other something. The script redraws it every
+   of the iPhone, behind both, labelled "> SSH" underneath, with a pulse that
+   runs along it when one tells the other something. The script redraws it every
    frame from two anchors, so it follows the tilt and the swap slide */
 .ag-tether{position:absolute; left:0; top:0; width:100%; height:100%; overflow:visible; pointer-events:none}
 .ag-tether path{fill:none; stroke-linecap:round}
-.ag-t-cable{stroke:color-mix(in srgb, var(--ink) 22%, transparent); stroke-width:3.5}
-.ag-t-rail{stroke:color-mix(in srgb, var(--magenta) 60%, transparent); stroke-width:1.2; stroke-dasharray:2 6}
+.ag-tether{--ag-cable:color-mix(in srgb, var(--ink) 22%, transparent)}
+.ag-t-cable{stroke:var(--ag-cable); stroke-width:3.5}
+/* "> SSH" under the cable's lowest point, in the cable's colour */
+.ag-t-label{fill:var(--ag-cable); font:600 12px var(--font-mono); letter-spacing:.04em}
 .ag-t-pulse{stroke:#ff3df2; stroke-width:2.6; opacity:0}
 .ag-t-pulse.ag-t-glow{stroke-width:9; filter:url(#ag-t-bloom)}
 .ag-anchor{position:absolute; left:50%; bottom:0; width:0; height:0; pointer-events:none}
@@ -926,7 +928,7 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
       <div class="ag-stage-col">
         <h2 class="ag-title" data-decode>Swap intuitively.</h2>
         <div class="ag-stage" id="ag-stage" data-step="0" aria-label="Animated example: Claude stops for permission on the Mac, the iPhone shows it waiting on you, you tap Allow on the phone and Claude carries on." role="img">
-          <svg class="ag-tether" id="ag-tether" aria-hidden="true"><defs><filter id="ag-t-bloom" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="3"/></filter></defs><path class="ag-t-cable"/><path class="ag-t-rail"/><path class="ag-t-pulse ag-t-glow"/><path class="ag-t-pulse"/></svg>
+          <svg class="ag-tether" id="ag-tether" aria-hidden="true"><defs><filter id="ag-t-bloom" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="3"/></filter></defs><path class="ag-t-cable"/><text class="ag-t-label" text-anchor="middle">&gt; SSH</text><path class="ag-t-pulse ag-t-glow"/><path class="ag-t-pulse"/></svg>
           <div class="ag-rig" id="ag-rig">
             <div class="ag-halo"></div>
             <div class="ag-mac">
@@ -2105,7 +2107,7 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
       }
       if (!RM) requestAnimationFrame(frame);
     }
-    const tSvg = $('#ag-tether'), tPaths = $$('path', tSvg), tPulses = $$('.ag-t-pulse', tSvg);
+    const tSvg = $('#ag-tether'), tPaths = $$('path', tSvg), tPulses = $$('.ag-t-pulse', tSvg), tLabel = $('.ag-t-label', tSvg);
     const tA = $('.ag-mac .ag-anchor'), tB = $('.ag-phone .ag-anchor');
     function tether() {
       const o = tSvg.getBoundingClientRect(), a = tA.getBoundingClientRect(), b = tB.getBoundingClientRect();
@@ -2115,6 +2117,16 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
       const dx = Math.abs(x2 - x1), drop = Math.max(18, dx * .22), sag = Math.max(24, dx * .3), yd = y1 + drop;
       const d = `M${x1.toFixed(1)} ${y1.toFixed(1)} V${yd.toFixed(1)} C${x1.toFixed(1)} ${(yd + sag * 1.1).toFixed(1)} ${x2.toFixed(1)} ${(Math.max(yd, y2) + sag * .8).toFixed(1)} ${x2.toFixed(1)} ${y2.toFixed(1)}`;
       tPaths.forEach(p => p.setAttribute('d', d));
+      // the label sits centred under the lowest point of the curve
+      const c = [x1, yd + sag * 1.1, x2, Math.max(yd, y2) + sag * .8];
+      let lx = x1, ly = yd;
+      for (let n = 1; n < 24; n++) {
+        const t = n / 24, u = 1 - t;
+        const x = u * u * u * x1 + 3 * u * u * t * c[0] + 3 * u * t * t * c[2] + t * t * t * x2;
+        const y = u * u * u * yd + 3 * u * u * t * c[1] + 3 * u * t * t * c[3] + t * t * t * y2;
+        if (y > ly) { ly = y; lx = x; }
+      }
+      tLabel.setAttribute('x', lx.toFixed(1)); tLabel.setAttribute('y', (ly + 20).toFixed(1));
     }
     // a pulse runs Mac to iPhone (dir 1) or back (dir -1)
     function pulse(dir) {
