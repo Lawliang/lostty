@@ -928,6 +928,14 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
 .foot ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
 .foot ul a { text-decoration: none; }
 .foot ul a:hover { color: var(--magenta-ink); text-decoration: underline; }
+/* phones: compact, the three link columns side by side in smaller type */
+@media (max-width: 640px) {
+  .foot { padding-block: 28px 24px; }
+  .foot-grid { grid-template-columns: minmax(0, .9fr) minmax(0, 1.25fr) minmax(0, .85fr); gap: 20px 12px; }
+  .foot-brand p { margin-top: 8px; font-size: 13px; line-height: 1.55; max-width: none; }
+  .foot h4 { margin-bottom: 6px; font-size: 12px; }
+  .foot ul { gap: 3px; font-size: 12.5px; line-height: 1.45; }
+}
 
 /* ---------- docs ---------- */
 .docs-grid { display: grid; grid-template-columns: 230px minmax(0, 1fr) 210px; gap: clamp(24px, 3vw, 48px); padding-block: 32px 80px; align-items: start; }
