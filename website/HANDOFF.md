@@ -39,7 +39,7 @@ Kinetic Mono as the base (JetBrains Mono, character-grid look, light "paper term
 - Description (JetBrains Mono 16px): "A Mac-native terminal-based coding harness that supports multi-agent orchestration, designed in sync with our iPhone app" then, on its own line, "— for builders **constantly on the go**."
 - Bullets (Neon Signal's body type: Bricolage Grotesque 16px; magenta `❯` markers):
   1. Install builds, view artifacts and simulators, & access your skills and MCPs, in one UI on your phone.
-  2. Native caffeinate and auto-hotspot designed to keep your MacBook running even when closed.
+  2. Tap into caffeinate & auto-hotspot features designed to keep your MacBook running even when closed.
   3. Supports Claude Code & Codex CLI.
 - Buttons: **Download for Mac** (magenta, laptop icon, goes to `#download`; rounds into a pill on hover). The **Read docs** button was replaced (owner, 2026-10-16) by a **GitHub** button (outlined, GitHub's mark, opens the repo in a new tab); `/` still opens docs search.
 - Removed: the `~ ❯ open -a Lostty` line, the mouse hint, the requirements line.
