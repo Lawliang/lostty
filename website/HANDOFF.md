@@ -41,7 +41,7 @@ Kinetic Mono as the base (JetBrains Mono, character-grid look, light "paper term
   1. Install builds, view artifacts and simulators, & access your skills and MCPs, all remotely on your phone.
   2. Native caffeinate and auto-hotspot designed to keep your MacBook running even when closed.
   3. Supports Claude Code & Codex CLI.
-- Button: **Download for Mac** (magenta, laptop icon, goes to `#download`; rounds into a pill on hover). The **Read docs** button was removed (owner, 2026-10-16); `/` still opens docs search.
+- Buttons: **Download for Mac** (magenta, laptop icon, goes to `#download`; rounds into a pill on hover). The **Read docs** button was replaced (owner, 2026-10-16) by a **GitHub** button (outlined, GitHub's mark, opens the repo in a new tab); `/` still opens docs search.
 - Removed: the `~ ❯ open -a Lostty` line, the mouse hint, the requirements line.
 
 **The dark boxes in the field ("quiet zones")** — the subtle part. Code: `hug()`, `lineBoxes()`, `quietZone()`, `inQuiet()` in the field script.
