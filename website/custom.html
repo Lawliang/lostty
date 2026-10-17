@@ -909,6 +909,13 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
   background: linear-gradient(150deg, var(--g-hair-hi), var(--g-hair) 32%, var(--g-hair) 68%, var(--g-hair-tint));
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; }
 .inst-card { padding: clamp(24px, 4vw, 52px); }
+/* Aurora's type in the card: Onest for the text and buttons (600 15px, 13px
+   corners); the terminal and file names stay in mono */
+.inst-card { font-family: "Onest", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+.inst-card .btn { font: 600 15px/1 "Onest", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; padding: 15px 20px; border-radius: 13px; }
+.inst-card .btn.soon { border-radius: 13px; }
+.inst-card .setup-k { font-family: inherit; font-size: 12.5px; }
+.inst-card .gf-steps code { font-family: var(--font-mono); }
 /* Aurora's "Set it up once" grid, split evenly (Aurora's is 5/7, but its
    heading size needs half the card for "Pair devices with" to fit a line):
    quick setup on the left, the GitHub flow on the right, stacked under 1000px */
