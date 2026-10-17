@@ -413,6 +413,8 @@ p { margin: 0; }
    with the section's edge; Aurora's Mac and iPhone sit on the right, the iPhone
    ending at the right edge. The type scales with the width (70em across) */
 .ag-demo .wrap{position:relative; z-index:1; container-type:inline-size}
+/* phones: more room from the section's top (under the strip's title) to the devices */
+@media (max-width: 640px){ .ag-demo{padding-top:calc(var(--strip-title-h, 0px) + 76px)} }
 .ag-stage-col{display:grid; grid-template-columns:minmax(max-content, 1fr) minmax(0, 49.6em); gap:0 1.5em; align-items:center;
   min-width:0; font-size:clamp(6px, calc(100cqi / 70), 13px)}
 /* the section's heading sits over the lists; the devices span both rows */
@@ -639,7 +641,7 @@ p { margin: 0; }
   /* on phones the heading stops filling the column (36px), and goes under
      the Mac and iPhone, centred: devices, then heading, then the lists */
   /* more room above it (from the devices) than below it (to the lists) */
-  .ag-title{font-size:36px; text-align:center; justify-self:center; margin:40px 0 12px}
+  .ag-title{font-size:36px; text-align:center; justify-self:center; margin:64px 0 12px}
   .ag-stage-col{row-gap:8px}
   .ag-stage-col > .ag-stage{grid-row:1}
   .ag-stage-col > .ag-title{grid-row:2}
