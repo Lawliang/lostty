@@ -376,7 +376,8 @@ p { margin: 0; }
    screen together. svh is the screen with the browser's bars showing; a
    screen too short for the copy just lets it run on */
 :root { --strip-run-h: 108px; }
-@media (max-width: 640px) { :root { --strip-run-h: 100px; } }
+/* phones have no skin strip, so the hero fills the whole first screen */
+@media (max-width: 640px) { :root { --strip-run-h: 0px; } }
 @media (max-width: 899px) {
   .hero-in { height: auto; align-items: flex-end; padding-block: 16px;
     min-height: calc(100vh - var(--nav-h) - var(--strip-run-h));
@@ -395,14 +396,6 @@ p { margin: 0; }
   /* both buttons on one row */
   .hero-cta { gap: 10px; }
   .hero-cta .btn { padding-inline: 14px; }
-}
-/* a phone's screen with Safari's bars showing (~660px tall): tighter still,
-   so the copy fits above the cards */
-@media (max-width: 899px) and (max-height: 760px) {
-  .hero-in { padding-block: 10px; }
-  .hero-copy { --hero-gap: 18px; }
-  .hero h1 { font-size: 34px; }
-  .hero-points { font-size: 14.5px; line-height: 1.5; gap: 2px; }
 }
 
 /* ---------- spinners and traces (skins, why) ---------- */
@@ -759,7 +752,9 @@ p { margin: 0; }
   .skstrip-track{transform:none !important; padding-inline:7vw}
   .skc[data-copy]{display:none}
 }
-@media (max-width: 640px){ .skstrip-head h2{margin-bottom:12px} .skstrip-foot h2{margin:0} .skc{width:184px; height:68px; margin-right:12px} }
+/* phones don't get the strip at all (owner, 2026-10-17); its title and glow
+   room measure 0 with it gone */
+@media (max-width: 640px){ .skstrip{display:none} }
 
 /* ---------- why ---------- */
 .issues { display: flex; flex-direction: column; }
@@ -1251,7 +1246,7 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
       <div class="hero-copy" id="hero-copy">
         <h1>Finally, you can go touch some <span class="grass">grass.</span><span class="h1-tail">With Lostty<span class="h1-blink" aria-hidden="true">_</span></span></h1>
         <div class="lede">
-          <p>Lostty is a fast, feature-rich terminal emulator for the agentic era, supporting multi-agent orchestration and remote-control, designed to be synced with our iOS app.</p>
+          <p>Lostty is a fast, customizable terminal emulator, supporting multi-agent orchestration and remote-control natively, designed to be used with your iPhone.</p>
           <ul class="hero-points">
             <li><span class="pt-mark" aria-hidden="true">❯</span><span>Install builds, view artifacts and simulators, &amp; access your skills and MCPs, all in one UI on the phone.</span></li>
             <li><span class="pt-mark" aria-hidden="true">❯</span><span>Tap into caffeinate &amp; auto-hotspot features designed to keep your MacBook running even when closed.</span></li>
@@ -1979,8 +1974,10 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
       var h1 = copy && copy.querySelector('h1');
       var room = h1 ? h1.getBoundingClientRect().top - hero.getBoundingClientRect().top : 0;
       if (!(room > 80)) room = Math.min(290, H) + 6;
-      var rh = Math.min(270, room - 20);
-      return { x: 8, y: (room - rh) / 2, w: W - 16, h: rh };
+      // the copy comes first: when the room is short the art keeps at least
+      // 200px and runs down behind the headline, which sits on top of it
+      var rh = Math.min(270, Math.max(200, room - 20));
+      return { x: 8, y: Math.max(10, (room - rh) / 2), w: W - 16, h: rh };
     }
     function buildMasks() {
       mcv.width = cols; mcv.height = rows;
