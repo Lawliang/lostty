@@ -5,7 +5,7 @@
 // custom.html is a fragment (the artifact host adds the document skeleton),
 // so this wraps it in a real document, retitles it and drops the
 // artifact-only meta. It also writes a favicon from the page's axolotl.
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -42,4 +42,6 @@ const favicon =
 mkdirSync(out, { recursive: true });
 writeFileSync(join(out, "index.html"), head + page);
 writeFileSync(join(out, "favicon.svg"), favicon);
-console.log(`built ${join(out, "index.html")} (${(head + page).length} bytes) and favicon.svg`);
+// the Endorse popup's Stripe Checkout route (Pages runs _worker.js in front of the files)
+copyFileSync(join(here, "worker.js"), join(out, "_worker.js"));
+console.log(`built ${join(out, "index.html")} (${(head + page).length} bytes), favicon.svg and _worker.js`);

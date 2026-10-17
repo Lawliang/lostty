@@ -1137,6 +1137,28 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
 .sup-nb { white-space: nowrap; } /* "developer" and the avatar stay together */
 .sup-me { display: inline-block; vertical-align: -.32em; margin-left: .3em; border-radius: 50%; line-height: 0; }
 .sup-me img { width: 1.4em; height: 1.4em; border-radius: 50%; box-shadow: 0 0 0 2px var(--paper), 0 0 0 3px var(--g-hair, var(--rule)); }
+/* the Endorse popup: pick an amount (or type one), then on to Stripe Checkout */
+.endorse { width: min(440px, calc(100vw - 32px)); padding: 0; border: 1px solid var(--rule); border-radius: 22px; background: var(--paper); color: var(--ink);
+  box-shadow: 0 40px 80px -30px rgba(0, 0, 0, .45); font-family: "Onest", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+.endorse::backdrop { background: rgba(14, 11, 18, .45); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }
+.endorse-in { position: relative; padding: 34px 28px 24px; text-align: center; }
+.endorse h2 { font-size: 26px; line-height: 1.15; letter-spacing: -.03em; max-width: none; margin: 0 auto; }
+.endorse-sub { margin-top: 8px; font-size: 14.5px; color: var(--ink-2); }
+.endorse-amts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 22px; }
+.endorse-amt { padding: 13px 0; border: 1px solid var(--rule); border-radius: 12px; background: transparent; font: 600 16px/1 var(--font-mono); cursor: pointer; transition: border-color .15s, background-color .15s, color .15s; }
+.endorse-amt:hover { border-color: var(--ink-2); }
+.endorse-amt[aria-checked="true"] { border-color: var(--magenta); background: color-mix(in srgb, var(--magenta) 12%, transparent); color: var(--magenta-ink); }
+.endorse-other { display: flex; align-items: center; gap: 6px; margin-top: 8px; padding: 0 14px; border: 1px solid var(--rule); border-radius: 12px; font: 600 16px/1 var(--font-mono); color: var(--ink-2); cursor: text; }
+.endorse-other:focus-within { border-color: var(--magenta); }
+.endorse-other input { flex: 1; min-width: 0; padding: 13px 0; border: 0; background: transparent; font: inherit; color: var(--ink); outline: none; -moz-appearance: textfield; }
+.endorse-other input::-webkit-inner-spin-button, .endorse-other input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.endorse-err { min-height: 1.5em; margin-top: 10px; font-size: 13.5px; color: var(--red); }
+.endorse-go { width: 100%; justify-content: center; }
+.endorse-go:disabled { opacity: .7; cursor: progress; }
+.endorse-fine { margin-top: 12px; font-size: 12.5px; color: var(--ink-2); }
+.endorse-x { position: absolute; top: 12px; right: 12px; width: 32px; height: 32px; display: grid; place-items: center; border: 0; border-radius: 8px; background: transparent; color: var(--ink-2); cursor: pointer; }
+.endorse-x:hover { background: var(--paper-2); color: var(--ink); }
+.endorse-x svg { width: 16px; height: 16px; }
 
 /* ---------- download ---------- */
 .dl .sec-head { margin-bottom: 40px; }
@@ -1507,8 +1529,8 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
         <p class="sup-lede">Lostty is a small, independent project — maintained by one <span class="sup-nb">developer<a class="sup-me" href="https://github.com/Lawliang" target="_blank" rel="noopener" aria-label="Law Liang on GitHub"><img src="data:image/jpeg;base64,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" alt="" width="48" height="48"></a></span><br>It's free, open source and MIT licensed</p>
         <div class="sup-cta">
           <div class="sup-row" id="sup-row">
-            <!-- the Stripe Checkout link goes in data-checkout; until then this one does nothing -->
-            <a class="btn primary sup-btn" href="#support" data-checkout="" data-note="Thank you, truly."><svg class="btn-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z" fill="currentColor"/></svg>Endorse Lostty</a>
+            <!-- opens the amount popup (#endorse), which goes on to Stripe Checkout -->
+            <a class="btn primary sup-btn" href="#support" data-endorse aria-haspopup="dialog"><svg class="btn-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z" fill="currentColor"/></svg>Endorse Lostty</a>
           </div>
           <p class="sup-note">Thank you, truly.</p>
         </div>
@@ -1527,6 +1549,24 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
       </div>
     </div>
   </section>
+  <!-- the Endorse popup: how much, then on to Stripe Checkout -->
+  <dialog class="endorse" id="endorse" aria-labelledby="endorse-t">
+    <form class="endorse-in" id="endorse-form" novalidate>
+      <button class="endorse-x" type="button" aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+      <h2 id="endorse-t">How much would you like to give?</h2>
+      <p class="endorse-sub">A one-time endorsement. Any amount helps.</p>
+      <div class="endorse-amts" role="radiogroup" aria-label="Amount">
+        <button class="endorse-amt" type="button" role="radio" aria-checked="false" data-amt="5">$5</button>
+        <button class="endorse-amt" type="button" role="radio" aria-checked="true" data-amt="10" autofocus>$10</button>
+        <button class="endorse-amt" type="button" role="radio" aria-checked="false" data-amt="25">$25</button>
+        <button class="endorse-amt" type="button" role="radio" aria-checked="false" data-amt="50">$50</button>
+      </div>
+      <label class="endorse-other">$<input id="endorse-other" type="number" inputmode="decimal" min="1" max="5000" step="0.01" placeholder="Other amount" aria-label="Other amount in US dollars"></label>
+      <p class="endorse-err" id="endorse-err" role="alert"></p>
+      <button class="btn primary sup-btn endorse-go" id="endorse-go" type="submit">Continue to checkout · $10</button>
+      <p class="endorse-fine">Secure checkout by Stripe.</p>
+    </form>
+  </dialog>
 </main>
 
 <!-- DOCS -->
@@ -3063,12 +3103,44 @@ void main(){
     else showHome(h === 'top' ? null : h);
   }
   window.addEventListener('hashchange', function () { route(); });
-  // the Stripe button does nothing until it has a Checkout link (data-checkout)
-  $$('[data-checkout]').forEach(function (a) {
-    var url = a.getAttribute('data-checkout');
-    if (url) { a.href = url; a.target = '_blank'; a.rel = 'noopener'; }
-    else a.addEventListener('click', function (e) { e.preventDefault(); });
-  });
+  // the Endorse button asks how much in a popup, then goes on to a Stripe
+  // Checkout for that amount, opened by the site's /api/endorse (website/worker.js)
+  var endorse = $('#endorse');
+  if (endorse && endorse.showModal) {
+    var amts = $$('.endorse-amt', endorse), other = $('#endorse-other'), go = $('#endorse-go'), err = $('#endorse-err'), pick = 10;
+    var amount = function () { return other.value ? Number(other.value) : pick; };
+    var syncEndorse = function () {
+      var a = amount();
+      amts.forEach(function (b) { b.setAttribute('aria-checked', String(!other.value && Number(b.getAttribute('data-amt')) === pick)); });
+      go.disabled = false;
+      go.textContent = 'Continue to checkout' + (a >= 1 ? ' · $' + (a % 1 ? a.toFixed(2) : a) : '');
+      err.textContent = '';
+    };
+    amts.forEach(function (b) { b.addEventListener('click', function () { pick = Number(b.getAttribute('data-amt')); other.value = ''; syncEndorse(); }); });
+    other.addEventListener('input', syncEndorse);
+    $$('[data-endorse]').forEach(function (a) { a.addEventListener('click', function (e) { e.preventDefault(); syncEndorse(); endorse.showModal(); }); });
+    $('.endorse-x', endorse).addEventListener('click', function () { endorse.close(); });
+    // a click on the backdrop closes it too
+    endorse.addEventListener('click', function (e) { if (e.target === endorse) endorse.close(); });
+    $('#endorse-form').addEventListener('submit', function (e) {
+      e.preventDefault();
+      var cents = Math.round(amount() * 100);
+      if (!(cents >= 100 && cents <= 500000)) { err.textContent = 'Pick an amount from $1 to $5,000.'; return; }
+      go.disabled = true; go.textContent = 'Opening checkout…';
+      fetch('/api/endorse', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: cents }) })
+        .then(function (r) { return r.ok ? r.json() : Promise.reject(); })
+        .then(function (d) { if (!d || !d.url) throw new Error('no checkout'); location.href = d.url; })
+        .catch(function () { syncEndorse(); err.textContent = 'Checkout didn’t open. Please try again in a moment.'; });
+    });
+    // back from Stripe (the page may come back from the back-forward cache)
+    addEventListener('pageshow', function () { syncEndorse(); });
+    // Stripe sends people back with ?endorsed=1 once they've paid
+    if (/[?&]endorsed=1\b/.test(location.search)) {
+      var note = $('.sup-note');
+      if (note) note.textContent = 'Your endorsement came through. Thank you, truly.';
+      history.replaceState(null, '', location.pathname + location.hash);
+    }
+  }
   route();
 
   /* ---------------- search palette ---------------- */
