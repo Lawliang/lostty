@@ -461,9 +461,11 @@ p { margin: 0; }
 .ag-stage-col{display:grid; grid-template-columns:minmax(max-content, 1fr) minmax(0, 49.6em); gap:0 1.5em; align-items:center;
   min-width:0; font-size:clamp(6px, calc(100cqi / 70), 13px)}
 /* the section's heading sits over the lists; the devices span both rows */
-/* sized so "Swap intuitively." is exactly as wide as the stage list under it:
-   the text measures 7.276em in Onest 700 at this tracking, the list 24rem */
-.ag-title{grid-column:1; grid-row:1; align-self:end; margin-bottom:56px; font-size:calc(24rem / 7.276)}
+/* sized so its wider line, "between devices.", is exactly as wide as the stage
+   list under it: the text measures 7.766em in Onest 700 at this tracking, the
+   list 24rem */
+.ag-title{grid-column:1; grid-row:1; align-self:end; margin-bottom:56px; font-size:calc(24rem / 7.766)}
+.ag-title > span{display:block}
 .ag-stage-col > .ag-stage{grid-column:2; grid-row:1 / span 2}
 .ag-stage-col > .ag-cats{grid-column:1; grid-row:2; align-self:start}
 /* Aurora's moving glow, drawn see-through over the paper and faded out at the
@@ -614,7 +616,9 @@ p { margin: 0; }
    stage on top, the next ones under it, dimmer the further away they are;
    when the stage moves on, the top one slides up and out and the rest follow */
 .ag-cats{order:-1; display:flex; flex-direction:column; width:24rem; max-width:100%; position:relative; z-index:1}
-.ag-cat-tabs{display:flex; align-items:flex-end; gap:28px; margin-bottom:12px}
+/* On Mac at the left end, On iPhone at the right, the mascot centred between */
+.ag-cat-tabs{display:grid; grid-template-columns:1fr auto 1fr; align-items:end; gap:28px; margin-bottom:12px}
+.ag-cat[data-cat="phone"]{justify-self:end}
 .ag-cat{transition:opacity .4s}
 .ag-cats[data-focus="mac"] .ag-cat[data-cat="phone"],.ag-cats[data-focus="phone"] .ag-cat[data-cat="mac"]{opacity:.38}
 .ag-cats[data-focus] .ag-cat:hover{opacity:1}
@@ -644,8 +648,8 @@ p { margin: 0; }
    front out and back in, and flips data-front while it's clear of the other */
 .ag-stage[data-front="mac"] .ag-phone{transform:translate(-7.72%, -4.49%) translateZ(-1.5em) rotateY(5deg) scale(1.0759)}
 .ag-stage[data-focus="phone"] .ag-mac::after,.ag-stage[data-focus="mac"] .ag-phone::after{opacity:.68}
-/* Kinetic Mono's axolotl, at the right end of the On Mac / On iPhone row; it changes with the step */
-.ag-cats-mascot{margin-left:auto; position:relative; width:64px; height:64px; margin-bottom:2px}
+/* Kinetic Mono's axolotl, in the middle of the On Mac / On iPhone row; it changes with the step */
+.ag-cats-mascot{position:relative; width:64px; height:64px; margin-bottom:2px}
 .ag-cats-mascot img{position:relative; z-index:1; display:block; width:64px; height:64px; object-fit:contain}
 /* the shadow it stands on */
 .ag-cats-mascot::after{content:""; position:absolute; left:50%; bottom:-5px; width:58px; height:13px; transform:translateX(-50%); border-radius:50%;
@@ -674,7 +678,7 @@ p { margin: 0; }
   .ag-stage[data-front="mac"] .ag-phone{transform:translate(-8.46%, -4.49%) translateZ(-1.5em) rotateY(5deg) scale(1.0759)}
   /* stacked: heading, then the devices, then the lists */
   /* stacked, the list runs the column's width: min(49.6em at 13px, 99.2cqi) */
-  .ag-title{grid-row:1; margin-bottom:24px; font-size:calc(min(644.8px, 99.2cqi) / 7.276)}
+  .ag-title{grid-row:1; margin-bottom:24px; font-size:calc(min(644.8px, 99.2cqi) / 7.766)}
   .ag-stage-col > .ag-stage{grid-column:1; grid-row:2}
   .ag-stage-col > .ag-cats{grid-row:3}
   .ag-cats{order:0; width:100%}
@@ -1274,7 +1278,7 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
     <div class="ag-aurora-fallback" id="ag-aurora-fallback" aria-hidden="true"></div>
     <div class="wrap">
       <div class="ag-stage-col">
-        <h2 class="ag-title" data-decode>Swap intuitively.</h2>
+        <h2 class="ag-title" data-decode><span>Swap intuitively.</span> <span>between devices.</span></h2>
         <div class="ag-stage" id="ag-stage" data-step="0" aria-label="Animated example: Claude stops for permission on the Mac, the iPhone shows it waiting on you, you tap Allow on the phone and Claude carries on." role="img">
           <svg class="ag-tether" id="ag-tether" aria-hidden="true"><defs><filter id="ag-t-bloom" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="3"/></filter></defs><path class="ag-t-cable"/><path class="ag-t-pulse ag-t-glow"/><path class="ag-t-pulse"/></svg>
           <div class="ag-rig" id="ag-rig">
@@ -1378,8 +1382,8 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
         <div class="ag-cats" id="ag-cats" role="group" aria-label="The loop, step by step">
           <div class="ag-cat-tabs">
             <div class="ag-cat" data-cat="mac"><button class="ag-cat-h" type="button" aria-pressed="false">On Mac</button></div>
-            <div class="ag-cat" data-cat="phone"><button class="ag-cat-h" type="button" aria-pressed="false">On iPhone</button></div>
             <div class="ag-cats-mascot"><img id="ag-mascot" alt="" hidden></div>
+            <div class="ag-cat" data-cat="phone"><button class="ag-cat-h" type="button" aria-pressed="false">On iPhone</button></div>
           </div>
           <div class="ag-car" id="ag-car">
             <ol class="ag-car-track">
@@ -2949,6 +2953,13 @@ void main(){
     if (reduce || !('IntersectionObserver' in window)) return;
     var GL = '!<>-_\\/[]{}=+*^?#%$01';
     function decode(h) {
+      // scrambled across the heading's text nodes, so spans inside it survive
+      var nodes = [], w = document.createTreeWalker(h, NodeFilter.SHOW_TEXT), t;
+      while ((t = w.nextNode())) nodes.push(t);
+      function put(str) {
+        var at = 0;
+        nodes.forEach(function (n) { var l = n.nodeValue.length; n.nodeValue = str.slice(at, at + l); at += l; });
+      }
       var orig = h.textContent, len = orig.length, start = performance.now(), D = 260 + len * 14;
       h.setAttribute('aria-label', orig);
       function step(now) {
@@ -2959,8 +2970,8 @@ void main(){
           if (i >= head - 6 && i < head && ch !== ' ') out += GL.charAt((Math.random() * GL.length) | 0);
           else out += ch;
         }
-        h.textContent = out;
-        if (p < 1) requestAnimationFrame(step); else { h.textContent = orig; h.removeAttribute('aria-label'); }
+        put(out);
+        if (p < 1) requestAnimationFrame(step); else { put(orig); h.removeAttribute('aria-label'); }
       }
       requestAnimationFrame(step);
     }
