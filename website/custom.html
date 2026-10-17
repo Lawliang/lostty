@@ -362,8 +362,8 @@ p { margin: 0; }
   font-family: var(--font-ui); line-height: 1.6;
   /* closer to the hero than other sections */
   padding-top: clamp(64px, 7vw, 104px);
-  /* and close to the skin strip under it: the stage list's faded tail already leaves room */
-  padding-bottom: clamp(8px, 2vw, 24px);
+  /* and the same room under it, above the skin strip */
+  padding-bottom: clamp(64px, 7vw, 104px);
 }
 .ag-mascot{display:block; overflow:visible}
 .ag-mascot .ag-gl{transform-origin:24px 40px}
@@ -614,7 +614,7 @@ p { margin: 0; }
    on the strip. The track holds the list twice and moves by half its width,
    so it wraps without a seam (each card carries its gap as margin, so the
    halves are exactly equal) */
-.skstrip{position:relative; padding-block:26px 30px; border-top:0}
+.skstrip{position:relative; padding-block:0; border-top:0}
 .skstrip + .sec{border-top:0}
 /* the heading is the same size as the demo's "Swap intuitively." (.ag-title):
    this wrap is a size container too and follows the same rules */
@@ -644,7 +644,7 @@ p { margin: 0; }
   .skstrip-track{animation:none; padding-inline:7vw}
   .skc[data-copy]{display:none}
 }
-@media (max-width: 640px){ .skstrip{padding-block:20px 24px} .skstrip-head h2{margin-bottom:20px} .skstrip-foot h2{margin:20px auto 0} .skc{width:184px; height:48px; margin-right:12px} }
+@media (max-width: 640px){ .skstrip-head h2{margin-bottom:20px} .skstrip-foot h2{margin:20px auto 0} .skc{width:184px; height:48px; margin-right:12px} }
 
 /* ---------- why ---------- */
 .issues { display: flex; flex-direction: column; }
