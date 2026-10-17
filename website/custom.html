@@ -934,7 +934,7 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
 /* the system requirements: their own row under both columns, centred, with
    Aurora's .reqs pairs side by side */
 .setup-reqs { grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; gap: 12px; padding-top: 8px; text-align: center; }
-.setup-reqs h3 { font: 600 17px/1.3 inherit; font-family: inherit; letter-spacing: -.01em; }
+.setup-reqs .setup-k { margin-bottom: 2px; }
 .reqs { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 10px 36px; }
 .reqs li { display: flex; gap: 12px; align-items: baseline; font-size: 15px; color: var(--ink-2); }
 .reqs li b { color: var(--ink); font-weight: 600; min-width: 4.5em; }
@@ -1353,7 +1353,7 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
             <div><a class="btn btn-ghost glass" href="#docs-build-from-source">Full setup guide</a></div>
           </div>
           <div class="setup-reqs">
-            <h3>System Requirements</h3>
+            <h3 class="setup-k">System Requirements</h3>
             <ul class="reqs">
               <li><b>Mac</b> macOS 14 or later</li>
               <li><b>iPhone</b> iOS 17 or later</li>
