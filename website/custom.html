@@ -620,11 +620,10 @@ p { margin: 0; }
    this wrap is a size container too and follows the same rules */
 .skstrip-head{container-type:inline-size}
 .skstrip h2{margin:0 auto; max-width:none; text-align:center; font-size:calc(24rem / 7.276)}
-/* "Unlock new skins..." over the cards, "...by spending tokens." under them */
-/* staggered: "Unlock new skins..." starts the same distance in from the
-   column's left edge as "...by spending tokens." ends from its right edge
-   (--sk-inset, a share of the column). Narrower (where the type grows to fill
-   the column, as "Swap intuitively." does) they sit flush left and flush right */
+/* one title, "Unlock skins by spending tokens.", under the cards. It leans
+   right: it ends --sk-inset (a share of the column) in from the right edge;
+   narrower (where the type grows to fill the column, as "Swap intuitively."
+   does) it sits flush right */
 .skstrip-head{--sk-inset:10cqi}
 .skstrip-head h2{margin:0 0 10px; text-align:left; padding-left:var(--sk-inset)}
 .skstrip-foot h2{margin:10px 0 0; text-align:right; padding-left:0; padding-right:var(--sk-inset)}
@@ -633,9 +632,8 @@ p { margin: 0; }
   .skstrip-head h2,.skstrip-foot h2{padding-inline:0}
 }
 /* hidden until the strip is hovered or a card is tapped (.show, set by the
-   script), then they slide in, the top one from the left and the bottom one
-   from the right, and go again 8s after the last of either. They keep their
-   space, so nothing moves when they come and go */
+   script), then it slides in from the right, and goes again 8s after the
+   last of either. It keeps its space, so nothing moves when it comes and goes */
 .skstrip h2{transition:opacity .5s, transform .7s cubic-bezier(.22, .8, .2, 1)}
 .skstrip:not(.show) .skstrip-head h2{opacity:0; transform:translateX(-48px)}
 .skstrip:not(.show) .skstrip-foot h2{transform:translateX(48px)}
@@ -1053,9 +1051,8 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
 
   <!-- SKIN STRIP: cards drift right to left; tapping one re-skins the site and the demo's Mac -->
   <section class="skstrip" id="skin-strip">
-    <div class="wrap skstrip-head"><h2>Unlock new skins...</h2></div>
     <div class="skstrip-run"><div class="skstrip-track" id="skstrip-track"></div></div>
-    <div class="wrap skstrip-head skstrip-foot"><h2>...by spending tokens.</h2></div>
+    <div class="wrap skstrip-head skstrip-foot"><h2>Unlock skins by spending tokens.</h2></div>
   </section>
 
   <!-- DEMO -->
@@ -2367,7 +2364,7 @@ void main(){
       themeChanged();
       document.dispatchEvent(new CustomEvent('lostty-skin'));
     }
-    // the titles: shown while the pointer is on the strip and when a card is
+    // the title: shown while the pointer is on the strip and when a card is
     // tapped, hidden again 8s after the last of either
     var strip = $('#skin-strip'), titleT = 0, onStrip = false, SHOW_MS = 8000;
     function showTitles() {
@@ -2641,7 +2638,7 @@ void main(){
       INDEX.push({ t: h.textContent, path: 'docs › ' + title, page: id, anchor: h.id, text: body.toLowerCase() });
     });
   });
-  [['demo', 'Watch the loop', 'home'], ['skin-strip', 'Unlock new skins', 'home'], ['install', 'Get started', 'home']].forEach(function (s) {
+  [['demo', 'Watch the loop', 'home'], ['skin-strip', 'Unlock skins by spending tokens', 'home'], ['install', 'Get started', 'home']].forEach(function (s) {
     var el = document.getElementById(s[0]);
     INDEX.push({ t: s[1], path: s[2], home: s[0], text: el ? el.textContent.slice(0, 900).toLowerCase() : '' });
   });
