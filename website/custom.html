@@ -919,6 +919,7 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
 /* Aurora's ghost button: the glass fill and hairline, no border, a 1px lift on hover */
 .inst-card .btn.btn-ghost, .inst-card .btn.btn-ghost:hover { border: 0; color: var(--ink); background: var(--g-fill); transition: transform .25s cubic-bezier(.22, .8, .2, 1); }
 .inst-card .btn.btn-ghost:hover { transform: translateY(-1px); }
+.gf-links { display: flex; flex-wrap: wrap; gap: 10px; }
 .inst-card .setup-k { font-family: inherit; font-size: 12.5px; }
 .inst-card .gf-steps code { font-family: var(--font-mono); }
 /* Aurora's "Set it up once" grid, split evenly (Aurora's is 5/7, but its
@@ -1353,7 +1354,7 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
               <li><span>Install Tailscale on the Mac and the iPhone, signed in to the same account.</span></li>
               <li><span>Open <b>Lostty → Phone Access…</b>, click <b>Pair a Phone…</b> and scan the code with the iPhone app.</span></li>
             </ol>
-            <div><a class="btn btn-ghost glass" href="#docs-build-from-source">Full setup guide</a></div>
+            <div class="gf-links"><a class="btn btn-ghost glass" href="#docs-build-from-source">Full setup guide</a><a class="btn btn-ghost glass" href="#docs">View Docs</a></div>
           </div>
           <div class="setup-reqs">
             <h3 class="setup-k">System Requirements</h3>
