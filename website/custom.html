@@ -613,7 +613,11 @@ p { margin: 0; }
    halves are exactly equal) */
 .skstrip{position:relative; padding-block:26px 30px; border-top:0}
 .skstrip + .sec{border-top:0}
-.skstrip h2{margin:0 auto 28px; text-align:center}
+/* the heading is the same size as the demo's "Swap intuitively." (.ag-title):
+   this wrap is a size container too and follows the same rules */
+.skstrip-head{container-type:inline-size}
+.skstrip h2{margin:0 auto 28px; text-align:center; font-size:calc(24rem / 7.276)}
+@container (max-width:1040px){ .skstrip h2{font-size:calc(min(644.8px, 99.2cqi) / 7.276)} }
 .skstrip-run{overflow:hidden; padding-block:8px;
   -webkit-mask-image:linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent); mask-image:linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent)}
 .skstrip-track{display:flex; width:max-content; animation:skstrip-drift 110s linear infinite}
@@ -1133,7 +1137,7 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
 
   <!-- SKIN STRIP: cards drift right to left; tapping one re-skins the site and the demo's Mac -->
   <section class="skstrip" id="skin-strip">
-    <div class="wrap"><h2 data-decode>Unlock premium skins.</h2></div>
+    <div class="wrap skstrip-head"><h2 data-decode>Unlock skins.</h2></div>
     <div class="skstrip-run"><div class="skstrip-track" id="skstrip-track"></div></div>
   </section>
 
