@@ -398,50 +398,75 @@ p { margin: 0; }
 .ag-trace.ag-on,.ag-stage[data-step="0"] .ag-mac .ag-trace,.ag-stage[data-step="4"] .ag-mac .ag-trace,.ag-stage[data-step="5"] .ag-mac .ag-trace{opacity:1}
 @keyframes ag-spin{to{--ang:360deg}}
 
-/* phone */
-.ag-phone{position:absolute; right:-5%; bottom:-6.5em; width:16em; height:33em; border-radius:2.7em; padding:.5em; background:#050407;
+/* phone: Neon Signal's iPhone. The frame is in em like the rest of the rig
+   (16em across, Neon's 258px); the screen is in cqw of itself (240 Neon px
+   across), so Neon's pixel values carry over and it all scales together */
+.ag-phone{position:absolute; right:-5%; bottom:-6.5em; width:16em; height:33.5em; border-radius:2.73em; padding:.56em; background:#050308;
   transform:translateZ(110px) rotateY(5deg);
-  box-shadow:0 0 0 1px rgba(255,255,255,.12), inset 0 0 0 .18em #2A2330, 0 3em 6em -1.5em rgba(0,0,0,.75), 0 0 4em -1em color-mix(in srgb, var(--magenta) 50%, transparent)}
-.ag-pscreen{position:relative; height:100%; border-radius:2.25em; overflow:hidden; background:#0B0910; color:var(--term-fg)}
-.ag-island{position:absolute; top:.6em; left:50%; width:5.4em; height:1.5em; margin-left:-2.7em; border-radius:1em; background:#000; z-index:5}
-.ag-ptrack{display:flex; width:200%; height:100%; transition:transform .6s cubic-bezier(.7,0,.2,1)}
-.ag-stage[data-step="2"] .ag-ptrack{transition-delay:.5s}
-.ag-stage[data-step="2"] .ag-ptrack,.ag-stage[data-step="3"] .ag-ptrack,.ag-stage[data-step="4"] .ag-ptrack{transform:translateX(-50%)}
-.ag-pview{width:50%; height:100%; padding:2.9em .8em .8em; position:relative}
-.ag-phead{display:flex; align-items:center; gap:.45em; margin-bottom:.8em}
-.ag-phead h4{margin:0 auto 0 0; font-size:1.45em; letter-spacing:-.03em; font-weight:700}
-.ag-phead .ag-mascot{width:2.1em; height:2.1em}
-.ag-pbtn{position:relative; display:grid; place-items:center; width:2em; height:2em; border-radius:50%; background:#1E1826; color:var(--term-fg)}
-.ag-pbtn svg{width:1.1em; height:1.1em}
-.ag-badge{position:absolute; top:-.25em; right:-.25em; min-width:1.2em; height:1.2em; padding:0 .3em; border-radius:1em; background:var(--magenta); color:#fff; font-size:.72em; font-weight:700; display:grid; place-items:center; transform:scale(0); transition:transform .35s var(--ease)}
-.ag-stage[data-step="1"] .ag-badge,.ag-stage[data-step="2"] .ag-badge,.ag-stage[data-step="3"] .ag-badge{transform:scale(1)}
-.ag-plist{position:relative; height:19em}
-.ag-pcard{position:absolute; left:0; right:0; top:0; height:4.4em; border-radius:1em; padding:.6em .75em; display:grid; gap:.1em; align-content:center;
-  transform:translateY(calc(var(--i, 0) * 4.85em)); transition:transform .7s var(--ease), box-shadow .4s;
-  background:var(--cbg); border:1px solid rgba(255,255,255,.07)}
-.ag-pcard .ag-r1{display:flex; justify-content:space-between; gap:.5em; font-size:.82em}
-.ag-pcard .ag-nm{font-family:var(--font-mono); font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
-.ag-pcard .ag-ag{color:var(--term-dim)}
-.ag-pcard .ag-stt{font-size:.78em; font-weight:600; display:flex; align-items:center; gap:.4em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
-.ag-pcard .ag-stt::before{content:""; width:.55em; height:.55em; border-radius:50%; background:currentColor; flex:none}
-.ag-pcard.ag-waiting .ag-stt{color:var(--st-wait)} .ag-pcard.ag-working .ag-stt{color:var(--st-work)} .ag-pcard.ag-ready .ag-stt{color:var(--st-ready)} .ag-pcard.ag-idle .ag-stt{color:var(--st-idle)}
-.ag-pcard.ag-waiting{box-shadow:0 0 0 1px color-mix(in srgb, var(--st-wait) 70%, transparent), 0 0 1.6em -.2em color-mix(in srgb, var(--st-wait) 55%, transparent)}
-.ag-pcard.ag-working .ag-stt::before{animation:ag-pulse 1.2s ease-in-out infinite}
-@keyframes ag-pulse{50%{opacity:.3}}
-.ag-tap{position:absolute; width:2.4em; height:2.4em; margin:-1.2em 0 0 -1.2em; border-radius:50%; pointer-events:none; z-index:4;
-  background:radial-gradient(circle, rgba(255,255,255,.9) 0 22%, rgba(255,255,255,.35) 23% 45%, transparent 47%);
-  animation:ag-tapIn .9s var(--ease) both}
-.ag-tap.ag-t1{left:70%; top:2.2em} .ag-tap.ag-t2{left:30%; top:50%}
-@keyframes ag-tapIn{0%{transform:scale(.4); opacity:0}25%{transform:scale(1); opacity:1}100%{transform:scale(1.8); opacity:0}}
-.ag-pterm-bar{display:flex; align-items:center; justify-content:space-between; font-size:.8em; margin-bottom:.8em; color:var(--term-dim)}
-.ag-pterm-bar b{color:var(--term-fg); font-family:var(--font-mono); font-weight:600}
-.ag-pterm{font-family:var(--font-mono); font-size:.68em; line-height:1.55; background:#160B26; border-radius:.9em; padding:.8em .7em; height:21em; display:flex; flex-direction:column; justify-content:flex-end; overflow:hidden}
-.ag-pterm .ag-ph{color:#C9A7FF; font-weight:600}
-.ag-pterm .ag-dim{color:var(--term-dim)} .ag-pterm .ag-ok{color:var(--st-wait)}
-.ag-pterm .ag-opt{position:relative; padding:.15em .3em; border-radius:.3em}
-.ag-pterm .ag-opt.ag-sel{color:#22E5FF; background:rgba(34,229,255,.08)}
-.ag-pkeys{display:flex; gap:.35em; margin-top:.7em}
-.ag-pkeys span{flex:1; text-align:center; font-family:var(--font-mono); font-size:.62em; padding:.55em 0; border-radius:.5em; background:#1E1826; color:var(--term-dim)}
+  box-shadow:0 0 0 .093em #3b2d55, 0 0 0 .31em #0a0610, 0 0 0 .372em #2a1f3b, 0 2.48em 4.96em -1.49em #000, 0 0 5.6em -1.86em color-mix(in srgb, #28e7ff 35%, transparent)}
+.ag-pscreen{position:relative; height:100%; border-radius:2.23em; overflow:hidden; background:#000; color:#f3f1f7; container-type:inline-size;
+  font-family:-apple-system, "SF Pro Text", "Onest", system-ui, sans-serif}
+.ag-ns{position:relative; height:100%; padding:4.167cqw 5cqw 0}
+.ag-n-island{position:absolute; left:50%; top:3.75cqw; width:32.5cqw; height:9.167cqw; background:#000; border-radius:5cqw; transform:translateX(-50%); box-shadow:0 0 0 0.417cqw #111; z-index:4}
+.ag-n-sbar{display:flex; justify-content:space-between; align-items:center; height:9.167cqw; padding-inline:5cqw 3.333cqw; font-size:5cqw; font-weight:600}
+.ag-n-ic{display:flex; gap:1.667cqw; align-items:center}
+.ag-n-ic svg{width:6.25cqw; height:4.167cqw}
+.ag-n-bat{width:8.333cqw; height:3.75cqw; border:0.417cqw solid #9ea; border-radius:1.25cqw; position:relative}
+.ag-n-bat::after{content:""; position:absolute; inset:0.417cqw 1.25cqw 0.417cqw 0.417cqw; background:#3dd68c; border-radius:0.417cqw}
+.ag-n-head{display:flex; align-items:center; gap:2.5cqw; margin-top:4.167cqw}
+.ag-n-head .ag-mascot{width:10.833cqw; height:10.833cqw}
+.ag-n-head b{font-size:8.75cqw; font-weight:700; letter-spacing:-.01em}
+.ag-n-icons{margin-left:auto; display:flex; gap:2.5cqw}
+.ag-n-btn{width:12.5cqw; height:12.5cqw; border-radius:50%; background:#1c1b20; display:grid; place-items:center; position:relative; color:#fff}
+.ag-n-btn svg{width:5.833cqw; height:5.833cqw}
+.ag-n-badge{position:absolute; top:-1.25cqw; right:-1.25cqw; min-width:5.833cqw; height:5.833cqw; padding-inline:1.25cqw; border-radius:2.917cqw; background:var(--magenta); color:#fff; font:700 3.75cqw/5.833cqw -apple-system, "Onest", sans-serif; text-align:center; transform:scale(0); transition:transform .35s var(--ease)}
+.ag-n-badge.ag-on{transform:scale(1)}
+.ag-n-conn{display:flex; align-items:center; gap:2.5cqw; margin-top:4.167cqw; font-size:5cqw; color:#9a98a3; font-weight:600}
+.ag-n-conn span{font-size:4.167cqw; color:#3dd68c; border:0.417cqw solid #2e6b4c; background:#10291d; border-radius:416.25cqw; padding:0 2.5cqw}
+.ag-n-chips{display:flex; gap:2.083cqw; margin-top:3.333cqw; overflow:hidden; white-space:nowrap}
+.ag-n-chip{flex:none; font-size:4.167cqw; font-weight:600; padding:1.667cqw 1.667cqw 1.667cqw 3.333cqw; border-radius:416.25cqw; background:#17161b; border:0.417cqw solid #2a2930; display:inline-flex; gap:2.083cqw; align-items:center; color:#e9e7ef; transition:border-color .3s, color .3s}
+.ag-n-chip i{font-style:normal; background:#000; border-radius:416.25cqw; padding:0 2.083cqw; font-size:3.75cqw; transition:color .3s}
+.ag-n-chip.ag-hot{border-color:var(--magenta); color:#fff}
+.ag-n-chip.ag-hot i{color:#ff3df2}
+.ag-n-cards{position:relative; display:flex; flex-direction:column; gap:2.917cqw; margin-top:4.167cqw}
+.ag-n-card{--cbg:#1b1530; --cacc:#c89bff; --cline:#3a2c62;
+  position:relative; border-radius:5.417cqw; padding:3.75cqw 16.667cqw 3.75cqw 4.583cqw; background:var(--cbg); border:0.417cqw solid var(--cline); min-height:30.833cqw;
+  transition:background-color .45s, border-color .45s, color .45s}
+.ag-n-card.ag-c-api{--cbg:#0f2a27; --cline:#1d4a44; --cacc:#5fe3d3}
+.ag-n-card.ag-c-lostty{--cbg:#1d0f3a; --cline:#45207a; --cacc:#ff7af6}
+.ag-n-card h4{margin:0; font-size:5.208cqw; font-weight:600; line-height:1.25; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.ag-n-path{font:4.167cqw/1.5 var(--font-mono); color:#9b97ad; margin-top:0.833cqw; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.ag-n-path b{color:var(--cacc); font-weight:700}
+/* the top two lines stop short of the axolotl */
+.ag-n-card h4,.ag-n-path{margin-right:6.25cqw}
+.ag-n-what{font:4cqw/1.5 var(--font-mono); color:#a7a3b8; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:0.833cqw}
+.ag-n-st{font:600 4cqw/1.5 var(--font-mono); color:var(--cacc); margin-top:0.417cqw; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.ag-n-axo{position:absolute; right:9.167cqw; top:3.333cqw; width:16.667cqw; height:16.667cqw}
+.ag-n-axo .ag-mascot{width:100%; height:100%}
+.ag-n-chev{position:absolute; right:2.5cqw; top:50%; translate:0 -50%; width:7.5cqw; height:7.5cqw; border-radius:50%; background:#00000066; display:grid; place-items:center; color:#ccc; font-size:4.167cqw}
+.ag-n-card.ag-ready{--cbg:#d9d3cb; --cline:#e9e4dd; --cacc:#3a2f28; color:#2b2622}
+.ag-n-card.ag-ready .ag-n-path{color:#6c645c} .ag-n-card.ag-ready .ag-n-path b{color:#c56a1b} .ag-n-card.ag-ready .ag-n-what{color:#6c645c}
+.ag-n-card.ag-ready .ag-n-chev{background:#0000001a; color:#555}
+.ag-n-card.ag-idle{--cbg:#19181d; --cline:#2b2a31; --cacc:#e8e6ee}
+.ag-n-card.ag-idle .ag-n-path b{color:#ff3df2}
+.ag-n-ask{display:grid; grid-template-rows:0fr; transition:grid-template-rows .45s var(--ease)}
+.ag-n-ask > div{overflow:hidden; display:flex; gap:2.5cqw}
+.ag-n-ask button{position:relative; flex:1; margin-top:2.917cqw; font:600 4.375cqw/1 -apple-system, "Onest", sans-serif; padding:2.917cqw 0; border-radius:3.333cqw; border:0; color:#fff; background:#ffffff1a; cursor:default; transition:background .2s, transform .15s}
+.ag-n-ask button.ag-n-allow{background:var(--magenta)}
+.ag-n-ask button.ag-n-allow.ag-pressed{background:#ff5cc0; transform:scale(.95)}
+.ag-n-card.ag-ask .ag-n-ask{grid-template-rows:1fr}
+.ag-n-card::after{content:""; position:absolute; inset:-0.417cqw; border-radius:5.417cqw; pointer-events:none; opacity:0; transition:opacity .45s; box-shadow:0 0 0 0.625cqw #ff3df2, 0 0 9.167cqw 0.833cqw color-mix(in srgb, var(--magenta) 60%, transparent)}
+.ag-n-card.ag-waiting::after{opacity:1; animation:ag-n-pulse 1.6s ease-in-out infinite}
+@keyframes ag-n-pulse{50%{opacity:.55}}
+.ag-n-card.ag-waiting .ag-n-st{color:#ff3df2}
+.ag-n-card.ag-waiting .ag-mascot .ag-gl{animation:ag-gillL .9s ease-in-out infinite}
+.ag-n-card.ag-waiting .ag-mascot .ag-gr{animation:ag-gillR .9s ease-in-out infinite}
+.ag-n-card.ag-working .ag-n-axo{animation:ag-n-bob 2.2s ease-in-out infinite}
+@keyframes ag-n-bob{50%{transform:translateY(-0.833cqw)}}
+.ag-n-tap{position:absolute; left:50%; top:50%; width:14.167cqw; height:14.167cqw; margin:-7.083cqw 0 0 -7.083cqw; border-radius:50%; pointer-events:none; z-index:5; background:#ffffff40; box-shadow:0 0 0 0.417cqw #ffffff80; opacity:0}
+.ag-n-allow.ag-pressed .ag-n-tap{animation:ag-n-tapgo .7s var(--ease) forwards}
+@keyframes ag-n-tapgo{0%{opacity:0; transform:scale(1.3)}30%{opacity:1; transform:scale(.8)}100%{opacity:0; transform:scale(1.6)}}
+.ag-n-home{position:absolute; bottom:2.917cqw; left:50%; width:38.333cqw; height:1.667cqw; border-radius:1.25cqw; background:#ffffffcc; transform:translateX(-50%)}
 
 /* hero progress */
 /* both lists are lit until someone picks one; then the other list and its
@@ -881,7 +906,7 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
     <div class="wrap">
       <div class="ag-stage-col">
         <h2 class="ag-title" data-decode>Swap intuitively.</h2>
-        <div class="ag-stage" id="ag-stage" data-step="0" aria-label="Animated example: Claude stops for permission on the Mac, the iPhone shows it waiting on you, you tap Yes on the phone and Claude carries on." role="img">
+        <div class="ag-stage" id="ag-stage" data-step="0" aria-label="Animated example: Claude stops for permission on the Mac, the iPhone shows it waiting on you, you tap Allow on the phone and Claude carries on." role="img">
           <div class="ag-rig" id="ag-rig">
             <div class="ag-halo"></div>
             <div class="ag-mac">
@@ -921,53 +946,58 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
 
             <div class="ag-phone">
               <div class="ag-pscreen">
-                <div class="ag-island"></div>
-                <div class="ag-ptrack">
-                  <div class="ag-pview">
-                    <div class="ag-phead">
-                      <span class="ag-mascot-slot" data-mascot="" id="ag-phoneMascot"></span>
-                      <h4>Terminals</h4>
-                      <span class="ag-pbtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15Z"/><path d="M10 20.5a2.2 2.2 0 0 0 4 0"/></svg><span class="ag-badge">1</span></span>
-                      <span class="ag-pbtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
-                    </div>
-                    <div class="ag-plist">
-                      <div class="ag-pcard ag-working" id="ag-pc-api" style="--i:0; --cbg:#0C2A26">
-                        <div class="ag-r1"><span class="ag-nm">api-server</span><span class="ag-ag">Codex</span></div>
-                        <div class="ag-stt">Working… Incubating… (3m 52s)</div>
-                      </div>
-                      <div class="ag-pcard ag-working" id="ag-pc-lostty" style="--i:1; --cbg:#22103A">
-                        <div class="ag-r1"><span class="ag-nm">lostty/skins</span><span class="ag-ag">Claude</span></div>
-                        <div class="ag-stt" id="ag-pc-lostty-st">Working… Editing SessionList.swift</div>
-                        <span class="ag-tap ag-t1 ag-off" data-on="2"></span>
-                      </div>
-                      <div class="ag-pcard ag-ready" id="ag-pc-docs" style="--i:2; --cbg:#2A1A12">
-                        <div class="ag-r1"><span class="ag-nm">docs-site</span><span class="ag-ag">Claude</span></div>
-                        <div class="ag-stt">Ready</div>
-                      </div>
-                      <div class="ag-pcard ag-idle" id="ag-pc-dots" style="--i:3; --cbg:#16131B">
-                        <div class="ag-r1"><span class="ag-nm">dotfiles</span><span class="ag-ag">zsh</span></div>
-                        <div class="ag-stt">Idle</div>
-                      </div>
+                <div class="ag-ns">
+                  <div class="ag-n-island"></div>
+                  <div class="ag-n-sbar"><span>9:41</span><span class="ag-n-ic"><svg viewBox="0 0 15 10"><rect x="0" y="6" width="3" height="4" rx="1" fill="#fff"/><rect x="4" y="4" width="3" height="6" rx="1" fill="#fff"/><rect x="8" y="2" width="3" height="8" rx="1" fill="#fff"/><rect x="12" y="0" width="3" height="10" rx="1" fill="#fff"/></svg><span class="ag-n-bat"></span></span></div>
+                  <div class="ag-n-head">
+                    <span class="ag-mascot-slot" data-mascot="" id="ag-phoneMascot"></span>
+                    <b>Lostty</b>
+                    <div class="ag-n-icons">
+                      <span class="ag-n-btn"><svg viewBox="0 0 16 16"><path d="M8 1.5a4 4 0 0 0-4 4v2.8L2.6 11h10.8L12 8.3V5.5a4 4 0 0 0-4-4ZM6.3 12.5a1.8 1.8 0 0 0 3.4 0" fill="none" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/></svg><span class="ag-n-badge" id="ag-n-bell">1</span></span>
+                      <span class="ag-n-btn"><svg viewBox="0 0 16 16"><path d="M8 2v12M2 8h12" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/></svg></span>
                     </div>
                   </div>
-                  <div class="ag-pview">
-                    <div class="ag-pterm-bar"><span>‹ Sessions</span><b>lostty/skins</b></div>
-                    <div class="ag-pterm">
-                      <div class="ag-dim">  ⎿ Updated with 12 additions</div>
-                      <div class="ag-off" data-on="2 3"><span class="ag-ph">Bash command</span></div>
-                      <div class="ag-off" data-on="2 3">  swift test --filter</div>
-                      <div class="ag-off" data-on="2 3">  SessionListTests</div>
-                      <div class="ag-off" data-on="2 3">Do you want to proceed?</div>
-                      <div class="ag-opt ag-sel ag-off" data-on="2 3">❯ 1. Yes<span class="ag-tap ag-t2 ag-off" data-on="3"></span></div>
-                      <div class="ag-opt ag-off" data-on="2 3">  2. Yes, and don't ask…</div>
-                      <div class="ag-opt ag-off" data-on="2 3">  3. No, and tell Claude…</div>
-                      <div class="ag-off" data-on="4 5 6 0 1"><span class="ag-ok">●</span> Bash(swift test…)</div>
-                      <div class="ag-dim ag-off" data-on="4 5 6 0 1">  ⎿ Executed 14 tests,</div>
-                      <div class="ag-dim ag-off" data-on="4 5 6 0 1">    with 0 failures</div>
-                      <div class="ag-off" data-on="4 5"><span style="color:#FF2BD6">✳&#xFE0E; Working…</span></div>
-                    </div>
-                    <div class="ag-pkeys"><span>esc</span><span>tab</span><span>ctrl</span><span>↑</span><span>↓</span></div>
+                  <div class="ag-n-conn">Connected <span>4</span></div>
+                  <div class="ag-n-chips">
+                    <span class="ag-n-chip" id="ag-n-chipWait">Waiting on You <i id="ag-n-cWait">0</i></span>
+                    <span class="ag-n-chip">Working <i id="ag-n-cWork">2</i></span>
+                    <span class="ag-n-chip">Ready <i id="ag-n-cReady">1</i></span>
+                    <span class="ag-n-chip">Idle <i>1</i></span>
                   </div>
+                  <div class="ag-n-cards">
+                    <div class="ag-n-card ag-c-api ag-working" id="ag-pc-api">
+                      <h4>Rate-limit the uploads</h4>
+                      <div class="ag-n-path"><b>&gt;</b> api-server/main</div>
+                      <div class="ag-n-what">Codex · Editing limiter.ts</div>
+                      <div class="ag-n-st">✽ Incubating… (3m 52s)</div>
+                      <span class="ag-n-axo"><span class="ag-mascot-slot" data-mascot=""></span></span>
+                      <span class="ag-n-chev">›</span>
+                    </div>
+                    <div class="ag-n-card ag-c-lostty ag-working" id="ag-pc-lostty">
+                      <h4>Sort waiting first</h4>
+                      <div class="ag-n-path"><b>&gt;</b> lostty/skins</div>
+                      <div class="ag-n-what" id="ag-n-aWhat">Editing SessionList.swift</div>
+                      <div class="ag-n-st" id="ag-n-aSt">✳ Working… (1m 12s)</div>
+                      <span class="ag-n-axo"><span class="ag-mascot-slot" data-mascot=""></span></span>
+                      <span class="ag-n-chev">›</span>
+                      <div class="ag-n-ask"><div><button class="ag-n-allow" id="ag-n-allow" type="button" tabindex="-1">Allow<span class="ag-n-tap"></span></button><button type="button" tabindex="-1">Don't allow</button></div></div>
+                    </div>
+                    <div class="ag-n-card ag-ready" id="ag-pc-docs">
+                      <h4>Publish the docs</h4>
+                      <div class="ag-n-path"><b>&gt;</b> docs-site</div>
+                      <div class="ag-n-st">Ready.</div>
+                      <span class="ag-n-axo"><span class="ag-mascot-slot" data-mascot=""></span></span>
+                      <span class="ag-n-chev">›</span>
+                    </div>
+                    <div class="ag-n-card ag-idle" id="ag-pc-dots">
+                      <h4>dotfiles</h4>
+                      <div class="ag-n-path"><b>&gt;</b> dotfiles/main</div>
+                      <div class="ag-n-st">Idle. 2h ago</div>
+                      <span class="ag-n-axo"><span class="ag-mascot-slot" data-mascot=""></span></span>
+                      <span class="ag-n-chev">›</span>
+                    </div>
+                  </div>
+                  <span class="ag-n-home"></span>
                 </div>
               </div>
             </div>
@@ -990,7 +1020,7 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
             <ol class="ag-steps">
               <li class="ag-cur">Shows it working</li>
               <li>Puts it first</li>
-              <li>You tap Yes</li>
+              <li>You tap Allow</li>
               <li>Back in your pocket</li>
             </ol>
           </div>
@@ -2132,9 +2162,12 @@ void main(){
 
     const stage = $('#ag-stage');
     const pc = { api: $('#ag-pc-api'), lostty: $('#ag-pc-lostty'), docs: $('#ag-pc-docs'), dots: $('#ag-pc-dots') };
-    const lsSt = $('#ag-pc-lostty-st');
+    const aWhat = $('#ag-n-aWhat'), aSt = $('#ag-n-aSt'), allow = $('#ag-n-allow'), bell = $('#ag-n-bell');
+    const chipWait = $('#ag-n-chipWait'), cWait = $('#ag-n-cWait'), cWork = $('#ag-n-cWork'), cReady = $('#ag-n-cReady');
+    // what the lostty/skins card says at each step, matching the Mac
+    const A_WHAT = ['Editing SessionList.swift', 'Bash: swift test --filter SessionListTests', 'Bash: swift test --filter SessionListTests', 'Bash: swift test --filter SessionListTests', 'Running swift test…', 'Executed 14 tests, 0 failures', 'Done. Waiting sessions sort first'];
+    const A_ST = ['✳ Working… (1m 12s)', 'Waiting on You', 'Waiting on You · Allow Bash?', 'Waiting on You · Allow Bash?', '✳ Working… (1m 31s)', '✳ Working… (1m 36s)', 'Ready.'];
     const pm = $('#ag-phoneMascot');
-    const STATE_TXT = { working: 'Working… Editing SessionList.swift', waiting: 'Waiting on you', ready: 'Ready' };
     const plan = [
       { l: 'working', o: ['api', 'lostty', 'docs', 'dots'], p: 0 },
       { l: 'waiting', o: ['lostty', 'api', 'docs', 'dots'], p: 1 },
@@ -2163,9 +2196,21 @@ void main(){
         if (on && !was && !RM) { el.classList.remove('ag-in'); void el.offsetWidth; el.classList.add('ag-in'); }
       });
       const p = plan[s];
-      pc.lostty.className = 'ag-pcard ag-' + p.l;
-      lsSt.textContent = STATE_TXT[p.l];
-      p.o.forEach((k, i) => pc[k].style.setProperty('--i', i));
+      // the cards reorder like the app's list: note where each one is, change
+      // the order, then slide each from its old place (offsetTop is in the
+      // phone's own coordinates, so the rig's tilt doesn't skew it)
+      const cards = Object.values(pc), before = new Map(cards.map(c => [c, c.offsetTop]));
+      pc.lostty.className = 'ag-n-card ag-c-lostty ag-' + p.l + (s === 2 || s === 3 ? ' ag-ask' : '');
+      allow.classList.toggle('ag-pressed', s === 3);
+      aWhat.textContent = A_WHAT[s]; aSt.textContent = A_ST[s];
+      bell.classList.toggle('ag-on', p.l === 'waiting');
+      chipWait.classList.toggle('ag-hot', p.l === 'waiting');
+      cWait.textContent = p.l === 'waiting' ? 1 : 0; cWork.textContent = p.l === 'working' ? 2 : 1; cReady.textContent = p.l === 'ready' ? 2 : 1;
+      p.o.forEach((k, i) => { pc[k].style.order = i; });
+      if (!RM) cards.forEach(c => {
+        const d = before.get(c) - c.offsetTop;
+        if (Math.abs(d) > 1) c.animate([{ transform: `translateY(${d}px)` }, { transform: 'none' }], { duration: 700, easing: 'cubic-bezier(.22, .8, .2, 1)' });
+      });
       lists.forEach(lis => lis.forEach((li, i) => { li.classList.toggle('ag-cur', i === p.p); li.classList.toggle('ag-done', i < p.p); }));
       const [mid, malt] = MASCOT[p.l], msrc = $('#' + mid);
       if (mascotImg && msrc && mascotImg.getAttribute('src') !== msrc.getAttribute('src')) { mascotImg.src = msrc.src; mascotImg.alt = malt; mascotImg.hidden = false; }
