@@ -112,6 +112,48 @@
   --ag-platform: rgba(229, 25, 156, .3);
   color-scheme: dark;
 }
+/* a skin picked from the strip under the demo (data-skin, with its colours as
+   --sk-* on the root) takes over the accents: magenta becomes its first accent,
+   the sheen's rose its second. Backgrounds and the theme stay. In light, text
+   in the accent is mixed toward the ink so bright accents stay readable */
+:root[data-skin] {
+  --magenta: var(--sk-a1);
+  --magenta-ink: color-mix(in oklab, var(--sk-a1) 62%, #1C1622);
+  --btn-bg: var(--sk-a1);
+  --btn-fg: var(--sk-bg);
+  --rose: var(--sk-a2);
+  --sheen-hi: color-mix(in oklab, var(--sk-a1) 50%, var(--sk-a2));
+  --sel: color-mix(in srgb, var(--sk-a1) 22%, transparent);
+  --ag-platform: color-mix(in srgb, var(--sk-bg) 40%, transparent);
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-skin]:not([data-theme="light"]) {
+    --magenta-ink: var(--sk-a1);
+    --sheen-hi: #FFFFFF;
+    --sel: color-mix(in srgb, var(--sk-a1) 34%, transparent);
+    --ag-platform: color-mix(in srgb, var(--sk-a1) 30%, transparent);
+  }
+}
+:root[data-skin][data-theme="dark"] {
+  --magenta-ink: var(--sk-a1);
+  --sheen-hi: #FFFFFF;
+  --sel: color-mix(in srgb, var(--sk-a1) 34%, transparent);
+  --ag-platform: color-mix(in srgb, var(--sk-a1) 30%, transparent);
+}
+/* and the demo's Mac takes the whole skin: its background, text, accents and texture */
+:root[data-skin] .ag-demo {
+  --mk-bg: var(--sk-bg); --mk-fg: var(--sk-fg);
+  --mk-bar: color-mix(in srgb, var(--sk-bg) 93%, var(--sk-fg));
+  --mk-line: color-mix(in srgb, var(--sk-bg) 85%, var(--sk-fg));
+  --mk-edge: color-mix(in srgb, var(--sk-bg) 80%, var(--sk-fg));
+  --mk-title: color-mix(in srgb, var(--sk-fg) 68%, var(--sk-bg));
+  --mk-pill: color-mix(in srgb, var(--sk-bg) 84%, var(--sk-fg));
+  --mk-pill-fg: color-mix(in srgb, var(--sk-fg) 86%, var(--sk-bg));
+  --mk-dim: color-mix(in srgb, var(--sk-fg) 55%, var(--sk-bg));
+  --mk-rule: color-mix(in srgb, var(--sk-fg) 38%, var(--sk-bg));
+  --mk-bg2: color-mix(in srgb, var(--sk-bg) 90%, var(--sk-a1));
+  --mk-a1: var(--sk-a1); --mk-a1s: color-mix(in srgb, var(--sk-a1) 72%, #fff); --mk-a2: var(--sk-a2);
+}
 
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
@@ -313,6 +355,10 @@ p { margin: 0; }
   --violet: #9B6BFF; --fg: var(--ink); --faint: var(--ink-2); --hair: var(--rule); --shadow: var(--ag-shadow);
   --font-ui: "Onest", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --ease: cubic-bezier(.22, .8, .2, 1);
+  /* the Mac terminal's colours (Neon Signal's); a skin from the strip under the demo repaints them */
+  --mk-bg: #120a2a; --mk-bar: #170e33; --mk-line: #241743; --mk-edge: #2c1d4f; --mk-fg: #f3ecff; --mk-title: #b9a9e3;
+  --mk-pill: #22164a; --mk-pill-fg: #d9ccff; --mk-dim: #8a7cb3; --mk-rule: #6f6197; --mk-bg2: #1a0f36;
+  --mk-a1: #ff3df2; --mk-a1s: #ff7af6; --mk-a2: #28e7ff;
   font-family: var(--font-ui); line-height: 1.6;
   /* closer to the hero than other sections */
   padding-top: clamp(64px, 7vw, 104px);
@@ -362,40 +408,44 @@ p { margin: 0; }
 
 /* the Mac: Neon Signal's window. Neon's px are written here / 13, so they
    scale with the rig's em like the rest of it */
-.ag-mac{position:relative; border-radius:0.923em; background:#120a2a; color:#f3ecff; transform:translateZ(0);
-  box-shadow:0 0 0 0.077em #2c1d4f, 0 3.077em 6.154em -2.308em #000, 0 0 9.231em -3.077em color-mix(in srgb, var(--magenta) 45%, transparent)}
+.ag-mac{position:relative; border-radius:0.923em; background:var(--mk-bg); color:var(--mk-fg); transform:translateZ(0);
+  box-shadow:0 0 0 0.077em var(--mk-edge), 0 3.077em 6.154em -2.308em #000, 0 0 9.231em -3.077em color-mix(in srgb, var(--magenta) 45%, transparent)}
 .ag-mac-clip{border-radius:inherit; overflow:hidden; position:relative}
-.ag-mac-bar{height:2.923em; display:flex; align-items:center; gap:0.923em; padding-inline:1.077em; border-bottom:0.077em solid #241743; background:#170e33; position:relative}
+.ag-mac-bar{height:2.923em; display:flex; align-items:center; gap:0.923em; padding-inline:1.077em; border-bottom:0.077em solid var(--mk-line); background:var(--mk-bar); position:relative; transition:background-color .5s, border-color .5s}
 .ag-lights{display:flex; gap:0.538em}
 .ag-lights i{width:0.846em; height:0.846em; border-radius:50%; background:#ff5f57}
 .ag-lights i:nth-child(2){background:#febc2e} .ag-lights i:nth-child(3){background:#28c840}
-.ag-mac-title{position:absolute; left:50%; transform:translateX(-50%); font:500 0.962em "Bricolage Grotesque", "Avenir Next", system-ui, sans-serif; color:#b9a9e3; white-space:nowrap}
+.ag-mac-title{position:absolute; left:50%; transform:translateX(-50%); font:500 0.962em "Bricolage Grotesque", "Avenir Next", system-ui, sans-serif; color:var(--mk-title); white-space:nowrap}
 /* Neon puts this at the bar's right end; here the iPhone covers that, so it sits by the lights */
-.ag-mac-status{display:inline-flex; align-items:center; gap:0.538em; white-space:nowrap; font:500 0.885em var(--font-mono); color:#d9ccff; padding:0.231em 0.692em; border-radius:76.846em; background:#22164a;
+.ag-mac-status{display:inline-flex; align-items:center; gap:0.538em; white-space:nowrap; font:500 0.885em var(--font-mono); color:var(--mk-pill-fg); padding:0.231em 0.692em; border-radius:76.846em; background:var(--mk-pill);
   transition:background .3s, color .3s, box-shadow .3s; position:relative; z-index:1}
-.ag-mac-status .ag-sg{color:#ff3df2; width:1ch; text-align:center}
-.ag-stage[data-step="1"] .ag-mac-status,.ag-stage[data-step="2"] .ag-mac-status,.ag-stage[data-step="3"] .ag-mac-status{background:color-mix(in srgb, var(--magenta) 30%, #22164a); color:#fff; box-shadow:0 0 0 0.077em var(--magenta)}
+.ag-mac-status .ag-sg{color:var(--mk-a1); width:1ch; text-align:center}
+.ag-stage[data-step="1"] .ag-mac-status,.ag-stage[data-step="2"] .ag-mac-status,.ag-stage[data-step="3"] .ag-mac-status{background:color-mix(in srgb, var(--mk-a1) 30%, var(--mk-pill)); color:#fff; box-shadow:0 0 0 0.077em var(--mk-a1)}
 .ag-mac-body{position:relative; height:24em; overflow:hidden; padding:1.231em 1.385em; display:flex; flex-direction:column; justify-content:flex-end; gap:0.077em;
-  font:400 0.981em/1.62 var(--font-mono); color:#f3ecff; background-color:#120a2a;
-  background-image:linear-gradient(#ff3df20d 0.077em, transparent 0.077em), linear-gradient(90deg, #ff3df20d 0.077em, transparent 0.077em); background-size:1.692em 1.692em}
+  font:400 0.981em/1.62 var(--font-mono); color:var(--mk-fg); background-color:var(--mk-bg); isolation:isolate; transition:background-color .5s, color .5s;
+  background-image:linear-gradient(color-mix(in srgb, var(--mk-a1) 5%, transparent) 0.077em, transparent 0.077em), linear-gradient(90deg, color-mix(in srgb, var(--mk-a1) 5%, transparent) 0.077em, transparent 0.077em); background-size:1.692em 1.692em}
+/* a skin swaps Neon's grid for its own texture */
+.ag-mac-body .tex{display:none}
+:root[data-skin] .ag-mac-body{background-image:none}
+:root[data-skin] .ag-mac-body .tex[data-t]:not([data-t=""]){display:block}
 .ag-mac-body::after{content:""; position:absolute; inset:0; pointer-events:none; background:repeating-linear-gradient(0deg, #00000022 0 0.077em, transparent 0.077em 0.231em); mix-blend-mode:multiply; opacity:.6}
 .ag-mac-body > *{flex-shrink:0}
 .ag-tl{white-space:pre-wrap; overflow-wrap:anywhere; min-height:1.62em}
-.ag-mac-body .ag-dim{color:#8a7cb3} .ag-mac-body .ag-mag{color:#ff3df2} .ag-mac-body .ag-cy{color:#28e7ff} .ag-mac-body .ag-ok{color:#3dffb0}
+.ag-mac-body .ag-dim{color:var(--mk-dim)} .ag-mac-body .ag-mag{color:var(--mk-a1)} .ag-mac-body .ag-cy{color:var(--mk-a2)} .ag-mac-body .ag-ok{color:#3dffb0}
 .ag-mac-body b{font-weight:700}
-.ag-tbox{border:0.077em solid #6f6197; border-radius:0.538em; padding:0.462em 0.923em; margin-block:0.308em}
-.ag-tbox.ag-welcome{border-color:#ff7af6; align-self:flex-start}
-.ag-tbox.ag-ask{border-color:#ff7af6; background:#1a0f36; box-shadow:0 0 0 0.077em #ff3df233, 0 0 2.154em -0.615em #ff3df2aa}
+.ag-tbox{border:0.077em solid var(--mk-rule); border-radius:0.538em; padding:0.462em 0.923em; margin-block:0.308em}
+.ag-tbox.ag-welcome{border-color:var(--mk-a1s); align-self:flex-start}
+.ag-tbox.ag-ask{border-color:var(--mk-a1s); background:var(--mk-bg2); box-shadow:0 0 0 0.077em color-mix(in srgb, var(--mk-a1) 20%, transparent), 0 0 2.154em -0.615em color-mix(in srgb, var(--mk-a1) 67%, transparent)}
 .ag-opt{display:block; border-radius:0.308em; padding-inline:0.308em; margin-inline:-0.308em; transition:background .2s, color .2s}
 .ag-stage[data-step="3"] .ag-opt.ag-yes{background:#3dffb033; color:#fff}
-.ag-mac-body .ag-spin{color:#ff7af6}
+.ag-mac-body .ag-spin{color:var(--mk-a1s)}
 .ag-off{display:none !important}
 .ag-in{animation:ag-lineIn .32s var(--ease) both}
 @keyframes ag-lineIn{from{opacity:0; transform:translateY(0.308em)}}
 
 /* Claude's trace: Neon's comet running round the window edge while it works */
 .ag-trace,.ag-bloom{position:absolute; inset:-0.077em; border-radius:1em; pointer-events:none; opacity:0; transition:opacity .5s;
-  background:conic-gradient(from var(--ang), transparent 0 64%, color-mix(in srgb, #28e7ff 70%, transparent) 80%, #ff3df2 93%, #fff 95%, transparent 96%);
+  background:conic-gradient(from var(--ang), transparent 0 64%, color-mix(in srgb, var(--mk-a2) 70%, transparent) 80%, var(--mk-a1) 93%, #fff 95%, transparent 96%);
   animation:ag-spin 3.2s linear infinite}
 .ag-trace{padding:0.123em; z-index:3; -webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite:xor; mask-composite:exclude}
 .ag-bloom{inset:-0.462em; border-radius:1.385em; filter:blur(0.923em); z-index:-1}
@@ -408,7 +458,7 @@ p { margin: 0; }
    across), so Neon's pixel values carry over and it all scales together */
 .ag-phone{position:absolute; right:-5%; bottom:-6.5em; width:16em; height:33.5em; border-radius:2.73em; padding:.56em; background:#050308;
   transform:translateZ(8.46em) rotateY(5deg);
-  box-shadow:0 0 0 .093em #3b2d55, 0 0 0 .31em #0a0610, 0 0 0 .372em #2a1f3b, 0 2.48em 4.96em -1.49em #000, 0 0 5.6em -1.86em color-mix(in srgb, #28e7ff 35%, transparent)}
+  box-shadow:0 0 0 .093em #3b2d55, 0 0 0 .31em #0a0610, 0 0 0 .372em #2a1f3b, 0 2.48em 4.96em -1.49em #000, 0 0 5.6em -1.86em color-mix(in srgb, var(--mk-a2) 35%, transparent)}
 .ag-pscreen{position:relative; height:100%; border-radius:2.23em; overflow:hidden; background:#000; color:#f3f1f7; container-type:inline-size;
   font-family:-apple-system, "SF Pro Text", "Onest", system-ui, sans-serif}
 .ag-ns{position:relative; height:100%; padding:4.167cqw 5cqw 0}
@@ -432,7 +482,7 @@ p { margin: 0; }
 .ag-n-chip{flex:none; font-size:4.167cqw; font-weight:600; padding:1.667cqw 1.667cqw 1.667cqw 3.333cqw; border-radius:416.25cqw; background:#17161b; border:0.417cqw solid #2a2930; display:inline-flex; gap:2.083cqw; align-items:center; color:#e9e7ef; transition:border-color .3s, color .3s}
 .ag-n-chip i{font-style:normal; background:#000; border-radius:416.25cqw; padding:0 2.083cqw; font-size:3.75cqw; transition:color .3s}
 .ag-n-chip.ag-hot{border-color:var(--magenta); color:#fff}
-.ag-n-chip.ag-hot i{color:#ff3df2}
+.ag-n-chip.ag-hot i{color:var(--mk-a1)}
 .ag-n-cards{position:relative; display:flex; flex-direction:column; gap:2.917cqw; margin-top:4.167cqw}
 .ag-n-card{--cbg:#1b1530; --cacc:#c89bff; --cline:#3a2c62;
   position:relative; border-radius:5.417cqw; padding:3.75cqw 16.667cqw 3.75cqw 4.583cqw; background:var(--cbg); border:0.417cqw solid var(--cline); min-height:30.833cqw;
@@ -453,17 +503,17 @@ p { margin: 0; }
 .ag-n-card.ag-ready .ag-n-path{color:#6c645c} .ag-n-card.ag-ready .ag-n-path b{color:#c56a1b} .ag-n-card.ag-ready .ag-n-what{color:#6c645c}
 .ag-n-card.ag-ready .ag-n-chev{background:#0000001a; color:#555}
 .ag-n-card.ag-idle{--cbg:#19181d; --cline:#2b2a31; --cacc:#e8e6ee}
-.ag-n-card.ag-idle .ag-n-path b{color:#ff3df2}
+.ag-n-card.ag-idle .ag-n-path b{color:var(--mk-a1)}
 .ag-n-ask{display:grid; grid-template-rows:0fr; transition:grid-template-rows .45s var(--ease)}
 .ag-n-ask > div{overflow:hidden; display:flex; gap:2.5cqw}
 .ag-n-ask button{position:relative; flex:1; margin-top:2.917cqw; font:600 4.375cqw/1 -apple-system, "Onest", sans-serif; padding:2.917cqw 0; border-radius:3.333cqw; border:0; color:#fff; background:#ffffff1a; cursor:default; transition:background .2s, transform .15s}
 .ag-n-ask button.ag-n-allow{background:var(--magenta)}
 .ag-n-ask button.ag-n-allow.ag-pressed{background:#ff5cc0; transform:scale(.95)}
 .ag-n-card.ag-ask .ag-n-ask{grid-template-rows:1fr}
-.ag-n-card::after{content:""; position:absolute; inset:-0.417cqw; border-radius:5.417cqw; pointer-events:none; opacity:0; transition:opacity .45s; box-shadow:0 0 0 0.625cqw #ff3df2, 0 0 9.167cqw 0.833cqw color-mix(in srgb, var(--magenta) 60%, transparent)}
+.ag-n-card::after{content:""; position:absolute; inset:-0.417cqw; border-radius:5.417cqw; pointer-events:none; opacity:0; transition:opacity .45s; box-shadow:0 0 0 0.625cqw var(--mk-a1), 0 0 9.167cqw 0.833cqw color-mix(in srgb, var(--magenta) 60%, transparent)}
 .ag-n-card.ag-waiting::after{opacity:1; animation:ag-n-pulse 1.6s ease-in-out infinite}
 @keyframes ag-n-pulse{50%{opacity:.55}}
-.ag-n-card.ag-waiting .ag-n-st{color:#ff3df2}
+.ag-n-card.ag-waiting .ag-n-st{color:var(--mk-a1)}
 .ag-n-card.ag-waiting .ag-mascot .ag-gl{animation:ag-gillL .9s ease-in-out infinite}
 .ag-n-card.ag-waiting .ag-mascot .ag-gr{animation:ag-gillR .9s ease-in-out infinite}
 .ag-n-card.ag-working .ag-n-axo{animation:ag-n-bob 2.2s ease-in-out infinite}
@@ -493,7 +543,7 @@ p { margin: 0; }
 .ag-tether path{fill:none; stroke-linecap:round}
 .ag-tether{--ag-cable:color-mix(in srgb, var(--ink) 22%, transparent)}
 .ag-t-cable{stroke:var(--ag-cable); stroke-width:3.5}
-.ag-t-pulse{stroke:#ff3df2; stroke-width:2.6; opacity:0}
+.ag-t-pulse{stroke:var(--mk-a1); stroke-width:2.6; opacity:0}
 .ag-t-pulse.ag-t-glow{stroke-width:9; filter:url(#ag-t-bloom)}
 .ag-anchor{position:absolute; left:50%; bottom:0; width:0; height:0; pointer-events:none}
 /* tapping a device picks its list */
@@ -553,6 +603,37 @@ p { margin: 0; }
   .ag-car-t b{font-size:14.5px}
   .ag-car-t small{font-size:11.5px}
 }
+
+/* ---------- skin strip (under the demo) ---------- */
+/* a short strip of skin cards drifting right to left, edge to edge, faded at
+   both ends. Every card is dim except the one under the pointer; the drift
+   stops while the pointer is on the strip. The track holds the list twice and
+   moves by half its width, so it wraps without a seam (each card carries its
+   gap as margin, so the halves are exactly equal) */
+.skstrip{position:relative; overflow:hidden; padding-block:26px 30px; border-top:1px dashed var(--rule);
+  -webkit-mask-image:linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent); mask-image:linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent)}
+.skstrip-track{display:flex; width:max-content; animation:skstrip-drift 110s linear infinite}
+.skstrip:hover .skstrip-track,.skstrip:focus-within .skstrip-track{animation-play-state:paused}
+@keyframes skstrip-drift{to{transform:translateX(-50%)}}
+.skc{position:relative; isolation:isolate; overflow:hidden; flex:none; width:208px; height:70px; margin-right:14px; padding:11px 14px;
+  display:flex; flex-direction:column; justify-content:space-between; text-align:left; cursor:pointer;
+  border:1px solid color-mix(in srgb, var(--sk-fg) 16%, transparent); border-radius:8px; background:var(--sk-bg); color:var(--sk-fg);
+  font:600 13.5px/1.3 var(--font-mono); opacity:.36; transition:opacity .3s, transform .3s, box-shadow .3s}
+.skc:hover,.skc:focus-visible{opacity:1; transform:translateY(-2px)}
+/* the skin being worn keeps a ring in its own accent, dim or not */
+.skc[aria-pressed="true"]{box-shadow:0 0 0 2px var(--paper), 0 0 0 4px var(--sk-a1)}
+.skc-n{display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.skc-n i{font-style:normal; color:var(--sk-a1)}
+.skc-m{display:flex; align-items:center; gap:6px; font:500 11.5px/1 var(--font-mono); color:var(--sk-a2)}
+.skc-m b{width:16px; height:6px; border-radius:3px; background:var(--sk-a1)}
+.skc-m b + b{background:var(--sk-a2); margin-right:4px}
+@media (prefers-reduced-motion: reduce){
+  /* no drift: the strip scrolls by hand, and the second copy goes */
+  .skstrip{overflow-x:auto}
+  .skstrip-track{animation:none; padding-inline:7vw}
+  .skc[data-copy]{display:none}
+}
+@media (max-width: 640px){ .skstrip{padding-block:20px 24px} .skc{width:184px; height:64px; margin-right:12px} }
 
 /* ---------- why ---------- */
 .issues { display: flex; flex-direction: column; }
@@ -614,8 +695,8 @@ p { margin: 0; }
   transition: background-color .5s, color .5s; font-size: 13px; line-height: 1.6; isolation: isolate;
   --trace-a: var(--sk-a2); --trace-b: var(--sk-a1);
 }
-.pane .tex { position: absolute; inset: 0; background: var(--sk-a1); opacity: .2; z-index: -1; transition: background-color .5s; pointer-events: none; -webkit-mask-repeat: repeat; mask-repeat: repeat; }
-.pane .tex.b { background: var(--sk-a2); opacity: .16; }
+.tex { position: absolute; inset: 0; background: var(--sk-a1); opacity: .2; z-index: -1; transition: background-color .5s; pointer-events: none; -webkit-mask-repeat: repeat; mask-repeat: repeat; }
+.tex.b { background: var(--sk-a2); opacity: .16; }
 .pane .a1 { color: var(--sk-a1); transition: color .5s; } .pane .a2 { color: var(--sk-a2); transition: color .5s; }
 .pane .mute { opacity: .66; }
 .pane-body { padding: 16px 18px; display: flex; flex-direction: column; gap: 2px; min-height: 220px; justify-content: flex-end; }
@@ -854,19 +935,19 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
   .pkt { display: none; }
 }
 
-.pane .tex:not([data-t]), .pane .tex[data-t=""] { display: none; }
-.pane .tex[data-t="grid"] { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24'%3E%3Cpath d='M24 0H0V24' fill='none' stroke='white' stroke-width='1'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24'%3E%3Cpath d='M24 0H0V24' fill='none' stroke='white' stroke-width='1'/%3E%3C/svg%3E"); }
-.pane .tex[data-t="scan"] { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='4'%3E%3Crect width='4' height='1.4' fill='white'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='4'%3E%3Crect width='4' height='1.4' fill='white'/%3E%3C/svg%3E"); }
-.pane .tex[data-t="dots"] { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14'%3E%3Ccircle cx='2' cy='2' r='1.3' fill='white'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14'%3E%3Ccircle cx='2' cy='2' r='1.3' fill='white'/%3E%3C/svg%3E"); }
-.pane .tex[data-t="bubbles"] { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60'%3E%3Ccircle cx='15' cy='18' r='7' fill='none' stroke='white'/%3E%3Ccircle cx='44' cy='40' r='4' fill='none' stroke='white'/%3E%3Ccircle cx='40' cy='10' r='2' fill='none' stroke='white'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60'%3E%3Ccircle cx='15' cy='18' r='7' fill='none' stroke='white'/%3E%3Ccircle cx='44' cy='40' r='4' fill='none' stroke='white'/%3E%3Ccircle cx='40' cy='10' r='2' fill='none' stroke='white'/%3E%3C/svg%3E"); }
-.pane .tex[data-t="diag"] { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12'%3E%3Cpath d='M-3 3L3 -3M0 12L12 0M9 15L15 9' stroke='white' stroke-width='2'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12'%3E%3Cpath d='M-3 3L3 -3M0 12L12 0M9 15L15 9' stroke='white' stroke-width='2'/%3E%3C/svg%3E"); }
-.pane .tex[data-t="sparkle"] { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48'%3E%3Cpath d='M12 6l1.5 4.5L18 12l-4.5 1.5L12 18l-1.5-4.5L6 12l4.5-1.5z' fill='white'/%3E%3Ccircle cx='36' cy='34' r='1.5' fill='white'/%3E%3Ccircle cx='30' cy='8' r='1' fill='white'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48'%3E%3Cpath d='M12 6l1.5 4.5L18 12l-4.5 1.5L12 18l-1.5-4.5L6 12l4.5-1.5z' fill='white'/%3E%3Ccircle cx='36' cy='34' r='1.5' fill='white'/%3E%3Ccircle cx='30' cy='8' r='1' fill='white'/%3E%3C/svg%3E"); }
-.pane .tex[data-t="bolt"] { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='70' height='90'%3E%3Cpath d='M38 4L24 40h12L22 84' fill='none' stroke='white' stroke-width='2.5' stroke-linejoin='round'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='70' height='90'%3E%3Cpath d='M38 4L24 40h12L22 84' fill='none' stroke='white' stroke-width='2.5' stroke-linejoin='round'/%3E%3C/svg%3E"); }
-.pane .tex[data-t="tide"] { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='22'%3E%3Cpath d='M0 11c10-8 20-8 30 0s20 8 30 0 20-8 30 0' fill='none' stroke='white' stroke-width='1.5'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='22'%3E%3Cpath d='M0 11c10-8 20-8 30 0s20 8 30 0 20-8 30 0' fill='none' stroke='white' stroke-width='1.5'/%3E%3C/svg%3E"); }
-.pane .tex[data-t="blade"] { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40'%3E%3Cpath d='M6 30L18 8M26 36L34 22' stroke='white' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40'%3E%3Cpath d='M6 30L18 8M26 36L34 22' stroke='white' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E"); }
-.pane .tex[data-t="petal"] { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='56'%3E%3Cellipse cx='14' cy='16' rx='6' ry='3' transform='rotate%28-30 14 16%29' fill='white'/%3E%3Cellipse cx='40' cy='42' rx='5' ry='2.5' transform='rotate%2825 40 42%29' fill='white'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='56'%3E%3Cellipse cx='14' cy='16' rx='6' ry='3' transform='rotate%28-30 14 16%29' fill='white'/%3E%3Cellipse cx='40' cy='42' rx='5' ry='2.5' transform='rotate%2825 40 42%29' fill='white'/%3E%3C/svg%3E"); }
-.pane .tex[data-t="stars"] { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64'%3E%3Ccircle cx='8' cy='12' r='1' fill='white'/%3E%3Ccircle cx='40' cy='6' r='.7' fill='white'/%3E%3Ccircle cx='28' cy='34' r='1.4' fill='white'/%3E%3Ccircle cx='56' cy='50' r='.8' fill='white'/%3E%3Ccircle cx='12' cy='54' r='.6' fill='white'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64'%3E%3Ccircle cx='8' cy='12' r='1' fill='white'/%3E%3Ccircle cx='40' cy='6' r='.7' fill='white'/%3E%3Ccircle cx='28' cy='34' r='1.4' fill='white'/%3E%3Ccircle cx='56' cy='50' r='.8' fill='white'/%3E%3Ccircle cx='12' cy='54' r='.6' fill='white'/%3E%3C/svg%3E"); }
-@media (prefers-reduced-motion: no-preference) { .skin-stage .pane .tex[data-t="scan"], .skin-stage .pane .tex[data-t="tide"], .skin-stage .pane .tex[data-t="stars"] { animation: tex-drift 18s linear infinite; } }
+.pane .tex:not([data-t]), .tex[data-t=""] { display: none; }
+.tex[data-t="grid"] { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24'%3E%3Cpath d='M24 0H0V24' fill='none' stroke='white' stroke-width='1'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24'%3E%3Cpath d='M24 0H0V24' fill='none' stroke='white' stroke-width='1'/%3E%3C/svg%3E"); }
+.tex[data-t="scan"] { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='4'%3E%3Crect width='4' height='1.4' fill='white'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='4'%3E%3Crect width='4' height='1.4' fill='white'/%3E%3C/svg%3E"); }
+.tex[data-t="dots"] { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14'%3E%3Ccircle cx='2' cy='2' r='1.3' fill='white'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14'%3E%3Ccircle cx='2' cy='2' r='1.3' fill='white'/%3E%3C/svg%3E"); }
+.tex[data-t="bubbles"] { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60'%3E%3Ccircle cx='15' cy='18' r='7' fill='none' stroke='white'/%3E%3Ccircle cx='44' cy='40' r='4' fill='none' stroke='white'/%3E%3Ccircle cx='40' cy='10' r='2' fill='none' stroke='white'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60'%3E%3Ccircle cx='15' cy='18' r='7' fill='none' stroke='white'/%3E%3Ccircle cx='44' cy='40' r='4' fill='none' stroke='white'/%3E%3Ccircle cx='40' cy='10' r='2' fill='none' stroke='white'/%3E%3C/svg%3E"); }
+.tex[data-t="diag"] { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12'%3E%3Cpath d='M-3 3L3 -3M0 12L12 0M9 15L15 9' stroke='white' stroke-width='2'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12'%3E%3Cpath d='M-3 3L3 -3M0 12L12 0M9 15L15 9' stroke='white' stroke-width='2'/%3E%3C/svg%3E"); }
+.tex[data-t="sparkle"] { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48'%3E%3Cpath d='M12 6l1.5 4.5L18 12l-4.5 1.5L12 18l-1.5-4.5L6 12l4.5-1.5z' fill='white'/%3E%3Ccircle cx='36' cy='34' r='1.5' fill='white'/%3E%3Ccircle cx='30' cy='8' r='1' fill='white'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48'%3E%3Cpath d='M12 6l1.5 4.5L18 12l-4.5 1.5L12 18l-1.5-4.5L6 12l4.5-1.5z' fill='white'/%3E%3Ccircle cx='36' cy='34' r='1.5' fill='white'/%3E%3Ccircle cx='30' cy='8' r='1' fill='white'/%3E%3C/svg%3E"); }
+.tex[data-t="bolt"] { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='70' height='90'%3E%3Cpath d='M38 4L24 40h12L22 84' fill='none' stroke='white' stroke-width='2.5' stroke-linejoin='round'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='70' height='90'%3E%3Cpath d='M38 4L24 40h12L22 84' fill='none' stroke='white' stroke-width='2.5' stroke-linejoin='round'/%3E%3C/svg%3E"); }
+.tex[data-t="tide"] { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='22'%3E%3Cpath d='M0 11c10-8 20-8 30 0s20 8 30 0 20-8 30 0' fill='none' stroke='white' stroke-width='1.5'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='22'%3E%3Cpath d='M0 11c10-8 20-8 30 0s20 8 30 0 20-8 30 0' fill='none' stroke='white' stroke-width='1.5'/%3E%3C/svg%3E"); }
+.tex[data-t="blade"] { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40'%3E%3Cpath d='M6 30L18 8M26 36L34 22' stroke='white' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40'%3E%3Cpath d='M6 30L18 8M26 36L34 22' stroke='white' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E"); }
+.tex[data-t="petal"] { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='56'%3E%3Cellipse cx='14' cy='16' rx='6' ry='3' transform='rotate%28-30 14 16%29' fill='white'/%3E%3Cellipse cx='40' cy='42' rx='5' ry='2.5' transform='rotate%2825 40 42%29' fill='white'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='56'%3E%3Cellipse cx='14' cy='16' rx='6' ry='3' transform='rotate%28-30 14 16%29' fill='white'/%3E%3Cellipse cx='40' cy='42' rx='5' ry='2.5' transform='rotate%2825 40 42%29' fill='white'/%3E%3C/svg%3E"); }
+.tex[data-t="stars"] { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64'%3E%3Ccircle cx='8' cy='12' r='1' fill='white'/%3E%3Ccircle cx='40' cy='6' r='.7' fill='white'/%3E%3Ccircle cx='28' cy='34' r='1.4' fill='white'/%3E%3Ccircle cx='56' cy='50' r='.8' fill='white'/%3E%3Ccircle cx='12' cy='54' r='.6' fill='white'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64'%3E%3Ccircle cx='8' cy='12' r='1' fill='white'/%3E%3Ccircle cx='40' cy='6' r='.7' fill='white'/%3E%3Ccircle cx='28' cy='34' r='1.4' fill='white'/%3E%3Ccircle cx='56' cy='50' r='.8' fill='white'/%3E%3Ccircle cx='12' cy='54' r='.6' fill='white'/%3E%3C/svg%3E"); }
+@media (prefers-reduced-motion: no-preference) { .skin-stage .tex[data-t="scan"], .skin-stage .tex[data-t="tide"], .skin-stage .tex[data-t="stars"] { animation: tex-drift 18s linear infinite; } }
 @keyframes tex-drift { to { -webkit-mask-position: 0 180px; mask-position: 0 180px; } }
 </style>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
@@ -944,6 +1025,7 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
                   <span class="ag-mac-status"><span class="ag-sg">✳</span><span data-on="0">Editing SessionList.swift</span><span class="ag-off" data-on="1 2 3">Waiting on you</span><span class="ag-off" data-on="4 5">Running tests</span><span class="ag-off" data-on="6">Ready</span></span>
                 </div>
                 <div class="ag-mac-body">
+                  <span class="tex a"></span><span class="tex b"></span>
                   <div class="ag-tl"><span class="ag-cy">~/code/lostty/skins</span> <span class="ag-mag">❯</span> claude</div>
                   <div class="ag-tbox ag-welcome"><span class="ag-mag">✻</span> Welcome to <b>Claude Code</b></div>
                   <div class="ag-tl"><span class="ag-dim">&gt;</span> sort the phone list so waiting sessions come first</div>
@@ -1046,6 +1128,11 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
         </div>
       </div>
     </div>
+  </section>
+
+  <!-- SKIN STRIP: cards drift right to left; tapping one re-skins the site and the demo's Mac -->
+  <section class="skstrip" id="skin-strip" aria-label="Try a skin">
+    <div class="skstrip-track" id="skstrip-track"></div>
   </section>
 
   <!-- WHY -->
@@ -2148,7 +2235,7 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
       if (!gl) { if (cv) cv.style.display = 'none'; return null; }
       const vs = 'attribute vec2 p;void main(){gl_Position=vec4(p,0.,1.);}';
       const fs = `precision mediump float;
-uniform vec2 uR;uniform float uT;uniform vec2 uM;uniform float uL;
+uniform vec2 uR;uniform float uT;uniform vec2 uM;uniform float uL;uniform vec3 uMag,uRose,uVio,uTeal;
 float h(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
 float n(vec2 p){vec2 i=floor(p),f=fract(p);vec2 u=f*f*(3.-2.*f);
 return mix(mix(h(i),h(i+vec2(1.,0.)),u.x),mix(h(i+vec2(0.,1.)),h(i+vec2(1.,1.)),u.x),u.y);}
@@ -2166,7 +2253,7 @@ void main(){
  vec2 c3=vec2(asp*(.52+.22*sin(t*.9)),.60+.10*sin(t*1.9));
  vec2 c4=vec2(asp*(.95+.05*cos(t*1.5)),.40+.10*cos(t*1.1));
  c1=mix(c1,m,.14);c3=mix(c3,m,.22);
- vec3 mag=vec3(.898,.098,.612),rose=vec3(1.,.45,.68),vio=vec3(.52,.33,1.),teal=vec3(.12,.80,.74);
+ vec3 mag=uMag,rose=uRose,vio=uVio,teal=uTeal;
  vec3 g=mag*blob(w,c1,.055)*.9+vio*blob(w,c2,.05)*.85+rose*blob(w,c3,.028)*.5+teal*blob(w,c4,.026)*.45;
  float band=fbm(vec2(p.x*1.6-t*1.8,p.y*2.6+t*.4));
  g+=mix(vio,mag,clamp(uv.x+.2*sin(t),0.,1.))*pow(band,3.6)*.55*smoothstep(.35,1.,uv.y);
@@ -2187,6 +2274,20 @@ void main(){
       const loc = gl.getAttribLocation(pr, 'p'); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
       const U = k => gl.getUniformLocation(pr, k);
       const uR = U('uR'), uT = U('uT'), uM = U('uM'), uL = U('uL');
+      // Aurora's four lights; a skin from the strip under the demo makes them
+      // its first accent (magenta, and a lighter rose) and its second (violet, teal)
+      const uC = [U('uMag'), U('uRose'), U('uVio'), U('uTeal')];
+      const OWN = [[.898, .098, .612], [1, .45, .68], [.52, .33, 1], [.12, .80, .74]];
+      let lights = OWN;
+      const rgb = h => { const n = parseInt(h.trim().slice(1), 16); return [(n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255]; };
+      const mixW = (c, k) => c.map(x => x + (1 - x) * k);
+      const readSkin = () => {
+        const r = document.documentElement, cs = getComputedStyle(r);
+        if (!r.hasAttribute('data-skin')) { lights = OWN; return; }
+        const a1 = rgb(cs.getPropertyValue('--sk-a1')), a2 = rgb(cs.getPropertyValue('--sk-a2'));
+        lights = [a1, mixW(a1, .35), a2, mixW(a2, .2)];
+      };
+      document.addEventListener('lostty-skin', readSkin);
       // half resolution, like Aurora: it's all soft gradients
       const size = () => { const r = cv.getBoundingClientRect(); cv.width = Math.max(2, Math.round(r.width * .5)); cv.height = Math.max(2, Math.round(r.height * .5)); gl.viewport(0, 0, cv.width, cv.height); };
       size(); addEventListener('resize', size);
@@ -2198,6 +2299,7 @@ void main(){
       $('#ag-aurora-fallback').classList.add('ag-gone');
       return (t, mx, my) => {
         gl.uniform2f(uR, cv.width, cv.height); gl.uniform1f(uT, t); gl.uniform2f(uM, mx, my); gl.uniform1f(uL, light);
+        uC.forEach((u, i) => gl.uniform3fv(u, lights[i]));
         gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT); gl.drawArrays(gl.TRIANGLES, 0, 3);
       };
     }
@@ -2407,6 +2509,58 @@ void main(){
     }
     tabs.forEach(function (t) { t.addEventListener('click', function () { sel(t); }); });
     sel(tabs[0]);
+  })();
+
+  /* ---------------- skin strip ---------------- */
+  // Tapping a card wears that skin: its colours go on the root as --sk-* with
+  // data-skin, which the CSS turns into the site's accents and the demo Mac's
+  // look. The first card is the site's own look and takes the skin off.
+  // Nothing is remembered: every visit starts in the site's own look.
+  (function () {
+    var track = $('#skstrip-track');
+    if (!track) return;
+    var OWN = { id: 'lostty', r: 'default', bg: '#120a2a', fg: '#f3ecff', a1: '#ff3df2', a2: '#28e7ff', tex: 'grid' };
+    var list = [OWN].concat(SKINS);
+    var macTex = $$('.ag-mac-body .tex');
+    var KEYS = ['bg', 'fg', 'a1', 'a2'];
+    function setTex(els, tex) {
+      var tx = (tex || '').split(' ');
+      els[0].setAttribute('data-t', TEX[tx[0]] ? tx[0] : '');
+      els[1].setAttribute('data-t', tx[1] && TEX[tx[1]] ? tx[1] : '');
+    }
+    function card(s, copy) {
+      var b = document.createElement('button');
+      b.type = 'button'; b.className = 'skc'; b.setAttribute('data-id', s.id);
+      KEYS.forEach(function (k) { b.style.setProperty('--sk-' + k, s[k]); });
+      b.innerHTML = '<span class="tex a"></span><span class="tex b"></span>' +
+        '<span class="skc-n"><i>❯</i> ' + s.id + '</span><span class="skc-m"><b></b><b></b>' + s.r + '</span>';
+      setTex($$('.tex', b), s.tex);
+      if (copy) { b.tabIndex = -1; b.setAttribute('aria-hidden', 'true'); b.setAttribute('data-copy', ''); }
+      else b.setAttribute('aria-label', s === OWN ? 'Lostty’s own look' : 'Wear the ' + s.id + ' skin');
+      b.setAttribute('aria-pressed', s === OWN ? 'true' : 'false');
+      return b;
+    }
+    [false, true].forEach(function (copy) { list.forEach(function (s) { track.appendChild(card(s, copy)); }); });
+    var cards = $$('.skc', track);
+    function wear(id) {
+      var s = SKIN[id];
+      if (s) {
+        root.setAttribute('data-skin', s.id);
+        KEYS.forEach(function (k) { root.style.setProperty('--sk-' + k, s[k]); });
+        setTex(macTex, s.tex);
+      } else {
+        root.removeAttribute('data-skin');
+        KEYS.forEach(function (k) { root.style.removeProperty('--sk-' + k); });
+      }
+      cards.forEach(function (c) { c.setAttribute('aria-pressed', c.getAttribute('data-id') === (s ? s.id : OWN.id) ? 'true' : 'false'); });
+      // the hero's glyph field and the demo's glow read colours in script
+      themeChanged();
+      document.dispatchEvent(new CustomEvent('lostty-skin'));
+    }
+    track.addEventListener('click', function (e) {
+      var c = e.target.closest('.skc');
+      if (c) wear(c.getAttribute('data-id'));
+    });
   })();
 
   /* ---------------- new session sheet ---------------- */
