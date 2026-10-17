@@ -408,6 +408,8 @@ p { margin: 0; }
 /* clipped sideways only (the iPhone overhangs the margin); the shadows run on past the bottom into the skin strip */
 .ag-demo{position:relative; overflow:hidden; overflow:clip visible}
 .ag-aurora,.ag-aurora-fallback{position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:0;
+  /* it reaches up behind the skin strip too (--strip-h, the strip's height, set by the script), so the glow runs into the carousel */
+  top:calc(-1 * var(--strip-h, 0px)); height:calc(100% + var(--strip-h, 0px));
   -webkit-mask-image:linear-gradient(transparent, #000 7%, #000 78%, transparent); mask-image:linear-gradient(transparent, #000 7%, #000 78%, transparent)}
 .ag-aurora{display:block}
 .ag-aurora-fallback{
@@ -2115,6 +2117,8 @@ void main(){
       // half resolution, like Aurora: it's all soft gradients
       const size = () => { const r = cv.getBoundingClientRect(); cv.width = Math.max(2, Math.round(r.width * .5)); cv.height = Math.max(2, Math.round(r.height * .5)); gl.viewport(0, 0, cv.width, cv.height); };
       size(); addEventListener('resize', size);
+      // it also grows when the skin strip above sets how far up it reaches
+      if (window.ResizeObserver) new ResizeObserver(size).observe(cv);
       let light = 0;
       const readTheme = () => { light = /dark/.test(getComputedStyle(document.documentElement).colorScheme) ? 0 : 1; };
       readTheme();
@@ -2395,9 +2399,14 @@ void main(){
     // the title floats below the strip; the demo under it leaves room for it
     // in its top padding, as tall as the title (it wraps on narrow screens)
     var foot = $('.skstrip-foot'), demoSec = $('#demo');
-    function titleRoom() { if (foot && demoSec) demoSec.style.setProperty('--strip-title-h', foot.offsetHeight + 'px'); }
+    function titleRoom() {
+      if (!foot || !demoSec) return;
+      demoSec.style.setProperty('--strip-title-h', foot.offsetHeight + 'px');
+      // and the demo's glow reaches up behind the whole strip
+      demoSec.style.setProperty('--strip-h', $('#skin-strip').offsetHeight + 'px');
+    }
     titleRoom();
-    if (window.ResizeObserver && foot) new ResizeObserver(titleRoom).observe(foot);
+    if (window.ResizeObserver && foot) { var ro = new ResizeObserver(titleRoom); ro.observe(foot); ro.observe($('#skin-strip')); }
     else addEventListener('resize', titleRoom);
     var strip = $('#skin-strip'), titleT = 0, enterT = 0, onStrip = false, SHOW_MS = 3000, HOVER_MS = 1000;
     function showTitles() {
