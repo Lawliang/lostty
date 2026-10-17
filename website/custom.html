@@ -454,10 +454,10 @@ p { margin: 0; }
 .ag-stage-col{display:grid; grid-template-columns:minmax(max-content, 1fr) minmax(0, 49.6em); gap:0 1.5em; align-items:center;
   min-width:0; font-size:clamp(6px, calc(100cqi / 70), 13px)}
 /* the section's heading sits over the lists; the devices span both rows */
-/* sized so its wider line, "between devices.", is exactly as wide as the stage
-   list under it: the text measures 7.766em in Onest 700 at this tracking, the
-   list 24rem */
-.ag-title{grid-column:1; grid-row:1; align-self:end; margin-bottom:56px; font-size:calc(24rem / 7.766)}
+/* sized so its wider line, "Swap more intuitively", is exactly as wide as the
+   stage list under it: the text measures 9.524em in Onest 700 at this
+   tracking, the list 24rem */
+.ag-title{grid-column:1; grid-row:1; align-self:end; margin-bottom:56px; font-size:calc(24rem / 9.524)}
 .ag-title > span{display:block}
 .ag-stage-col > .ag-stage{grid-column:2; grid-row:1 / span 2}
 .ag-stage-col > .ag-cats{grid-column:1; grid-row:2; align-self:start}
@@ -671,7 +671,7 @@ p { margin: 0; }
   .ag-stage[data-front="mac"] .ag-phone{transform:translate(-8.46%, -4.49%) translateZ(-1.5em) rotateY(5deg) scale(1.0759)}
   /* stacked: heading, then the devices, then the lists */
   /* stacked, the list runs the column's width: min(49.6em at 13px, 99.2cqi) */
-  .ag-title{grid-row:1; margin-bottom:24px; font-size:calc(min(644.8px, 99.2cqi) / 7.766)}
+  .ag-title{grid-row:1; margin-bottom:24px; font-size:calc(min(644.8px, 99.2cqi) / 9.524)}
   .ag-stage-col > .ag-stage{grid-column:1; grid-row:2}
   .ag-stage-col > .ag-cats{grid-row:3}
   .ag-cats{order:0; width:100%}
@@ -680,7 +680,7 @@ p { margin: 0; }
   /* on phones the heading stops filling the column (36px), and goes under
      the Mac and iPhone, centred: devices, then heading, then the lists */
   /* more room above it (from the devices) than below it (to the lists) */
-  .ag-title{font-size:36px; text-align:center; justify-self:center; margin:64px 0 12px}
+  .ag-title{font-size:32px; text-align:center; justify-self:center; margin:48px 0 12px}
   .ag-stage-col{row-gap:8px}
   .ag-stage-col > .ag-stage{grid-row:1}
   .ag-stage-col > .ag-title{grid-row:2}
@@ -1295,7 +1295,7 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
     <div class="ag-aurora-fallback" id="ag-aurora-fallback" aria-hidden="true"></div>
     <div class="wrap">
       <div class="ag-stage-col">
-        <h2 class="ag-title" data-decode><span>Swap intuitively</span> <span>between devices.</span></h2>
+        <h2 class="ag-title" data-decode><span>Swap more intuitively</span> <span>between devices.</span></h2>
         <div class="ag-stage" id="ag-stage" data-step="0" aria-label="Animated example: Claude stops for permission on the Mac, the iPhone shows it waiting on you, you tap Allow on the phone and Claude carries on." role="img">
           <svg class="ag-tether" id="ag-tether" aria-hidden="true"><defs><filter id="ag-t-bloom" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="3"/></filter></defs><path class="ag-t-cable"/><path class="ag-t-pulse ag-t-glow"/><path class="ag-t-pulse"/></svg>
           <div class="ag-rig" id="ag-rig">
@@ -2015,11 +2015,12 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
       // narrow: centred in the room between the hero's top and the headline's
       var h1 = copy && copy.querySelector('h1');
       var room = h1 ? h1.getBoundingClientRect().top - hero.getBoundingClientRect().top : 0;
-      if (!(room > 80)) room = Math.min(290, H) + 6;
-      // the copy comes first: when the room is short the art keeps at least
-      // 200px and runs down behind the headline, which sits on top of it
-      var rh = Math.min(270, Math.max(200, room - 20));
-      return { x: 8, y: Math.max(10, (room - rh) / 2), w: W - 16, h: rh };
+      if (!h1) room = Math.min(290, H) + 6;
+      // sized to that room, 12px clear above and below. The copy comes first:
+      // in a room too short for 140px the art keeps that and runs down behind
+      // the headline, which sits on top of it
+      var rh = Math.max(140, room - 24);
+      return { x: 8, y: Math.max(12, (room - rh) / 2), w: W - 16, h: rh };
     }
     function buildMasks() {
       mcv.width = cols; mcv.height = rows;
