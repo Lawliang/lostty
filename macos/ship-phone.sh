@@ -1,10 +1,11 @@
 #!/bin/sh
 # Builds the iPhone app (Release, development-signed for the team's phones)
-# and installs it on the phone over the cable. When the Mac can't reach the
-# phone, it publishes the build on this Mac's Tailscale address for an
-# over-the-air install instead: open https://<this Mac>.<tailnet>.ts.net/ on
-# the phone, tap Install. Needs HTTPS certificates on for the tailnet (Tailscale admin
-# console: DNS > HTTPS Certificates), and serves to the tailnet only.
+# and installs it on the phone over the cable, else over Wi-Fi. When the Mac
+# can't reach the phone either way, it publishes the build on this Mac's
+# Tailscale address for an over-the-air install instead: open
+# https://<this Mac>.<tailnet>.ts.net/ on the phone, tap Install. Needs HTTPS
+# certificates on for the tailnet (Tailscale admin console: DNS > HTTPS
+# Certificates), and serves to the tailnet only.
 #
 #   macos/ship-phone.sh ["What's new line" ...]
 set -eu
@@ -83,27 +84,46 @@ xcodebuild -exportArchive -archivePath "$OUT/Lostty.xcarchive" -exportPath "$OUT
 
 cp "$OUT/export/"*.ipa "$OUT/Lostty.ipa"
 
-# A phone the Mac can reach (its cable, or the same network) gets the build
-# now, and then there's no page to publish.
+# The phone gets the build the most direct way the Mac can reach it: over
+# the cable, else over Wi-Fi (the same network; the phone needs "Connect via
+# network" on in Xcode's Devices window), and only then a Tailscale page.
+install_on_phone() { # how
+  xcrun devicectl device install app --device "$PHONE" --timeout 180 "$OUT/Lostty.ipa" \
+    > "$OUT/install.log" 2>&1 || return 1
+  echo "Installed build $BUILD ($COMMIT) on the phone over $1."
+  exit 0
+}
+# The paired iPhone and how it's connected now: "wired", "localNetwork", or
+# nothing when the Mac doesn't see it (asleep, or away).
+PHONE=""; TRANSPORT=""
 if xcrun devicectl list devices --json-output "$OUT/devices.json" >/dev/null 2>&1; then
-  PHONE=$(python3 -I -c '
+  read -r PHONE TRANSPORT <<EOF
+$(python3 -I -c '
 import json, sys
 for d in json.load(open(sys.argv[1]))["result"]["devices"]:
-    if d["hardwareProperties"].get("deviceType") == "iPhone" \
-            and d["connectionProperties"].get("tunnelState") != "unavailable":
-        print(d["identifier"]); break' "$OUT/devices.json")
-  if [ -n "$PHONE" ]; then
-    if xcrun devicectl device install app --device "$PHONE" "$OUT/Lostty.ipa" \
-        > "$OUT/install.log" 2>&1; then
-      echo "Installed build $BUILD ($COMMIT) on the phone directly."
-      exit 0
-    fi
-    echo "Couldn't install on the phone directly (see $OUT/install.log); publishing it over Tailscale."
-  else
-    echo "The phone isn't connected; publishing it over Tailscale."
-  fi
+    c = d["connectionProperties"]
+    if d["hardwareProperties"].get("deviceType") == "iPhone" and c.get("pairingState") == "paired":
+        available = c.get("tunnelState") != "unavailable"
+        print(d["identifier"], (c.get("transportType") if available else None) or ""); break' "$OUT/devices.json")
+EOF
+fi
+if [ -z "$PHONE" ]; then
+  echo "No iPhone is paired with this Mac; publishing it over Tailscale."
 else
-  echo "Couldn't look for the phone; publishing it over Tailscale."
+  if [ "$TRANSPORT" = wired ]; then
+    install_on_phone "the cable" \
+      || echo "Couldn't install over the cable (see $OUT/install.log); trying Wi-Fi."
+  else
+    echo "The phone isn't on the cable; trying Wi-Fi."
+  fi
+  # A phone that just woke can take a few seconds to show up on the network;
+  # any other failure isn't worth repeating.
+  for try in 1 2 3 4; do
+    install_on_phone "Wi-Fi" || true
+    grep -q "unable to locate a device" "$OUT/install.log" || break
+    [ "$try" = 4 ] || sleep 5
+  done
+  echo "Couldn't reach the phone over Wi-Fi (see $OUT/install.log); publishing it over Tailscale."
 fi
 
 HOST=$(tailscale status --json | python3 -I -c 'import json,sys; print(json.load(sys.stdin)["Self"]["DNSName"].rstrip("."))')
