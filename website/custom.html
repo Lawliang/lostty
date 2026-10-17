@@ -1109,6 +1109,8 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
    two short notes side by side (stacked on phones) and the Stripe button */
 #support-view { font-family: "Onest", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
 .sup-card { max-width: 860px; margin-inline: auto; padding: clamp(28px, 5vw, 64px); text-align: center; }
+/* phones: the card sits 16px under the nav, like its side gutters (the section's 72px read as a hole) */
+@media (max-width: 640px) { .sec.sup { padding-top: 16px; } }
 .sup-mascot { position: relative; width: 96px; height: 96px; margin: 0 auto 14px; }
 .sup-mascot .ag-mascot { position: relative; z-index: 1; width: 96px; height: 96px; }
 .sup-mascot::after { content: ""; position: absolute; left: 50%; bottom: -6px; width: 80px; height: 16px; transform: translateX(-50%); border-radius: 50%;
