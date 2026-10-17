@@ -625,8 +625,8 @@ p { margin: 0; }
 @container (max-width:1040px){
   .skstrip h2{font-size:calc(min(644.8px, 99.2cqi) / 7.276)}
 }
-/* hidden until the strip is hovered or a card is tapped (.show, set by the
-   script), then it slides in from the right, and goes again 3s after the
+/* hidden until the strip is hovered for a second or a card is tapped (.show,
+   set by the script), then it slides in from the right, and goes again 3s after the
    last of either. It keeps its space, so nothing moves when it comes and goes */
 .skstrip h2{transition:opacity .5s, transform .7s cubic-bezier(.22, .8, .2, 1)}
 .skstrip:not(.show) .skstrip-head h2{opacity:0; transform:translateX(-48px)}
@@ -2359,8 +2359,9 @@ void main(){
       document.dispatchEvent(new CustomEvent('lostty-skin'));
     }
     // the title: shown while the pointer is on the strip and when a card is
-    // tapped, hidden again 3s after the last of either
-    var strip = $('#skin-strip'), titleT = 0, onStrip = false, SHOW_MS = 3000;
+    // tapped, hidden again 3s after the last of either. A hover has to last
+    // a second before it shows the title
+    var strip = $('#skin-strip'), titleT = 0, enterT = 0, onStrip = false, SHOW_MS = 3000, HOVER_MS = 1000;
     function showTitles() {
       strip.classList.add('show');
       clearTimeout(titleT);
@@ -2412,8 +2413,18 @@ void main(){
     function setHold(n) { hold = n; go(); }
     var hovering = false, focused = false;
     function sync() { setHold(hovering || focused ? 1 : 0); }
-    run.addEventListener('pointerenter', function (e) { if (e.pointerType === 'mouse') { hovering = true; sync(); onStrip = true; showTitles(); } });
-    run.addEventListener('pointerleave', function (e) { if (e.pointerType === 'mouse') { hovering = false; sync(); onStrip = false; showTitles(); } });
+    run.addEventListener('pointerenter', function (e) {
+      if (e.pointerType !== 'mouse') return;
+      hovering = true; sync(); onStrip = true;
+      clearTimeout(enterT); enterT = setTimeout(function () { if (onStrip) showTitles(); }, HOVER_MS);
+    });
+    run.addEventListener('pointerleave', function (e) {
+      if (e.pointerType !== 'mouse') return;
+      hovering = false; sync(); onStrip = false;
+      clearTimeout(enterT);
+      // already showing: start its 3s from now
+      if (strip.classList.contains('show')) showTitles();
+    });
     // keyboard focus only: a mouse click leaves focus on the card, which mustn't keep it stopped
     run.addEventListener('focusin', function (e) { var k = false; try { k = e.target.matches(':focus-visible'); } catch (_) {} if (k) { focused = true; sync(); } });
     run.addEventListener('focusout', function () { focused = false; sync(); });
