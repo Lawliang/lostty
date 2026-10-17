@@ -461,11 +461,13 @@ p { margin: 0; }
    section's top and bottom; the static gradients stand in without WebGL */
 /* clipped sideways only (the iPhone overhangs the margin); the shadows run on past the bottom into the skin strip */
 .ag-demo{position:relative; overflow:hidden; overflow:clip visible}
-.ag-aurora,.ag-aurora-fallback{position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:0;
+.ag-aurora,.ag-aurora-fallback,.ag-skinfx{position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:0;
   /* it reaches up behind the skin strip too (--strip-h, the strip's height, set by the script), so the glow runs into the carousel */
   top:calc(-1 * var(--strip-h, 0px)); height:calc(100% + var(--strip-h, 0px));
   -webkit-mask-image:linear-gradient(transparent, #000 7%, #000 78%, transparent); mask-image:linear-gradient(transparent, #000 7%, #000 78%, transparent)}
 .ag-aurora{display:block}
+/* the equipped skin's own animation (Skin Shifter's), under the glow; script-drawn */
+.ag-skinfx{display:block}
 /* lighter on phones, where it fills most of the screen */
 @media (max-width: 640px){ .ag-aurora,.ag-aurora-fallback{opacity:.55} }
 .ag-aurora-fallback{
@@ -703,7 +705,9 @@ p { margin: 0; }
    a desktop column, down to 18px on phones */
 .skstrip-head{container-type:inline-size}
 .skstrip h2{margin:0 auto; max-width:none; text-align:center; font-size:clamp(15px, 1.75cqi, 20px); letter-spacing:-.03em}
-/* one title, "We are unaffiliated, fully open source. So here are our coolest skins.", centred under the cards */
+/* one title, "We are unaffiliated, fully open source. Here are our coolest skins. Tap to support us.", centred under the cards */
+/* "Tap to support us." in the skin's accent (the site's magenta with no skin on) */
+.skstrip-tap{color:var(--magenta-ink)}
 .skstrip-foot h2{margin:0; text-align:center}
 /* hidden until the strip is hovered for a second or a card is tapped (.show,
    set by the script), then it slides down into place from above, and goes
@@ -1280,11 +1284,12 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
   <!-- SKIN STRIP: cards drift right to left; tapping one re-skins the site and the demo's Mac -->
   <section class="skstrip" id="skin-strip">
     <div class="skstrip-run"><div class="skstrip-track" id="skstrip-track"></div></div>
-    <div class="wrap skstrip-head skstrip-foot"><h2>We are unaffiliated, fully open source. So here are our coolest skins.</h2></div>
+    <div class="wrap skstrip-head skstrip-foot"><h2>We are unaffiliated, fully open source. Here are our coolest skins. <span class="skstrip-tap">Tap to support us.</span></h2></div>
   </section>
 
   <!-- DEMO -->
   <section class="sec ag-demo" id="demo" style="border-top:0">
+    <canvas class="ag-skinfx" id="ag-skinfx" aria-hidden="true"></canvas>
     <canvas class="ag-aurora" id="ag-aurora" aria-hidden="true"></canvas>
     <div class="ag-aurora-fallback" id="ag-aurora-fallback" aria-hidden="true"></div>
     <div class="wrap">
@@ -1893,6 +1898,178 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
         tabs.forEach(function (x) { x.setAttribute('aria-selected', x === t ? 'true' : 'false'); });
       });
     });
+  })();
+
+  /* ---------------- skin animations (Skin Shifter's) ---------------- */
+  // A skin from the strip plays its own animation behind the demo (rain,
+  // lightning, blade glints, petals, stars…), under Aurora's glow: Skin
+  // Shifter's painters, ported as they were, on a canvas the size of the glow.
+  // Switching skins cross-fades; taking the skin off fades it out. Only runs
+  // while on screen; reduced motion draws one still frame.
+  (function () {
+    var cv = $('#ag-skinfx');
+    if (!cv) return;
+    var c = cv.getContext('2d');
+    var TAU = Math.PI * 2;
+    function rnd(seed){return function(){seed|=0;seed=seed+0x6D2B79F5|0;var t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+    var R = rnd(7);
+    function arr(n,f){var a=[];for(var i=0;i<n;i++)a.push(f(i));return a}
+    var P={
+     stars:arr(220,function(){return{x:R(),y:R(),r:R()*R()*1.7+.35,ph:R()*TAU,sp:.5+R()*1.6}}),
+     sparks:arr(64,function(){return{x:R(),y:R(),s:3+R()*8,ph:R()*TAU,sp:.5+R()*1.1}}),
+     petals:arr(44,function(){return{x:R(),y:R(),s:5+R()*7,rot:R()*TAU,vr:(R()-.5)*.9,vx:.003+R()*.008,vy:.012+R()*.02,ph:R()*TAU}}),
+     embers:arr(56,function(){return{x:R(),y:R(),s:.8+R()*2.2,v:.012+R()*.03,ph:R()*TAU}}),
+     bubbles:arr(28,function(){return{x:R(),y:R(),r:4+R()*13,v:.008+R()*.018,ph:R()*TAU}}),
+     slashes:arr(16,function(){return{x:R()*1.1-.05,y:R(),l:.16+R()*.3,a:-.55-R()*.5,w:.8+R()*1.6}}),
+     drops:arr(44,function(){return{x:R(),y:R(),l:.04+R()*.1,v:.03+R()*.07}})
+    };
+    function makeBolt(r,x,y,ang,len,depth){var pts=[[x,y]],br=[],cx=x,cy=y;for(var i=0;i<12;i++){var a=ang+(r()-.5)*1.2;cx+=Math.cos(a)*len/12;cy+=Math.sin(a)*len/12;pts.push([cx,cy]);if(depth&&r()<.28){var b=makeBolt(r,cx,cy,ang+(r()<.5?-.75:.75),len*.38,depth-1);br.push(b.pts);br=br.concat(b.br)}}return{pts:pts,br:br}}
+    var BR=rnd(42);
+    var BOLTS=[[.2,-.03,1.3,.85],[.63,-.03,1.8,.7],[.88,.1,1.5,.6]].map(function(b){return makeBolt(BR,b[0],b[1],b[2],b[3],1)});
+    function cnt(N,w,h,u){var k=(w/u)*(h/u)/(1440*900);return Math.max(6,Math.round(N*Math.min(1,Math.max(.22,k))))}
+    function wrap1(v){return((v%1)+1)%1}
+    function path(c,pts,w,h){c.beginPath();for(var j=0;j<pts.length;j++){var p=pts[j];if(j)c.lineTo(p[0]*w,p[1]*h);else c.moveTo(p[0]*w,p[1]*h)}c.stroke()}
+    function tGrid(c,w,h,t,s,k,u){
+     var g=46*u,off=(t*10*u)%g,x,y;c.lineWidth=u;
+     c.strokeStyle=s.a1;c.globalAlpha=.17*k;c.beginPath();for(x=(w/2)%g;x<w;x+=g){c.moveTo(x,0);c.lineTo(x,h)}c.stroke();
+     c.strokeStyle=s.a2;c.globalAlpha=.13*k;c.beginPath();for(y=off-g;y<h;y+=g){c.moveTo(0,y);c.lineTo(w,y)}c.stroke();
+     c.fillStyle=s.a2;for(var i=0;i<18;i++){var p=P.stars[i],tw=Math.max(0,Math.sin(t*p.sp+p.ph));c.globalAlpha=.6*tw*k;
+      var gx=Math.floor(p.x*w/g)*g+(w/2)%g,gy=Math.floor(p.y*h/g)*g+off;c.fillRect(gx-1.5*u,gy-1.5*u,3*u,3*u)}
+    }
+    function tScan(c,w,h,t,s,k,u){
+     var cx=w*.78,cy=h*.6,r=Math.min(w,h)*.3;c.save();c.beginPath();c.arc(cx,cy,r,0,TAU);c.clip();
+     var gr=c.createLinearGradient(0,cy-r,0,cy+r);gr.addColorStop(0,s.a1);gr.addColorStop(1,s.a2);c.fillStyle=gr;c.globalAlpha=.2*k;
+     var y=cy-r,band=0;while(y<cy+r){var gap=y>cy-r*.15?Math.max(1,(y-(cy-r*.15))/r*14)*u:0;var hgt=y>cy-r*.15?9*u:2*r;c.fillRect(cx-r,y,2*r,hgt);y+=hgt+gap;band++;if(band>60)break}
+     c.restore();
+     c.fillStyle=s.fg;c.globalAlpha=.05*k;for(var yy=0;yy<h;yy+=3*u)c.fillRect(0,yy,w,u);
+     var by=((t*.07)%1.3-.15)*h,bg=c.createLinearGradient(0,by-70*u,0,by+70*u);bg.addColorStop(0,"rgba(0,0,0,0)");bg.addColorStop(.5,s.a2);bg.addColorStop(1,"rgba(0,0,0,0)");
+     c.fillStyle=bg;c.globalAlpha=.07*k;c.fillRect(0,by-70*u,w,140*u);
+    }
+    function tDots(c,w,h,t,s,k,u){
+     var g=22*u,x,y;c.fillStyle=s.a1;c.globalAlpha=.18*k;for(y=g/2;y<h;y+=g)for(x=g/2;x<w;x+=g)c.fillRect(x-.9*u,y-.9*u,1.8*u,1.8*u);
+     var n=cnt(P.drops.length,w,h,u);for(var i=0;i<n;i++){var p=P.drops[i],col=Math.floor(p.x*w/g)*g+g/2,L=p.l*h,yy=wrap1(p.y+t*p.v)*(h+L)-L;
+      var gr=c.createLinearGradient(0,yy,0,yy+L);gr.addColorStop(0,"rgba(0,0,0,0)");gr.addColorStop(1,i%3?s.a1:s.a2);c.fillStyle=gr;c.globalAlpha=.5*k;c.fillRect(col-u,yy,2*u,L)}
+    }
+    function tWaves(c,w,h,t,s,k,u){
+     var n=Math.max(5,Math.round(h/(58*u)));c.lineWidth=1.3*u;
+     for(var i=0;i<=n;i++){var y0=i/n*h;c.strokeStyle=i%2?s.a2:s.a1;c.globalAlpha=.15*k;c.beginPath();
+      for(var x=0;x<=w+12*u;x+=12*u){var y=y0+Math.sin(x/(150*u)+t*.7+i*.9)*9*u;if(x)c.lineTo(x,y);else c.moveTo(x,y)}c.stroke()}
+     var m=cnt(P.bubbles.length,w,h,u);c.strokeStyle=s.a1;c.lineWidth=u;
+     for(var j=0;j<m;j++){var b=P.bubbles[j],bx=(b.x+Math.sin(t*.8+b.ph)*.01)*w,by=wrap1(b.y-t*b.v)*h;c.globalAlpha=.22*k;c.beginPath();c.arc(bx,by,b.r*.5*u,0,TAU);c.stroke()}
+    }
+    function tDiag(c,w,h,t,s,k,u){
+     c.save();c.fillStyle=s.a1;c.globalAlpha=.075*k;var g=34*u,off=(t*9*u)%g,L=Math.hypot(w,h);c.translate(w/2,h/2);c.rotate(-Math.PI/4);
+     for(var x=-L/2-g+off;x<L/2;x+=g)c.fillRect(x,-L/2,11*u,L);c.restore();
+     var gr=c.createLinearGradient(0,h,0,h*.55);gr.addColorStop(0,s.a1);gr.addColorStop(1,"rgba(0,0,0,0)");c.fillStyle=gr;c.globalAlpha=.1*k;c.fillRect(0,h*.55,w,h*.45);
+     var n=cnt(P.embers.length,w,h,u);for(var i=0;i<n;i++){var p=P.embers[i],ex=(p.x+Math.sin(t*.9+p.ph)*.012)*w,ey=wrap1(p.y-t*p.v)*h,f=.5+.5*Math.sin(t*4+p.ph*3);
+      c.fillStyle=i%2?s.a2:s.a1;c.globalAlpha=(.25+.5*f)*k*(ey/h);c.beginPath();c.arc(ex,ey,p.s*u,0,TAU);c.fill()}
+    }
+    function star4(c,x,y,r){c.beginPath();c.moveTo(x,y-r);c.quadraticCurveTo(x,y,x+r,y);c.quadraticCurveTo(x,y,x,y+r);c.quadraticCurveTo(x,y,x-r,y);c.quadraticCurveTo(x,y,x,y-r);c.fill()}
+    function tSpark(c,w,h,t,s,k,u){
+     var n=cnt(P.sparks.length,w,h,u);for(var i=0;i<n;i++){var p=P.sparks[i],tw=Math.max(0,Math.sin(t*p.sp+p.ph));
+      c.fillStyle=i%3?s.a2:s.a1;c.globalAlpha=(.08+.6*tw)*k;star4(c,p.x*w,p.y*h,p.s*u*(.45+.55*tw))}
+     var m=cnt(P.bubbles.length,w,h,u);c.lineWidth=1.2*u;
+     for(var j=0;j<m;j++){var b=P.bubbles[j],bx=(b.x+Math.sin(t*.7+b.ph)*.015)*w,by=wrap1(b.y-t*b.v)*h;c.strokeStyle=s.a1;c.globalAlpha=.2*k;c.beginPath();c.arc(bx,by,b.r*u,0,TAU);c.stroke();
+      c.fillStyle=s.fg;c.globalAlpha=.18*k;c.beginPath();c.arc(bx-b.r*.35*u,by-b.r*.35*u,b.r*.18*u,0,TAU);c.fill()}
+    }
+    function bolts(c,w,h,t,col,k,u){
+     c.strokeStyle=col;c.lineJoin="round";
+     for(var i=0;i<BOLTS.length;i++){var b=BOLTS[i],cyc=(t+i*2.4)%7,I=cyc<.08?1:cyc<.6?Math.exp(-(cyc-.08)*6)*(.55+.45*Math.sin(cyc*80)):0;
+      c.globalAlpha=(.1+.75*I)*k;c.lineWidth=(1.4+1.6*I)*u;if(I>.05){c.shadowColor=col;c.shadowBlur=16*u*I}path(c,b.pts,w,h);
+      c.lineWidth=(.8+I)*u;c.globalAlpha=(.07+.5*I)*k;for(var j=0;j<b.br.length;j++)path(c,b.br[j],w,h);c.shadowBlur=0;
+      if(I>.05){c.fillStyle=col;c.globalAlpha=.05*I*k;c.fillRect(0,0,w,h)}}
+    }
+    function tLight(c,w,h,t,s,k,u){
+     c.strokeStyle=s.a2;c.lineWidth=u;c.globalAlpha=.06*k;c.beginPath();
+     for(var i=0;i<90;i++){var p=P.stars[i],x=p.x*w,y=wrap1(p.y+t*.35*p.sp)*h;c.moveTo(x,y);c.lineTo(x-7*u,y+22*u)}c.stroke();
+     bolts(c,w,h,t,s.a1,k,u);
+    }
+    function tide(c,w,h,t,col,k,u){
+     var n=Math.max(6,Math.round(h/(44*u)));c.lineWidth=1.25*u;c.strokeStyle=col;
+     for(var i=0;i<=n;i++){var y0=i/n*h;c.globalAlpha=(i%3===0?.17:.09)*k;c.beginPath();
+      for(var x=0;x<=w+14*u;x+=14*u){var y=y0+Math.sin(x/(270*u)+t*.32+i*.7)*11*u+Math.sin(x/(95*u)-t*.45+i)*4*u;if(x)c.lineTo(x,y);else c.moveTo(x,y)}c.stroke()}
+    }
+    function tTide(c,w,h,t,s,k,u){tide(c,w,h,t,s.a1,k,u);
+     var m=cnt(P.embers.length,w,h,u);c.fillStyle=s.fg;for(var i=0;i<m;i++){var p=P.embers[i];c.globalAlpha=(.1+.15*Math.sin(t+p.ph))*k;c.fillRect(wrap1(p.x+t*.004)*w,p.y*h,1.4*u,1.4*u)}}
+    function tBlades(c,w,h,t,s,k,u){
+     var n=cnt(P.slashes.length,w,h,u)+3;n=Math.min(n,P.slashes.length);
+     for(var i=0;i<n;i++){var p=P.slashes[i],L=p.l*Math.max(w,h)*.7,x=p.x*w,y=p.y*h,dx=Math.cos(p.a)*L,dy=Math.sin(p.a)*L,nx=-dy/L,ny=dx/L,wd=p.w*3*u;
+      c.fillStyle=s.a1;c.globalAlpha=.17*k;c.beginPath();c.moveTo(x,y);c.quadraticCurveTo(x+dx/2+nx*wd,y+dy/2+ny*wd,x+dx,y+dy);c.quadraticCurveTo(x+dx/2-nx*wd*.2,y+dy/2-ny*wd*.2,x,y);c.fill();
+      var gl=(t*.22+i*.37)%1.6;if(gl<1){c.fillStyle=s.a2;c.globalAlpha=.55*Math.sin(gl*Math.PI)*k;c.beginPath();c.arc(x+dx*gl,y+dy*gl,2*u,0,TAU);c.fill()}}
+    }
+    function tPetals(c,w,h,t,s,k,u){
+     var n=cnt(P.petals.length,w,h,u);for(var i=0;i<n;i++){var p=P.petals[i],x=wrap1(p.x+t*p.vx+Math.sin(t*.6+p.ph)*.015)*w,y=wrap1(p.y+t*p.vy)*h*1.1-h*.05,sz=p.s*u;
+      c.save();c.translate(x,y);c.rotate(p.rot+t*p.vr);c.fillStyle=i%3?s.a1:s.a2;c.globalAlpha=(i%3?.3:.22)*k;c.beginPath();c.moveTo(0,-sz);
+      c.bezierCurveTo(sz*.95,-sz*.55,sz*.65,sz*.75,0,sz);c.bezierCurveTo(-sz*.65,sz*.75,-sz*.95,-sz*.55,0,-sz);c.fill();c.restore()}
+    }
+    function tStars(c,w,h,t,s,k,u){
+     var n=cnt(P.stars.length,w,h,u);for(var i=0;i<n;i++){var p=P.stars[i],tw=.55+.45*Math.sin(t*p.sp+p.ph);c.fillStyle=i%7?s.fg:s.a1;
+      c.globalAlpha=(.12+.55*tw)*k*(p.r>1.2?1:.7);c.beginPath();c.arc(p.x*w,p.y*h,p.r*u,0,TAU);c.fill()}
+     var mx=w*.84,my=h*.17,mr=Math.max(14*u,Math.min(w,h)*.07);c.save();c.beginPath();c.arc(mx,my,mr,0,TAU);c.clip();c.beginPath();c.arc(mx,my,mr,0,TAU);
+     c.moveTo(mx+mr*.42+mr*.9,my-mr*.22);c.arc(mx+mr*.42,my-mr*.22,mr*.9,0,TAU);c.fillStyle=s.a2;c.globalAlpha=.4*k;c.fill("evenodd");c.restore();
+     var ph=t%8;if(ph<1.5){var q=ph/1.5,hx=w*(-.1+1.2*q),hy=h*(.12+.3*q),tx=hx-w*.14,ty=hy-h*.035;var gr=c.createLinearGradient(tx,ty,hx,hy);gr.addColorStop(0,"rgba(0,0,0,0)");gr.addColorStop(1,s.a1);
+      c.strokeStyle=gr;c.lineWidth=1.6*u;c.globalAlpha=.85*Math.sin(q*Math.PI)*k;c.beginPath();c.moveTo(tx,ty);c.lineTo(hx,hy);c.stroke()}
+    }
+    function tTemp(c,w,h,t,s,k,u){tide(c,w,h,t,s.a2,k,u);bolts(c,w,h,t+1.2,s.a1,k*.9,u)}
+    // each of the strip's skins to its painter in Skin Shifter
+    var FX = {
+      'neon-arcade': tGrid, 'sunset-drive': tScan, 'mint-protocol': tDots, 'deep-dive': tWaves,
+      'lava-rush': tDiag, 'bubble-pop': tSpark, 'thunderhead': tLight, 'undertow': tTide,
+      'bloodrite': tBlades, 'heartsease': tPetals, 'silverbow': tStars, 'stormsurge': tTemp
+    };
+
+    // Shifter drew on the skin's own dark background; on Custom's light paper
+    // the colours go 30% toward the ink (and the light fg becomes the ink
+    // itself) and a little stronger, so pale accents still show
+    var light = false;
+    function readTheme() { light = !/dark/.test(getComputedStyle(root).colorScheme); }
+    function hex(h) { var n = parseInt(h.slice(1), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; }
+    function toInk(h, k) { var a = hex(h), b = [28, 22, 34]; return 'rgb(' + a.map(function (x, i) { return Math.round(x + (b[i] - x) * k); }).join(',') + ')'; }
+    function colours(s) { return light ? { a1: toInk(s.a1, .3), a2: toInk(s.a2, .3), fg: '#1C1622' } : s; }
+
+    var u = 1, W = 1, H = 1, cur = null, prev = null, fadeAt = 0, FADE = 1250, seen = false, raf = 0;
+    function fit() {
+      var r = cv.getBoundingClientRect();
+      u = Math.min(window.devicePixelRatio || 1, 1.5);
+      W = Math.max(1, Math.round(r.width * u)); H = Math.max(1, Math.round(r.height * u));
+      if (cv.width !== W) cv.width = W;
+      if (cv.height !== H) cv.height = H;
+    }
+    function paint(s, t, k) {
+      if (!s || k <= 0) return;
+      c.save(); FX[s.id](c, W, H, t, colours(s), k * (light ? 1.25 : 1), u); c.restore();
+      c.globalAlpha = 1; c.shadowBlur = 0;
+    }
+    function draw(t) {
+      c.clearRect(0, 0, W, H);
+      var f = Math.min(1, (performance.now() - fadeAt) / FADE);
+      var e = f < .5 ? 2 * f * f : 1 - Math.pow(-2 * f + 2, 2) / 2;
+      if (prev) paint(prev, t, 1 - e);
+      paint(cur, t, e);
+      if (f >= 1) prev = null;
+    }
+    function frame(now) {
+      raf = 0;
+      draw(now / 1000);
+      if (seen && (cur || prev)) raf = requestAnimationFrame(frame);
+    }
+    function go() {
+      if (reduce) { prev = null; draw(2); return; }
+      if (!raf && seen) raf = requestAnimationFrame(frame);
+    }
+    document.addEventListener('lostty-skin', function () {
+      var id = root.getAttribute('data-skin'), s = id && FX[id] ? SKIN[id] : null;
+      if (s === cur) return;
+      // fading out the skin that was on (or into the new one from nothing)
+      prev = cur; cur = s; fadeAt = performance.now();
+      go();
+    });
+    themeListeners.push(function () { readTheme(); if (reduce) draw(2); });
+    readTheme(); fit();
+    if (window.ResizeObserver) new ResizeObserver(function () { fit(); if (reduce || !raf) draw(reduce ? 2 : performance.now() / 1000); }).observe(cv);
+    if ('IntersectionObserver' in window) {
+      new IntersectionObserver(function (es) { seen = es[0].isIntersecting; if (seen) go(); }).observe(cv);
+    } else seen = true;
   })();
 
   /* ---------------- hero bullets carousel ---------------- */
