@@ -2,6 +2,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Action = @import("ghostty.zig").Action;
 const protocol = @import("claude/protocol.zig");
+const speak = @import("claude/speak.zig");
 
 pub const Options = struct {
     pub fn deinit(self: Options) void {
@@ -22,10 +23,10 @@ pub const Options = struct {
 /// still working) or mean nothing should be sent (protocol.refine), and
 /// marks Claude asking permission. An `idle` also names the conversation
 /// file, for the Mac's turn observer. `tool` (PreToolUse) sends what the tool
-/// call is about to do, for Lostty Mobile's session list. It
-/// never fails and never prints: outside Lostty, without a terminal, or
-/// with a bad argument it does nothing and exits 0, so a hook can never
-/// break Claude.
+/// call is about to do, for Lostty Mobile's session list. It never fails,
+/// and prints only the context handoff's queued text (`busy`, `done`,
+/// `start`): outside Lostty, without a terminal, or with a bad argument it
+/// does nothing and exits 0, so a hook can never break Claude.
 pub fn run(gpa: Allocator) !u8 {
     var arena_state = std.heap.ArenaAllocator.init(gpa);
     defer arena_state.deinit();
@@ -35,9 +36,25 @@ pub fn run(gpa: Allocator) !u8 {
     var args: std.ArrayList([]const u8) = .empty;
     for (argv) |arg| args.append(alloc, arg) catch return 0;
     var state = protocol.stateFromArgs(args.items) orelse return 0;
-    if (std.posix.getenv(protocol.surface_env) == null) return 0;
+    const pane = std.posix.getenv(protocol.surface_env) orelse return 0;
     var detail: protocol.Detail = .{};
     switch (state) {
+        // A prompt: give Claude the directive queued for it, then say busy.
+        .busy => _ = speakQueued(alloc, pane, .say, "UserPromptSubmit"),
+        // After a tool call: only speak (Claude's own calls, not a subagent's).
+        .done => {
+            if (hookInput(alloc)) |input| if (speak.isSubagent(alloc, input)) return 0;
+            _ = speakQueued(alloc, pane, .say, "PostToolUse");
+            return 0;
+        },
+        // A fresh window after /clear: hand it the handoff, then say so.
+        .start => {
+            const input = hookInput(alloc) orelse return 0;
+            const source = speak.sessionSource(alloc, input) orelse return 0;
+            if (!std.mem.eql(u8, source, "clear")) return 0;
+            if (!speakQueued(alloc, pane, .start, "SessionStart")) return 0;
+            state = .fresh;
+        },
         .idle, .resumed => if (hookInput(alloc)) |input| {
             state = protocol.refine(alloc, state, input) orelse return 0;
             detail.permission = state == .idle and protocol.isPermissionPrompt(alloc, input);
@@ -53,6 +70,19 @@ pub fn run(gpa: Allocator) !u8 {
     defer tty.close();
     tty.writeAll(seq) catch {};
     return 0;
+}
+
+/// Prints the text the Mac app queued for this pane as Claude Code's
+/// additionalContext for `event`. False when nothing was queued (or the
+/// pane id isn't one Lostty sets).
+fn speakQueued(alloc: Allocator, pane: []const u8, kind: speak.Kind, event: []const u8) bool {
+    if (!speak.isPaneId(pane)) return false;
+    const home = std.posix.getenv("HOME") orelse return false;
+    const path = speak.queuedPath(alloc, home, pane, kind) catch return false;
+    const text = speak.take(alloc, path) orelse return false;
+    const out = speak.output(alloc, event, text) catch return false;
+    std.fs.File.stdout().writeAll(out) catch return false;
+    return true;
 }
 
 /// The hook input Claude Code writes to stdin, or null when stdin is a
@@ -91,4 +121,5 @@ const Ps = struct {
 
 test {
     _ = @import("claude/protocol.zig");
+    _ = @import("claude/speak.zig");
 }

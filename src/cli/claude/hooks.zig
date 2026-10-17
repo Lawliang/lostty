@@ -17,7 +17,8 @@ pub const Agent = enum { claude, codex };
 /// SubagentStop and Notification are refined from the hook input
 /// (protocol.refine): a Stop with subagents still working sends `agents`.
 /// PreToolUse sends what each tool call does (protocol.action); with no
-/// output it never decides anything about the call.
+/// output it never decides anything about the call. PostToolUse (`done`)
+/// and SessionStart (`start`) only speak the context handoff's queued text.
 const claude_events = [_]Event{
     .{ .name = "UserPromptSubmit", .state = "busy" },
     .{ .name = "Stop", .state = "idle" },
@@ -25,6 +26,8 @@ const claude_events = [_]Event{
     .{ .name = "Notification", .state = "idle" },
     .{ .name = "SessionEnd", .state = "exit" },
     .{ .name = "PreToolUse", .state = "tool" },
+    .{ .name = "PostToolUse", .state = "done" },
+    .{ .name = "SessionStart", .state = "start" },
 };
 
 /// Codex hook events (same hooks.json names). Codex has no session-end
@@ -436,6 +439,24 @@ test "claude hooks: preview lists every event" {
     const a = arena.allocator();
     const out = try stringify(a, try preview(a, .claude));
     for (eventsFor(.claude)) |e| try std.testing.expect(std.mem.indexOf(u8, out, e.name) != null);
+}
+
+test "claude hooks: the handoff's events are installed" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var root = try parseFixture(a, "{}");
+    try std.testing.expect(try install(a, .claude, &root));
+    const out = try stringify(a, root);
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"PostToolUse\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "+claude-state done") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"SessionStart\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "+claude-state start") != null);
+    // An install from before the handoff is partial, so Settings offers the update.
+    var old = try parseFixture(a, "{}");
+    try std.testing.expect(try install(a, .claude, &old));
+    _ = old.object.getPtr("hooks").?.object.orderedRemove("PostToolUse");
+    try std.testing.expectEqual(Status.partial, try status(a, .claude, old));
 }
 
 test "claude hooks: the status line is added, updated and removed" {
