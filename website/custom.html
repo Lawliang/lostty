@@ -702,7 +702,7 @@ p { margin: 0; }
    pointer is on the strip and eases back up when it leaves. The track holds the list twice and moves by half its width,
    so it wraps without a seam (each card carries its gap as margin, so the
    halves are exactly equal) */
-.skstrip{position:relative; z-index:2; padding-block:0; border-top:0; scroll-margin-top:calc(var(--nav-h) + 24px)}
+.skstrip{position:relative; z-index:2; display:flow-root; padding-block:0; border-top:0; scroll-margin-top:calc(var(--nav-h) + 24px)} /* flow-root: the run's -40px margin stays inside */
 /* the title hangs below the cards, over the top of the demo, which leaves room for it */
 .skstrip-foot{position:absolute; left:0; right:0; top:100%; pointer-events:none}
 .skstrip + .sec{border-top:0}
@@ -718,8 +718,10 @@ p { margin: 0; }
 .skstrip h2{transition:opacity .5s, transform .7s cubic-bezier(.22, .8, .2, 1)}
 .skstrip:not(.show) .skstrip-foot h2{opacity:0; transform:translateY(-28px)}
 @media (prefers-reduced-motion: reduce){ .skstrip:not(.show) .skstrip-foot h2{transform:none} }
-/* room above and below for the cards' tilt */
-.skstrip-run{overflow:hidden; padding-block:16px;
+/* room above and below for the cards' tilt, and 40px more below (taken back
+   with the margin, so nothing moves) for the hovered card's glow to spill into
+   instead of being cut off at the strip's edge */
+.skstrip-run{overflow:hidden; padding-block:16px 56px; margin-bottom:-40px;
   -webkit-mask-image:linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent); mask-image:linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent)}
 /* the script moves the track: it slows to a crawl while the pointer (or focus)
    is on the strip and speeds back up when it leaves */
@@ -1878,8 +1880,6 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
       var mx = Math.max.apply(null, hs), sum = hs.reduce(function (a, b) { return a + b; }, 0) + GAP * (items.length - 1);
       ul.style.setProperty('--pts-h', mx + 'px');
       hero.style.setProperty('--pts-saved', Math.max(0, sum - mx) + 'px');
-      // a shorter bullet (one line) sits in the middle of the slot
-      items.forEach(function (li, k) { li.style.top = ((mx - hs[k]) / 2).toFixed(1) + 'px'; });
     }
     measure();
     function next() {
@@ -1888,6 +1888,8 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
       at = (at + 1) % items.length;
       cur.classList.remove('on'); cur.classList.add('out');
       items[at].classList.add('on');
+      // the field's box follows the bullet now showing, from halfway through the slide
+      setTimeout(Field.requiet, 250);
       // once it's off to the left, put it back on the right without animating
       setTimeout(function () {
         cur.style.transition = 'none'; cur.classList.remove('out');
@@ -1907,7 +1909,7 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
   /* ---------------- glyph field ---------------- */
   var Field = (function () {
     var cv = $('#field'), hero = $('#top'), copy = $('#hero-copy');
-    if (!cv || !cv.getContext) return { pause: function () {}, resume: function () {}, relayout: function () {} };
+    if (!cv || !cv.getContext) return { pause: function () {}, resume: function () {}, relayout: function () {}, requiet: function () {} };
     var ctx = cv.getContext('2d');
     var mcv = document.createElement('canvas'), mctx = mcv.getContext('2d', { willReadFrequently: true });
     var W = 0, H = 0, dpr = 1, fs = 14, cw = 8.4, chh = 17, cols = 0, rows = 0, N = 0;
@@ -2152,14 +2154,26 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
         // the buttons keep their place in the layout but get no box: the
         // field runs right up to them
         if (q.el.classList.contains('hero-cta')) return;
-        var L = lineBoxes(q.el).map(function (l) {
+        // the bullet carousel keeps its slot's place, but the box wraps the
+        // bullet showing (measured where it will come to rest, not mid-slide),
+        // and rows beside none of its lines get no box
+        var car = q.el.classList.contains('is-car'), src = q.el, dx = 0;
+        if (car) {
+          src = $('li.on', q.el) || q.el.firstElementChild;
+          if (!src) return;
+          dx = src.getBoundingClientRect().left - q.el.getBoundingClientRect().left;
+        }
+        var L = (car ? lineBoxes(src).map(function (l) { return { left: l.left - dx, right: l.right - dx, top: l.top, bottom: l.bottom }; }) : lineBoxes(src)).map(function (l) {
           return { x0: l.left - hr.left, x1: l.right - hr.left, a: l.top - hr.top - q.side, b: l.bottom - hr.top + q.side };
         });
         if (!L.length) return;
         for (var r = q.r0; r <= q.r1; r++) {
           var top = r * chh, bot = top + chh, x0 = Infinity, x1 = -Infinity;
           L.forEach(function (l) { if (l.a < bot && l.b > top) { x0 = Math.min(x0, l.x0); x1 = Math.max(x1, l.x1); } });
-          if (x0 === Infinity) { var nl = top < L[0].a ? L[0] : L[L.length - 1]; x0 = nl.x0; x1 = nl.x1; }
+          if (x0 === Infinity) {
+            if (car) continue;
+            var nl = top < L[0].a ? L[0] : L[L.length - 1]; x0 = nl.x0; x1 = nl.x1;
+          }
           rowsZ.push({ c0: Math.round((x0 - G) / cw), c1: Math.round((x1 + G) / cw) - 1, r0: r, r1: r });
         }
       });
@@ -2320,7 +2334,14 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
     return {
       pause: function () { homeVisible = false; sync(); },
       resume: function () { homeVisible = true; resize(); sync(); },
-      relayout: function () { resize(); }
+      relayout: function () { resize(); },
+      // redo only the boxes (the bullet carousel moved on): the layout and
+      // the field's animation stay as they are
+      requiet: function () {
+        if (!N) return;
+        try { quietZone(); } catch (e) { qz = []; }
+        if (reduce || !running) drawFrame(performance.now(), true);
+      }
     };
   })();
 
