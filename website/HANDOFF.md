@@ -59,9 +59,9 @@ Kinetic Mono as the base (JetBrains Mono, character-grid look, light "paper term
 
 **Headings**: every section heading (and the Docs page titles) uses the hero title's type, Onest 700 with -.04em tracking, at its own size; the Docs `## ` subheads stay mono.
 
-**Sections below the demo**: the home page is now hero, skin strip, demo, then Install (with its dashed divider above it) ("Clone it, build it, go take a walk."), then the footer. On 2026-10-16 the owner removed "Four things kept going wrong…" (`#why`), "Twelve skins…" (`#skins`), "Your Mac, your phone, your tailnet…" (`#how`) and "Built on Ghostty." (`#ghostty`); restore any from git if wanted. Their CSS and guarded scripts are still in the file, unused. The demo's waving and ready axolotls (`#m-wait`, `#m-ready`) lived in `#why`, so they now sit in a `hidden` div between the demo and Install. Search lists only demo, skin strip and install on the home page. Install keeps Kinetic Mono's look, minus the `~/lostty ❯ …` prompt line. Headings still do the brief scramble when they scroll into view.
+**Sections below the demo**: the home page is now hero, skin strip, demo, then Install (with its dashed divider above it) ("Clone it, build it, go take a walk."), then the footer. On 2026-10-16 the owner removed "Four things kept going wrong…" (`#why`), "Twelve skins…" (`#skins`), "Your Mac, your phone, your tailnet…" (`#how`) and "Built on Ghostty." (`#ghostty`); restore any from git if wanted. Their CSS and guarded scripts are still in the file, unused. The demo's waving and ready axolotls (`#m-wait`, `#m-ready`) lived in `#why`, so they now sit in a `hidden` div between the demo and Install (with `#m-happy`, from the footer). Search lists only demo, skin strip and install on the home page. Install keeps Kinetic Mono's look, minus the `~/lostty ❯ …` prompt line. Headings still do the brief scramble when they scroll into view.
 
-**Footer logo**: same as the header (Onest "Lostty" plus the blinking `_`).
+**Footer logo**: same as the header (Onest "Lostty" plus the blinking `_`). The footer's axolotl picture and the `❯ exit … [Process completed]` line were removed (owner, 2026-10-16); the picture (`#m-happy`) lives on in the hidden holder, since the demo uses it.
 
 **Download page** (`#download`, a view like Docs)
 - Stable: https://github.com/Lawliang/lostty/releases/latest/download/Lostty.dmg
@@ -79,7 +79,7 @@ Kinetic Mono as the base (JetBrains Mono, character-grid look, light "paper term
 None open. Last done: the skin strip (see "Skin strip" above).
 
 ## Settled with the owner (2026-10-15, on recommendation)
-- Kept: the footer `❯ exit … [Process completed]`, the docs `LOSTTY(1)` man bar, the bullets' `❯` markers, and the hero button going to the Download page.
+- Kept: the docs `LOSTTY(1)` man bar, the bullets' `❯` markers, and the hero button going to the Download page.
 - The field starts even if measuring the hero boxes throws (`try { quietZone(); } catch …` in `resize`).
 
 ## Checking changes (`website/tools/`)
