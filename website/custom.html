@@ -2586,17 +2586,17 @@ void main(){
     });
 
     // The drift: right to left at one half-track (one copy of the list) per
-    // 110s. With the pointer or focus on the strip the speed eases down to
-    // zero, and off it eases back up (about a second and a half either way); the
-    // offset wraps by half the track, where the two copies line up.
-    var run = track.parentNode, PERIOD = 110, TAU = 0.55;
+    // 45s. With the pointer or focus on the strip the speed eases down to a
+    // crawl (8% of that), and off it eases back up (about a second and a half
+    // either way); the offset wraps by half the track, where the copies line up.
+    var run = track.parentNode, PERIOD = 45, CRAWL = 0.08, TAU = 0.55;
     var half = 0, x = 0, v = 0, hold = 0, last = 0, raf = 0, seen = false;
     function measure() { half = track.scrollWidth / 2; }
     function frame(t) {
       raf = 0;
       var dt = last ? Math.min((t - last) / 1000, 0.1) : 0;
       last = t;
-      var target = hold ? 0 : half / PERIOD;
+      var target = half / PERIOD * (hold ? CRAWL : 1);
       v += (target - v) * (1 - Math.exp(-dt / TAU));
       if (Math.abs(target - v) < 0.05) v = target;
       x += v * dt;
