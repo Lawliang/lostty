@@ -1,0 +1,150 @@
+<title>Lostty Tab Icons</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Onest:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: one column of concept rows; each row shows the icon big, then at the
+   real sizes a browser uses, on light and dark tab strips. Lostty's own palette. */
+:root {
+  --paper: #F3F2F6;
+  --panel: #FFFFFF;
+  --ink: #1C1622;
+  --ink-2: #5B5266;
+  --rule: #D9D3E0;
+  --magenta: #E5199C;
+  --magenta-ink: #B30F77;
+  /* browser chrome, drawn the same in both themes: a favicon has to work on both */
+  --strip-l: #DEE1E6; --tab-l: #FFFFFF; --tabtxt-l: #3C4043;
+  --strip-d: #202124; --tab-d: #35363A; --tabtxt-d: #E8EAED;
+  --f-display: "Onest", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0E0B12; --panel: #17131D; --ink: #ECE6F2; --ink-2: #A097AB; --rule: #2C2634; --magenta-ink: #FF4DB8;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0E0B12; --panel: #17131D; --ink: #ECE6F2; --ink-2: #A097AB; --rule: #2C2634; --magenta-ink: #FF4DB8;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--paper); color: var(--ink); font: 400 15px/1.6 var(--f-display); -webkit-font-smoothing: antialiased; }
+.page { max-width: 1040px; margin-inline: auto; padding-block: 48px 72px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+header h1 { font-size: clamp(30px, 5vw, 44px); line-height: 1.05; letter-spacing: -.035em; margin: 0; text-wrap: balance; }
+header h1 .cur { color: var(--magenta); font-weight: 400; animation: blink 1.06s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { header h1 .cur { animation: none; } }
+header p { margin: 12px 0 0; color: var(--ink-2); max-width: 62ch; }
+
+/* all five side by side in a real-looking tab strip, light and dark */
+.strips { display: grid; gap: 10px; margin-top: 32px; }
+.strip { display: flex; gap: 2px; padding: 8px 8px 0; border-radius: 10px 10px 0 0; overflow-x: auto; }
+.strip.l { background: var(--strip-l); }
+.strip.d { background: var(--strip-d); }
+.tab { flex: none; display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px; border-radius: 8px 8px 0 0;
+  font: 400 12.5px/1 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+.strip.l .tab { background: var(--tab-l); color: var(--tabtxt-l); }
+.strip.d .tab { background: var(--tab-d); color: var(--tabtxt-d); }
+.tab svg { width: 16px; height: 16px; flex: none; }
+.tab .x { opacity: .55; margin-left: 6px; }
+.strip-k { font: 600 11px/1 var(--f-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); margin-bottom: 6px; }
+
+/* one row per concept */
+.list { display: grid; gap: 16px; margin-top: 40px; }
+.row { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 28px; align-items: center;
+  padding: 24px; background: var(--panel); border: 1px solid var(--rule); border-radius: 18px; }
+.row.pick { border-color: var(--magenta); }
+.big svg { width: 180px; height: 180px; display: block; }
+.meta { min-width: 0; }
+.name { display: flex; align-items: baseline; flex-wrap: wrap; gap: 10px; }
+.name h2 { margin: 0; font-size: 24px; letter-spacing: -.02em; }
+.name .k { font: 600 12px/1 var(--f-mono); color: var(--ink-2); }
+.badge { font: 600 11px/1 var(--f-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--magenta-ink);
+  border: 1px solid currentColor; border-radius: 999px; padding: 4px 8px; }
+.meta p { margin: 8px 0 0; color: var(--ink-2); max-width: 60ch; }
+.sizes { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+.sz { display: flex; align-items: flex-end; gap: 14px; padding: 12px 14px; border-radius: 10px; }
+.sz.l { background: var(--strip-l); }
+.sz.d { background: var(--strip-d); }
+.sz figure { margin: 0; display: grid; justify-items: center; gap: 6px; }
+.sz figcaption { font: 400 10.5px/1 var(--f-mono); }
+.sz.l figcaption { color: var(--tabtxt-l); }
+.sz.d figcaption { color: var(--tabtxt-d); }
+.sz svg { display: block; }
+@media (max-width: 640px) {
+  .row { grid-template-columns: minmax(0, 1fr); gap: 18px; }
+  .big svg { width: 120px; height: 120px; }
+}
+footer { margin-top: 40px; color: var(--ink-2); font-size: 14px; max-width: 70ch; }
+footer code { font-family: var(--f-mono); font-size: 13px; }
+</style>
+
+<div class="page">
+  <header>
+    <h1>Lostty tab icons<span class="cur">_</span></h1>
+    <p>Five replacements for the axolotl favicon. Each is drawn from simple shapes, not text, so it stays sharp at the 16px a browser tab gives it. Pick one by name.</p>
+  </header>
+
+  <section class="strips" aria-label="All five in a browser tab strip">
+    <div><div class="strip-k">Light browser</div><div class="strip l" id="strip-l"></div></div>
+    <div><div class="strip-k">Dark browser</div><div class="strip d" id="strip-d"></div></div>
+  </section>
+
+  <section class="list" id="list"></section>
+
+  <footer>
+    <p>Whichever you pick goes in as <code>favicon.svg</code> (built by <code>website/build.mjs</code>), plus a 180px PNG for iPhone home screens. The axolotl stays on the page itself.</p>
+  </footer>
+</div>
+
+<script>
+// each icon in a 64×64 box, plain shapes only (a favicon can't load the page's fonts)
+var ICONS = [
+  { id: 'prompt', name: 'Prompt', pick: true,
+    note: 'The shell prompt and Lostty’s blinking underscore, on the dark terminal ground. Reads as “terminal” at a glance and matches the wordmark.',
+    svg: '<rect width="64" height="64" rx="14" fill="#16111C"/>' +
+         '<path d="M17 19 L30 32 L17 45" fill="none" stroke="#F3F2F6" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>' +
+         '<rect x="34" y="40" width="15" height="6.5" rx="1.5" fill="#FF3DAE"/>' },
+  { id: 'prompt-magenta', name: 'Prompt, magenta', pick: false,
+    note: 'The same mark on Lostty’s magenta. Louder in a row of tabs; less “terminal”, more brand.',
+    svg: '<rect width="64" height="64" rx="14" fill="#E5199C"/>' +
+         '<path d="M17 19 L30 32 L17 45" fill="none" stroke="#FFFFFF" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>' +
+         '<rect x="34" y="40" width="15" height="6.5" rx="1.5" fill="#1C1622"/>' },
+  { id: 'monogram', name: 'Monogram', pick: false,
+    note: 'An L followed by the underscore, like the start of “Lostty_”. Simple and clearly a letter mark; says less about what the app does.',
+    svg: '<rect width="64" height="64" rx="14" fill="#1C1622"/>' +
+         '<path d="M20 15 V45 H34" fill="none" stroke="#F3F2F6" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>' +
+         '<rect x="39" y="41" width="11" height="7" rx="1.5" fill="#FF3DAE"/>' },
+  { id: 'cursor', name: 'Wandering cursor', pick: false,
+    note: 'A block cursor that has drifted off its line: the “lost” in Lostty. The most distinctive of the five, and the least literal.',
+    svg: '<rect width="64" height="64" rx="14" fill="#16111C"/>' +
+         '<rect x="12" y="44" width="22" height="4" rx="2" fill="#5B5266"/>' +
+         '<rect x="35" y="14" width="13" height="26" rx="2" fill="#FF3DAE" transform="rotate(14 41.5 27)"/>' },
+  { id: 'gills', name: 'Gill mark', pick: false,
+    note: 'The axolotl cut down to geometry: a rounded head with three gills a side and a >_ face. Keeps the mascot’s heritage without the cartoon.',
+    svg: '<rect width="64" height="64" rx="14" fill="#16111C"/>' +
+         '<g fill="#FF3DAE"><rect x="5" y="20" width="11" height="5" rx="2.5" transform="rotate(-24 10.5 22.5)"/><rect x="4" y="29.5" width="11" height="5" rx="2.5"/><rect x="5" y="39" width="11" height="5" rx="2.5" transform="rotate(24 10.5 41.5)"/>' +
+         '<rect x="48" y="20" width="11" height="5" rx="2.5" transform="rotate(24 53.5 22.5)"/><rect x="49" y="29.5" width="11" height="5" rx="2.5"/><rect x="48" y="39" width="11" height="5" rx="2.5" transform="rotate(-24 53.5 41.5)"/></g>' +
+         '<rect x="15" y="17" width="34" height="30" rx="13" fill="#F7B2D8"/>' +
+         '<path d="M23 27 L28 31.5 L23 36" fill="none" stroke="#3A1530" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>' +
+         '<rect x="32" y="34" width="9" height="3.4" rx="1.4" fill="#3A1530"/>' }
+];
+function svg(icon, px) { return '<svg viewBox="0 0 64 64" width="' + px + '" height="' + px + '" role="img" aria-label="' + icon.name + ' icon">' + icon.svg + '</svg>'; }
+function tabs() {
+  return ICONS.map(function (i) { return '<div class="tab">' + svg(i, 16) + '<span>Lostty · ' + i.name + '</span><span class="x" aria-hidden="true">✕</span></div>'; }).join('');
+}
+document.getElementById('strip-l').innerHTML = tabs();
+document.getElementById('strip-d').innerHTML = tabs();
+document.getElementById('list').innerHTML = ICONS.map(function (i, n) {
+  var sizes = function (cls) {
+    return '<div class="sz ' + cls + '">' + [16, 32, 48].map(function (px) { return '<figure>' + svg(i, px) + '<figcaption>' + px + 'px</figcaption></figure>'; }).join('') + '</div>';
+  };
+  return '<article class="row' + (i.pick ? ' pick' : '') + '"><div class="big">' + svg(i, 180) + '</div><div class="meta">' +
+    '<div class="name"><h2>' + i.name + '</h2><span class="k">' + (n + 1) + ' of ' + ICONS.length + '</span>' + (i.pick ? '<span class="badge">My pick</span>' : '') + '</div>' +
+    '<p>' + i.note + '</p><div class="sizes">' + sizes('l') + sizes('d') + '</div></div></article>';
+}).join('');
+</script>
