@@ -2245,7 +2245,7 @@ void main(){
       const apply = () => { if (front === 'mac') stage.dataset.front = 'mac'; else delete stage.dataset.front; };
       if (RM || front === was) { apply(); return; }
       const el = front === 'mac' ? $('.ag-mac', stage) : $('.ag-phone', stage);
-      swing.push(el.animate(front === 'mac' ? arc(-1, 42, -1.4) : arc(1, 100, 1.45), { duration: SWING, easing: 'cubic-bezier(.45, 0, .55, 1)' }));
+      swing.push(el.animate(front === 'mac' ? arc(-1, 33.4, -1.11) : arc(1, 100, 1.45), { duration: SWING, easing: 'cubic-bezier(.45, 0, .55, 1)' }));
       flip = setTimeout(() => { flip = 0; apply(); }, SWING / 2);
     }
     function setFocus(f) {
