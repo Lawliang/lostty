@@ -21,7 +21,7 @@ Last updated 2026-10-16. Branch: `website`. Everything below is committed.
 | Concept 3 · Skin Shifter | `website/concepts/3-skin-shifter.html` | https://claude.ai/artifact/34Y46vrqv4ooe6xt54amYr |
 | Concept 4 · Handoff | `website/concepts/4-handoff.html` (built by `concepts/handoff-build/gen.py`) | https://claude.ai/artifact/8kJMCvbFpxQuPpJZdYoTtU |
 | Concept 5 · Kinetic Mono | `website/concepts/5-kinetic-mono.html` | https://claude.ai/artifact/2gDLx5dDfdpUWw3H4E6AH5 |
-| Tab icons (owner picked "Prompt", 2026-10-17; it replaced the axolotl favicon) | `website/concepts/tab-icons.html` | https://claude.ai/artifact/LgAYE99XsmbESjJeHrh7zB |
+| Tab icons (owner picked "Prompt, magenta", 2026-10-17, after first picking the dark "Prompt"; it replaced the axolotl favicon: white ❯ and a dark underscore on magenta) | `website/concepts/tab-icons.html` | https://claude.ai/artifact/LgAYE99XsmbESjJeHrh7zB |
 
 - Every change to Custom is its own commit on `website` (`git log --oneline -- website/custom.html`), so any earlier state can be restored with `git show <sha>:website/custom.html`. The artifact also keeps its own version history (see the read result for the current version).
 - The concepts are frozen drafts; only Custom is being edited.

@@ -86,7 +86,7 @@ footer code { font-family: var(--f-mono); font-size: 13px; }
 <div class="page">
   <header>
     <h1>Lostty tab icons<span class="cur">_</span></h1>
-    <p>Five replacements for the axolotl favicon. Each is drawn from simple shapes, not text, so it stays sharp at the 16px a browser tab gives it. Pick one by name.</p>
+    <p>Five replacements for the axolotl favicon. Each is drawn from simple shapes, not text, so it stays sharp at the 16px a browser tab gives it. Prompt, magenta is the one lostty.org uses.</p>
   </header>
 
   <section class="strips" aria-label="All five in a browser tab strip">
@@ -104,12 +104,12 @@ footer code { font-family: var(--f-mono); font-size: 13px; }
 <script>
 // each icon in a 64×64 box, plain shapes only (a favicon can't load the page's fonts)
 var ICONS = [
-  { id: 'prompt', name: 'Prompt', pick: true,
+  { id: 'prompt', name: 'Prompt', pick: false,
     note: 'The shell prompt and Lostty’s blinking underscore, on the dark terminal ground. Reads as “terminal” at a glance and matches the wordmark.',
     svg: '<rect width="64" height="64" rx="14" fill="#16111C"/>' +
          '<path d="M17 19 L30 32 L17 45" fill="none" stroke="#F3F2F6" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>' +
          '<rect x="34" y="40" width="15" height="6.5" rx="1.5" fill="#FF3DAE"/>' },
-  { id: 'prompt-magenta', name: 'Prompt, magenta', pick: false,
+  { id: 'prompt-magenta', name: 'Prompt, magenta', pick: true,
     note: 'The same mark on Lostty’s magenta. Louder in a row of tabs; less “terminal”, more brand.',
     svg: '<rect width="64" height="64" rx="14" fill="#E5199C"/>' +
          '<path d="M17 19 L30 32 L17 45" fill="none" stroke="#FFFFFF" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>' +
@@ -144,7 +144,7 @@ document.getElementById('list').innerHTML = ICONS.map(function (i, n) {
     return '<div class="sz ' + cls + '">' + [16, 32, 48].map(function (px) { return '<figure>' + svg(i, px) + '<figcaption>' + px + 'px</figcaption></figure>'; }).join('') + '</div>';
   };
   return '<article class="row' + (i.pick ? ' pick' : '') + '"><div class="big">' + svg(i, 180) + '</div><div class="meta">' +
-    '<div class="name"><h2>' + i.name + '</h2><span class="k">' + (n + 1) + ' of ' + ICONS.length + '</span>' + (i.pick ? '<span class="badge">My pick</span>' : '') + '</div>' +
+    '<div class="name"><h2>' + i.name + '</h2><span class="k">' + (n + 1) + ' of ' + ICONS.length + '</span>' + (i.pick ? '<span class="badge">Chosen</span>' : '') + '</div>' +
     '<p>' + i.note + '</p><div class="sizes">' + sizes('l') + sizes('d') + '</div></div></article>';
 }).join('');
 </script>
