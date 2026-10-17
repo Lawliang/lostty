@@ -463,10 +463,15 @@ p { margin: 0; }
 .ag-cat-h[aria-pressed="true"]{color:var(--magenta-ink)}
 /* the device that steps back fades under a veil of the page colour: opacity or
    a filter would pull it out of the 3D scene and let the other show through */
-.ag-mac,.ag-phone{transition:transform .6s var(--ease)}
+.ag-mac,.ag-phone{transition:transform .8s cubic-bezier(.65, 0, .35, 1)}
 .ag-mac::after,.ag-phone::after{content:""; position:absolute; inset:0; border-radius:inherit; background:var(--paper); opacity:0; transition:opacity .5s; pointer-events:none; z-index:6}
+/* the picked device comes to the front: picking the Mac sends the iPhone back
+   behind it; picking the iPhone pushes the Mac further back. Both glide home
+   when both are lit again */
 .ag-stage[data-focus="phone"] .ag-mac{transform:translateZ(-90px)}
-.ag-stage[data-focus="mac"] .ag-phone{transform:translateZ(110px) rotateY(5deg) scale(.92)}
+.ag-stage[data-focus="phone"] .ag-phone{transform:translateZ(150px) rotateY(5deg)}
+.ag-stage[data-focus="mac"] .ag-mac{transform:translateZ(80px)}
+.ag-stage[data-focus="mac"] .ag-phone{transform:translateX(4%) translateZ(-60px) rotateY(5deg)}
 .ag-stage[data-focus="phone"] .ag-mac::after,.ag-stage[data-focus="mac"] .ag-phone::after{opacity:.68}
 /* Kinetic Mono's axolotl, centred over both lists; it changes with the step */
 .ag-cats-mascot{grid-column:3 / -1; grid-row:1; justify-self:center; position:relative; width:64px; height:64px; margin-bottom:16px}
