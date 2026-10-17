@@ -1,10 +1,13 @@
 #!/bin/sh
-# Publishes a Lostty for Mac release: builds it, signs it as Developer ID,
-# makes Lostty.dmg, has Apple notarize it, writes Sparkle's appcast.xml, then
-# tags vX.Y and creates the GitHub release with both. Run it only when the
-# owner says "release". One-time setup: CONTRIBUTING.md → Release.
-#   macos/release.sh [--version X.Y] [--dry-run]   --dry-run: everything but publishing
+# Publishes Lostty for Mac: builds it, signs it as Developer ID, makes the
+# DMG, has Apple notarize it, writes Sparkle's feed, then tags it and creates
+# the GitHub release. A stable release also publishes its matching Lostty
+# Beta (CONTRIBUTING.md → Stable and beta). Run it only when the owner says
+# "release". One-time setup: CONTRIBUTING.md → Release.
+#   macos/release.sh [--version X.Y] [--dry-run]   stable X.Y, then X.Y beta 1
+#   macos/release.sh --beta [--dry-run]             the next beta of the latest stable
 #   macos/release.sh --make-key                     the update-signing key, into the app
+#   --dry-run: everything but publishing
 set -eu
 cd "$(dirname "$0")/.."
 export PATH="$(brew --prefix zig@0.15)/bin:$PATH"
@@ -12,6 +15,7 @@ export PATH="$(brew --prefix zig@0.15)/bin:$PATH"
 TEAM=K85Z63QH48
 REPO=Lawliang/lostty
 FEED="https://github.com/$REPO/releases/latest/download/appcast.xml"
+BETA_FEED="https://github.com/$REPO/releases/download/beta/appcast-beta.xml"
 PROFILE=lostty-notary
 PLIST=macos/Lostty-Info.plist
 OUT="$PWD/macos/build/release"
@@ -19,18 +23,25 @@ DERIVED="$OUT/DerivedData"
 SPARKLE_BIN="$DERIVED/SourcePackages/artifacts/sparkle/Sparkle/bin"
 HELPER="python3 -I macos/release_helper.py"
 
-OVERRIDE=""; DRY_RUN=0; MAKE_KEY=0
+OVERRIDE=""; DRY_RUN=0; MAKE_KEY=0; BETA_ONLY=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --version) OVERRIDE=${2:?"--version needs X.Y"}; shift 2 ;;
+    --beta) BETA_ONLY=1; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
     --make-key) MAKE_KEY=1; shift ;;
-    *) echo "Usage: macos/release.sh [--version X.Y] [--dry-run] | --make-key" >&2; exit 2 ;;
+    *) echo "Usage: macos/release.sh [--version X.Y | --beta] [--dry-run] | --make-key" >&2; exit 2 ;;
   esac
 done
 mkdir -p "$OUT"
 
-fail() { echo "release: $*" >&2; exit 1; }
+# Once something is published, how to finish what's left after a failure.
+HINT=""
+fail() {
+  echo "release: $*" >&2
+  [ -z "$HINT" ] || echo "release: $HINT" >&2
+  exit 1
+}
 step() { echo "==> $*"; }
 # The last lines of a failed step's log, then why.
 failed() { tail -20 "$1" >&2; fail "$2; see $1"; }
@@ -55,6 +66,8 @@ if [ "$MAKE_KEY" = 1 ]; then
   exit 0
 fi
 
+[ "$BETA_ONLY" = 0 ] || [ -z "$OVERRIDE" ] || fail "--version names a stable release; a beta takes the latest stable's."
+
 step "Checking"
 [ -z "$(git status --porcelain)" ] || fail "commit or stash your changes first."
 git fetch -q origin main
@@ -72,34 +85,50 @@ KEY=$("$SPARKLE_BIN/generate_keys" -p 2> /dev/null || true)
 [ -n "$KEY" ] || fail "no update-signing key on this Mac. Run: macos/release.sh --make-key"
 [ "$KEY" = "$(plist_key)" ] || fail "the app's SUPublicEDKey isn't this Mac's update-signing key. Run macos/release.sh --make-key, then commit and push."
 
-LATEST=$(gh release list --repo "$REPO" --limit 1 --exclude-drafts --json tagName --jq '.[0].tagName // ""')
-VERSION=$($HELPER next-version --latest "$LATEST" --override "$OVERRIDE") || exit 1
+# Stable's "latest" skips pre-releases, so betas never count toward it.
+STABLE_LATEST=$(gh release list --repo "$REPO" --limit 1 --exclude-drafts --exclude-pre-releases \
+  --json tagName --jq '.[0].tagName // ""')
+TAGS=$(gh release list --repo "$REPO" --limit 1000 --exclude-drafts --json tagName --jq '.[].tagName')
+if [ "$BETA_ONLY" = 1 ]; then
+  [ -n "$STABLE_LATEST" ] || fail "make a stable release first: betas are numbered after it."
+  VERSION=${STABLE_LATEST#v}
+  BETA=$(echo "$TAGS" | $HELPER next-beta --stable "$STABLE_LATEST") || exit 1
+  # Notes since the last release of either kind.
+  SINCE=$(echo "$TAGS" | $HELPER newest-tag)
+  NAME="Lostty $VERSION beta $BETA"
+else
+  VERSION=$($HELPER next-version --latest "$STABLE_LATEST" --override "$OVERRIDE") || exit 1
+  BETA=1
+  SINCE=$STABLE_LATEST
+  NAME="Lostty $VERSION"
+fi
 TAG="v$VERSION"
+BETA_TAG="v$VERSION-beta.$BETA"
 BUILD=$(date +%Y%m%d%H%M)
-! git rev-parse -q --verify "refs/tags/$TAG" > /dev/null || fail "the tag $TAG already exists on this Mac."
+if [ "$BETA_ONLY" = 0 ] && git rev-parse -q --verify "refs/tags/$TAG" > /dev/null; then
+  fail "the tag $TAG already exists on this Mac."
+fi
+! git rev-parse -q --verify "refs/tags/$BETA_TAG" > /dev/null || fail "the tag $BETA_TAG already exists on this Mac."
 
-step "Notes for Lostty $VERSION"
+# The matching beta reuses stable's notes; a beta by itself gets its own.
+step "Notes for $NAME"
 NOTES="$OUT/notes.md"
 RANGE="-30 HEAD"
-if [ -n "$LATEST" ]; then
-  git fetch -q origin "refs/tags/$LATEST:refs/tags/$LATEST" 2> /dev/null || true
-  git rev-parse -q --verify "refs/tags/$LATEST" > /dev/null && RANGE="$LATEST..HEAD"
+if [ -n "$SINCE" ]; then
+  git fetch -q origin "refs/tags/$SINCE:refs/tags/$SINCE" 2> /dev/null || true
+  git rev-parse -q --verify "refs/tags/$SINCE" > /dev/null && RANGE="$SINCE..HEAD"
 fi
 # shellcheck disable=SC2086 # RANGE is one or two words on purpose
 git log --no-merges --format=%s $RANGE | $HELPER notes > "$NOTES"
 ${EDITOR:-nano} "$NOTES"
 grep -q '[^[:space:]]' "$NOTES" || fail "the notes are empty; nothing was released."
 
-step "Building Lostty $VERSION ($BUILD)"
-zig build -Demit-macos-app=false -Doptimize=ReleaseFast > "$OUT/zig.log" 2>&1 \
+step "Building the engine"
+# The engine takes its version from git and stops on any tag but its own
+# vX.Y.Z, such as Lostty's v0.4, v0.4-beta.1 and beta: name it instead.
+ENGINE_VERSION="$(sed -n 's/^ *\.version = "\(.*\)",$/\1/p' build.zig.zon)-dev+$(git rev-parse --short HEAD)"
+zig build -Demit-macos-app=false -Doptimize=ReleaseFast -Dversion-string="$ENGINE_VERSION" > "$OUT/zig.log" 2>&1 \
   || failed "$OUT/zig.log" "the engine build failed"
-rm -rf "$OUT/Lostty.xcarchive" "$OUT/export"
-xcodebuild archive -project macos/Lostty.xcodeproj -scheme Lostty -configuration Release \
-  -destination generic/platform=macOS -archivePath "$OUT/Lostty.xcarchive" -derivedDataPath "$DERIVED" \
-  -allowProvisioningUpdates DEVELOPMENT_TEAM=$TEAM CODE_SIGN_STYLE=Automatic CODE_SIGN_IDENTITY="Apple Development" \
-  MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$BUILD" LOSTTY_UPDATE_FEED="$FEED" \
-  ENABLE_CODE_COVERAGE=NO CLANG_COVERAGE_MAPPING=NO \
-  > "$OUT/archive.log" 2>&1 || failed "$OUT/archive.log" "the archive failed"
 cat > "$OUT/ExportOptions.plist" << EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -109,81 +138,164 @@ cat > "$OUT/ExportOptions.plist" << EOF
   <key>signingStyle</key><string>automatic</string>
 </dict></plist>
 EOF
-xcodebuild -exportArchive -archivePath "$OUT/Lostty.xcarchive" -exportPath "$OUT/export" \
-  -exportOptionsPlist "$OUT/ExportOptions.plist" -allowProvisioningUpdates \
-  > "$OUT/export.log" 2>&1 || failed "$OUT/export.log" "signing it as Developer ID failed"
-APP="$OUT/export/Lostty.app"
-codesign --verify --deep --strict "$APP" 2> "$OUT/codesign.log" || failed "$OUT/codesign.log" "the signature doesn't verify"
-# Notarization needs every helper (Sparkle's Autoupdate, Updater.app, its
-# XPC services) signed as Developer ID with a timestamp, not just the app.
-# (Not the symlinks inside Sparkle.framework, nor resource bundles with no code.)
-{ echo "$APP"; find "$APP/Contents" ! -type l \( -name "*.app" -o -name "*.xpc" -o -name "*.framework" \
-  -o -name "*.plugin" -o -name "*.bundle" -o -name Autoupdate \) -print; } > "$OUT/signed-parts.txt"
-while read -r part; do
-  case "$part" in *.bundle | *.plugin) [ -d "$part/Contents/MacOS" ] || continue ;; esac
-  codesign -dvv "$part" > "$OUT/part.log" 2>&1
-  grep -q "^Authority=Developer ID Application" "$OUT/part.log" && grep -q "^Timestamp=" "$OUT/part.log" \
-    || failed "$OUT/part.log" "${part#"$OUT/export/"} isn't signed as Developer ID with a timestamp"
-done < "$OUT/signed-parts.txt"
-[ "$(/usr/libexec/PlistBuddy -c 'Print :LosttyUpdateFeed' "$APP/Contents/Info.plist")" = "$FEED" ] \
-  || fail "the app doesn't carry the update feed $FEED"
-[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")" = "$VERSION" ] \
-  || fail "the app's version isn't $VERSION"
 
-step "Making Lostty.dmg"
-rm -rf "$OUT/dmg" "$OUT/Lostty.dmg"
-mkdir -p "$OUT/dmg"
-cp -R "$APP" "$OUT/dmg/"
-ln -s /Applications "$OUT/dmg/Applications"
-hdiutil create -volname Lostty -srcfolder "$OUT/dmg" -fs HFS+ -format UDZO "$OUT/Lostty.dmg" \
-  > "$OUT/dmg.log" 2>&1 || failed "$OUT/dmg.log" "hdiutil failed"
-codesign --sign "$IDENTITY" --timestamp "$OUT/Lostty.dmg" 2> "$OUT/dmg-sign.log" \
-  || failed "$OUT/dmg-sign.log" "signing the DMG failed"
+# build_dmg stable|beta: archives, signs, notarizes and staples one build in
+# $OUT/<channel>, then writes its feed there. Stable: Lostty.dmg and
+# appcast.xml. Beta: Lostty-Beta.dmg and appcast-beta.xml, its enclosure on
+# the versioned pre-release so an offered update outlives the next beta.
+build_dmg() {
+  CH=$1
+  DIR="$OUT/$CH"
+  if [ "$CH" = beta ]; then
+    DMG=Lostty-Beta.dmg; FEED_FILE=appcast-beta.xml; VOLUME="Lostty Beta"
+    CH_FEED=$BETA_FEED; CH_TAG=$BETA_TAG; CH_NAME="Lostty $VERSION beta $BETA"; WANT=beta
+    set -- LOSTTY_CHANNEL=beta LOSTTY_BETA_NUMBER="$BETA" "INFOPLIST_KEY_CFBundleDisplayName=Lostty Beta" \
+      ASSETCATALOG_COMPILER_APPICON_NAME=LosttyMacBetaIcon
+  else
+    DMG=Lostty.dmg; FEED_FILE=appcast.xml; VOLUME=Lostty
+    CH_FEED=$FEED; CH_TAG=$TAG; CH_NAME="Lostty $VERSION"; WANT=""
+    set --
+  fi
+  step "Building $CH_NAME ($BUILD)"
+  rm -rf "$DIR"
+  mkdir -p "$DIR"
+  xcodebuild archive -project macos/Lostty.xcodeproj -scheme Lostty -configuration Release \
+    -destination generic/platform=macOS -archivePath "$DIR/Lostty.xcarchive" -derivedDataPath "$DERIVED" \
+    -allowProvisioningUpdates DEVELOPMENT_TEAM=$TEAM CODE_SIGN_STYLE=Automatic CODE_SIGN_IDENTITY="Apple Development" \
+    MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$BUILD" LOSTTY_UPDATE_FEED="$CH_FEED" \
+    ENABLE_CODE_COVERAGE=NO CLANG_COVERAGE_MAPPING=NO "$@" \
+    > "$DIR/archive.log" 2>&1 || failed "$DIR/archive.log" "the $CH archive failed"
+  xcodebuild -exportArchive -archivePath "$DIR/Lostty.xcarchive" -exportPath "$DIR/export" \
+    -exportOptionsPlist "$OUT/ExportOptions.plist" -allowProvisioningUpdates \
+    > "$DIR/export.log" 2>&1 || failed "$DIR/export.log" "signing the $CH build as Developer ID failed"
+  APP="$DIR/export/Lostty.app"
+  codesign --verify --deep --strict "$APP" 2> "$DIR/codesign.log" || failed "$DIR/codesign.log" "the signature doesn't verify"
+  # Notarization needs every helper (Sparkle's Autoupdate, Updater.app, its
+  # XPC services) signed as Developer ID with a timestamp, not just the app.
+  # (Not the symlinks inside Sparkle.framework, nor resource bundles with no code.)
+  { echo "$APP"; find "$APP/Contents" ! -type l \( -name "*.app" -o -name "*.xpc" -o -name "*.framework" \
+    -o -name "*.plugin" -o -name "*.bundle" -o -name Autoupdate \) -print; } > "$DIR/signed-parts.txt"
+  while read -r part; do
+    case "$part" in *.bundle | *.plugin) [ -d "$part/Contents/MacOS" ] || continue ;; esac
+    codesign -dvv "$part" > "$DIR/part.log" 2>&1
+    grep -q "^Authority=Developer ID Application" "$DIR/part.log" && grep -q "^Timestamp=" "$DIR/part.log" \
+      || failed "$DIR/part.log" "${part#"$DIR/export/"} isn't signed as Developer ID with a timestamp"
+  done < "$DIR/signed-parts.txt"
+  INFO="$APP/Contents/Info.plist"
+  [ "$(/usr/libexec/PlistBuddy -c 'Print :LosttyUpdateFeed' "$INFO")" = "$CH_FEED" ] \
+    || fail "the $CH app doesn't carry the update feed $CH_FEED"
+  [ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$INFO")" = "$VERSION" ] \
+    || fail "the $CH app's version isn't $VERSION"
+  [ "$(/usr/libexec/PlistBuddy -c 'Print :LosttyChannel' "$INFO")" = "$WANT" ] \
+    || fail "the $CH app isn't the $CH channel"
 
-step "Notarizing (a few minutes)"
-xcrun notarytool submit "$OUT/Lostty.dmg" --keychain-profile "$PROFILE" --wait --output-format json \
-  > "$OUT/notary.json" 2> "$OUT/notary.log" || true
-field() { python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1])).get(sys.argv[2], ""))' "$OUT/notary.json" "$1" 2> /dev/null || true; }
-if [ "$(field status)" != Accepted ]; then
-  ID=$(field id)
-  [ -n "$ID" ] && xcrun notarytool log "$ID" --keychain-profile "$PROFILE" "$OUT/notary-log.json" > /dev/null 2>&1 \
-    && head -40 "$OUT/notary-log.json" >&2
-  fail "Apple didn't notarize it (status: $(field status)); see $OUT/notary.log and $OUT/notary-log.json"
-fi
-xcrun stapler staple "$OUT/Lostty.dmg" > "$OUT/staple.log" 2>&1 || failed "$OUT/staple.log" "stapling failed"
-spctl -a -t open --context context:primary-signature -v "$OUT/Lostty.dmg" > "$OUT/spctl.log" 2>&1 \
-  || failed "$OUT/spctl.log" "Gatekeeper rejects the DMG"
-MOUNT=$(mktemp -d)
-hdiutil attach -nobrowse -readonly -mountpoint "$MOUNT" "$OUT/Lostty.dmg" > /dev/null
-if spctl -a -vv "$MOUNT/Lostty.app" > "$OUT/spctl-app.log" 2>&1 \
-    && grep -q "Notarized Developer ID" "$OUT/spctl-app.log"; then OK=1; else OK=0; fi
-hdiutil detach "$MOUNT" -quiet || true
-[ "$OK" = 1 ] || failed "$OUT/spctl-app.log" "Gatekeeper rejects the app in the DMG"
+  step "Making $DMG"
+  rm -rf "$DIR/dmg"
+  mkdir -p "$DIR/dmg"
+  cp -R "$APP" "$DIR/dmg/"
+  ln -s /Applications "$DIR/dmg/Applications"
+  hdiutil create -volname "$VOLUME" -srcfolder "$DIR/dmg" -fs HFS+ -format UDZO "$DIR/$DMG" \
+    > "$DIR/dmg.log" 2>&1 || failed "$DIR/dmg.log" "hdiutil failed"
+  codesign --sign "$IDENTITY" --timestamp "$DIR/$DMG" 2> "$DIR/dmg-sign.log" \
+    || failed "$DIR/dmg-sign.log" "signing the DMG failed"
 
-step "Writing the update feed"
-SIGNED=$("$SPARKLE_BIN/sign_update" "$OUT/Lostty.dmg") || fail "sign_update failed"
-MIN=$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$APP/Contents/Info.plist")
-$HELPER appcast --version "$VERSION" --build "$BUILD" --min-system "$MIN" --notes-file "$NOTES" \
-  --url "https://github.com/$REPO/releases/download/$TAG/Lostty.dmg" --sign-output "$SIGNED" \
-  > "$OUT/appcast.xml" || exit 1
+  step "Notarizing $DMG (a few minutes)"
+  xcrun notarytool submit "$DIR/$DMG" --keychain-profile "$PROFILE" --wait --output-format json \
+    > "$DIR/notary.json" 2> "$DIR/notary.log" || true
+  if [ "$(field status)" != Accepted ]; then
+    ID=$(field id)
+    [ -n "$ID" ] && xcrun notarytool log "$ID" --keychain-profile "$PROFILE" "$DIR/notary-log.json" > /dev/null 2>&1 \
+      && head -40 "$DIR/notary-log.json" >&2
+    fail "Apple didn't notarize $DMG (status: $(field status)); see $DIR/notary.log and $DIR/notary-log.json"
+  fi
+  xcrun stapler staple "$DIR/$DMG" > "$DIR/staple.log" 2>&1 || failed "$DIR/staple.log" "stapling failed"
+  spctl -a -t open --context context:primary-signature -v "$DIR/$DMG" > "$DIR/spctl.log" 2>&1 \
+    || failed "$DIR/spctl.log" "Gatekeeper rejects the DMG"
+  MOUNT=$(mktemp -d)
+  hdiutil attach -nobrowse -readonly -mountpoint "$MOUNT" "$DIR/$DMG" > /dev/null
+  if spctl -a -vv "$MOUNT/Lostty.app" > "$DIR/spctl-app.log" 2>&1 \
+      && grep -q "Notarized Developer ID" "$DIR/spctl-app.log"; then OK=1; else OK=0; fi
+  hdiutil detach "$MOUNT" -quiet || true
+  [ "$OK" = 1 ] || failed "$DIR/spctl-app.log" "Gatekeeper rejects the app in $DMG"
+
+  step "Writing $FEED_FILE"
+  SIGNED=$("$SPARKLE_BIN/sign_update" "$DIR/$DMG") || fail "sign_update failed"
+  MIN=$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$INFO")
+  if [ "$CH" = beta ]; then set -- --beta-number "$BETA"; else set --; fi
+  $HELPER appcast --version "$VERSION" --build "$BUILD" --min-system "$MIN" --notes-file "$NOTES" \
+    --url "https://github.com/$REPO/releases/download/$CH_TAG/$DMG" --sign-output "$SIGNED" "$@" \
+    > "$DIR/$FEED_FILE" || exit 1
+}
+# A field of the last notarization's answer ($DIR/notary.json).
+field() { python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1])).get(sys.argv[2], ""))' "$DIR/notary.json" "$1" 2> /dev/null || true; }
+
+[ "$BETA_ONLY" = 1 ] || build_dmg stable
+build_dmg beta
 
 if [ "$DRY_RUN" = 1 ]; then
-  echo "Dry run: $OUT/Lostty.dmg and $OUT/appcast.xml are ready. Nothing was published."
+  [ "$BETA_ONLY" = 1 ] || echo "Dry run: $OUT/stable/Lostty.dmg and $OUT/stable/appcast.xml ($TAG)."
+  echo "Dry run: $OUT/beta/Lostty-Beta.dmg and $OUT/beta/appcast-beta.xml ($BETA_TAG, then the beta release)."
+  echo "Nothing was published."
   exit 0
 fi
 
-step "Publishing Lostty $VERSION"
-git tag -a "$TAG" -m "Lostty $VERSION" "$COMMIT"
-if ! GIT_NO_REPLACE_OBJECTS=1 git push origin "refs/tags/$TAG" > "$OUT/push.log" 2>&1; then
-  # It never reached GitHub, so it goes, and the next run can make it again.
-  git tag -d "$TAG" > /dev/null
-  failed "$OUT/push.log" "couldn't push the tag $TAG; nothing was published"
-fi
-gh release create "$TAG" "$OUT/Lostty.dmg" "$OUT/appcast.xml" --repo "$REPO" --verify-tag \
-  --title "Lostty $VERSION" --notes-file "$NOTES" > "$OUT/gh.log" 2>&1 || {
-  cat "$OUT/gh.log" >&2
-  fail "the tag $TAG is on GitHub, but the release wasn't created. Retry with: gh release create $TAG '$OUT/Lostty.dmg' '$OUT/appcast.xml' --repo $REPO --verify-tag --title 'Lostty $VERSION' --notes-file '$NOTES'"
+# push_tag TAG MESSAGE: tags this commit and pushes it; a tag that never
+# reached GitHub goes, so the next run can make it again.
+push_tag() {
+  git tag -a "$1" -m "$2" "$COMMIT"
+  if ! GIT_NO_REPLACE_OBJECTS=1 git push origin "refs/tags/$1" > "$OUT/push.log" 2>&1; then
+    git tag -d "$1" > /dev/null
+    failed "$OUT/push.log" "couldn't push the tag $1; it wasn't published"
+  fi
 }
-curl -fsSL "$FEED" | grep -q "<sparkle:shortVersionString>$VERSION<" \
-  || fail "released, but $FEED doesn't show $VERSION yet; check https://github.com/$REPO/releases"
-echo "Released Lostty $VERSION: https://github.com/$REPO/releases/tag/$TAG"
+
+if [ "$BETA_ONLY" = 0 ]; then
+  step "Publishing Lostty $VERSION"
+  push_tag "$TAG" "Lostty $VERSION"
+  gh release create "$TAG" "$OUT/stable/Lostty.dmg" "$OUT/stable/appcast.xml" --repo "$REPO" --verify-tag \
+    --title "Lostty $VERSION" --notes-file "$NOTES" > "$OUT/gh.log" 2>&1 || {
+    cat "$OUT/gh.log" >&2
+    fail "the tag $TAG is on GitHub, but the release wasn't created. Retry with: gh release create $TAG '$OUT/stable/Lostty.dmg' '$OUT/stable/appcast.xml' --repo $REPO --verify-tag --title 'Lostty $VERSION' --notes-file '$NOTES'. Then publish its beta with: macos/release.sh --beta"
+  }
+  # From here on stable is out, and a later failure leaves only its beta to do.
+  HINT="Lostty $VERSION is out; publish its beta with: macos/release.sh --beta"
+  curl -fsSL "$FEED" | grep -q "<sparkle:shortVersionString>$VERSION<" \
+    || fail "released, but $FEED doesn't show $VERSION yet; check https://github.com/$REPO/releases"
+  echo "Released Lostty $VERSION: https://github.com/$REPO/releases/tag/$TAG"
+fi
+
+BETA_NAME="Lostty $VERSION beta $BETA"
+BETA_TITLE="Lostty Beta ($VERSION beta $BETA)"
+BETA_FILES="'$OUT/beta/Lostty-Beta.dmg' '$OUT/beta/appcast-beta.xml'"
+# The commands that put this beta in the fixed `beta` release, for a hint.
+if gh release view beta --repo "$REPO" > /dev/null 2>&1; then
+  FEED_EXISTS=1
+  FEED_COMMANDS="gh release upload beta $BETA_FILES --repo $REPO --clobber && gh release edit beta --repo $REPO --title '$BETA_TITLE' --notes-file '$NOTES'"
+else
+  FEED_EXISTS=0
+  FEED_COMMANDS="gh release create beta $BETA_FILES --repo $REPO --prerelease --latest=false --target $COMMIT --title '$BETA_TITLE' --notes-file '$NOTES'"
+fi
+step "Publishing $BETA_NAME"
+# A tag that fails to push is deleted, so the hint above still holds.
+push_tag "$BETA_TAG" "$BETA_NAME"
+HINT="the tag $BETA_TAG is on GitHub, so don't run --beta (it would stop on that tag). Finish by hand: gh release create $BETA_TAG $BETA_FILES --repo $REPO --verify-tag --prerelease --title '$BETA_NAME' --notes-file '$NOTES', then: $FEED_COMMANDS"
+gh release create "$BETA_TAG" "$OUT/beta/Lostty-Beta.dmg" "$OUT/beta/appcast-beta.xml" --repo "$REPO" \
+  --verify-tag --prerelease --title "$BETA_NAME" --notes-file "$NOTES" > "$OUT/gh-beta.log" 2>&1 \
+  || failed "$OUT/gh-beta.log" "the beta's release $BETA_TAG wasn't created"
+# The beta is out; only its feed's fixed home may be left.
+HINT="$BETA_NAME is out (release $BETA_TAG); don't run --beta again. Finish its feed with: $FEED_COMMANDS"
+# The beta feed's fixed home: the newest beta's DMG and feed, replaced each time.
+if [ "$FEED_EXISTS" = 1 ]; then
+  { gh release upload beta "$OUT/beta/Lostty-Beta.dmg" "$OUT/beta/appcast-beta.xml" --repo "$REPO" --clobber \
+    && gh release edit beta --repo "$REPO" --title "$BETA_TITLE" --notes-file "$NOTES"; } \
+    > "$OUT/gh-beta-feed.log" 2>&1 || failed "$OUT/gh-beta-feed.log" "the beta release wasn't refreshed"
+else
+  gh release create beta "$OUT/beta/Lostty-Beta.dmg" "$OUT/beta/appcast-beta.xml" --repo "$REPO" \
+    --prerelease --latest=false --target "$COMMIT" --title "$BETA_TITLE" \
+    --notes-file "$NOTES" > "$OUT/gh-beta-feed.log" 2>&1 \
+    || failed "$OUT/gh-beta-feed.log" "the beta release wasn't created"
+fi
+HINT=""
+curl -fsSL "$BETA_FEED" | grep -q "<sparkle:shortVersionString>$VERSION beta $BETA<" \
+  || fail "released, but $BETA_FEED doesn't show $VERSION beta $BETA yet; check https://github.com/$REPO/releases/tag/beta"
+echo "Released $BETA_NAME: https://github.com/$REPO/releases/tag/beta"

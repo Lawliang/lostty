@@ -18,6 +18,7 @@ struct ClaudeUsageBar: View {
     @ObservedObject private var usage = ClaudeUsageRuntime.shared
     @ObservedObject private var skins = SkinsRuntime.shared.manager
     @ObservedObject private var mute = LosttyMute.shared
+    @ObservedObject private var handoff = ContextHandoffCoordinator.shared
     @State private var showingDetails = false
     @State private var hovering = false
 
@@ -95,13 +96,17 @@ struct ClaudeUsageBar: View {
         let context = pane.flatMap { usage.contexts[$0] }
         let metric = usage.tracked
         let limit = usage.percent(metric) ?? 0
+        let armed = pane.map { handoff.isArmed($0) } ?? false
 
         return (Text("Context ").foregroundColor(ink.opacity(0.6))
             + ClaudeUsageBlocks.text(context?.percent ?? 0, accent: accent, empty: ink.opacity(0.28))
             + Text(" " + ClaudeUsageFormat.thousands(context?.used ?? 0)).foregroundColor(ink.opacity(0.9))
+            + (armed ? Text(" ") + Text(Image(systemName: "arrow.triangle.2.circlepath")).foregroundColor(accent)
+                : Text(""))
             + Text("   " + metric.shortTitle + " ").foregroundColor(ink.opacity(0.6))
             + ClaudeUsageBlocks.text(limit, accent: accent, empty: ink.opacity(0.28))
             + Text(" " + ClaudeUsageFormat.percent(limit)).foregroundColor(ink.opacity(0.9)))
+            .help(armed ? "Will hand off at the next clean break" : "")
     }
 }
 

@@ -37,6 +37,10 @@ final class ClaudeRuntime: ObservableObject {
     /// tell: the guard learns the pane runs an agent, for its badge.
     var agentSeen: @MainActor (UUID, HookAgent?) -> Void = { _, _ in }
 
+    /// What the context handoff hears: turn ends, prompts, a fresh window
+    /// after /clear, and the pane's agent going away. Set at launch.
+    var handoffSignal: @MainActor (UUID, ContextHandoffSignal) -> Void = { _, _ in }
+
     private let now: () -> Date
     private let schedule: Scheduler
     /// Panes not focused right now. Panes start focused (SurfaceView does).
@@ -45,6 +49,11 @@ final class ClaudeRuntime: ObservableObject {
     private var seen: Set<UUID> = []
     /// Panes whose title has shown a working spinner since the trace started.
     private var sawSpinner: Set<UUID> = []
+    /// Panes whose hooks said a turn began (a prompt or a tool start) and no
+    /// Stop has ended it: the handoff's turns. Not the trace: the title or
+    /// working line stops that at a permission prompt, and Claude carries on
+    /// after you approve with no new prompt.
+    private var hookTurns: Set<UUID> = []
 
     init(
         now: @escaping () -> Date = Date.init,
@@ -62,10 +71,19 @@ final class ClaudeRuntime: ObservableObject {
 
     func userVarChanged(_ id: UUID, name: String, value: String) {
         guard name == ClaudeConstants.userVarName else { return }
+        if ClaudeMessage.isFresh(value) {
+            handoffSignal(id, .fresh)
+            return
+        }
+        if ClaudeMessage.isCleared(value) {
+            handoffSignal(id, .cleared)
+            return
+        }
         if let action = ClaudeMessage.action(value) {
             // A tool starting means Claude works, even with no new prompt
             // (it carries on after a permission prompt without one).
             if phase(id).isOff { apply(.busy, to: id) }
+            hookTurns.insert(id)
             setAction(action, for: id)
             agentSeen(id, ClaudeMessage.agentKind(value))
             return
@@ -78,8 +96,18 @@ final class ClaudeRuntime: ObservableObject {
         // Only a turn that was under way ends: anything printed in a pane can
         // carry this user var, so an idle out of nowhere names no file.
         let turnUnderWay = !phase(id).isOff
-        apply(state, to: id, permission: ClaudeMessage.isPermission(value))
-        if state == .idle, turnUnderWay, let path = ClaudeMessage.transcript(value) { turnEnded(id, path) }
+        let permission = ClaudeMessage.isPermission(value)
+        apply(state, to: id, permission: permission)
+        switch state {
+        case .busy:
+            hookTurns.insert(id)
+            handoffSignal(id, .prompted)
+        case .exit: hookTurns.remove(id)
+        default: break
+        }
+        guard state == .idle, let path = ClaudeMessage.transcript(value) else { return }
+        if turnUnderWay { turnEnded(id, path) }
+        if !permission, hookTurns.remove(id) != nil { handoffSignal(id, .stopped(transcript: path)) }
     }
 
     /// The pane's shell reported a command finished, so whatever ran there
@@ -87,6 +115,8 @@ final class ClaudeRuntime: ObservableObject {
     func commandFinished(_ id: UUID) {
         agentGone(id)
         apply(.exit, to: id)
+        hookTurns.remove(id)
+        handoffSignal(id, .gone)
     }
 
     func surfaceClosed(_ id: UUID) {
@@ -96,7 +126,9 @@ final class ClaudeRuntime: ObservableObject {
         seen.remove(id)
         awaiting.remove(id)
         sawSpinner.remove(id)
+        hookTurns.remove(id)
         setAction(nil, for: id)
+        handoffSignal(id, .gone)
     }
 
     /// A pane is focused when its window is key and it is the selected pane.

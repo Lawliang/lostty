@@ -1185,6 +1185,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				LOSTTY_CHANNEL = beta;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 0.1;
 				"OTHER_LDFLAGS[arch=*]" = "-lstdc++";

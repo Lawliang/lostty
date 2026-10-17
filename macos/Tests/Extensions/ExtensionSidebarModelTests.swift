@@ -6,9 +6,29 @@ import Testing
 @MainActor
 struct ExtensionSidebarModelTests {
     /// A sidebar whose Branches model reads a scripted world.
-    private func makeModel() throws -> (ExtensionSidebarModel, BranchesModel) {
+    private func makeModel(channel: LosttyChannel = .beta) throws -> (ExtensionSidebarModel, BranchesModel) {
         let branches = BranchesModel(env: try FakeBranchesWorld().environment())
-        return (ExtensionSidebarModel(branches: branches), branches)
+        return (ExtensionSidebarModel(branches: branches, channel: channel), branches)
+    }
+
+    @Test func branchesIsInTheBetaOnly() {
+        #expect(LosttyExtension.available(in: .beta) == [.branches, .skins])
+        #expect(LosttyExtension.available(in: .stable) == [.skins])
+    }
+
+    @Test func stableNeverOpensBranches() throws {
+        let (model, branches) = try makeModel(channel: .stable)
+        #expect(model.available == [.skins])
+        model.select(.branches)
+        #expect(model.active == nil)
+        #expect(branches.isOpen == false)
+        model.select(.skins)
+        #expect(model.active == .skins)
+    }
+
+    @Test func theMascotIsInTheBetaOnly() throws {
+        #expect(try makeModel(channel: .beta).0.showsMascot)
+        #expect(try makeModel(channel: .stable).0.showsMascot == false)
     }
 
     @Test func startsWithNothingOpen() throws {

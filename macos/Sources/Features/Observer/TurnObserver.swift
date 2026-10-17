@@ -174,6 +174,12 @@ final class TurnObserver: ObservableObject {
         waitingPanes.remove(pane)
     }
 
+    /// The context handoff cleared this pane's window on purpose: its next
+    /// conversation file is taken at once, not held off for `switchInterval`.
+    func conversationChanging(_ pane: UUID) {
+        switchedAt[pane] = nil
+    }
+
     /// Each pane's conversation file, for Restart to Update to hand on.
     func carry() -> [UUID: String] { panes }
 

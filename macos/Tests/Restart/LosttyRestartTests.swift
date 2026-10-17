@@ -73,5 +73,19 @@ struct LosttyRestartTests {
         #expect(!LosttyRestart.resumeIfRestarted(from: url, environment: ["XCTestConfigurationFilePath": "/x"]))
         #expect(FileManager.default.fileExists(atPath: url.path))
     }
+
+    @Test func onlyABuildWithTheMascotHandsOverItsConversations() {
+        let pane = UUID()
+        #expect(LosttyRestart.transcripts([pane: "/t.jsonl"], channel: .beta) == [pane.uuidString: "/t.jsonl"])
+        #expect(LosttyRestart.transcripts([pane: "/t.jsonl"], channel: .stable) == nil)
+    }
+
+    @Test func stableIgnoresConversationsABetaHandedOver() {
+        let pane = UUID()
+        let saved = [pane.uuidString: "/t.jsonl", "not a uuid": "/x.jsonl"]
+        #expect(LosttyRestart.restoredTranscripts(saved, channel: .beta) == [pane: "/t.jsonl"])
+        #expect(LosttyRestart.restoredTranscripts(saved, channel: .stable).isEmpty)
+        #expect(LosttyRestart.restoredTranscripts(nil, channel: .beta).isEmpty)
+    }
 }
 #endif
