@@ -2,6 +2,14 @@
 
 Last updated 2026-10-16. Branch: `website`. Everything below is committed.
 
+## lostty.org (owner, 2026-10-16)
+
+- Hosted on **Cloudflare Pages**, built from GitHub: repo `Lawliang/lostty`, production branch **`website`**, build command `node website/build.mjs`, build output directory `website/dist`. Domains: `lostty.org` and `www.lostty.org` (the domain is on the owner's Cloudflare account).
+- `website/build.mjs` wraps `custom.html` (a fragment; the artifact host adds the skeleton) in a real document: doctype, charset, viewport, canonical, `<title>Lostty</title>`, drops the `claude:` meta, and writes `favicon.svg` from the page's `<g id="axo">`. `website/dist/` is git-ignored.
+- So a change goes live by: edit `custom.html`, publish the artifact as before, commit, then `git push origin website` (push only when the owner asks). Pages rebuilds on the push.
+- The saved launch version is tag `website-v1`.
+- Still placeholders on the live site: the Download links (404 until the first release), the Endorse button's Stripe link (`data-checkout`), the TestFlight button, the made-up QR code.
+
 ## Where things are
 
 | What | File | Published (private, owner only) |
