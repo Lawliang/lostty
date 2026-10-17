@@ -132,6 +132,69 @@ A skin with the same name as a preset keeps the preset's trace unless it
 sets `trace`. `[defaults] trace = false` turns traces off. With Reduce
 Motion on, the border glows gently instead of racing.
 
+## Guard
+
+In every Claude Code and Codex pane, Lostty stops a critical action before
+it runs and asks you, even when the agent skips its own permission
+prompts:
+
+- **Deleting what git can't get back:** untracked or ignored files,
+  anything outside the repo, uncommitted changes, `git clean`, deleting a
+  branch whose commits are nowhere else, dropping a stash. Deleting a
+  committed file goes through: git can restore it.
+- **Throwing work away:** `git reset --hard`, `checkout`/`restore` over
+  changes, `rebase`, amending a pushed commit.
+- **Leaving the Mac:** force pushes, tags, branch deletes on the remote and
+  pushes to protected branches (every push if you set `"push": "all"`),
+  `gh pr/issue create`, publishing a package, scripts you list.
+- **Merging into a protected branch** (`main`, `master`, and ones you add).
+- **Changing the guardrails:** agent settings, hook files, `~/.config/lostty`,
+  `~/.ssh`, the Keychain.
+- **Writing outside the project** (temp folders excepted).
+
+The agent is told it's blocked and to carry on with other work. You get a
+notification (Deny right there, or click to see the whole request), an
+amber badge on the pane, and the request in the Branches panel. In the
+request window, Return and Escape deny. Approve it there, and if the agent
+is still running, Lostty types "Approved #N" into its pane. The agent runs
+that exact call once. An approval lasts 10 minutes; a request nobody
+answers lapses after an hour. Agents have no way to approve.
+
+A red **Guard disconnected** badge means an agent's guard hook isn't
+installed. That includes an agent you never connected. Fix it from
+**Lostty → Claude Integration…** by installing or updating the hooks.
+
+If Lostty isn't running (say, during Restart to Update) or its app was moved
+or deleted, Claude asks you in its own prompt and Codex stays blocked until
+Lostty is back.
+
+Settings live in `~/.config/lostty/guard.json`:
+
+    {
+      "push": "protected",
+      "protectedBranches": ["release"],
+      "commands": ["deploy.sh"],
+      "deletable": ["vendor"],
+      "repos": {
+        "/Users/you/projectrepos/app": { "push": "all" }
+      }
+    }
+
+By default (`"push": "protected"`) Lostty asks only for force pushes
+(including `+ref`, `--force-with-lease`), tags, deletes on the remote and
+pushes to protected branches. `"push": "all"`, globally or for one repo,
+asks for every `git push`. `deletable` folders (by default `node_modules`,
+`zig-out`, `.zig-cache`, `zig-cache`, `DerivedData`, `.build`, `__pycache__`)
+can be deleted without asking.
+
+Connecting an agent (the bubble at launch, or **Lostty → Claude
+Integration…**) sets up its guard along with the trace. Agents already
+running pick up new hooks only after you restart them. Codex asks you once
+to trust Lostty's hooks; until you do, its guard doesn't run.
+
+The guard defends against mistakes and misled agents, not a process set on
+getting around it: it isn't a sandbox.
+
 ## Project Pill
 
 At the right of the title bar, a pill names the focused pane's project and
