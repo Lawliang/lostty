@@ -2224,14 +2224,16 @@ void main(){
     // lit again.
     const DUR = [3000, 2400, 1500, 1300, 1800, 1800, 3000];
     let i = 0, timer = 0, focus = '', left = 0;
-    // When the device in front changes, the one coming forward swings out to
-    // its side (the Mac left, the iPhone right) on a loop, rising on the way
-    // out and dipping on the way back, and the layers swap at the far point
+    // When the device in front changes, the one coming forward slides out to
+    // its side (the Mac left, the iPhone right) and back, along x only, and
+    // the layers swap at the far point
     const SWING = 1000;
     let swing = [], flip = 0;
+    // ay cancels the small vertical drift the rig's tilt gives a sideways
+    // move, so on screen it travels flat (measured in Chrome)
     function arc(dir, ax, ay) {
       const k = [];
-      for (let n = 0; n <= 20; n++) { const t = n / 20; k.push({ translate: `${(dir * ax * Math.sin(Math.PI * t)).toFixed(2)}% ${(-ay * Math.sin(2 * Math.PI * t)).toFixed(2)}%` }); }
+      for (let n = 0; n <= 20; n++) { const s = Math.sin(Math.PI * n / 20); k.push({ translate: `${(dir * ax * s).toFixed(2)}% ${(ay * s).toFixed(2)}%` }); }
       return k;
     }
     function setFront(front) {
@@ -2241,7 +2243,7 @@ void main(){
       const apply = () => { if (front === 'mac') stage.dataset.front = 'mac'; else delete stage.dataset.front; };
       if (RM || front === was) { apply(); return; }
       const el = front === 'mac' ? $('.ag-mac', stage) : $('.ag-phone', stage);
-      swing.push(el.animate(front === 'mac' ? arc(-1, 42, 9) : arc(1, 100, 6), { duration: SWING, easing: 'cubic-bezier(.45, 0, .55, 1)' }));
+      swing.push(el.animate(front === 'mac' ? arc(-1, 42, -1.4) : arc(1, 100, 1.45), { duration: SWING, easing: 'cubic-bezier(.45, 0, .55, 1)' }));
       flip = setTimeout(() => { flip = 0; apply(); }, SWING / 2);
     }
     function setFocus(f) {
