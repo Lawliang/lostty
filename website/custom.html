@@ -3,7 +3,7 @@
 <meta name="description" content="Lostty: a fast, native Mac terminal with an iPhone companion app for people running coding agents.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800;900&family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,400..800&family=Hanken+Grotesk:wght@400;500&family=JetBrains+Mono:ital,wght@0,300..800;1,400&family=Onest:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800;900&family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,400..800&family=JetBrains+Mono:ital,wght@0,300..800;1,400&family=Onest:wght@400;500;600;700&display=swap">
 <style>
 /* Layout: everything sits on a visible character grid (1ch x 1 line), left-aligned in a 1240px frame.
    Sections open with a shell prompt; product screens stay dark in both themes. */
@@ -641,9 +641,9 @@ p { margin: 0; }
    is on the strip and speeds back up when it leaves */
 .skstrip-track{display:flex; align-items:stretch; width:max-content; will-change:transform}
 
-/* the cards are Skin Shifter's: a frame in the rarity's colours round the
-   skin's own background and texture, a rarity badge and pack, the glowing
-   star emblem, name, description, the 16-colour palette and an Equip button.
+/* the cards are Skin Shifter's, trimmed: a frame in the rarity's colours
+   round the skin's own background and texture, the glowing star emblem, the
+   name with its rarity badge under it, and an Equip button.
    They tilt toward the pointer with a polychrome foil and a glare that follow
    it (--mx/--my, --rx/--ry, set by the script). Tapping anywhere on a card
    equips it; the equipped one's button reads "Equipped", with no ring round
@@ -664,14 +664,12 @@ p { margin: 0; }
 .skc:hover,.skc:focus-visible,.skc.hot{opacity:1}
 .skc.hot{transition:opacity .3s, transform .08s linear, box-shadow .3s; box-shadow:0 26px 54px -20px color-mix(in oklab, var(--sk-a1) 50%, transparent)}
 .skc-in{position:relative; display:flex; flex-direction:column; gap:9px; height:100%; padding:14px; border-radius:14px; overflow:hidden; isolation:isolate; background:var(--sk-bg)}
-.skc-top{display:flex; justify-content:space-between; align-items:center; gap:8px; min-height:18px}
-.skc-badge{display:inline-flex; font:800 10px/1 var(--skc-display); letter-spacing:.14em; text-transform:uppercase; color:#14101a;
+.skc-badge{display:inline-flex; align-self:center; margin-top:-3px; font:800 10px/1 var(--skc-display); letter-spacing:.14em; text-transform:uppercase; color:#14101a;
   padding:4px 9px 3px; clip-path:polygon(5px 0, 100% 0, calc(100% - 5px) 100%, 0 100%); background:var(--rc); white-space:nowrap}
 .skc.legendary .skc-badge{background-size:250% 100%; animation:skc-goldrun 3.5s linear infinite}
 .skc.duo .skc-badge{background:var(--r-duo)}
 @keyframes skc-goldrun{from{background-position:0 0} to{background-position:-250% 0}}
-.skc-patron{font:700 12px/1 var(--skc-display); letter-spacing:.1em; text-transform:uppercase; color:color-mix(in oklab, var(--sk-fg) 70%, transparent); white-space:nowrap}
-.skc-emblem{position:relative; display:grid; place-items:center; width:62px; height:62px; margin:4px auto 0; border-radius:50%;
+.skc-emblem{position:relative; display:grid; place-items:center; width:62px; height:62px; margin:8px auto 0; border-radius:50%;
   background:radial-gradient(circle, color-mix(in oklab, var(--sk-a1) 30%, transparent), transparent 70%);
   box-shadow:inset 0 0 0 1.5px color-mix(in oklab, var(--sk-a1) 70%, transparent), 0 0 24px -6px var(--sk-a1)}
 .skc-emblem::before{content:""; position:absolute; inset:-6px; border-radius:50%; border:1px dashed color-mix(in oklab, var(--sk-a2) 60%, transparent)}
@@ -679,9 +677,6 @@ p { margin: 0; }
 @keyframes skc-rot{to{transform:rotate(360deg)}}
 .skc-emblem svg{width:30px; height:30px; color:var(--sk-a1); filter:drop-shadow(0 0 7px var(--sk-a1))}
 .skc-name{display:block; text-align:center; font:900 27px/.95 var(--skc-display); letter-spacing:.01em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
-.skc-blurb{display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; min-height:2.9em; text-align:center; font-size:12.5px; color:color-mix(in oklab, var(--sk-fg) 80%, transparent)}
-.skc-pal{display:grid; grid-template-columns:repeat(8, 1fr); gap:3px}
-.skc-pal i{aspect-ratio:1.6; border-radius:2px}
 .skc-equip{display:block; text-align:center; font:800 13px/1 var(--skc-display); letter-spacing:.1em; text-transform:uppercase; padding:9px 0 8px; border-radius:8px;
   background:color-mix(in oklab, var(--sk-a1) 18%, transparent); color:var(--sk-a1); box-shadow:inset 0 0 0 1.5px color-mix(in oklab, var(--sk-a1) 55%, transparent); transition:background .2s, color .2s}
 .skc:hover .skc-equip,.skc[aria-pressed="true"] .skc-equip{background:var(--sk-a1); color:var(--sk-bg)}
@@ -2588,11 +2583,7 @@ void main(){
   (function () {
     var track = $('#skstrip-track');
     if (!track) return;
-    var OWN = { id: 'lostty', r: 'default', patron: 'Lostty', bg: '#120a2a', fg: '#f3ecff', a1: '#ff3df2', a2: '#28e7ff', tex: 'grid', d: 'Lostty’s own magenta and cyan on a dark purple grid.' };
-    // each skin's 16-colour terminal palette, from Skin Shifter (the site's own
-    // look shares neon-arcade's)
-    var PAL = {"neon-arcade":["#1d1240","#ff4f7b","#3dffb0","#ffd84d","#7b8cff","#ff3df2","#28e7ff","#d9ccff","#6f6197","#ff7a9c","#7dffcb","#ffe68a","#a5b1ff","#ff7af6","#7af0ff","#f3ecff"],"sunset-drive":["#2b1436","#ff4f5e","#9dff6a","#ffb347","#8f7bff","#ff4fa3","#5ee7ff","#f0d4e6","#7d5f84","#ff7a86","#bfff96","#ffcf7f","#b3a6ff","#ff85c0","#8ff0ff","#ffe9f5"],"mint-protocol":["#0b2219","#ff5c7a","#2cff9a","#b6ff3b","#3fb8ff","#d38bff","#3dffe0","#bfe8d2","#4b7161","#ff8aa0","#7dffc0","#d4ff85","#7fd1ff","#e3b3ff","#8affec","#d8ffe9"],"deep-dive":["#0b2a45","#ff5c8a","#3dffa8","#ffd166","#25c4ff","#9b87ff","#3de8ff","#c4e4f5","#4f728e","#ff8aac","#85ffc8","#ffe199","#7ad8ff","#bfb3ff","#8af0ff","#dff4ff"],"lava-rush":["#2e110c","#ff5a2c","#b8ff4d","#ffc53d","#6fa8ff","#ff5fb0","#4de3ff","#f2d9cc","#856056","#ff8a66","#d2ff8a","#ffd97f","#9cc4ff","#ff8fca","#8aecff","#fff0e8"],"bubble-pop":["#36143a","#ff5c8a","#6dffb3","#ffd84d","#7ea8ff","#ff6ad5","#5cf2ff","#f2d6f0","#855f86","#ff8aab","#9dffcc","#ffe68a","#a8c4ff","#ff9be4","#92f6ff","#ffeefe"],"thunderhead":["#16224a","#ff5d6c","#8be38a","#ffd84a","#7fc8ff","#c9a0ff","#7fe9ff","#c8d2ee","#6f7ea8","#ff8a95","#b3f0b2","#ffe68a","#a8dbff","#ddc2ff","#a8f2ff","#dfe7ff"],"undertow":["#0b3440","#ff7a6b","#5fe3a1","#f2e48a","#59b8ff","#b49cff","#3fe0d0","#bfe3df","#5f8f93","#ff9d92","#93edc0","#f7eeb0","#8ccfff","#cdbdff","#7debe0","#d6f6f2"],"bloodrite":["#2e0c0d","#ff3b3f","#a8d672","#ffb547","#8fb0d9","#e07ab0","#9fd4d0","#e2c8c3","#8a5a57","#ff6e6f","#c6e89c","#ffcd80","#b4cbe8","#eda2c8","#c0e6e3","#f3dcd8"],"heartsease":["#3a1530","#ff6b8a","#9be7b0","#ffd59a","#a9b8ff","#ff7ab8","#9ee8e8","#f0cfe0","#9a6f86","#ff95ab","#bff0cc","#ffe3bb","#c6d0ff","#ffa3cd","#c0f0f0","#ffe3f0"],"silverbow":["#0f2a1e","#ff7b6e","#8ff08a","#e8f0a0","#9cc8ff","#d6b3ff","#a8f0d8","#cfe0d2","#5e8a70","#ff9f95","#b5f5b1","#f0f5c0","#bddbff","#e4ccff","#c6f5e6","#e4f2e6"],"stormsurge":["#0e2c3c","#ff6b6b","#6fe3a8","#ffd84a","#6fbaff","#c2a0ff","#3fe0d0","#c3dfe4","#5a8396","#ff9393","#9cedc4","#ffe68a","#9cd0ff","#d8c2ff","#7debe0","#def4f6"]};
-    PAL.lostty = PAL['neon-arcade'];
+    var OWN = { id: 'lostty', r: 'default', bg: '#120a2a', fg: '#f3ecff', a1: '#ff3df2', a2: '#28e7ff', tex: 'grid' };
     var STAR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.5l2.2 7.3 7.3 2.2-7.3 2.2L12 21.5l-2.2-7.3L2.5 12l7.3-2.2z"/></svg>';
     var list = [OWN].concat(SKINS);
     var macTex = $$('.ag-mac-body .tex');
@@ -2606,12 +2597,9 @@ void main(){
       var b = document.createElement('button');
       b.type = 'button'; b.className = 'skc ' + s.r; b.setAttribute('data-id', s.id);
       KEYS.forEach(function (k) { b.style.setProperty('--sk-' + k, s[k]); });
-      var pack = s.patron || (s.pack === 'arcade' ? 'Arcade' : s.pack);
       b.innerHTML = '<span class="skc-in"><span class="tex a"></span><span class="tex b"></span>' +
-        '<span class="skc-top"><span class="skc-badge">' + s.r + '</span><span class="skc-patron">' + pack + '</span></span>' +
         '<span class="skc-emblem">' + STAR + '</span><span class="skc-name">' + s.id + '</span>' +
-        '<span class="skc-blurb">' + s.d + '</span>' +
-        '<span class="skc-pal" aria-hidden="true">' + (PAL[s.id] || []).map(function (c) { return '<i style="background:' + c + '"></i>'; }).join('') + '</span>' +
+        '<span class="skc-badge">' + s.r + '</span>' +
         '<span class="skc-equip">Equip</span></span>' +
         '<span class="skc-foil" aria-hidden="true"></span><span class="skc-glare" aria-hidden="true"></span>';
       setTex($$('.tex', b), s.tex);
