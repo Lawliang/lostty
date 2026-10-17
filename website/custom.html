@@ -2020,7 +2020,12 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
     }
     function region() {
       if (W >= 900) return { x: W * 0.5, y: 28, w: W * 0.5 - 32, h: H - 70 };
-      return { x: 8, y: 14, w: W - 16, h: Math.min(290, H) - 20 };
+      // narrow: centred in the room between the hero's top and the headline's
+      var h1 = copy && copy.querySelector('h1');
+      var room = h1 ? h1.getBoundingClientRect().top - hero.getBoundingClientRect().top : 0;
+      if (!(room > 80)) room = Math.min(290, H) + 6;
+      var rh = Math.min(270, room - 20);
+      return { x: 8, y: (room - rh) / 2, w: W - 16, h: rh };
     }
     function buildMasks() {
       mcv.width = cols; mcv.height = rows;
