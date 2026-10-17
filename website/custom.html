@@ -373,8 +373,11 @@ p { margin: 0; }
   --mk-a1: #ff3df2; --mk-a1s: #ff7af6; --mk-a2: #28e7ff;
   font-family: var(--font-ui); line-height: 1.6;
   /* close to the skin strip above it */
-  padding-top: clamp(44px, 5vw, 72px);
-  /* and the same room under it, above the skin strip */
+  /* the skin strip's title floats over this padding (it takes no space of its
+     own), so the glow runs right up to the cards; --strip-title-h is its
+     height, measured by the script */
+  padding-top: calc(var(--strip-title-h, 0px) + clamp(44px, 5vw, 72px));
+  /* and more room under it, above Install */
   padding-bottom: clamp(64px, 7vw, 104px);
 }
 .ag-mascot{display:block; overflow:visible}
@@ -626,7 +629,9 @@ p { margin: 0; }
    pointer is on the strip and eases back up when it leaves. The track holds the list twice and moves by half its width,
    so it wraps without a seam (each card carries its gap as margin, so the
    halves are exactly equal) */
-.skstrip{position:relative; padding-block:0; border-top:0; scroll-margin-top:calc(var(--nav-h) + 24px)}
+.skstrip{position:relative; z-index:2; padding-block:0; border-top:0; scroll-margin-top:calc(var(--nav-h) + 24px)}
+/* the title hangs below the cards, over the top of the demo, which leaves room for it */
+.skstrip-foot{position:absolute; left:0; right:0; top:100%; pointer-events:none}
 .skstrip + .sec{border-top:0}
 /* the heading is the same size as the demo's "Swap intuitively." (.ag-title):
    this wrap is a size container too and follows the same rules */
@@ -2392,6 +2397,13 @@ void main(){
     // the title: shown while the pointer is on the strip and when a card is
     // tapped, hidden again 3s after the last of either. A hover has to last
     // a second before it shows the title
+    // the title floats below the strip; the demo under it leaves room for it
+    // in its top padding, as tall as the title (it wraps on narrow screens)
+    var foot = $('.skstrip-foot'), demoSec = $('#demo');
+    function titleRoom() { if (foot && demoSec) demoSec.style.setProperty('--strip-title-h', foot.offsetHeight + 'px'); }
+    titleRoom();
+    if (window.ResizeObserver && foot) new ResizeObserver(titleRoom).observe(foot);
+    else addEventListener('resize', titleRoom);
     var strip = $('#skin-strip'), titleT = 0, enterT = 0, onStrip = false, SHOW_MS = 3000, HOVER_MS = 1000;
     function showTitles() {
       strip.classList.add('show');
