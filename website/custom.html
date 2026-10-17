@@ -2451,13 +2451,13 @@ void main(){
   /* ---------------- skin strip ---------------- */
   // Tapping a card wears that skin: its colours go on the root as --sk-* with
   // data-skin, which the CSS turns into the site's accents and the demo Mac's
-  // look. The first card is the site's own look and takes the skin off.
-  // Nothing is remembered: every visit starts in the site's own look.
+  // look. Tapping the equipped card again takes it off, back to the site's
+  // own look (which has no card of its own). Nothing is remembered: every
+  // visit starts in the site's own look.
   (function () {
     var track = $('#skstrip-track');
     if (!track) return;
-    var OWN = { id: 'lostty', bg: '#120a2a', fg: '#f3ecff', a1: '#ff3df2', a2: '#28e7ff', tex: 'grid' };
-    var list = [OWN].concat(SKINS);
+    var list = SKINS;
     var macTex = $$('.ag-mac-body .tex');
     var KEYS = ['bg', 'fg', 'a1', 'a2'];
     function setTex(els, tex) {
@@ -2474,7 +2474,7 @@ void main(){
         '<span class="skc-foil" aria-hidden="true"></span><span class="skc-glare" aria-hidden="true"></span>';
       setTex($$('.tex', b), s.tex);
       if (copy) { b.tabIndex = -1; b.setAttribute('aria-hidden', 'true'); b.setAttribute('data-copy', ''); }
-      else b.setAttribute('aria-label', s === OWN ? 'Lostty’s own look' : 'Wear the ' + s.id + ' skin');
+      else b.setAttribute('aria-label', 'Wear the ' + s.id + ' skin');
       return b;
     }
     [false, true].forEach(function (copy) { list.forEach(function (s) { track.appendChild(card(s, copy)); }); });
@@ -2486,9 +2486,10 @@ void main(){
         $('.skc-equip', c).textContent = on ? 'Equipped' : 'Equip';
       });
     }
-    mark(OWN.id);
+    mark(null);
     function wear(id) {
-      var s = SKIN[id];
+      // the one already on comes off
+      var s = root.getAttribute('data-skin') === id ? null : SKIN[id];
       if (s) {
         root.setAttribute('data-skin', s.id);
         KEYS.forEach(function (k) { root.style.setProperty('--sk-' + k, s[k]); });
@@ -2497,7 +2498,7 @@ void main(){
         root.removeAttribute('data-skin');
         KEYS.forEach(function (k) { root.style.removeProperty('--sk-' + k); });
       }
-      mark(s ? s.id : OWN.id);
+      mark(s ? s.id : null);
       // the hero's glyph field and the demo's glow read colours in script
       themeChanged();
       document.dispatchEvent(new CustomEvent('lostty-skin'));
