@@ -2114,9 +2114,10 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
     function tether() {
       const o = tSvg.getBoundingClientRect(), a = tA.getBoundingClientRect(), b = tB.getBoundingClientRect();
       const x1 = a.left - o.left, y1 = a.top - o.top, x2 = b.left - o.left, y2 = b.top - o.top;
-      // it hangs: both ends leave downward and it sags below the lower one
-      const sag = Math.max(24, Math.abs(x2 - x1) * .32);
-      const d = `M${x1.toFixed(1)} ${y1.toFixed(1)} C${x1.toFixed(1)} ${(y1 + sag).toFixed(1)} ${x2.toFixed(1)} ${(Math.max(y1, y2) + sag * .8).toFixed(1)} ${x2.toFixed(1)} ${y2.toFixed(1)}`;
+      // it hangs: it drops straight down from the Mac first, then curves over
+      // and sags below the iPhone before rising into its bottom
+      const dx = Math.abs(x2 - x1), drop = Math.max(18, dx * .22), sag = Math.max(24, dx * .3), yd = y1 + drop;
+      const d = `M${x1.toFixed(1)} ${y1.toFixed(1)} V${yd.toFixed(1)} C${x1.toFixed(1)} ${(yd + sag * 1.1).toFixed(1)} ${x2.toFixed(1)} ${(Math.max(yd, y2) + sag * .8).toFixed(1)} ${x2.toFixed(1)} ${y2.toFixed(1)}`;
       tPaths.forEach(p => p.setAttribute('d', d));
     }
     // a pulse runs Mac to iPhone (dir 1) or back (dir -1)
