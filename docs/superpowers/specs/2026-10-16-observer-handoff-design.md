@@ -259,16 +259,17 @@ Per pane, the coordinator holds one state:
 1. **Arm.** On each context report, the policy (§6) decides the level. On
    arming, the coordinator writes the pane's **state file**
    `~/Library/Application Support/Lostty/handoff/panes/<pane>.json`:
-   `{"v":1,"level":"limit"|"ceiling","used":…,"limit":…,"ceiling":…,
-   "remindAt":…,"handoff":null}`. Disarming (setting off, or the context
+   (`panes/<pane>.json`: phase, level, whether the button armed it, the size
+   when the directive was last queued, used, size, nudged, the saved
+   handoff's path; the app's own record, which the hook never reads). Disarming (setting off, or the context
    dropping below the limit) deletes it.
-2. **Directive.** On `UserPromptSubmit` and `PostToolUse`, `+claude-state`
-   reads the state file for `$LOSTTY_SURFACE`. If there is one and it says to
-   speak now (first time, `used ≥ remindAt`, or the level rose), it prints
-   the directive (§1, ceiling wording at the ceiling) as `additionalContext`
-   and the app moves `remindAt` on (the hook reports that it spoke through
-   the same user var it already sends). No state file: it prints nothing, as
-   today.
+2. **Directive.** The app decides when to speak (on arming, each 25k past
+   the last time, and when the level rises) and then queues the directive
+   (§1, ceiling wording at the ceiling) as `panes/<pane>.say`. On
+   `UserPromptSubmit` and `PostToolUse` (Claude's own calls, not a
+   subagent's), `+claude-state` takes that file (renaming it, so only one
+   hook gets it) and prints it as `additionalContext`. No file: it prints
+   nothing, as today.
 3. **Handoff.** On a turn end (`Stop` with a transcript path) in an armed
    pane, the coordinator reads that turn's last assistant reply and looks for
    one `<lostty-handoff>` block (§6). Found and valid: it saves the handoff
@@ -280,20 +281,21 @@ Per pane, the coordinator holds one state:
      ceiling.` and Return. Once per arming; if that turn ends without a
      handoff too, nothing more is typed.
 4. **Grace.** 3 s. Any key typed in that pane, or a new `UserPromptSubmit`,
-   cancels: back to armed, with `remindAt` = `used` + 25k.
-5. **Clear.** The coordinator writes the handoff text and path into the
-   state file, then types `/clear` and Return into the pane.
+   cancels: back to armed; the next reminder 25k later.
+5. **Clear.** The coordinator queues the fresh window's text (the handoff,
+   prefixed, §1) as `panes/<pane>.start`, then types `/clear` and Return
+   into the pane.
 6. **Fresh window.** `SessionStart` with `source: "clear"` runs
-   `+claude-state`, which finds the handoff in the state file, prints it as
-   `additionalContext` (prefixed, §1), and reports that it did. Over 9,000
-   characters: the first 7,500 plus "The full handoff is at <path>. Read it
-   before acting." The coordinator then types, each followed by Return,
-   whatever the desk check showed `/clear` doesn't keep (`/model <model>`
-   from the usage feed's model; `/add-dir <dir>` for folders the handoff's
-   Pointers name outside the working directory), then the continue line
-   (§1). It deletes the state file and goes back to idle. If the desk check
-   shows the permission mode doesn't survive `/clear`, that is stated in
-   Settings as a known limitation; Lostty does not try to restore it. The observer is
+   `+claude-state`, which takes `panes/<pane>.start`, prints it as
+   `additionalContext`, and reports `fresh` through `LOSTTY_CLAUDE`. Over
+   9,000 characters: the first 7,500 plus "The full handoff is at <path>.
+   Read it before acting." The coordinator then types, each followed by
+   Return, `/model <alias>` if the desk check showed `/clear` drops the model
+   (alias from the usage feed's model name), then the continue line (§1). It
+   deletes the pane's files and goes back to idle. If the desk check shows
+   the permission mode or `/add-dir` folders don't survive `/clear`, that is
+   stated in Settings as a known limitation; Lostty does not try to restore
+   them. The observer is
    told the pane's conversation file is changing on purpose, so the 30 s
    switch limit doesn't hold the pane on the old file.
 7. **No fresh window.** No `SessionStart` report within 15 s of typing
@@ -304,8 +306,8 @@ At the ceiling the agent is told to hand off at the end of this turn. If it
 still doesn't, nothing more happens: Lostty never interrupts or kills a
 turn, and Claude's auto-compact stays the last resort.
 
-Restart to Update carries each pane's state (armed level, `remindAt`, a
-pending handoff's path) like the observer's.
+Restart to Update carries each pane's state (its state file; a pane caught mid-handoff
+comes back armed) like the observer's.
 
 ## 5. Safety rules
 
@@ -315,11 +317,11 @@ pending handoff's path) like the observer's.
 - Never while the agent is waiting on a permission prompt (the Notification
   state) or has subagents working (`agents`).
 - One handoff per arming; no retries after a failed fresh window.
-- The state file holds nothing but this pane's handoff state; the hook reads
-  only `panes/<LOSTTY_SURFACE>.json`, never a path from elsewhere.
+- The hook reads only `panes/<LOSTTY_SURFACE>.say` or `.start`, and only
+  when `LOSTTY_SURFACE` is an uppercase UUID; never a path from elsewhere.
 - Setting off: the coordinator deletes every state file and goes idle. The
-  hooks with no state file print nothing.
-- The hook stays fast and never fails: a missing or unreadable state file is
+  hooks with nothing queued print nothing.
+- The hook stays fast and never fails: a missing or unreadable queued file is
   silence; it still exits 0 within the existing 5 s timeout.
 
 ## 6. Pieces
@@ -331,7 +333,7 @@ Each has one job and is tested alone.
   speak. The 70% and 90% caps, the 25k reminder step.
 - **`HandoffDirective`** (Swift, pure): the directive text for each level,
   with the checklist, the contents list and the format (§1), filled with the
-  numbers. Kept under 4,000 characters. Written into the state file so the
+  numbers. Kept under 4,000 characters. Queued as `panes/<pane>.say` so the
   Zig hook only copies it.
 - **`HandoffExtract`** (Swift, pure): the last `<lostty-handoff>` block in a
   reply that is not inside a code fence; requires `Where we are`,
@@ -344,15 +346,15 @@ Each has one job and is tested alone.
   runs grace, clear, restore, continue and the ceiling nudge through an
   injected typist and clock; takes the bubble's two buttons; updates the
   bubble and the usage bar's mark; posts the failure notification. Agent-specific steps go
-  through a `HandoffAgent` adapter (Claude: `/clear`, the continue lines,
+  through a `ContextHandoffAgent` adapter (Claude: `/clear`, the continue lines,
   the context source).
-- **`+claude-state` speak path** (Zig): for `prompt`, `tool-done` and
-  `session-start` (new states), reads the state file and prints
-  `hookSpecificOutput` JSON with the right `hookEventName`; reports
-  `spoke` / `loaded` through `LOSTTY_CLAUDE`. Pure parts (choosing what to
-  print from a state file and an event) tested in Zig.
-- **Hook install** (Zig): adds `PostToolUse` (`tool-done`) and
-  `SessionStart` (`session-start`); `UserPromptSubmit` keeps `busy` and
+- **`+claude-state` speak path** (Zig): `busy` (UserPromptSubmit) and the
+  new `done` (PostToolUse) take `panes/<pane>.say`; the new `start`
+  (SessionStart, source `clear`) takes `panes/<pane>.start`. Each prints
+  `hookSpecificOutput` JSON with the right `hookEventName`; `start` then
+  reports `fresh` through `LOSTTY_CLAUDE`. Pure parts tested in Zig.
+- **Hook install** (Zig): adds `PostToolUse` (`done`) and
+  `SessionStart` (`start`); `UserPromptSubmit` keeps `busy` and
   speaks too. The Settings hooks check counts the new events, so an older
   install shows as "partial" and offers the update.
 - **Settings** (Swift): the two controls in the Mascot section (§2).
@@ -395,9 +397,10 @@ dropped; changing Claude's auto-compact settings.
   setting off mid-pending; pane closed; the button arms with the setting
   off; "Don't hand off" disarms until the next conversation; the ceiling
   nudge is typed once and only once).
-- **Unit (Zig):** the speak path's output for each event, with and without a
-  state file, at both levels, with a handoff over the cap; the installer's
-  new events and the partial status.
+- **Unit (Zig):** the hook output's JSON; pane ids (an uppercase UUID only);
+  taking a queued file once; a subagent's tool call left silent; the
+  session source; the installer's new events and the partial status. (The
+  9,000-character cap is applied by the app, tested in Swift.)
 - **Desk check (real pane, Debug override at 20k):** run a small task to
   past 20k, see the mark and the directive; see it not hand off mid-edit;
   let it finish and commit; watch the handoff, `/clear`, and the fresh agent
