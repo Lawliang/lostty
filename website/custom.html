@@ -294,8 +294,9 @@ p { margin: 0; }
 /* ---------- hero ---------- */
 .hero { position: relative; overflow: hidden; background: var(--paper); }
 #field { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-/* the height the bullets save by showing one at a time (--pts-saved, set by the script) goes above the headline */
-.hero-in { position: relative; height: 800px; display: flex; align-items: flex-start; padding-block: calc(72px + var(--pts-saved, 0px)) 72px; pointer-events: none; }
+/* desktop: the copy sits at the top, 72px down (owner, 2026-10-17); the height
+   the bullets save by showing one at a time is left under the buttons */
+.hero-in { position: relative; height: 800px; display: flex; align-items: flex-start; padding-block: 72px; pointer-events: none; }
 .hero-copy { max-width: 40rem; pointer-events: auto; }
 /* headline type from Aurora Glass's section titles: Onest 700, tight tracking */
 .hero h1 {
@@ -372,7 +373,7 @@ p { margin: 0; }
    screen together. svh is the screen with the browser's bars showing; a
    screen too short for the copy just lets it run on */
 :root { --strip-run-h: 108px; }
-/* phones have no skin strip, so the hero fills the whole first screen */
+/* phones: the hero fills the whole first screen; the skin strip comes after it */
 @media (max-width: 640px) { :root { --strip-run-h: 0px; } }
 @media (max-width: 899px) {
   .hero-in { height: auto; align-items: flex-end; padding-block: 16px;
@@ -752,9 +753,9 @@ p { margin: 0; }
   .skstrip-track{transform:none !important; padding-inline:7vw}
   .skc[data-copy]{display:none}
 }
-/* phones don't get the strip at all (owner, 2026-10-17); its title and glow
-   room measure 0 with it gone */
-@media (max-width: 640px){ .skstrip{display:none} }
+/* phones: the strip comes after the first screen, which the hero fills
+   (--strip-run-h is 0 there), with smaller cards */
+@media (max-width: 640px){ .skstrip-head h2{margin-bottom:12px} .skstrip-foot h2{margin:0} .skc{width:184px; height:68px; margin-right:12px} }
 
 /* ---------- why ---------- */
 .issues { display: flex; flex-direction: column; }
