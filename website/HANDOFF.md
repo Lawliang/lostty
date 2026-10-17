@@ -31,7 +31,7 @@ Kinetic Mono as the base (JetBrains Mono, character-grid look, light "paper term
 
 **Header**
 - Logo: the Kinetic Mono axolotl icon, wordmark "Lostty" in Onest 700 17px (Aurora Glass's logo type) plus the magenta blinking `_`.
-- Nav: **Download** (full-strength text even when not current), Features, Skins, Docs. On phones the `❯` current-page marker is hidden so the nav fits.
+- Nav: **Download** (full-strength text even when not current), Features (goes to `#demo`), Skins (goes to `#skin-strip`), Docs. The footer's Product links match (its "How it works" link went with that section). On phones the `❯` current-page marker is hidden so the nav fits.
 
 **Hero** (`.hero`, glyph-field canvas `#field`)
 - Height 800px on desktop (`.hero-in`), content starts 72px from the top; on phones (<900px) it sizes to content.
@@ -59,7 +59,7 @@ Kinetic Mono as the base (JetBrains Mono, character-grid look, light "paper term
 
 **Headings**: every section heading (and the Docs page titles) uses the hero title's type, Onest 700 with -.04em tracking, at its own size; the Docs `## ` subheads stay mono.
 
-**Sections below the demo**: as in Kinetic Mono, minus the `~/lostty ❯ …` prompt lines (removed). Headings still do the brief scramble when they scroll into view.
+**Sections below the demo**: the home page is now hero, demo, skin strip, then Install ("Clone it, build it, go take a walk."), then the footer. On 2026-10-16 the owner removed "Four things kept going wrong…" (`#why`), "Twelve skins…" (`#skins`), "Your Mac, your phone, your tailnet…" (`#how`) and "Built on Ghostty." (`#ghostty`); restore any from git if wanted. Their CSS and guarded scripts are still in the file, unused. The demo's waving and ready axolotls (`#m-wait`, `#m-ready`) lived in `#why`, so they now sit in a `hidden` div just above the skin strip (not below it, so nothing breaks `.skstrip + .sec`, which drops Install's divider). Search lists only demo, skin strip and install on the home page. Install keeps Kinetic Mono's look, minus the `~/lostty ❯ …` prompt line. Headings still do the brief scramble when they scroll into view.
 
 **Footer logo**: same as the header (Onest "Lostty" plus the blinking `_`).
 
