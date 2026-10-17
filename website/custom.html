@@ -3,7 +3,7 @@
 <meta name="description" content="Lostty: a fast, native Mac terminal with an iPhone companion app for people running coding agents.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800;900&family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,400..800&family=JetBrains+Mono:ital,wght@0,300..800;1,400&family=Onest:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,400..800&family=JetBrains+Mono:ital,wght@0,300..800;1,400&family=Onest:wght@400;500;600;700&display=swap">
 <style>
 /* Layout: everything sits on a visible character grid (1ch x 1 line), left-aligned in a 1240px frame.
    Sections open with a shell prompt; product screens stay dark in both themes. */
@@ -635,67 +635,45 @@ p { margin: 0; }
 /* on phones, the size of the other section headings instead */
 @container (max-width:640px){ .skstrip h2{font-size:clamp(32px, 5vw, 60px)} }
 /* room above and below for the cards' tilt */
-.skstrip-run{overflow:hidden; padding-block:22px;
+.skstrip-run{overflow:hidden; padding-block:16px;
   -webkit-mask-image:linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent); mask-image:linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent)}
 /* the script moves the track: it slows to a crawl while the pointer (or focus)
    is on the strip and speeds back up when it leaves */
 .skstrip-track{display:flex; align-items:stretch; width:max-content; will-change:transform}
 
-/* the cards are Skin Shifter's, trimmed and laid out across: a frame in the
-   rarity's colours round the skin's own background and texture, the rarity
-   badge, the glowing star emblem beside the name, and an Equip button.
-   They tilt toward the pointer with a polychrome foil and a glare that follow
-   it (--mx/--my, --rx/--ry, set by the script). Tapping anywhere on a card
-   equips it; the equipped one's button reads "Equipped", with no ring round
-   the card. Dim except the one under the pointer */
-.skstrip{--skc-display:"Big Shoulders Display", "Arial Narrow", "Helvetica Neue Condensed", sans-serif;
-  --skc-body:"Hanken Grotesk", ui-sans-serif, -apple-system, "Segoe UI", sans-serif;
-  --r-common:linear-gradient(135deg, #e2dee9, #9e98ad); --r-rare:linear-gradient(135deg, #8fd0ff, #3b7ff0);
-  --r-epic:linear-gradient(135deg, #dba6ff, #8b3dff); --r-heroic:linear-gradient(135deg, #ffab6b, #ff3b3f);
-  --r-legendary:linear-gradient(110deg, #ffe58a, #ffb21f 40%, #fff1b8 50%, #ffb21f 60%, #ffd25a);
-  --r-duo:linear-gradient(90deg, #ffd84a 0 50%, #3fe0d0 50% 100%); --r-default:linear-gradient(135deg, #ff3df2, #28e7ff)}
-.skc{--rx:0deg; --ry:0deg; --mx:50; --my:50; --rc:var(--r-common);
-  position:relative; flex:none; display:block; width:272px; margin-right:18px; padding:2px; border:0; border-radius:16px; background:var(--rc);
-  font:400 13px/1.45 var(--skc-body); color:var(--sk-fg); text-align:left; cursor:pointer;
-  transform:perspective(900px) rotateX(var(--rx)) rotateY(var(--ry)); transform-style:preserve-3d;
-  box-shadow:0 16px 36px -22px #000; opacity:.36; transition:opacity .3s, transform .6s var(--ease-out, cubic-bezier(.22, .8, .2, 1)), box-shadow .4s}
-.skc.rare{--rc:var(--r-rare)} .skc.epic{--rc:var(--r-epic)} .skc.heroic{--rc:var(--r-heroic)}
-.skc.legendary{--rc:var(--r-legendary)} .skc.duo{--rc:linear-gradient(135deg, #ffd84a 0 45%, #3fe0d0 55% 100%)} .skc.default{--rc:var(--r-default)}
+/* the cards: the skin's own background and texture with "❯ name", no
+   border, plus two things from Skin Shifter's cards: an Equip button
+   ("Equipped", filled, on the one being worn) and the polychrome foil and
+   glare that follow the pointer as the card tilts toward it (--mx/--my,
+   --rx/--ry, set by the script). Tapping anywhere on a card equips it. Dim
+   except the one under the pointer */
+.skc{--rx:0deg; --ry:0deg; --mx:50; --my:50;
+  position:relative; isolation:isolate; overflow:hidden; flex:none; display:flex; flex-direction:column; justify-content:center; align-items:flex-start; gap:9px;
+  width:208px; height:76px; margin-right:14px; padding:0 14px; border:0; border-radius:8px; background:var(--sk-bg); color:var(--sk-fg);
+  font:600 13.5px/1.3 var(--font-mono); text-align:left; cursor:pointer;
+  transform:perspective(700px) rotateX(var(--rx)) rotateY(var(--ry));
+  opacity:.36; transition:opacity .3s, transform .6s cubic-bezier(.22, .8, .2, 1), box-shadow .4s}
 .skc:hover,.skc:focus-visible,.skc.hot{opacity:1}
-.skc.hot{transition:opacity .3s, transform .08s linear, box-shadow .3s; box-shadow:0 26px 54px -20px color-mix(in oklab, var(--sk-a1) 50%, transparent)}
-.skc-in{position:relative; display:flex; flex-direction:column; gap:9px; height:100%; padding:14px; border-radius:14px; overflow:hidden; isolation:isolate; background:var(--sk-bg)}
-.skc-badge{display:inline-flex; align-self:flex-start; font:800 10px/1 var(--skc-display); letter-spacing:.14em; text-transform:uppercase; color:#14101a;
-  padding:4px 9px 3px; clip-path:polygon(5px 0, 100% 0, calc(100% - 5px) 100%, 0 100%); background:var(--rc); white-space:nowrap}
-.skc.legendary .skc-badge{background-size:250% 100%; animation:skc-goldrun 3.5s linear infinite}
-.skc.duo .skc-badge{background:var(--r-duo)}
-@keyframes skc-goldrun{from{background-position:0 0} to{background-position:-250% 0}}
-/* horizontal: the rarity at the top left, then the star (smaller, no dashed
-   ring) on the left with the name beside it, then Equip */
-.skc-row{display:flex; align-items:center; gap:12px; min-width:0}
-.skc-emblem{position:relative; flex:none; display:grid; place-items:center; width:40px; height:40px; border-radius:50%;
-  background:radial-gradient(circle, color-mix(in oklab, var(--sk-a1) 30%, transparent), transparent 70%);
-  box-shadow:inset 0 0 0 1.5px color-mix(in oklab, var(--sk-a1) 70%, transparent), 0 0 24px -6px var(--sk-a1)}
-.skc-emblem svg{width:20px; height:20px; color:var(--sk-a1); filter:drop-shadow(0 0 6px var(--sk-a1))}
-.skc-name{display:block; min-width:0; text-align:left; font:900 27px/.95 var(--skc-display); letter-spacing:.01em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
-.skc-equip{display:block; text-align:center; font:800 13px/1 var(--skc-display); letter-spacing:.1em; text-transform:uppercase; padding:9px 0 8px; border-radius:8px;
-  background:color-mix(in oklab, var(--sk-a1) 18%, transparent); color:var(--sk-a1); box-shadow:inset 0 0 0 1.5px color-mix(in oklab, var(--sk-a1) 55%, transparent); transition:background .2s, color .2s}
+.skc.hot{transition:opacity .3s, transform .08s linear, box-shadow .3s; box-shadow:0 18px 40px -18px color-mix(in oklab, var(--sk-a1) 55%, transparent)}
+.skc-n{display:block; max-width:100%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.skc-n i{font-style:normal; color:var(--sk-a1)}
+.skc-equip{font:700 10.5px/1 var(--font-mono); letter-spacing:.1em; text-transform:uppercase; padding:5px 9px 4px; border-radius:5px;
+  background:color-mix(in oklab, var(--sk-a1) 18%, transparent); color:var(--sk-a1); box-shadow:inset 0 0 0 1px color-mix(in oklab, var(--sk-a1) 55%, transparent); transition:background .2s, color .2s}
 .skc:hover .skc-equip,.skc[aria-pressed="true"] .skc-equip{background:var(--sk-a1); color:var(--sk-bg)}
-.skc-foil,.skc-glare{position:absolute; inset:2px; border-radius:14px; pointer-events:none; z-index:3; opacity:0; transition:opacity .35s}
+.skc-foil,.skc-glare{position:absolute; inset:0; border-radius:inherit; pointer-events:none; z-index:3; opacity:0; transition:opacity .35s}
 .skc-foil{mix-blend-mode:color-dodge;
   background:repeating-linear-gradient(118deg, #ff3d7f 0%, #ffd84d 6%, #3dffb0 12%, #28e7ff 18%, #b06bff 24%, #ff3d7f 30%),
     repeating-linear-gradient(28deg, transparent 0 6px, rgba(255, 255, 255, .18) 6px 7px);
   background-size:400% 400%, auto; background-position:calc(var(--mx) * 1%) calc(var(--my) * 1%), 0 0; filter:brightness(.55) contrast(1.4) saturate(1.3)}
 .skc-glare{mix-blend-mode:overlay; background:radial-gradient(circle at calc(var(--mx) * 1%) calc(var(--my) * 1%), rgba(255, 255, 255, .55), transparent 48%)}
 .skc.hot .skc-foil{opacity:.75} .skc.hot .skc-glare{opacity:1}
-.skc.legendary .skc-foil{opacity:.22} .skc.legendary.hot .skc-foil{opacity:.9}
 @media (prefers-reduced-motion: reduce){
   /* no drift: the strip scrolls by hand, and the second copy goes */
   .skstrip-run{overflow-x:auto}
   .skstrip-track{transform:none !important; padding-inline:7vw}
   .skc[data-copy]{display:none}
-  .skc.legendary .skc-badge{animation:none}
 }
-@media (max-width: 640px){ .skstrip-head h2{margin-bottom:12px} .skstrip-foot h2{margin:12px 0 0} .skc{width:236px; margin-right:14px} .skc-name{font-size:24px} }
+@media (max-width: 640px){ .skstrip-head h2{margin-bottom:12px} .skstrip-foot h2{margin:12px 0 0} .skc{width:184px; height:68px; margin-right:12px} }
 
 /* ---------- why ---------- */
 .issues { display: flex; flex-direction: column; }
@@ -2583,8 +2561,7 @@ void main(){
   (function () {
     var track = $('#skstrip-track');
     if (!track) return;
-    var OWN = { id: 'lostty', r: 'default', bg: '#120a2a', fg: '#f3ecff', a1: '#ff3df2', a2: '#28e7ff', tex: 'grid' };
-    var STAR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.5l2.2 7.3 7.3 2.2-7.3 2.2L12 21.5l-2.2-7.3L2.5 12l7.3-2.2z"/></svg>';
+    var OWN = { id: 'lostty', bg: '#120a2a', fg: '#f3ecff', a1: '#ff3df2', a2: '#28e7ff', tex: 'grid' };
     var list = [OWN].concat(SKINS);
     var macTex = $$('.ag-mac-body .tex');
     var KEYS = ['bg', 'fg', 'a1', 'a2'];
@@ -2595,12 +2572,10 @@ void main(){
     }
     function card(s, copy) {
       var b = document.createElement('button');
-      b.type = 'button'; b.className = 'skc ' + s.r; b.setAttribute('data-id', s.id);
+      b.type = 'button'; b.className = 'skc'; b.setAttribute('data-id', s.id);
       KEYS.forEach(function (k) { b.style.setProperty('--sk-' + k, s[k]); });
-      b.innerHTML = '<span class="skc-in"><span class="tex a"></span><span class="tex b"></span>' +
-        '<span class="skc-badge">' + s.r + '</span>' +
-        '<span class="skc-row"><span class="skc-emblem">' + STAR + '</span><span class="skc-name">' + s.id + '</span></span>' +
-        '<span class="skc-equip">Equip</span></span>' +
+      b.innerHTML = '<span class="tex a"></span><span class="tex b"></span>' +
+        '<span class="skc-n"><i>❯</i> ' + s.id + '</span><span class="skc-equip">Equip</span>' +
         '<span class="skc-foil" aria-hidden="true"></span><span class="skc-glare" aria-hidden="true"></span>';
       setTex($$('.tex', b), s.tex);
       if (copy) { b.tabIndex = -1; b.setAttribute('aria-hidden', 'true'); b.setAttribute('data-copy', ''); }
