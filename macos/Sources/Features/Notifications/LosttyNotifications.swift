@@ -30,12 +30,15 @@ struct LosttyNotification: Identifiable {
         case hooksMissing(HookAgent)
         /// The outcome of connecting the agent's hooks.
         case hooks(HookAgent)
+        /// A context handoff didn't reach its fresh window.
+        case handoff(UUID)
 
         /// Bubbles in the same slot replace each other (a connect result
         /// takes the place of its agent's "not connected" bubble).
         var slot: String {
             switch self {
             case .hooksMissing(let agent), .hooks(let agent): "hooks-\(agent.rawValue)"
+            case .handoff(let pane): "handoff-\(pane.uuidString)"
             }
         }
     }

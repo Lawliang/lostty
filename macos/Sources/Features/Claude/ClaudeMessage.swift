@@ -51,6 +51,12 @@ enum ClaudeMessage {
         return path
     }
 
+    /// `{"v":1,"state":"fresh"}`: a fresh window's start hook took the
+    /// context handoff after /clear. Not a ClaudeState: it changes no phase.
+    static func isFresh(_ value: String) -> Bool {
+        object(value)?["state"] as? String == "fresh"
+    }
+
     private static func object(_ value: String) -> [String: Any]? {
         guard let data = value.data(using: .utf8),
               let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],

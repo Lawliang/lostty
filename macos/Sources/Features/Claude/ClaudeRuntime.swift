@@ -29,6 +29,10 @@ final class ClaudeRuntime: ObservableObject {
     /// naming its conversation file: the turn observer's cue. Set at launch.
     var turnEnded: @MainActor (UUID, String) -> Void = { _, _ in }
 
+    /// What the context handoff hears: turn ends, prompts, a fresh window
+    /// after /clear, and the pane's agent going away. Set at launch.
+    var handoffSignal: @MainActor (UUID, ContextHandoffSignal) -> Void = { _, _ in }
+
     private let now: () -> Date
     private let schedule: Scheduler
     /// Panes not focused right now. Panes start focused (SurfaceView does).
@@ -54,6 +58,10 @@ final class ClaudeRuntime: ObservableObject {
 
     func userVarChanged(_ id: UUID, name: String, value: String) {
         guard name == ClaudeConstants.userVarName else { return }
+        if ClaudeMessage.isFresh(value) {
+            handoffSignal(id, .fresh)
+            return
+        }
         if let action = ClaudeMessage.action(value) {
             // A tool starting means Claude works, even with no new prompt
             // (it carries on after a permission prompt without one).
@@ -68,14 +76,20 @@ final class ClaudeRuntime: ObservableObject {
         // Only a turn that was under way ends: anything printed in a pane can
         // carry this user var, so an idle out of nowhere names no file.
         let turnUnderWay = !phase(id).isOff
-        apply(state, to: id, permission: ClaudeMessage.isPermission(value))
-        if state == .idle, turnUnderWay, let path = ClaudeMessage.transcript(value) { turnEnded(id, path) }
+        let permission = ClaudeMessage.isPermission(value)
+        apply(state, to: id, permission: permission)
+        if state == .busy { handoffSignal(id, .prompted) }
+        if state == .idle, turnUnderWay, let path = ClaudeMessage.transcript(value) {
+            turnEnded(id, path)
+            if !permission { handoffSignal(id, .stopped(transcript: path)) }
+        }
     }
 
     /// The pane's shell reported a command finished, so whatever ran there
     /// (claude included) is gone: a racing trace must not stay up.
     func commandFinished(_ id: UUID) {
         apply(.exit, to: id)
+        handoffSignal(id, .gone)
     }
 
     func surfaceClosed(_ id: UUID) {
@@ -85,6 +99,7 @@ final class ClaudeRuntime: ObservableObject {
         awaiting.remove(id)
         sawSpinner.remove(id)
         setAction(nil, for: id)
+        handoffSignal(id, .gone)
     }
 
     /// A pane is focused when its window is key and it is the selected pane.

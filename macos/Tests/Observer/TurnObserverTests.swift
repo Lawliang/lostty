@@ -307,5 +307,16 @@ struct TurnObserverTests {
         await eventually { observer.content(pane: pane, working: false) == .notes(ObserverNotes(built: ["a"], justNow: "new")) }
         #expect(observer.content(pane: pane, working: false) == .notes(ObserverNotes(built: ["a"], justNow: "new")))
     }
+
+    @Test func aDeliberateConversationChangeIsNotHeldOff() {
+        toggle.on = false
+        let observer = makeObserver()
+        fake.set("/ok/a", [you, agent])
+        fake.set("/ok/b", [you, agent])
+        observer.turnEnded(pane: pane, path: "/ok/a")
+        observer.conversationChanging(pane)
+        observer.turnEnded(pane: pane, path: "/ok/b")
+        #expect(observer.carry() == [pane: "/ok/b"])
+    }
 }
 #endif

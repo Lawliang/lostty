@@ -414,5 +414,33 @@ struct ClaudeRuntimeTests {
         runtime.userVarChanged(pane, name: "LOSTTY_CLAUDE", value: #"{"v":1,"state":"idle","transcript":"/t.jsonl"}"#)
         #expect(ended.turns.isEmpty)
     }
+
+    @Test func handoffSignals() {
+        let runtime = makeRuntime()
+        var signals: [ContextHandoffSignal] = []
+        runtime.handoffSignal = { _, signal in signals.append(signal) }
+        runtime.userVarChanged(pane, name: ClaudeConstants.userVarName, value: payload("busy"))
+        runtime.userVarChanged(pane, name: ClaudeConstants.userVarName,
+                               value: #"{"v":1,"state":"idle","transcript":"/t.jsonl"}"#)
+        runtime.userVarChanged(pane, name: ClaudeConstants.userVarName, value: payload("fresh"))
+        runtime.commandFinished(pane)
+        #expect(signals == [.prompted, .stopped(transcript: "/t.jsonl"), .fresh, .gone])
+    }
+
+    @Test func aPermissionPromptIsNoHandoffStop() {
+        let runtime = makeRuntime()
+        var signals: [ContextHandoffSignal] = []
+        runtime.handoffSignal = { _, signal in signals.append(signal) }
+        runtime.userVarChanged(pane, name: ClaudeConstants.userVarName, value: payload("busy"))
+        runtime.userVarChanged(pane, name: ClaudeConstants.userVarName,
+                               value: #"{"v":1,"state":"idle","permission":true,"transcript":"/t.jsonl"}"#)
+        #expect(signals == [.prompted])
+    }
+
+    @Test func freshChangesNoPhase() {
+        let runtime = makeRuntime()
+        runtime.userVarChanged(pane, name: ClaudeConstants.userVarName, value: payload("fresh"))
+        #expect(runtime.phases[pane] == nil)
+    }
 }
 #endif
