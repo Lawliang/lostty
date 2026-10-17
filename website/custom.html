@@ -945,6 +945,20 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
 .setup-quick { grid-column: 1 / span 6; min-width: 0; }
 .setup-gh { grid-column: 7 / span 6; display: grid; gap: 16px; align-content: start; min-width: 0; }
 @media (max-width: 1000px) { .setup-quick, .setup-gh { grid-column: 1 / -1; } }
+/* the tabs (narrow only): the demo's On Mac / On iPhone headings, the one
+   not picked dimmed; picking one shows its half and hides the other */
+.setup-tabs { display: none; }
+.setup-tab { border: 0; background: none; padding: 0 0 4px; margin: 0; cursor: pointer; color: var(--ink);
+  font: 600 19px/1.4 "Onest", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; letter-spacing: -.01em; transition: opacity .4s; }
+.setup-tab[aria-selected="false"] { opacity: .38; }
+/* only the one not picked lights up on hover; the picked one keeps its colour */
+.setup-tab[aria-selected="false"]:hover { opacity: 1; color: var(--magenta-ink); }
+@media (max-width: 1000px) {
+  .setup-tabs { display: flex; gap: 28px; grid-column: 1 / -1; margin-bottom: -8px; }
+  .setup .setup-quick > .setup-k, .setup .setup-gh > .setup-k { display: none; }
+  .setup[data-pane="quick"] .setup-gh, .setup[data-pane="cli"] .setup-quick { display: none; }
+}
+@media (max-width: 640px) { .setup-tab { font-size: 16px; } }
 .setup-k { font: 600 12px/1 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); margin-bottom: 18px; }
 .setup-gh .setup-k { margin-bottom: 2px; }
 .setup-gh .code { margin-top: 0; }
@@ -1343,7 +1357,12 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
       <!-- in Aurora Glass's glass card, laid out like its "Set it up once"
            section: quick setup on the left, the GitHub flow on the right -->
       <div class="inst-card glass">
-        <div class="setup">
+        <div class="setup" data-pane="quick">
+          <!-- narrow screens: the two halves become tabs, styled like the demo's On Mac / On iPhone -->
+          <div class="setup-tabs" role="tablist" aria-label="Setup">
+            <button class="setup-tab" type="button" role="tab" aria-selected="true" data-pane="quick">Quick setup</button>
+            <button class="setup-tab" type="button" role="tab" aria-selected="false" data-pane="cli">From CLI</button>
+          </div>
           <div class="setup-quick">
             <p class="setup-k">Quick setup</p>
             <div class="st-title">
@@ -1748,6 +1767,19 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
   new MutationObserver(themeChanged).observe(root, { attributes: true, attributeFilter: ['data-theme'] });
   var schemeMQ = window.matchMedia('(prefers-color-scheme: dark)');
   if (schemeMQ.addEventListener) schemeMQ.addEventListener('change', themeChanged);
+
+  /* ---------------- setup tabs (narrow screens) ---------------- */
+  (function () {
+    var setup = $('.setup');
+    if (!setup) return;
+    var tabs = $$('.setup-tab', setup);
+    tabs.forEach(function (t) {
+      t.addEventListener('click', function () {
+        setup.setAttribute('data-pane', t.getAttribute('data-pane'));
+        tabs.forEach(function (x) { x.setAttribute('aria-selected', x === t ? 'true' : 'false'); });
+      });
+    });
+  })();
 
   /* ---------------- hero bullets carousel ---------------- */
   // One bullet at a time, every 3.2s the next slides in from the right
