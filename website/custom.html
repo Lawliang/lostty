@@ -298,7 +298,8 @@ p { margin: 0; }
 /* ---------- hero ---------- */
 .hero { position: relative; overflow: hidden; background: var(--paper); }
 #field { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-.hero-in { position: relative; height: 800px; display: flex; align-items: flex-start; padding-block: 72px 72px; pointer-events: none; }
+/* the height the bullets save by showing one at a time (--pts-saved, set by the script) goes above the headline */
+.hero-in { position: relative; height: 800px; display: flex; align-items: flex-start; padding-block: calc(72px + var(--pts-saved, 0px)) 72px; pointer-events: none; }
 .hero-copy { max-width: 40rem; pointer-events: auto; }
 /* headline type from Aurora Glass's section titles: Onest 700, tight tracking */
 .hero h1 {
@@ -322,6 +323,11 @@ p { margin: 0; }
 @keyframes sheen { 0% { background-position: 100% 0; } 38%, 100% { background-position: 0% 0; } }
 /* "With Lostty." on its own line, a slight gap under the first sentence */
 .hero h1 .h1-tail { display: block; margin-top: .14em; }
+/* "With Lostty" ends in the logo's blinking magenta underscore. Its own fill
+   (the headline's text is a clipped gradient), and it blinks with visibility
+   so the gradient doesn't show through when it's off */
+.hero h1 .h1-blink { color: var(--magenta); -webkit-text-fill-color: var(--magenta); font-weight: 400; animation: blink-v 1.06s steps(1) infinite; }
+@keyframes blink-v { 50% { visibility: hidden; } }
 /* "grass" is filled with a photo of grass (CC0, "Green grass texture (Unsplash)"
    on Wikimedia Commons), with a white glint that sweeps with the headline's sheen */
 .hero h1 .grass {
@@ -338,6 +344,14 @@ p { margin: 0; }
 .hero-points { list-style: none; margin: 40px 0 0; padding: 0; display: grid; gap: 4px; }
 .hero-points li { display: grid; grid-template-columns: 2ch minmax(0, 1fr); }
 .hero-points .pt-mark { color: var(--magenta-ink); }
+/* one bullet at a time: a horizontal carousel (the script adds .is-car, not
+   with reduced motion). The slot is as tall as the tallest bullet (--pts-h);
+   each slides in from the right, holds, and slides out to the left */
+.hero-points.is-car { position: relative; display: block; overflow: hidden; height: var(--pts-h, auto); }
+.hero-points.is-car li { position: absolute; left: 0; right: 0; top: 0; transform: translateX(105%); opacity: 0;
+  transition: transform .5s cubic-bezier(.22, .8, .2, 1), opacity .4s; }
+.hero-points.is-car li.on { transform: none; opacity: 1; }
+.hero-points.is-car li.out { transform: translateX(-105%); opacity: 0; }
 .hero-cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 40px; }
 /* hero buttons round into full pills on hover and keyboard focus */
 .hero-cta .btn, .dl-card .btn, .st-actions .btn { transition: border-radius .35s cubic-bezier(.3, .7, .2, 1), transform .15s, background-color .15s, color .15s; }
@@ -1169,7 +1183,7 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
     <canvas id="field" aria-hidden="true"></canvas>
     <div class="wrap hero-in">
       <div class="hero-copy" id="hero-copy">
-        <h1>Finally... you can go touch some <span class="grass">grass.</span><span class="h1-tail">With Lostty.</span></h1>
+        <h1>Finally, we can go touch some <span class="grass">grass.</span><span class="h1-tail">With Lostty<span class="h1-blink" aria-hidden="true">_</span></span></h1>
         <div class="lede">
           <p>A Mac-native terminal-based coding harness that supports multi-agent orchestration, designed in sync with our iPhone app<br>— for builders <b>constantly on the go</b>.</p>
           <ul class="hero-points">
@@ -1735,10 +1749,52 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
   var schemeMQ = window.matchMedia('(prefers-color-scheme: dark)');
   if (schemeMQ.addEventListener) schemeMQ.addEventListener('change', themeChanged);
 
+  /* ---------------- hero bullets carousel ---------------- */
+  // One bullet at a time, every 3.2s the next slides in from the right
+  // (paused while the pointer is on it). The slot keeps the tallest bullet's
+  // height; the height the other two would take (--pts-saved) moves above
+  // the headline. Reduced motion keeps the plain list.
+  (function () {
+    var ul = $('.hero-points'), hero = $('#top');
+    if (!ul || reduce) return;
+    var items = $$('li', ul);
+    if (items.length < 2) return;
+    ul.classList.add('is-car');
+    var at = 0, hold = false, GAP = 4;
+    items[0].classList.add('on');
+    function measure() {
+      var hs = items.map(function (li) { return li.offsetHeight; });
+      var mx = Math.max.apply(null, hs), sum = hs.reduce(function (a, b) { return a + b; }, 0) + GAP * (items.length - 1);
+      ul.style.setProperty('--pts-h', mx + 'px');
+      hero.style.setProperty('--pts-saved', Math.max(0, sum - mx) + 'px');
+    }
+    measure();
+    function next() {
+      if (hold || document.hidden) return;
+      var cur = items[at];
+      at = (at + 1) % items.length;
+      cur.classList.remove('on'); cur.classList.add('out');
+      items[at].classList.add('on');
+      // once it's off to the left, put it back on the right without animating
+      setTimeout(function () {
+        cur.style.transition = 'none'; cur.classList.remove('out');
+        void cur.offsetWidth; cur.style.transition = '';
+      }, 520);
+    }
+    setInterval(next, 3200);
+    ul.addEventListener('pointerenter', function () { hold = true; });
+    ul.addEventListener('pointerleave', function () { hold = false; });
+    // remeasure when the type settles or the width changes, then let the field redo its boxes
+    function again() { measure(); Field.relayout(); }
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(again);
+    var rw = window.innerWidth;
+    addEventListener('resize', function () { if (window.innerWidth !== rw) { rw = window.innerWidth; again(); } });
+  })();
+
   /* ---------------- glyph field ---------------- */
   var Field = (function () {
     var cv = $('#field'), hero = $('#top'), copy = $('#hero-copy');
-    if (!cv || !cv.getContext) return { pause: function () {}, resume: function () {} };
+    if (!cv || !cv.getContext) return { pause: function () {}, resume: function () {}, relayout: function () {} };
     var ctx = cv.getContext('2d');
     var mcv = document.createElement('canvas'), mctx = mcv.getContext('2d', { willReadFrequently: true });
     var W = 0, H = 0, dpr = 1, fs = 14, cw = 8.4, chh = 17, cols = 0, rows = 0, N = 0;
@@ -1854,6 +1910,11 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
     // one quiet zone per block of hero copy (headline, description, buttons),
     // each hugging its own content rather than the whole column
     function hug(el) {
+      // the bullet carousel's slot is one fixed box, whichever bullet shows
+      if (el.classList.contains('is-car')) {
+        var b0 = el.getBoundingClientRect();
+        return { left: b0.left, top: b0.top, right: b0.right, bottom: b0.bottom, width: b0.width };
+      }
       if (el.classList.contains('hero-cta')) {
         var u = null;
         Array.prototype.forEach.call(el.children, function (k) {
@@ -1875,7 +1936,7 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
     // full ascent and descent, so the box would sit further above and below
     // the letters than beside them
     function lineBoxes(el) {
-      if (el.classList.contains('hero-cta')) return [hug(el)];
+      if (el.classList.contains('hero-cta') || el.classList.contains('is-car')) return [hug(el)];
       var rg = document.createRange(); rg.selectNodeContents(el);
       var cs = getComputedStyle(el), mc = hug.c || (hug.c = document.createElement('canvas').getContext('2d'));
       mc.font = cs.fontWeight + ' ' + cs.fontSize + ' ' + cs.fontFamily;
@@ -2140,7 +2201,8 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
     reduceMQ.addEventListener && reduceMQ.addEventListener('change', function (e) { reduce = e.matches; sync(); resize(); });
     return {
       pause: function () { homeVisible = false; sync(); },
-      resume: function () { homeVisible = true; resize(); sync(); }
+      resume: function () { homeVisible = true; resize(); sync(); },
+      relayout: function () { resize(); }
     };
   })();
 
