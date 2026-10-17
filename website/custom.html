@@ -636,7 +636,7 @@ p { margin: 0; }
 .ag-car{--ag-row:76px; position:relative; height:calc(var(--ag-row) * 4 - 10px); overflow:hidden;
   -webkit-mask-image:linear-gradient(#000 72%, transparent); mask-image:linear-gradient(#000 72%, transparent)}
 .ag-car-track{display:flex; flex-direction:column; gap:10px; margin:0; padding:0; list-style:none}
-.ag-car-i{height:calc(var(--ag-row) - 10px); display:grid; grid-template-columns:26px minmax(0, 1fr) auto; gap:14px; align-items:center; padding:0 12px;
+.ag-car-i{height:calc(var(--ag-row) - 10px); display:grid; grid-template-columns:26px minmax(0, 1fr); gap:14px; align-items:center; padding:0 12px;
   border:1px solid var(--rule); border-radius:4px; background:var(--paper); transition:opacity .5s, border-color .4s}
 /* the active stage's border: a step toward the text colour from the regular
    rule, so lighter in dark mode (and a touch darker in light) */
@@ -647,7 +647,6 @@ p { margin: 0; }
 .ag-car-t{min-width:0}
 .ag-car-t b{display:block; font:600 15.5px/1.3 var(--font-ui); letter-spacing:-.01em; color:var(--ink)}
 .ag-car-t small{display:block; margin-top:2px; font:400 12.5px/1.4 var(--font-mono); color:var(--ink-2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
-.ag-car-where{font:600 11px/1 var(--font-mono); color:var(--magenta-ink); border:1px solid currentColor; border-radius:999px; padding:4px 8px; white-space:nowrap}
 
 /* narrower: the list goes under the Mac and iPhone */
 @container (max-width:1040px){
@@ -1247,11 +1246,11 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
           </div>
           <div class="ag-car" id="ag-car">
             <ol class="ag-car-track">
-              <li class="ag-car-i" data-d="0"><span class="ag-car-n">1</span><span class="ag-car-t"><b>Working…</b><small>Claude edits your code</small></span><span class="ag-car-where">Mac</span></li>
-              <li class="ag-car-i" data-d="1"><span class="ag-car-n">2</span><span class="ag-car-t"><b>Waiting for response</b><small>Claude stops to ask you</small></span><span class="ag-car-where">Mac → iPhone</span></li>
-              <li class="ag-car-i" data-d="2"><span class="ag-car-n">3</span><span class="ag-car-t"><b>You tap Allow</b><small>Right from your phone</small></span><span class="ag-car-where">iPhone → Mac</span></li>
-              <li class="ag-car-i" data-d="3"><span class="ag-car-n">4</span><span class="ag-car-t"><b>Running tests…</b><small>Claude picks back up</small></span><span class="ag-car-where">Mac</span></li>
-              <li class="ag-car-i" data-d="4"><span class="ag-car-n">5</span><span class="ag-car-t"><b>Ready</b><small>Phone back in your pocket</small></span><span class="ag-car-where">Mac → iPhone</span></li>
+              <li class="ag-car-i" data-d="0"><span class="ag-car-n">1</span><span class="ag-car-t"><b>Working…</b><small>Claude edits your code</small></span></li>
+              <li class="ag-car-i" data-d="1"><span class="ag-car-n">2</span><span class="ag-car-t"><b>Waiting for response</b><small>Claude stops to ask you</small></span></li>
+              <li class="ag-car-i" data-d="2"><span class="ag-car-n">3</span><span class="ag-car-t"><b>You tap Allow</b><small>Right from your phone</small></span></li>
+              <li class="ag-car-i" data-d="3"><span class="ag-car-n">4</span><span class="ag-car-t"><b>Running tests…</b><small>Claude picks back up</small></span></li>
+              <li class="ag-car-i" data-d="4"><span class="ag-car-n">5</span><span class="ag-car-t"><b>Ready</b><small>Phone back in your pocket</small></span></li>
             </ol>
           </div>
         </div>
