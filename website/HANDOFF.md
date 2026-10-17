@@ -66,7 +66,13 @@ Kinetic Mono as the base (JetBrains Mono, character-grid look, light "paper term
 **Download page** (`#download`, a view like Docs)
 - Stable: https://github.com/Lawliang/lostty/releases/latest/download/Lostty.dmg
 - Beta: https://github.com/Lawliang/lostty/releases/download/beta/Lostty-Beta.dmg (fixed `beta` pre-release; each beta is tagged `vX.Y-beta.N`; beta replaces stable, shows as "Lostty Beta")
-- Copy says macOS 14 or later. That's right for the app (deployment target 14.0); Docs' Getting Started says macOS 15 because building from source needs Xcode 26, matching the README.
+- Copy says macOS 14 or later. That's right for the app (deployment target 14.0); Docs' Build from source says macOS 15 because building needs Xcode 26, matching the README.
+
+**Users install, they don't build (owner, 2026-10-16).** The iPhone app will ship through TestFlight external testing and then the App Store; no cable or Apple Account for users. So:
+- Home Install section: heading "Download it, pair it, go take a walk." (my placeholder, not the owner's wording); "You'll need" is a Mac on macOS 14+, an iPhone on iOS 17+ ("the app is coming soon on TestFlight"), Tailscale on both; three steps (download, TestFlight, pair); buttons Download for Mac, a dead dashed "TestFlight: coming soon" (`.btn.soon`, a span), Read Getting Started.
+- Download page "On your iPhone": coming soon on TestFlight. "Other ways" links to Build from source.
+- Docs Getting Started: four steps (download the dmg, TestFlight, Tailscale, pair) plus Updating (the app checks daily; TestFlight updates the phone). The old Xcode/clone/`setup.sh`/Apple Account/`install-phone.sh`/7-day steps moved to a new Docs page, **Build from source** (`#docs-build-from-source`, Reference, before Contributing; footer Docs list too).
+- When the TestFlight link exists: swap the `.btn.soon` span for a link, and put the link in Getting Started step 2 and the Download page.
 - **Both links 404 until the first release**; beta work is on branch `lostty-beta`, the first release waits on a signing fix (per the session doing release work).
 
 ## Next task
