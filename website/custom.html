@@ -901,6 +901,14 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
 .inst { max-width: 40rem; margin-inline: auto; }
 #install .sec-head { text-align: center; }
 #install .sec-head h2 { margin-inline: auto; }
+/* the heading: two numbered lines, "1 Download" over "2 Pair", each number in
+   a magenta circle like the demo's stage numbers (no scramble: it would wipe the circles) */
+/* centred as a block, the lines left-aligned inside it so the circles stack */
+.st-title { display: flex; flex-direction: column; align-items: flex-start; gap: .08em; width: fit-content; }
+.st-line { display: inline-flex; align-items: center; gap: .32em; }
+.st-n { display: inline-grid; place-items: center; flex: none; width: .82em; height: .82em; border-radius: 50%;
+  background: var(--magenta); color: #fff; font-size: 1em; }
+.st-n { font-size: .5em; width: 1.64em; height: 1.64em; letter-spacing: 0; line-height: 1; }
 .checks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 .checks li { display: grid; grid-template-columns: 3ch minmax(0, 1fr); padding-block: 9px; border-top: 1px dashed var(--rule); }
 .checks li:first-child { border-top: 0; }
@@ -1267,7 +1275,7 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
   <section class="sec" id="install" style="border-top:0">
     <div class="wrap">
       <header class="sec-head">
-        <h2 data-decode>Download it, pair it, go take a walk.</h2>
+        <h2 class="st-title" aria-label="1, Download. 2, Pair."><span class="st-line"><span class="st-n" aria-hidden="true">1</span>Download</span><span class="st-line"><span class="st-n" aria-hidden="true">2</span>Pair</span></h2>
       </header>
       <div class="inst">
         <div>
