@@ -914,6 +914,9 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
 .inst-card { font-family: "Onest", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
 .inst-card .btn { font: 600 15px/1 "Onest", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; padding: 15px 20px; border-radius: 13px; }
 .inst-card .btn.soon { border-radius: 13px; }
+/* Aurora's ghost button: the glass fill and hairline, no border, a 1px lift on hover */
+.inst-card .btn.btn-ghost, .inst-card .btn.btn-ghost:hover { border: 0; color: var(--ink); background: var(--g-fill); transition: transform .25s cubic-bezier(.22, .8, .2, 1); }
+.inst-card .btn.btn-ghost:hover { transform: translateY(-1px); }
 .inst-card .setup-k { font-family: inherit; font-size: 12.5px; }
 .inst-card .gf-steps code { font-family: var(--font-mono); }
 /* Aurora's "Set it up once" grid, split evenly (Aurora's is 5/7, but its
@@ -928,7 +931,6 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
 .setup-gh .code { margin-top: 0; }
 /* the system requirements, Aurora's .reqs */
 .reqs { list-style: none; padding: 0; margin: 28px 0 0; display: grid; gap: 10px; }
-.setup-gh .reqs { margin-top: 4px; }
 .reqs li { display: flex; gap: 12px; align-items: baseline; font-size: 15px; color: var(--ink-2); }
 .reqs li b { color: var(--ink); font-weight: 600; min-width: 4.5em; }
 /* the GitHub flow's steps, Aurora's numbered list */
@@ -1347,12 +1349,7 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
               <li><span>Install Tailscale on the Mac and the iPhone, signed in to the same account.</span></li>
               <li><span>Open <b>Lostty → Phone Access…</b>, click <b>Pair a Phone…</b> and scan the code with the iPhone app.</span></li>
             </ol>
-            <ul class="reqs">
-              <li><b>Mac</b> macOS 15 or later, Xcode 26 and Homebrew</li>
-              <li><b>iPhone</b> iOS 17 or later, with its cable</li>
-              <li><b>Account</b> a free Apple Account</li>
-            </ul>
-            <div><a class="btn" href="#docs-build-from-source">Full setup guide</a></div>
+            <div><a class="btn btn-ghost glass" href="#docs-build-from-source">Full setup guide</a></div>
           </div>
         </div>
       </div>
