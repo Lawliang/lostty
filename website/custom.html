@@ -430,6 +430,8 @@ p { margin: 0; }
   top:calc(-1 * var(--strip-h, 0px)); height:calc(100% + var(--strip-h, 0px));
   -webkit-mask-image:linear-gradient(transparent, #000 7%, #000 78%, transparent); mask-image:linear-gradient(transparent, #000 7%, #000 78%, transparent)}
 .ag-aurora{display:block}
+/* lighter on phones, where it fills most of the screen */
+@media (max-width: 640px){ .ag-aurora,.ag-aurora-fallback{opacity:.55} }
 .ag-aurora-fallback{
   background:
     radial-gradient(60% 50% at 78% 8%, color-mix(in srgb, var(--magenta) 40%, transparent), transparent 70%),
