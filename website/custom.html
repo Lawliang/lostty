@@ -621,9 +621,17 @@ p { margin: 0; }
 .skstrip-head{container-type:inline-size}
 .skstrip h2{margin:0 auto; max-width:none; text-align:center; font-size:calc(24rem / 7.276)}
 /* "Unlock skins" over the cards, "by spending tokens." under them */
-.skstrip-head h2{margin-bottom:28px}
-.skstrip-foot h2{margin:28px auto 0}
-@container (max-width:1040px){ .skstrip h2{font-size:calc(min(644.8px, 99.2cqi) / 7.276)} }
+/* staggered: "Unlock skins" is centred in the left three quarters of the
+   column, so it leans left, and "by spending tokens." in the right three
+   quarters, so it leans right. Narrower (where the type grows to fill the
+   column, as "Swap intuitively." does) they sit flush left and flush right */
+.skstrip-head h2{width:75%; margin:0 0 28px}
+.skstrip-foot h2{margin:28px 0 0 auto}
+@container (max-width:1040px){
+  .skstrip h2{font-size:calc(min(644.8px, 99.2cqi) / 7.276)}
+  .skstrip-head h2{width:auto; text-align:left}
+  .skstrip-foot h2{text-align:right}
+}
 .skstrip-run{overflow:hidden; padding-block:8px;
   -webkit-mask-image:linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent); mask-image:linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent)}
 /* the script moves the track: it slows to a stop while the pointer (or focus)
@@ -644,7 +652,7 @@ p { margin: 0; }
   .skstrip-track{transform:none !important; padding-inline:7vw}
   .skc[data-copy]{display:none}
 }
-@media (max-width: 640px){ .skstrip-head h2{margin-bottom:20px} .skstrip-foot h2{margin:20px auto 0} .skc{width:184px; height:48px; margin-right:12px} }
+@media (max-width: 640px){ .skstrip-head h2{margin-bottom:20px} .skstrip-foot h2{margin:20px 0 0} .skc{width:184px; height:48px; margin-right:12px} }
 
 /* ---------- why ---------- */
 .issues { display: flex; flex-direction: column; }
