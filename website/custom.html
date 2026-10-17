@@ -207,9 +207,10 @@ kbd, .kbd {
 }
 @keyframes blink { 50% { opacity: 0; } }
 
-h1, h2 { font-family: var(--font-display); font-stretch: 75%; text-wrap: balance; margin: 0; }
+/* every heading in the hero title's type: Onest 700, tight tracking */
+h1, h2 { font-family: "Onest", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; font-stretch: normal; text-wrap: balance; margin: 0; }
 h2 {
-  font-size: clamp(32px, 5vw, 60px); line-height: .98; font-weight: 760; letter-spacing: -.012em;
+  font-size: clamp(32px, 5vw, 60px); line-height: 1.02; font-weight: 700; letter-spacing: -.04em;
   max-width: 21ch; margin-top: 0;
 }
 h3 { font-size: 17px; line-height: 1.35; margin: 0; font-weight: 700; letter-spacing: -.01em; }
@@ -711,7 +712,7 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
 .man-bar span:nth-child(2) { text-align: center; }
 @media (max-width: 520px) { .man-bar span:nth-child(3) { display: none; } }
 .doc { padding-top: 28px; max-width: 72ch; }
-.doc h1 { font-size: clamp(40px, 6vw, 64px); line-height: .95; font-weight: 800; letter-spacing: -.015em; }
+.doc h1 { font-size: clamp(40px, 6vw, 64px); line-height: 1.02; font-weight: 700; letter-spacing: -.04em; }
 .doc .doc-lede { font-size: 16px; color: var(--ink-2); margin-top: 14px; }
 .doc h2 { font-family: var(--font-mono); font-stretch: 100%; font-size: 15px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; margin: 44px 0 12px; max-width: none; scroll-margin-top: calc(var(--nav-h) + 20px); color: var(--ink); }
 .doc h2::before { content: "## "; color: var(--magenta-ink); }
