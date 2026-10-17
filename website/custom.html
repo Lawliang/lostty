@@ -362,6 +362,8 @@ p { margin: 0; }
   font-family: var(--font-ui); line-height: 1.6;
   /* closer to the hero than other sections */
   padding-top: clamp(64px, 7vw, 104px);
+  /* and close to the skin strip under it: the stage list's faded tail already leaves room */
+  padding-bottom: clamp(8px, 2vw, 24px);
 }
 .ag-mascot{display:block; overflow:visible}
 .ag-mascot .ag-gl{transform-origin:24px 40px}
@@ -388,7 +390,8 @@ p { margin: 0; }
 .ag-stage-col > .ag-cats{grid-column:1; grid-row:2; align-self:start}
 /* Aurora's moving glow, drawn see-through over the paper and faded out at the
    section's top and bottom; the static gradients stand in without WebGL */
-.ag-demo{position:relative; overflow:hidden}
+/* clipped sideways only (the iPhone overhangs the margin); the shadows run on past the bottom into the skin strip */
+.ag-demo{position:relative; overflow:hidden; overflow:clip visible}
 .ag-aurora,.ag-aurora-fallback{position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:0;
   -webkit-mask-image:linear-gradient(transparent, #000 7%, #000 78%, transparent); mask-image:linear-gradient(transparent, #000 7%, #000 78%, transparent)}
 .ag-aurora{display:block}
