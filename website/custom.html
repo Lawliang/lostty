@@ -902,9 +902,14 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
 #install .sec-head h2 { margin-inline: auto; }
 /* the heading: two numbered lines, "1 Download" over "2 Pair", each number in
    a magenta circle like the demo's stage numbers (no scramble: it would wipe the circles) */
-/* centred as a block, the lines left-aligned inside it so the circles stack */
-.st-title { display: flex; flex-direction: column; align-items: flex-start; gap: .08em; width: fit-content; }
-.st-line { display: inline-flex; align-items: center; gap: .32em; }
+/* centred as a block, the lines left-aligned inside it so the circles stack;
+   the Download and TestFlight buttons sit under "Download", lined up with the
+   word (the circle is .82em wide, plus the .32em gap) */
+.st-title { --st-fs: clamp(32px, 5vw, 60px); display: flex; flex-direction: column; align-items: flex-start; width: fit-content; margin-inline: auto; text-align: left;
+  font-size: var(--st-fs); }
+.st-line { display: inline-flex; align-items: center; gap: .32em; font-size: 1em; max-width: none; }
+#install .sec-head .st-line { margin-inline: 0; }
+.st-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: calc(var(--st-fs) * .3) 0 calc(var(--st-fs) * .5) calc(var(--st-fs) * 1.14); font-size: 14px; }
 .st-n { display: inline-grid; place-items: center; flex: none; width: .82em; height: .82em; border-radius: 50%;
   background: var(--magenta); color: #fff; font-size: 1em; }
 .st-n { font-size: .5em; width: 1.64em; height: 1.64em; letter-spacing: 0; line-height: 1; }
@@ -927,8 +932,8 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
 .next b { color: var(--ink); font-weight: 600; }
 
 /* ---------- footer (Aurora Glass's) ---------- */
-.foot { padding-block: 0 40px; font-family: "Onest", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-.foot-row { display: flex; flex-wrap: wrap; gap: 24px 40px; align-items: flex-start; justify-content: space-between; padding-top: 28px; border-top: 1px solid var(--rule); }
+.foot { padding-block: 28px 40px; background: var(--paper); border-top: 1px solid var(--rule); font-family: "Onest", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+.foot-row { display: flex; flex-wrap: wrap; gap: 24px 40px; align-items: flex-start; justify-content: space-between; }
 .foot-logo { display: inline-flex; align-items: center; gap: 8px; text-decoration: none; font-weight: 700; font-size: 17px; letter-spacing: -.02em; }
 .foot-logo .ag-mascot { width: 40px; height: 40px; }
 .foot-brand p { color: var(--ink-2); font-size: 14px; line-height: 1.6; max-width: 46ch; margin-top: 8px; }
@@ -1266,7 +1271,14 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
   <section class="sec" id="install" style="border-top:0">
     <div class="wrap">
       <header class="sec-head">
-        <h2 class="st-title" aria-label="1, Download. 2, Pair."><span class="st-line"><span class="st-n" aria-hidden="true">1</span>Download</span><span class="st-line"><span class="st-n" aria-hidden="true">2</span>Pair</span></h2>
+        <div class="st-title">
+          <h2 class="st-line"><span class="st-n" aria-hidden="true">1</span>Download</h2>
+          <div class="st-actions">
+            <a class="btn primary" href="#download">Download for Mac</a>
+            <span class="btn soon" aria-disabled="true">TestFlight: coming soon</span>
+          </div>
+          <h2 class="st-line"><span class="st-n" aria-hidden="true">2</span>Pair</h2>
+        </div>
       </header>
       <div class="inst">
         <div>
@@ -1277,8 +1289,6 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
             <li><span>Open <b>Lostty → Phone Access… → Pair a Phone…</b> and scan the code with the phone.</span></li>
           </ol>
           <div class="links">
-            <a class="btn primary" href="#download">Download for Mac</a>
-            <span class="btn soon" aria-disabled="true">TestFlight: coming soon</span>
             <a class="btn" href="#docs">Read Getting Started</a>
           </div>
         </div>
@@ -1575,7 +1585,7 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
   </div>
 </main>
 
-<!-- Aurora Glass's footer: a rule across the content, its axolotl and wordmark
+<!-- Aurora Glass's footer (on the plain page colour, with a rule across the whole width): its axolotl and wordmark
      with one line about the project, and a row of links -->
 <footer class="foot">
   <div class="wrap">
