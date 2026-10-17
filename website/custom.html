@@ -201,7 +201,7 @@ kbd, .kbd {
 /* ---------- nav ---------- */
 .nav {
   position: sticky; top: env(safe-area-inset-top, 0px); z-index: 50;
-  background: var(--glass);
+  background: var(--glass); box-shadow: 0 1px 0 var(--rule); /* the divider, drawn outside so the bar stays --nav-h tall */
   -webkit-backdrop-filter: blur(14px) saturate(1.3); backdrop-filter: blur(14px) saturate(1.3);
 }
 /* logo left, tools right, and the links centred in the bar between them */
