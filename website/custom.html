@@ -522,7 +522,9 @@ p { margin: 0; }
 .ag-car-track{display:flex; flex-direction:column; gap:10px; margin:0; padding:0; list-style:none}
 .ag-car-i{height:calc(var(--ag-row) - 10px); display:grid; grid-template-columns:26px minmax(0, 1fr) auto; gap:14px; align-items:center; padding:0 12px;
   border:1px solid var(--rule); border-radius:4px; background:var(--paper); transition:opacity .5s, border-color .4s}
-.ag-car-i[data-d="0"]{border-color:#fff}
+/* the active stage's border: a step toward the text colour from the regular
+   rule, so lighter in dark mode (and a touch darker in light) */
+.ag-car-i[data-d="0"]{border-color:color-mix(in srgb, var(--rule) 72%, var(--ink))}
 .ag-car-i[data-d="1"]{opacity:.55} .ag-car-i[data-d="2"]{opacity:.32} .ag-car-i[data-d="3"]{opacity:.16}
 .ag-car-i[data-d="4"],.ag-car-i[data-d="out"]{opacity:0}
 .ag-car-n{width:26px; height:26px; border-radius:50%; background:var(--magenta); color:#fff; display:grid; place-items:center; font:700 12.5px/1 var(--font-mono)}
