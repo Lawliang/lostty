@@ -358,44 +358,47 @@ p { margin: 0; }
 .ag-halo{position:absolute; inset:10% -6% -2% 8%; border-radius:50%; filter:blur(50px); opacity:.55; transform:translateZ(-120px);
   background:radial-gradient(closest-side, var(--magenta), color-mix(in srgb, var(--violet) 60%, transparent) 60%, transparent)}
 
-.ag-mac{position:relative; border-radius:1em; background:var(--term-bg); color:var(--term-fg); transform:translateZ(0);
-  box-shadow:0 0 0 1px rgba(255,255,255,.07), 0 2em 5em -1em rgba(0,0,0,.6), var(--shadow)}
-.ag-mac-clip{border-radius:inherit; overflow:hidden}
-.ag-mac-bar{display:flex; align-items:center; gap:1em; height:2.9em; padding:0 1.1em; background:var(--term-bar); border-bottom:1px solid var(--term-hair); font-size:.95em}
-.ag-lights{display:flex; gap:.5em}
-.ag-lights i{width:.85em; height:.85em; border-radius:50%; background:#FF5F57}
-.ag-lights i:nth-child(2){background:#FEBC2E}.ag-lights i:nth-child(3){background:#28C840}
-.ag-mac-title{flex:1; text-align:center; color:var(--term-dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
-.ag-pill{font-family:var(--font-mono); font-size:.85em; padding:.25em .7em; border-radius:999px; background:#22103A; color:#F3E9FF; border:1px solid #FF2BD6; white-space:nowrap}
-.ag-pill b{color:#FF2BD6; font-weight:600}
-.ag-mac-body{position:relative; height:24em; padding:1.1em 1.3em; font-family:var(--font-mono); font-size:1em; line-height:1.6; display:flex; flex-direction:column; justify-content:flex-end; gap:.15em; overflow:hidden;
-  background:linear-gradient(rgba(255,43,214,.035) 1px, transparent 1px) 0 0/100% 1.6em, #160B26}
-.ag-mac-body .ag-dim{color:var(--term-dim)}
-.ag-mac-body .ag-ok{color:var(--st-wait)}
-.ag-mac-body .ag-acc{color:#FF2BD6}
-.ag-mac-body .ag-cy{color:#22E5FF}
-.ag-tl{white-space:pre-wrap; overflow-wrap:anywhere}
-.ag-perm{border:1px solid #6B4BA8; border-radius:.5em; padding:.6em .9em; margin-top:.3em}
-.ag-perm .ag-ph{color:#C9A7FF; font-weight:600}
-.ag-perm .ag-sel{color:#22E5FF}
-.ag-ready-pill{position:absolute; top:.9em; right:1em; font-family:var(--font-ui); font-size:.9em; font-weight:600; color:#1B0E14; background:var(--st-ready); padding:.3em .8em; border-radius:999px; transition:opacity .3s}
-.ag-mac-body .ag-shade{position:absolute; inset:0; background:rgba(5,3,8,.28); opacity:0; transition:opacity .4s; pointer-events:none}
-.ag-stage[data-step="1"] .ag-shade,.ag-stage[data-step="2"] .ag-shade,.ag-stage[data-step="3"] .ag-shade{opacity:1}
-.ag-usage{display:flex; gap:1.6em; align-items:center; height:2.5em; padding:0 1.2em; background:var(--term-bar); border-top:1px solid var(--term-hair); font-family:var(--font-mono); font-size:.82em; color:var(--term-dim); white-space:nowrap; overflow:hidden}
-.ag-usage .ag-m{color:var(--term-fg)}
-.ag-usage .ag-bar{letter-spacing:-.05em; color:#FF2BD6}
+/* the Mac: Neon Signal's window. Neon's px are written here / 13, so they
+   scale with the rig's em like the rest of it */
+.ag-mac{position:relative; border-radius:0.923em; background:#120a2a; color:#f3ecff; transform:translateZ(0);
+  box-shadow:0 0 0 0.077em #2c1d4f, 0 3.077em 6.154em -2.308em #000, 0 0 9.231em -3.077em color-mix(in srgb, var(--magenta) 45%, transparent)}
+.ag-mac-clip{border-radius:inherit; overflow:hidden; position:relative}
+.ag-mac-bar{height:2.923em; display:flex; align-items:center; gap:0.923em; padding-inline:1.077em; border-bottom:0.077em solid #241743; background:#170e33; position:relative}
+.ag-lights{display:flex; gap:0.538em}
+.ag-lights i{width:0.846em; height:0.846em; border-radius:50%; background:#ff5f57}
+.ag-lights i:nth-child(2){background:#febc2e} .ag-lights i:nth-child(3){background:#28c840}
+.ag-mac-title{position:absolute; left:50%; transform:translateX(-50%); font:500 0.962em "Bricolage Grotesque", "Avenir Next", system-ui, sans-serif; color:#b9a9e3; white-space:nowrap}
+/* Neon puts this at the bar's right end; here the iPhone covers that, so it sits by the lights */
+.ag-mac-status{display:inline-flex; align-items:center; gap:0.538em; white-space:nowrap; font:500 0.885em var(--font-mono); color:#d9ccff; padding:0.231em 0.692em; border-radius:76.846em; background:#22164a;
+  transition:background .3s, color .3s, box-shadow .3s; position:relative; z-index:1}
+.ag-mac-status .ag-sg{color:#ff3df2; width:1ch; text-align:center}
+.ag-stage[data-step="1"] .ag-mac-status,.ag-stage[data-step="2"] .ag-mac-status,.ag-stage[data-step="3"] .ag-mac-status{background:color-mix(in srgb, var(--magenta) 30%, #22164a); color:#fff; box-shadow:0 0 0 0.077em var(--magenta)}
+.ag-mac-body{position:relative; height:24em; overflow:hidden; padding:1.231em 1.385em; display:flex; flex-direction:column; justify-content:flex-end; gap:0.077em;
+  font:400 0.981em/1.62 var(--font-mono); color:#f3ecff; background-color:#120a2a;
+  background-image:linear-gradient(#ff3df20d 0.077em, transparent 0.077em), linear-gradient(90deg, #ff3df20d 0.077em, transparent 0.077em); background-size:1.692em 1.692em}
+.ag-mac-body::after{content:""; position:absolute; inset:0; pointer-events:none; background:repeating-linear-gradient(0deg, #00000022 0 0.077em, transparent 0.077em 0.231em); mix-blend-mode:multiply; opacity:.6}
+.ag-mac-body > *{flex-shrink:0}
+.ag-tl{white-space:pre-wrap; overflow-wrap:anywhere; min-height:1.62em}
+.ag-mac-body .ag-dim{color:#8a7cb3} .ag-mac-body .ag-mag{color:#ff3df2} .ag-mac-body .ag-cy{color:#28e7ff} .ag-mac-body .ag-ok{color:#3dffb0}
+.ag-mac-body b{font-weight:700}
+.ag-tbox{border:0.077em solid #6f6197; border-radius:0.538em; padding:0.462em 0.923em; margin-block:0.308em}
+.ag-tbox.ag-welcome{border-color:#ff7af6; align-self:flex-start}
+.ag-tbox.ag-ask{border-color:#ff7af6; background:#1a0f36; box-shadow:0 0 0 0.077em #ff3df233, 0 0 2.154em -0.615em #ff3df2aa}
+.ag-opt{display:block; border-radius:0.308em; padding-inline:0.308em; margin-inline:-0.308em; transition:background .2s, color .2s}
+.ag-stage[data-step="3"] .ag-opt.ag-yes{background:#3dffb033; color:#fff}
+.ag-mac-body .ag-spin{color:#ff7af6}
 .ag-off{display:none !important}
-.ag-in{animation:ag-lineIn .45s var(--ease) both}
-@keyframes ag-lineIn{from{opacity:0; transform:translateY(.5em)}}
+.ag-in{animation:ag-lineIn .32s var(--ease) both}
+@keyframes ag-lineIn{from{opacity:0; transform:translateY(0.308em)}}
 
-/* claude trace */
-.ag-trace{position:absolute; inset:-1px; border-radius:inherit; pointer-events:none; opacity:0; transition:opacity .5s}
-.ag-trace::before,.ag-trace::after{content:""; position:absolute; inset:0; border-radius:inherit; padding:2px;
-  background:conic-gradient(from var(--ang), transparent 0 62%, var(--t1, #FF2BD6) 76%, var(--t2, #22E5FF) 88%, transparent 94%);
-  -webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite:xor; mask-composite:exclude;
-  animation:ag-spin 2.8s linear infinite}
-.ag-trace::after{filter:blur(10px); padding:4px; opacity:.9}
-.ag-trace.ag-on,.ag-stage[data-step="0"] .ag-mac .ag-trace,.ag-stage[data-step="4"] .ag-mac .ag-trace,.ag-stage[data-step="5"] .ag-mac .ag-trace{opacity:1}
+/* Claude's trace: Neon's comet running round the window edge while it works */
+.ag-trace,.ag-bloom{position:absolute; inset:-0.077em; border-radius:1em; pointer-events:none; opacity:0; transition:opacity .5s;
+  background:conic-gradient(from var(--ang), transparent 0 64%, color-mix(in srgb, #28e7ff 70%, transparent) 80%, #ff3df2 93%, #fff 95%, transparent 96%);
+  animation:ag-spin 3.2s linear infinite}
+.ag-trace{padding:0.123em; z-index:3; -webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite:xor; mask-composite:exclude}
+.ag-bloom{inset:-0.462em; border-radius:1.385em; filter:blur(0.923em); z-index:-1}
+.ag-stage[data-step="0"] .ag-mac .ag-trace,.ag-stage[data-step="4"] .ag-mac .ag-trace,.ag-stage[data-step="5"] .ag-mac .ag-trace{opacity:1}
+.ag-stage[data-step="0"] .ag-mac .ag-bloom,.ag-stage[data-step="4"] .ag-mac .ag-bloom,.ag-stage[data-step="5"] .ag-mac .ag-bloom{opacity:.55}
 @keyframes ag-spin{to{--ang:360deg}}
 
 /* phone: Neon Signal's iPhone. The frame is in em like the rest of the rig
@@ -911,36 +914,35 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
             <div class="ag-halo"></div>
             <div class="ag-mac">
               <div class="ag-trace"></div>
+              <div class="ag-bloom"></div>
               <div class="ag-mac-clip">
                 <div class="ag-mac-bar">
                   <span class="ag-lights"><i></i><i></i><i></i></span>
-                  <span class="ag-mac-title"><span data-on="0 4 5">Editing SessionList.swift</span><span data-on="1 2 3" class="ag-off">Waiting for permission</span><span data-on="6" class="ag-off">Ready</span></span>
-                  <span class="ag-pill"><b>&gt;</b> lostty/skins</span>
+                  <span class="ag-mac-title">skins — claude</span>
+                  <span class="ag-mac-status"><span class="ag-sg">✳</span><span data-on="0">Editing SessionList.swift</span><span class="ag-off" data-on="1 2 3">Waiting on you</span><span class="ag-off" data-on="4 5">Running tests</span><span class="ag-off" data-on="6">Ready</span></span>
                 </div>
                 <div class="ag-mac-body">
-                  <div class="ag-shade"></div>
-                  <span class="ag-ready-pill ag-off" data-on="1 2 3">Ready for response</span>
-                  <div class="ag-tl ag-dim">~/code/lostty on skins</div>
-                  <div class="ag-tl"><span class="ag-acc">&gt;</span> sort the phone list so waiting sessions come first</div>
-                  <div class="ag-tl"><span class="ag-acc">●</span> I'll change the sort in SessionList.swift and add a test.</div>
-                  <div class="ag-tl"><span class="ag-ok">●</span> Update(<b>SessionList.swift</b>)</div>
+                  <div class="ag-tl"><span class="ag-cy">~/code/lostty/skins</span> <span class="ag-mag">❯</span> claude</div>
+                  <div class="ag-tbox ag-welcome"><span class="ag-mag">✻</span> Welcome to <b>Claude Code</b></div>
+                  <div class="ag-tl"><span class="ag-dim">&gt;</span> sort the phone list so waiting sessions come first</div>
+                  <div class="ag-tl"><span class="ag-ok">⏺</span> I'll change the sort in SessionList.swift and add a test.</div>
+                  <div class="ag-tl"><span class="ag-ok">⏺</span> <b>Update</b>(Sources/SessionList.swift)</div>
                   <div class="ag-tl ag-dim">  ⎿  Updated with 12 additions and 3 removals</div>
-                  <div class="ag-perm ag-off" data-on="1 2 3">
-                    <div class="ag-ph">Bash command</div>
+                  <div class="ag-tbox ag-ask ag-off" data-on="1 2 3">
+                    <div><b>Bash command</b></div>
                     <div class="ag-tl">  swift test --filter SessionListTests</div>
                     <div class="ag-tl ag-dim">  Run the session list tests</div>
                     <div class="ag-tl">Do you want to proceed?</div>
-                    <div class="ag-tl ag-sel">❯ 1. Yes</div>
-                    <div class="ag-tl">  2. Yes, and don't ask again for swift test</div>
-                    <div class="ag-tl">  3. No, and tell Claude what to do differently</div>
+                    <span class="ag-opt ag-yes"><span class="ag-mag">❯</span> 1. Yes</span>
+                    <span class="ag-opt ag-dim">  2. Yes, and don't ask again for swift test</span>
+                    <span class="ag-opt ag-dim">  3. No, and tell Claude what to do differently (esc)</span>
                   </div>
-                  <div class="ag-tl ag-off" data-on="4 5 6"><span class="ag-ok">●</span> Bash(swift test --filter SessionListTests)</div>
-                  <div class="ag-tl ag-dim ag-off" data-on="4 5 6">  ⎿  Executed 14 tests, with 0 failures</div>
-                  <div class="ag-tl ag-off" data-on="6"><span class="ag-acc">●</span> Done. Waiting sessions now sort first, then Working, Ready and Idle.</div>
-                  <div class="ag-tl ag-acc" data-on="0 4 5">✳&#xFE0E; Working… <span class="ag-dim">(1m 12s · esc to interrupt)</span></div>
-                  <div class="ag-tl ag-off" data-on="6"><span class="ag-acc">&gt;</span> <span class="ag-cy">▍</span></div>
+                  <div class="ag-tl ag-off" data-on="4 5 6"><span class="ag-ok">⏺</span> <b>Bash</b>(swift test --filter SessionListTests)</div>
+                  <div class="ag-tl ag-dim ag-off" data-on="5 6">  ⎿  Executed 14 tests, with 0 failures</div>
+                  <div class="ag-tl ag-off" data-on="6"><span class="ag-ok">⏺</span> Done. Waiting sessions now sort first, then Working, Ready and Idle.</div>
+                  <div class="ag-tl ag-spin" data-on="0 4 5"><span class="ag-mag">✳</span> Working… <span class="ag-dim">(1m 12s · esc to interrupt)</span></div>
+                  <div class="ag-tl ag-off" data-on="6"><span class="ag-dim">&gt;</span> <span class="ag-mag">▍</span></div>
                 </div>
-                <div class="ag-usage"><span class="ag-m">Opus</span><span>context <span class="ag-bar">▰▰▰▱▱▱</span> 50K</span><span>5h limit <span class="ag-bar">▰▰▱▱▱</span> 32%</span></div>
               </div>
             </div>
 
