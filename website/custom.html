@@ -1919,6 +1919,8 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
       var mx = Math.max.apply(null, hs), sum = hs.reduce(function (a, b) { return a + b; }, 0) + GAP * (items.length - 1);
       ul.style.setProperty('--pts-h', mx + 'px');
       hero.style.setProperty('--pts-saved', Math.max(0, sum - mx) + 'px');
+      // a shorter bullet (one line) sits in the middle of the slot
+      items.forEach(function (li, k) { li.style.top = ((mx - hs[k]) / 2).toFixed(1) + 'px'; });
     }
     measure();
     function next() {
