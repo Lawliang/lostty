@@ -933,7 +933,8 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
 .setup-gh .code { margin-top: 0; }
 /* the system requirements: their own row under both columns, centred, with
    Aurora's .reqs pairs side by side */
-.setup-reqs { grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; gap: 12px; padding-top: 8px; text-align: center; }
+.setup-reqs { grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; gap: 12px; padding-top: 28px; text-align: center;
+  border-top: 1px solid var(--g-hair); /* a divider above, in the card's hairline colour */ }
 .setup-reqs .setup-k { margin-bottom: 2px; }
 .reqs { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 10px 36px; }
 .reqs li { display: flex; gap: 12px; align-items: baseline; font-size: 15px; color: var(--ink-2); }
