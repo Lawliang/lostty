@@ -26,10 +26,11 @@ pub const Agent = enum { claude, codex };
 
 /// Claude Code hook events and the `+claude-state` each one sends. Stop,
 /// SubagentStop and Notification are refined from the hook input
-/// (protocol.refine): a Stop with subagents still working sends `agents`.
-/// PreToolUse sends what each tool call does (protocol.action); with no
-/// output it never decides anything about the call. PostToolUse (`done`)
-/// and SessionStart (`start`) only speak the context handoff's queued text.
+/// (protocol.refine): a Stop with subagents or background shells still
+/// working sends `agents`. PreToolUse sends what each tool call does
+/// (protocol.action); with no output it never decides anything about the
+/// call. PostToolUse (`done`) and SessionStart (`start`) only speak the
+/// context handoff's queued text.
 const claude_events = [_]Event{
     .{ .name = "UserPromptSubmit", .state = "busy" },
     .{ .name = "Stop", .state = "idle" },

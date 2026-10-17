@@ -3,8 +3,8 @@ import AppKit
 
 /// Which part of a pane's edge the Claude trace travels while Claude works:
 /// the whole border, or back and forth along one side. The bottom edge is
-/// kept for subagents (TraceCourse.subagents). Saved in user defaults and
-/// set from Lostty → Claude Trace Path.
+/// kept for subagents and background shells (TraceCourse.subagents).
+/// Saved in user defaults and set from Lostty → Claude Trace Path.
 enum TraceRoute: String, CaseIterable {
     case all, right, top, left
 
@@ -46,7 +46,7 @@ final class TraceRouteMenu: NSObject, NSMenuDelegate {
             submenu.addItem(item)
         }
         submenu.addItem(.separator())
-        let note = NSMenuItem(title: "Bottom edge: only subagents working", action: nil, keyEquivalent: "")
+        let note = NSMenuItem(title: "Bottom edge: only subagents or shells working", action: nil, keyEquivalent: "")
         note.isEnabled = false
         submenu.addItem(note)
         let item = NSMenuItem(title: "Claude Trace Path", action: nil, keyEquivalent: "")
