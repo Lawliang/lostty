@@ -31,8 +31,8 @@ const head = [
   "",
 ].join("\n");
 
-// the nav logo's axolotl (<g id="axo">), cropped to its head like the logo
-// and centred in a square
+// the page's axolotl (<g id="axo">, no longer shown in the nav), cropped to
+// its head and centred in a square
 const axo = page.match(/<g id="axo">[\s\S]*?<\/g>/);
 if (!axo) throw new Error('build: <g id="axo"> not found in custom.html');
 const favicon =

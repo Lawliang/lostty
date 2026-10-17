@@ -254,10 +254,6 @@ a.menu-row:hover { background: var(--paper-2); }
 }
 /* narrow phones: "Support" moves from the bar into the menu */
 @media (max-width: 389px) { .nav-links a.hide-sm { display: none; } }
-/* the very narrowest phones (320px): the axolotl alone, so the links don't run into the wordmark */
-@media (max-width: 340px) {
-  .nav .logo-word { display: none; }
-}
 
 /* ---------- shared type ---------- */
 .pr-c { color: var(--magenta-ink); }
@@ -1032,7 +1028,6 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
 .foot { padding-block: 28px 40px; background: var(--paper); border-top: 1px solid var(--rule); font-family: "Onest", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
 .foot-row { display: flex; flex-wrap: wrap; gap: 24px 40px; align-items: flex-start; justify-content: space-between; }
 .foot-logo { display: inline-flex; align-items: center; gap: 8px; text-decoration: none; font-weight: 700; font-size: 17px; letter-spacing: -.02em; }
-.foot-logo .ag-mascot { width: 40px; height: 40px; }
 .foot-brand p { color: var(--ink-2); font-size: 14px; line-height: 1.6; max-width: 46ch; margin-top: 8px; }
 .foot-nav { display: flex; flex-wrap: wrap; gap: 8px 22px; font-size: 14px; }
 .foot-nav a { color: var(--ink-2); text-decoration: none; }
@@ -1232,7 +1227,6 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
 <header class="nav">
   <div class="wrap nav-in">
     <a class="logo" href="#top" aria-label="Lostty home">
-      <svg viewBox="0 12 100 58" aria-hidden="true"><use href="#axo"/></svg>
       <span class="logo-word">Lostty<span class="blink">_</span></span>
     </a>
     <nav class="nav-links" aria-label="Main">
@@ -1817,7 +1811,7 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
   <div class="wrap">
     <div class="foot-row">
       <div class="foot-brand">
-        <a class="foot-logo" href="#top" aria-label="Lostty home"><span class="ag-mascot-slot" data-mascot=""></span><span>Lostty</span></a>
+        <a class="foot-logo" href="#top" aria-label="Lostty home"><span>Lostty</span></a>
         <p>MIT Licensed, open source.<br>Built on Ghostty by Mitchell Hashimoto.</p>
       </div>
       <nav class="foot-nav" aria-label="Footer">
