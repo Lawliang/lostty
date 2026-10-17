@@ -610,8 +610,8 @@ p { margin: 0; }
 /* ---------- skin strip (under the demo) ---------- */
 /* a centred heading over a short strip of skin cards drifting right to left,
    edge to edge, faded at both ends. No divider above or below. Every card is
-   dim except the one under the pointer; the drift stops while the pointer is
-   on the strip. The track holds the list twice and moves by half its width,
+   dim except the one under the pointer; the drift eases to a stop while the
+   pointer is on the strip and eases back up when it leaves. The track holds the list twice and moves by half its width,
    so it wraps without a seam (each card carries its gap as margin, so the
    halves are exactly equal) */
 .skstrip{position:relative; padding-block:0; border-top:0}
@@ -626,9 +626,9 @@ p { margin: 0; }
 @container (max-width:1040px){ .skstrip h2{font-size:calc(min(644.8px, 99.2cqi) / 7.276)} }
 .skstrip-run{overflow:hidden; padding-block:8px;
   -webkit-mask-image:linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent); mask-image:linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent)}
-.skstrip-track{display:flex; width:max-content; animation:skstrip-drift 110s linear infinite}
-.skstrip-run:hover .skstrip-track,.skstrip-run:focus-within .skstrip-track{animation-play-state:paused}
-@keyframes skstrip-drift{to{transform:translateX(-50%)}}
+/* the script moves the track: it slows to a stop while the pointer (or focus)
+   is on the strip and speeds back up when it leaves */
+.skstrip-track{display:flex; width:max-content; will-change:transform}
 .skc{position:relative; isolation:isolate; overflow:hidden; flex:none; width:208px; height:52px; margin-right:14px; padding:0 14px;
   display:flex; align-items:center; text-align:left; cursor:pointer;
   border:1px solid color-mix(in srgb, var(--sk-fg) 16%, transparent); border-radius:8px; background:var(--sk-bg); color:var(--sk-fg);
@@ -641,7 +641,7 @@ p { margin: 0; }
 @media (prefers-reduced-motion: reduce){
   /* no drift: the strip scrolls by hand, and the second copy goes */
   .skstrip-run{overflow-x:auto}
-  .skstrip-track{animation:none; padding-inline:7vw}
+  .skstrip-track{transform:none !important; padding-inline:7vw}
   .skc[data-copy]{display:none}
 }
 @media (max-width: 640px){ .skstrip-head h2{margin-bottom:20px} .skstrip-foot h2{margin:20px auto 0} .skc{width:184px; height:48px; margin-right:12px} }
@@ -2574,6 +2574,44 @@ void main(){
       var c = e.target.closest('.skc');
       if (c) wear(c.getAttribute('data-id'));
     });
+
+    // The drift: right to left at one half-track (one copy of the list) per
+    // 110s. With the pointer or focus on the strip the speed eases down to
+    // zero, and off it eases back up (about half a second either way); the
+    // offset wraps by half the track, where the two copies line up.
+    var run = track.parentNode, PERIOD = 110, TAU = 0.18;
+    var half = 0, x = 0, v = 0, hold = 0, last = 0, raf = 0, seen = false;
+    function measure() { half = track.scrollWidth / 2; }
+    function frame(t) {
+      raf = 0;
+      var dt = last ? Math.min((t - last) / 1000, 0.1) : 0;
+      last = t;
+      var target = hold ? 0 : half / PERIOD;
+      v += (target - v) * (1 - Math.exp(-dt / TAU));
+      if (Math.abs(target - v) < 0.05) v = target;
+      x += v * dt;
+      if (half && x >= half) x -= half;
+      track.style.transform = 'translateX(' + (-x).toFixed(2) + 'px)';
+      if (seen && !reduce && (v || target)) raf = requestAnimationFrame(frame);
+      else last = 0;
+    }
+    function go() { if (!raf && seen && !reduce) raf = requestAnimationFrame(frame); }
+    function setHold(n) { hold = n; go(); }
+    var hovering = false, focused = false;
+    function sync() { setHold(hovering || focused ? 1 : 0); }
+    run.addEventListener('pointerenter', function (e) { if (e.pointerType === 'mouse') { hovering = true; sync(); } });
+    run.addEventListener('pointerleave', function (e) { if (e.pointerType === 'mouse') { hovering = false; sync(); } });
+    // keyboard focus only: a mouse click leaves focus on the card, which mustn't keep it stopped
+    run.addEventListener('focusin', function (e) { var k = false; try { k = e.target.matches(':focus-visible'); } catch (_) {} if (k) { focused = true; sync(); } });
+    run.addEventListener('focusout', function () { focused = false; sync(); });
+    measure();
+    v = half / PERIOD;
+    addEventListener('resize', function () { var f = half ? x / half : 0; measure(); x = f * half; });
+    // only runs while the strip is on screen
+    if ('IntersectionObserver' in window) {
+      new IntersectionObserver(function (es) { seen = es[0].isIntersecting; if (seen) go(); }).observe(run);
+    } else { seen = true; go(); }
+    reduceMQ.addEventListener && reduceMQ.addEventListener('change', function () { go(); });
   })();
 
   /* ---------------- new session sheet ---------------- */
