@@ -620,16 +620,10 @@ p { margin: 0; }
    this wrap is a size container too and follows the same rules */
 .skstrip-head{container-type:inline-size}
 .skstrip h2{margin:0 auto; max-width:none; text-align:center; font-size:calc(24rem / 7.276)}
-/* one title, "Unlock skins by spending tokens.", under the cards. It leans
-   right: it ends --sk-inset (a share of the column) in from the right edge;
-   narrower (where the type grows to fill the column, as "Swap intuitively."
-   does) it sits flush right */
-.skstrip-head{--sk-inset:10cqi}
-.skstrip-head h2{margin:0 0 10px; text-align:left; padding-left:var(--sk-inset)}
-.skstrip-foot h2{margin:10px 0 0; text-align:right; padding-left:0; padding-right:var(--sk-inset)}
+/* one title, "Unlock skins by spending tokens.", centred under the cards */
+.skstrip-foot h2{margin:10px 0 0; text-align:center}
 @container (max-width:1040px){
   .skstrip h2{font-size:calc(min(644.8px, 99.2cqi) / 7.276)}
-  .skstrip-head h2,.skstrip-foot h2{padding-inline:0}
 }
 /* hidden until the strip is hovered or a card is tapped (.show, set by the
    script), then it slides in from the right, and goes again 8s after the
