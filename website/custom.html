@@ -626,7 +626,7 @@ p { margin: 0; }
   .skstrip h2{font-size:calc(min(644.8px, 99.2cqi) / 7.276)}
 }
 /* hidden until the strip is hovered or a card is tapped (.show, set by the
-   script), then it slides in from the right, and goes again 8s after the
+   script), then it slides in from the right, and goes again 3s after the
    last of either. It keeps its space, so nothing moves when it comes and goes */
 .skstrip h2{transition:opacity .5s, transform .7s cubic-bezier(.22, .8, .2, 1)}
 .skstrip:not(.show) .skstrip-head h2{opacity:0; transform:translateX(-48px)}
@@ -2359,8 +2359,8 @@ void main(){
       document.dispatchEvent(new CustomEvent('lostty-skin'));
     }
     // the title: shown while the pointer is on the strip and when a card is
-    // tapped, hidden again 8s after the last of either
-    var strip = $('#skin-strip'), titleT = 0, onStrip = false, SHOW_MS = 8000;
+    // tapped, hidden again 3s after the last of either
+    var strip = $('#skin-strip'), titleT = 0, onStrip = false, SHOW_MS = 3000;
     function showTitles() {
       strip.classList.add('show');
       clearTimeout(titleT);
