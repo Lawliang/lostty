@@ -909,19 +909,35 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
   background: linear-gradient(150deg, var(--g-hair-hi), var(--g-hair) 32%, var(--g-hair) 68%, var(--g-hair-tint));
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; }
 .inst-card { padding: clamp(24px, 4vw, 52px); }
-/* one column, centred as a block; its text stays left-aligned */
-.inst { max-width: 40rem; margin-inline: auto; }
-#install .sec-head { text-align: center; margin-bottom: 0; }
-#install .sec-head h2 { margin-inline: auto; }
-/* the heading: two numbered lines, "1 Download" over "2 Pair", each number in
-   a magenta circle like the demo's stage numbers (no scramble: it would wipe the circles) */
-/* centred as a block, the lines left-aligned inside it so the circles stack;
-   the Download and TestFlight buttons sit under "Download", lined up with the
-   word (the circle is .82em wide, plus the .32em gap) */
-.st-title { --st-fs: clamp(32px, 5vw, 60px); display: flex; flex-direction: column; align-items: flex-start; width: fit-content; margin-inline: auto; text-align: left;
+/* Aurora's "Set it up once" grid, split evenly (Aurora's is 5/7, but its
+   heading size needs half the card for "Pair devices with" to fit a line):
+   quick setup on the left, the GitHub flow on the right, stacked under 1000px */
+.setup { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 32px 24px; }
+.setup-quick { grid-column: 1 / span 6; min-width: 0; }
+.setup-gh { grid-column: 7 / span 6; display: grid; gap: 16px; align-content: start; min-width: 0; }
+@media (max-width: 1000px) { .setup-quick, .setup-gh { grid-column: 1 / -1; } }
+.setup-k { font: 600 12px/1 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); margin-bottom: 18px; }
+.setup-gh .setup-k { margin-bottom: 2px; }
+.setup-gh .code { margin-top: 0; }
+/* the system requirements, Aurora's .reqs */
+.reqs { list-style: none; padding: 0; margin: 28px 0 0; display: grid; gap: 10px; }
+.setup-gh .reqs { margin-top: 4px; }
+.reqs li { display: flex; gap: 12px; align-items: baseline; font-size: 15px; color: var(--ink-2); }
+.reqs li b { color: var(--ink); font-weight: 600; min-width: 4.5em; }
+/* the GitHub flow's steps, Aurora's numbered list */
+.gf-steps { list-style: none; counter-reset: n; padding: 0; margin: 0; display: grid; gap: 12px; }
+.gf-steps li { counter-increment: n; display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 12px; font-size: 15px; color: var(--ink-2); }
+.gf-steps li::before { content: counter(n); display: grid; place-items: center; width: 26px; height: 26px; border-radius: 8px; font-size: 13px; font-weight: 700; color: var(--ink); background: color-mix(in srgb, var(--ink) 8%, transparent); }
+.gf-steps b { color: var(--ink); }
+.gf-steps code { overflow-wrap: anywhere; font-size: .88em; padding: .12em .4em; border-radius: 6px; background: color-mix(in srgb, var(--ink) 8%, transparent); color: var(--ink); }
+/* the quick setup's steps: numbered headings at Aurora's heading size, each
+   number in a magenta circle like the demo's stage numbers (no scramble: it
+   would wipe the circles). The buttons and the QR code sit under their step,
+   lined up with its words (the circle is .82em wide, plus the .32em gap) */
+.st-title { --st-fs: clamp(34px, 4vw, 52px); display: flex; flex-direction: column; align-items: flex-start; text-align: left;
   font-size: var(--st-fs); }
 .st-line { display: inline-flex; align-items: center; gap: .32em; font-size: 1em; max-width: none; }
-#install .sec-head .st-line { margin-inline: 0; }
+.st-line { margin: 0; }
 /* phones: smaller, so "Pair devices with" and its QR code stay on one line */
 @media (max-width: 640px) { .st-title { --st-fs: clamp(24px, 7.2vw, 32px); } }
 /* a made-up pairing QR code on its own row under "Pair devices with", like the Download buttons under "Download" (decorative; Lostty shows the real one on the Mac) */
@@ -1290,20 +1306,48 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
   <!-- INSTALL -->
   <section class="sec" id="install" style="border-top:0; padding-top:0">
     <div class="wrap">
-      <!-- in Aurora Glass's glass card, like its own download section -->
+      <!-- in Aurora Glass's glass card, laid out like its "Set it up once"
+           section: quick setup on the left, the GitHub flow on the right -->
       <div class="inst-card glass">
-        <header class="sec-head">
-          <div class="st-title">
-            <h2 class="st-line"><span class="st-n" aria-hidden="true">1</span>Download</h2>
-            <div class="st-actions">
-              <a class="btn primary" href="#download">Download for Mac</a>
-              <span class="btn soon" aria-disabled="true">iOS App - in progress</span>
+        <div class="setup">
+          <div class="setup-quick">
+            <p class="setup-k">Quick setup</p>
+            <div class="st-title">
+              <h2 class="st-line"><span class="st-n" aria-hidden="true">1</span>Download</h2>
+              <div class="st-actions">
+                <a class="btn primary" href="#download">Download for Mac</a>
+                <span class="btn soon" aria-disabled="true">iOS App - in progress</span>
+              </div>
+              <h2 class="st-line"><span class="st-n" aria-hidden="true">2</span>Pair devices with</h2>
+              <div class="st-actions st-qr-row"><svg class="st-qr" viewBox="-2 -2 29 29" aria-hidden="true"><rect x="-2" y="-2" width="29" height="29" rx="2.5" class="st-qr-bg"/><path d="M0 0h7v1h-7zM8 0h2v1h-2zM11 0h1v1h-1zM13 0h2v1h-2zM16 0h1v1h-1zM18 0h7v1h-7zM0 1h1v1h-1zM6 1h1v1h-1zM8 1h4v1h-4zM13 1h2v1h-2zM18 1h1v1h-1zM24 1h1v1h-1zM0 2h1v1h-1zM2 2h3v1h-3zM6 2h1v1h-1zM9 2h1v1h-1zM11 2h1v1h-1zM13 2h4v1h-4zM18 2h1v1h-1zM20 2h3v1h-3zM24 2h1v1h-1zM0 3h1v1h-1zM2 3h3v1h-3zM6 3h1v1h-1zM9 3h1v1h-1zM12 3h1v1h-1zM14 3h3v1h-3zM18 3h1v1h-1zM20 3h3v1h-3zM24 3h1v1h-1zM0 4h1v1h-1zM2 4h3v1h-3zM6 4h1v1h-1zM9 4h2v1h-2zM12 4h2v1h-2zM16 4h1v1h-1zM18 4h1v1h-1zM20 4h3v1h-3zM24 4h1v1h-1zM0 5h1v1h-1zM6 5h1v1h-1zM12 5h1v1h-1zM14 5h2v1h-2zM18 5h1v1h-1zM24 5h1v1h-1zM0 6h7v1h-7zM8 6h1v1h-1zM10 6h1v1h-1zM12 6h1v1h-1zM14 6h1v1h-1zM16 6h1v1h-1zM18 6h7v1h-7zM8 7h3v1h-3zM15 7h1v1h-1zM2 8h1v1h-1zM5 8h2v1h-2zM8 8h1v1h-1zM13 8h2v1h-2zM16 8h5v1h-5zM22 8h3v1h-3zM1 9h2v1h-2zM8 9h3v1h-3zM13 9h5v1h-5zM19 9h4v1h-4zM4 10h1v1h-1zM6 10h1v1h-1zM10 10h3v1h-3zM14 10h11v1h-11zM2 11h4v1h-4zM7 11h1v1h-1zM10 11h6v1h-6zM17 11h2v1h-2zM21 11h1v1h-1zM23 11h1v1h-1zM3 12h4v1h-4zM10 12h2v1h-2zM18 12h1v1h-1zM20 12h5v1h-5zM2 13h1v1h-1zM7 13h5v1h-5zM15 13h1v1h-1zM18 13h1v1h-1zM23 13h2v1h-2zM1 14h1v1h-1zM4 14h3v1h-3zM9 14h3v1h-3zM14 14h1v1h-1zM18 14h1v1h-1zM20 14h2v1h-2zM1 15h1v1h-1zM4 15h2v1h-2zM7 15h2v1h-2zM10 15h3v1h-3zM14 15h2v1h-2zM18 15h1v1h-1zM23 15h2v1h-2zM0 16h2v1h-2zM3 16h2v1h-2zM6 16h1v1h-1zM8 16h1v1h-1zM12 16h1v1h-1zM14 16h7v1h-7zM9 17h1v1h-1zM14 17h1v1h-1zM16 17h1v1h-1zM20 17h2v1h-2zM0 18h7v1h-7zM9 18h1v1h-1zM13 18h4v1h-4zM18 18h1v1h-1zM20 18h4v1h-4zM0 19h1v1h-1zM6 19h1v1h-1zM10 19h1v1h-1zM13 19h1v1h-1zM16 19h1v1h-1zM20 19h2v1h-2zM23 19h2v1h-2zM0 20h1v1h-1zM2 20h3v1h-3zM6 20h1v1h-1zM10 20h2v1h-2zM13 20h8v1h-8zM22 20h1v1h-1zM24 20h1v1h-1zM0 21h1v1h-1zM2 21h3v1h-3zM6 21h1v1h-1zM8 21h2v1h-2zM12 21h1v1h-1zM16 21h3v1h-3zM20 21h3v1h-3zM0 22h1v1h-1zM2 22h3v1h-3zM6 22h1v1h-1zM8 22h2v1h-2zM13 22h2v1h-2zM16 22h2v1h-2zM21 22h1v1h-1zM23 22h1v1h-1zM0 23h1v1h-1zM6 23h1v1h-1zM8 23h2v1h-2zM12 23h2v1h-2zM15 23h7v1h-7zM23 23h1v1h-1zM0 24h7v1h-7zM8 24h5v1h-5zM15 24h2v1h-2zM18 24h1v1h-1zM20 24h2v1h-2zM23 24h1v1h-1z"/></svg></div>
+              <h2 class="st-line"><span class="st-n" aria-hidden="true">3</span>Lostty: Unlocked</h2>
             </div>
-            <h2 class="st-line"><span class="st-n" aria-hidden="true">2</span>Pair devices with</h2>
-          <div class="st-actions st-qr-row"><svg class="st-qr" viewBox="-2 -2 29 29" aria-hidden="true"><rect x="-2" y="-2" width="29" height="29" rx="2.5" class="st-qr-bg"/><path d="M0 0h7v1h-7zM8 0h2v1h-2zM11 0h1v1h-1zM13 0h2v1h-2zM16 0h1v1h-1zM18 0h7v1h-7zM0 1h1v1h-1zM6 1h1v1h-1zM8 1h4v1h-4zM13 1h2v1h-2zM18 1h1v1h-1zM24 1h1v1h-1zM0 2h1v1h-1zM2 2h3v1h-3zM6 2h1v1h-1zM9 2h1v1h-1zM11 2h1v1h-1zM13 2h4v1h-4zM18 2h1v1h-1zM20 2h3v1h-3zM24 2h1v1h-1zM0 3h1v1h-1zM2 3h3v1h-3zM6 3h1v1h-1zM9 3h1v1h-1zM12 3h1v1h-1zM14 3h3v1h-3zM18 3h1v1h-1zM20 3h3v1h-3zM24 3h1v1h-1zM0 4h1v1h-1zM2 4h3v1h-3zM6 4h1v1h-1zM9 4h2v1h-2zM12 4h2v1h-2zM16 4h1v1h-1zM18 4h1v1h-1zM20 4h3v1h-3zM24 4h1v1h-1zM0 5h1v1h-1zM6 5h1v1h-1zM12 5h1v1h-1zM14 5h2v1h-2zM18 5h1v1h-1zM24 5h1v1h-1zM0 6h7v1h-7zM8 6h1v1h-1zM10 6h1v1h-1zM12 6h1v1h-1zM14 6h1v1h-1zM16 6h1v1h-1zM18 6h7v1h-7zM8 7h3v1h-3zM15 7h1v1h-1zM2 8h1v1h-1zM5 8h2v1h-2zM8 8h1v1h-1zM13 8h2v1h-2zM16 8h5v1h-5zM22 8h3v1h-3zM1 9h2v1h-2zM8 9h3v1h-3zM13 9h5v1h-5zM19 9h4v1h-4zM4 10h1v1h-1zM6 10h1v1h-1zM10 10h3v1h-3zM14 10h11v1h-11zM2 11h4v1h-4zM7 11h1v1h-1zM10 11h6v1h-6zM17 11h2v1h-2zM21 11h1v1h-1zM23 11h1v1h-1zM3 12h4v1h-4zM10 12h2v1h-2zM18 12h1v1h-1zM20 12h5v1h-5zM2 13h1v1h-1zM7 13h5v1h-5zM15 13h1v1h-1zM18 13h1v1h-1zM23 13h2v1h-2zM1 14h1v1h-1zM4 14h3v1h-3zM9 14h3v1h-3zM14 14h1v1h-1zM18 14h1v1h-1zM20 14h2v1h-2zM1 15h1v1h-1zM4 15h2v1h-2zM7 15h2v1h-2zM10 15h3v1h-3zM14 15h2v1h-2zM18 15h1v1h-1zM23 15h2v1h-2zM0 16h2v1h-2zM3 16h2v1h-2zM6 16h1v1h-1zM8 16h1v1h-1zM12 16h1v1h-1zM14 16h7v1h-7zM9 17h1v1h-1zM14 17h1v1h-1zM16 17h1v1h-1zM20 17h2v1h-2zM0 18h7v1h-7zM9 18h1v1h-1zM13 18h4v1h-4zM18 18h1v1h-1zM20 18h4v1h-4zM0 19h1v1h-1zM6 19h1v1h-1zM10 19h1v1h-1zM13 19h1v1h-1zM16 19h1v1h-1zM20 19h2v1h-2zM23 19h2v1h-2zM0 20h1v1h-1zM2 20h3v1h-3zM6 20h1v1h-1zM10 20h2v1h-2zM13 20h8v1h-8zM22 20h1v1h-1zM24 20h1v1h-1zM0 21h1v1h-1zM2 21h3v1h-3zM6 21h1v1h-1zM8 21h2v1h-2zM12 21h1v1h-1zM16 21h3v1h-3zM20 21h3v1h-3zM0 22h1v1h-1zM2 22h3v1h-3zM6 22h1v1h-1zM8 22h2v1h-2zM13 22h2v1h-2zM16 22h2v1h-2zM21 22h1v1h-1zM23 22h1v1h-1zM0 23h1v1h-1zM6 23h1v1h-1zM8 23h2v1h-2zM12 23h2v1h-2zM15 23h7v1h-7zM23 23h1v1h-1zM0 24h7v1h-7zM8 24h5v1h-5zM15 24h2v1h-2zM18 24h1v1h-1zM20 24h2v1h-2zM23 24h1v1h-1z"/></svg></div>
-          <h2 class="st-line"><span class="st-n" aria-hidden="true">3</span>Lostty: Unlocked</h2>
+            <ul class="reqs">
+              <li><b>Mac</b> macOS 14 or later</li>
+              <li><b>iPhone</b> iOS 17 or later</li>
+            </ul>
           </div>
-        </header>
+          <div class="setup-gh">
+            <p class="setup-k">From GitHub</p>
+            <div class="code">
+              <div class="code-h"><span>Terminal on your Mac</span><button class="copy" type="button">Copy</button></div>
+              <pre><code><span class="c-p">$ </span>git clone https://github.com/Lawliang/lostty.git
+<span class="c-p">$ </span>cd lostty
+<span class="c-p">$ </span>macos/setup.sh</code></pre>
+            </div>
+            <ol class="gf-steps">
+              <li><span>Plug in your iPhone, tap <b>Trust</b>, then run <code>macos/install-phone.sh</code> in the same folder.</span></li>
+              <li><span>Install Tailscale on the Mac and the iPhone, signed in to the same account.</span></li>
+              <li><span>Open <b>Lostty → Phone Access…</b>, click <b>Pair a Phone…</b> and scan the code with the iPhone app.</span></li>
+            </ol>
+            <ul class="reqs">
+              <li><b>Mac</b> macOS 15 or later, Xcode 26 and Homebrew</li>
+              <li><b>iPhone</b> iOS 17 or later, with its cable</li>
+              <li><b>Account</b> a free Apple Account</li>
+            </ul>
+            <div><a class="btn" href="#docs-build-from-source">Full setup guide</a></div>
+          </div>
+        </div>
       </div>
     </div>
   </section>
@@ -2656,7 +2700,9 @@ void main(){
   $$('.copy').forEach(function (btn) {
     btn.addEventListener('click', function () {
       var pre = btn.closest('.code').querySelector('pre');
-      var text = pre.textContent.replace(/\s+#[^\n]*$/gm, '').replace(/[ \t]+$/gm, '');
+      // without the $ prompts
+      var clean = pre.cloneNode(true); $$('.c-p', clean).forEach(function (e) { e.remove(); });
+      var text = clean.textContent.replace(/\s+#[^\n]*$/gm, '').replace(/[ \t]+$/gm, '');
       var done = function (ok) {
         btn.textContent = ok ? 'Copied' : 'Press ⌘C';
         btn.classList.toggle('ok', ok);
