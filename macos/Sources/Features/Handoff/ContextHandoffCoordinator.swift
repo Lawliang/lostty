@@ -10,6 +10,8 @@ enum ContextHandoffSignal: Equatable {
     case prompted
     /// The fresh window's start hook took the handoff after /clear.
     case fresh
+    /// The window was cleared with no handoff waiting (your own /clear).
+    case cleared
     /// The pane's command finished or the pane closed.
     case gone
 }
@@ -67,6 +69,23 @@ final class ContextHandoffCoordinator: ObservableObject {
     private var working: Set<UUID> = []
     /// Panes with the ceiling nudge waiting out its grace.
     private var nudgeWaiting: Set<UUID> = []
+    /// Panes with keys typed since their last prompt: their prompt may
+    /// hold half a message, which Lostty's typing would add to and send.
+    private var typed: Set<UUID> = []
+
+    private struct Reading: Equatable {
+        var used: Int
+        var size: Int
+    }
+
+    /// Each pane's latest context report.
+    private var readings: [UUID: Reading] = [:]
+    /// A cleared window's last reading: the usage feed sends nothing new
+    /// until the fresh window's first reply, so this one keeps coming back.
+    private var stale: [UUID: Reading] = [:]
+
+    static let typingNote = "Didn't hand off: you were typing in this terminal. Lostty hands off at the next "
+        + "clean break."
 
     init(deps: Dependencies) {
         self.deps = deps
@@ -74,20 +93,28 @@ final class ContextHandoffCoordinator: ObservableObject {
 
     func isArmed(_ pane: UUID) -> Bool { panes[pane] != nil }
 
-    /// The bubble's line for a pane.
+    /// The bubble's line for a pane: its last word (done, failed, held),
+    /// else what an armed pane waits for.
     func line(_ pane: UUID) -> String? {
+        if let note = notes[pane] { return note }
         if let state = panes[pane] {
             if state.byButton { return "Will hand off at the next clean break." }
             let limit = ContextHandoffPolicy.limit(setting: deps.setting(), size: state.size)
             return "Will hand off at the next clean break (\(ContextHandoffDirective.k(state.used)) of "
                 + "\(ContextHandoffDirective.k(limit)))."
         }
-        return notes[pane]
+        return nil
     }
 
     // MARK: - Arming
 
     func contextChanged(_ pane: UUID, used: Int, size: Int) {
+        let reading = Reading(used: used, size: size)
+        if let old = stale[pane] {
+            guard old != reading else { return }
+            stale[pane] = nil
+        }
+        readings[pane] = reading
         if var state = panes[pane] {
             state.used = used
             state.size = size
@@ -183,26 +210,37 @@ final class ContextHandoffCoordinator: ObservableObject {
         switch signal {
         case .stopped(let path): stopped(pane, path)
         case .prompted:
+            typed.remove(pane)
             working.insert(pane)
             interrupted(pane)
         case .fresh: fresh(pane)
+        case .cleared:
+            // Lostty's own /clear waits for `fresh` (or times out).
+            guard panes[pane]?.phase != .clearing else { return }
+            disarm(pane)
+            stale[pane] = readings[pane]
         case .gone:
             disarm(pane)
             conversations[pane] = nil
             declined[pane] = nil
             notes[pane] = nil
             working.remove(pane)
+            typed.remove(pane)
+            readings[pane] = nil
+            stale[pane] = nil
         }
     }
 
-    /// A key typed in an armed pane (the app forwards those).
-    func keyTyped(_ pane: UUID) { interrupted(pane) }
+    /// A key typed in a pane (the app forwards every terminal's).
+    func keyTyped(_ pane: UUID) {
+        typed.insert(pane)
+        interrupted(pane)
+    }
 
     /// You typed or prompted: a pending clear or a waiting nudge is off.
-    /// A reply still being read is not: typing your next prompt right
-    /// after a turn ends mustn't lose its handoff (a prompt drops it
-    /// instead, through `working`). Not while clearing: /clear and
-    /// Lostty's own lines prompt too.
+    /// While you've typed since your last prompt, Lostty types nothing
+    /// (`typed`). Not while clearing: /clear and Lostty's own lines
+    /// prompt too.
     private func interrupted(_ pane: UUID) {
         guard var state = panes[pane], state.phase != .clearing else { return }
         nudgeWaiting.remove(pane)
@@ -233,6 +271,10 @@ final class ContextHandoffCoordinator: ObservableObject {
         // A prompt came in while the reply was read: the agent works again.
         guard var state = panes[pane], state.phase == .armed, !working.contains(pane) else { return }
         switch ContextHandoffExtract.find(in: reply) {
+        case .success where typed.contains(pane):
+            // Your prompt may hold half a message: ask again at the next break.
+            notes[pane] = Self.typingNote
+            say(pane, problem: nil)
         case .success(let handoff):
             do {
                 let url = try deps.store.saveHandoff(handoff.text, project: deps.project(pane), at: deps.now())
@@ -241,6 +283,7 @@ final class ContextHandoffCoordinator: ObservableObject {
                 state.next = handoff.next
                 state.summary = handoff.summary
                 panes[pane] = state
+                notes[pane] = nil
                 persist(pane)
                 let gen = bump(pane)
                 deps.schedule(Self.grace) { [weak self] in self?.clear(pane, gen) }
@@ -250,21 +293,21 @@ final class ContextHandoffCoordinator: ObservableObject {
         case .failure(.missing(let section)):
             say(pane, problem: "Your handoff had no '\(section)'.")
         case .failure(.none):
-            guard state.level == .ceiling, !state.nudged, !state.byButton else { return }
+            guard state.level == .ceiling, !state.nudged, !state.byButton, !typed.contains(pane) else { return }
             state.nudged = true
             panes[pane] = state
             persist(pane)
             nudgeWaiting.insert(pane)
             deps.schedule(Self.grace) { [weak self] in
                 guard let self, self.nudgeWaiting.remove(pane) != nil, self.panes[pane]?.phase == .armed,
-                      !self.working.contains(pane) else { return }
+                      !self.working.contains(pane), !self.typed.contains(pane) else { return }
                 self.deps.type(pane, [.text(ContextHandoffDirective.nudge), .enter])
             }
         }
     }
 
     private func clear(_ pane: UUID, _ gen: Int) {
-        guard generation[pane] == gen, var state = panes[pane], state.phase == .pending,
+        guard generation[pane] == gen, var state = panes[pane], state.phase == .pending, !typed.contains(pane),
               let path = state.handoff, let text = try? String(contentsOfFile: path, encoding: .utf8) else { return }
         deps.store.removeSay(pane)
         deps.store.writeStart(pane, ContextHandoffDirective.freshStart(handoff: text, path: path, used: state.used))
@@ -284,6 +327,9 @@ final class ContextHandoffCoordinator: ObservableObject {
         let keys = lines.flatMap { [ContextHandoffKey.text($0), .enter] }
         deps.schedule(Self.continueDelay) { [weak self] in self?.deps.type(pane, keys) }
         disarm(pane)
+        // The old window's figure stays in the usage feed until the fresh
+        // window's first reply: it mustn't arm the fresh one.
+        stale[pane] = readings[pane] ?? Reading(used: state.used, size: state.size)
         notes[pane] = "Fresh window: handed off at \(ContextHandoffDirective.k(state.used)) after "
             + "'\(state.summary ?? "")'"
     }

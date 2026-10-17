@@ -12,9 +12,9 @@ pub const surface_env = "LOSTTY_SURFACE";
 /// them finished, so Claude itself works again. `tool`: Claude (or one of
 /// its subagents) is about to run a tool; it carries the action, not a
 /// change of state. `done` (PostToolUse) and `start` (SessionStart) only
-/// speak the context handoff's queued text; `fresh` says a fresh window
-/// took the handoff (sent after `start`).
-pub const State = enum { busy, idle, exit, agents, resumed, tool, done, start, fresh };
+/// speak the context handoff's queued text; after a /clear, `start` sends
+/// `fresh` (the fresh window took the handoff) or `cleared` (none waited).
+pub const State = enum { busy, idle, exit, agents, resumed, tool, done, start, fresh, cleared };
 
 /// What a message says beyond its state.
 pub const Detail = struct {

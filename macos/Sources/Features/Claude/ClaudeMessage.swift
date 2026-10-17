@@ -57,6 +57,12 @@ enum ClaudeMessage {
         object(value)?["state"] as? String == "fresh"
     }
 
+    /// `{"v":1,"state":"cleared"}`: the window was cleared with no handoff
+    /// waiting (your own /clear). Not a ClaudeState either.
+    static func isCleared(_ value: String) -> Bool {
+        object(value)?["state"] as? String == "cleared"
+    }
+
     private static func object(_ value: String) -> [String: Any]? {
         guard let data = value.data(using: .utf8),
               let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],

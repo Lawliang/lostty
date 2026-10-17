@@ -47,13 +47,13 @@ pub fn run(gpa: Allocator) !u8 {
             _ = speakQueued(alloc, pane, .say, "PostToolUse");
             return 0;
         },
-        // A fresh window after /clear: hand it the handoff, then say so.
+        // A fresh window after /clear: hand it the handoff and say so, or
+        // say it was cleared with none (the Mac disarms the pane).
         .start => {
             const input = hookInput(alloc) orelse return 0;
             const source = speak.sessionSource(alloc, input) orelse return 0;
             if (!std.mem.eql(u8, source, "clear")) return 0;
-            if (!speakQueued(alloc, pane, .start, "SessionStart")) return 0;
-            state = .fresh;
+            state = if (speakQueued(alloc, pane, .start, "SessionStart")) .fresh else .cleared;
         },
         .idle, .resumed => if (hookInput(alloc)) |input| {
             state = protocol.refine(alloc, state, input) orelse return 0;

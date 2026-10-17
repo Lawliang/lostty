@@ -437,6 +437,15 @@ struct ClaudeRuntimeTests {
         #expect(signals == [.prompted])
     }
 
+    @Test func aClearWithoutAHandoffIsSignalled() {
+        let runtime = makeRuntime()
+        var signals: [ContextHandoffSignal] = []
+        runtime.handoffSignal = { _, signal in signals.append(signal) }
+        runtime.userVarChanged(pane, name: ClaudeConstants.userVarName, value: payload("cleared"))
+        #expect(signals == [.cleared])
+        #expect(runtime.phases[pane] == nil)
+    }
+
     @Test func freshChangesNoPhase() {
         let runtime = makeRuntime()
         runtime.userVarChanged(pane, name: ClaudeConstants.userVarName, value: payload("fresh"))

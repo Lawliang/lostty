@@ -28,6 +28,8 @@ enum ContextHandoffExtract {
     static let open = "<lostty-handoff>"
     static let close = "</lostty-handoff>"
     static let summaryMax = 80
+    /// How the directive's template fills "Where we are".
+    static let placeholder = "(done, with commits"
 
     /// The last block outside a code fence, if it has every required
     /// section: Where we are, Active workflow, Next (missing = wait), and
@@ -35,6 +37,8 @@ enum ContextHandoffExtract {
     static func find(in reply: String) -> Result<ContextHandoff, ContextHandoffProblem> {
         guard let body = lastBlock(reply) else { return .failure(.none) }
         let sections = sections(body)
+        // The directive's own template, echoed back, is no handoff.
+        if (sections["Where we are"] ?? "").hasPrefix(placeholder) { return .failure(.none) }
         for name in ["Where we are", "Active workflow"] where (sections[name] ?? "").isEmpty {
             return .failure(.missing(name))
         }
@@ -46,7 +50,8 @@ enum ContextHandoffExtract {
     }
 
     /// The text between the last open and close tag lines that sit outside
-    /// a ``` fence; nil without a closed block.
+    /// a ``` or ~~~ fence; nil without a closed block, or when anything
+    /// but blank lines follows it (the handoff ends the reply).
     private static func lastBlock(_ reply: String) -> String? {
         var fenced = false
         var current: [Substring]?
@@ -62,7 +67,8 @@ enum ContextHandoffExtract {
                 }
                 continue
             }
-            if trimmed.hasPrefix("```") {
+            if last != nil, !trimmed.isEmpty { last = nil }
+            if trimmed.hasPrefix("```") || trimmed.hasPrefix("~~~") {
                 fenced.toggle()
             } else if !fenced, trimmed == open {
                 current = []

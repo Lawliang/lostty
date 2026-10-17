@@ -131,7 +131,7 @@ struct ContextHandoffCoordinatorTests {
         #expect(c.panes[pane]?.phase == .armed)
     }
 
-    @Test func typingRightAfterAStopDoesNotLoseTheHandoff() {
+    @Test func typingAheadHoldsTheClear() {
         world.deferReplies = true
         let c = make()
         c.contextChanged(pane, used: 312_000, size: 1_000_000)
@@ -139,7 +139,79 @@ struct ContextHandoffCoordinatorTests {
         c.signal(pane, .stopped(transcript: "/t1"))
         c.keyTyped(pane)  // you start typing your next prompt
         world.heldReplies.forEach { $0() }
+        runPending()
+        #expect(c.panes[pane]?.phase == .armed)
+        #expect(world.typed.isEmpty)
+        #expect(c.line(pane)?.contains("you were typing") == true)
+    }
+
+    @Test func keysTypedWhileItWorkedHoldTheClear() {
+        let c = make()
+        c.contextChanged(pane, used: 312_000, size: 1_000_000)
+        c.signal(pane, .prompted)
+        c.keyTyped(pane)  // a half-typed next message, not sent
+        world.replies["/t1"] = handoff
+        c.signal(pane, .stopped(transcript: "/t1"))
+        runPending()
+        #expect(world.typed.isEmpty)
+    }
+
+    @Test func aSentPromptClearsTheTypingMark() {
+        let c = make()
+        c.contextChanged(pane, used: 312_000, size: 1_000_000)
+        c.keyTyped(pane)
+        c.signal(pane, .prompted)
+        world.replies["/t1"] = handoff
+        c.signal(pane, .stopped(transcript: "/t1"))
         #expect(c.panes[pane]?.phase == .pending)
+    }
+
+    @Test func theNudgeWaitsWhileYouType() {
+        let c = make()
+        c.contextChanged(pane, used: 400_000, size: 1_000_000)
+        c.keyTyped(pane)
+        world.replies["/t1"] = "No handoff yet."
+        c.signal(pane, .stopped(transcript: "/t1"))
+        runPending()
+        #expect(world.typed.isEmpty)
+    }
+
+    @Test func aStaleContextReportDoesNotReArmTheFreshWindow() {
+        let c = make()
+        c.contextChanged(pane, used: 312_000, size: 1_000_000)
+        world.replies["/t1"] = handoff
+        c.signal(pane, .stopped(transcript: "/t1"))
+        runPending()
+        c.signal(pane, .fresh)
+        // Another pane's report republishes this pane's old figure.
+        c.contextChanged(pane, used: 312_000, size: 1_000_000)
+        #expect(!c.isArmed(pane))
+        #expect(c.line(pane)?.hasPrefix("Fresh window") == true)
+        c.contextChanged(pane, used: 9_000, size: 1_000_000)
+        c.contextChanged(pane, used: 320_000, size: 1_000_000)
+        #expect(c.isArmed(pane))
+    }
+
+    @Test func yourOwnClearDisarms() {
+        let c = make()
+        c.contextChanged(pane, used: 312_000, size: 1_000_000)
+        c.signal(pane, .cleared)
+        #expect(!c.isArmed(pane))
+        #expect(!FileManager.default.fileExists(atPath: sayFile.path))
+        c.contextChanged(pane, used: 312_000, size: 1_000_000)
+        #expect(!c.isArmed(pane))
+    }
+
+    @Test func aFailedSaveShowsInTheBubble() throws {
+        // A file where the handoffs folder should be: saving fails.
+        try FileManager.default.createDirectory(at: store.root, withIntermediateDirectories: true)
+        try Data().write(to: store.handoffs)
+        let c = make()
+        c.contextChanged(pane, used: 312_000, size: 1_000_000)
+        world.replies["/t1"] = handoff
+        c.signal(pane, .stopped(transcript: "/t1"))
+        #expect(c.isArmed(pane))
+        #expect(c.line(pane)?.hasPrefix("Couldn't save the handoff") == true)
     }
 
     @Test func aPromptBeforeTheReplyIsReadDropsTheHandoff() {

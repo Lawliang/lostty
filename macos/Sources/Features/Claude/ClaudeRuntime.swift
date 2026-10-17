@@ -62,6 +62,10 @@ final class ClaudeRuntime: ObservableObject {
             handoffSignal(id, .fresh)
             return
         }
+        if ClaudeMessage.isCleared(value) {
+            handoffSignal(id, .cleared)
+            return
+        }
         if let action = ClaudeMessage.action(value) {
             // A tool starting means Claude works, even with no new prompt
             // (it carries on after a permission prompt without one).

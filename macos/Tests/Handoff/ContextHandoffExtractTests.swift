@@ -50,6 +50,19 @@ struct ContextHandoffExtractTests {
         #expect(ContextHandoffExtract.find(in: block(next: "wait")) == .failure(.missing("Open threads")))
     }
 
+    @Test func aBlockFollowedByMoreTextIsNotAHandoff() {
+        #expect(ContextHandoffExtract.find(in: block() + "\n\nAnyway, back to the bug.") == .failure(.none))
+    }
+
+    @Test func theTemplateItselfIsNotAHandoff() {
+        let template = ContextHandoffDirective.text(level: .limit, used: 312_000, limit: 300_000, ceiling: 400_000,
+                                                    byButton: false, problem: nil)
+        let block = template[template.range(of: "<lostty-handoff>")!.lowerBound...]
+            .prefix { _ in true }
+        let echoed = String(block[..<block.range(of: "</lostty-handoff>")!.upperBound])
+        #expect(ContextHandoffExtract.find(in: "Lostty asked for this:\n" + echoed) == .failure(.none))
+    }
+
     @Test func anUnclosedBlockIsNone() {
         let open = block().replacingOccurrences(of: "</lostty-handoff>", with: "")
         #expect(ContextHandoffExtract.find(in: open) == .failure(.none))

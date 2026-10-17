@@ -53,12 +53,13 @@ enum ContextHandoffWiring {
             .dropFirst()
             .sink { coordinator.settingChanged(enabled: $0) }
             .store(in: &watchers)
-        // A key typed in a pane with a handoff pending (or a nudge waiting)
-        // calls it off. The key still reaches the terminal.
+        // Every key typed in a terminal: one typed since the last prompt
+        // means its prompt may hold half a message, so Lostty types nothing
+        // there; one during a pending handoff calls it off. The key still
+        // reaches the terminal.
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             MainActor.assumeIsolated {
-                if let view = NSApp.keyWindow?.firstResponder as? Ghostty.SurfaceView,
-                   coordinator.isArmed(view.id) {
+                if let view = NSApp.keyWindow?.firstResponder as? Ghostty.SurfaceView {
                     coordinator.keyTyped(view.id)
                 }
             }
