@@ -652,6 +652,8 @@ fn push(ctx: Ctx, probe: anytype, rest: []const shell.Word) Error!?Finding {
     if (forced) return finding(.leaving, "git push --force overwrites the remote");
     if (has(rest, "--tags") or has(rest, "--delete") or has(rest, "--prune") or hasShort(rest, 'd')) return finding(.leaving, "pushes tags or deletes on the remote");
     if (ops.len >= 2) {
+        // `HEAD` and `@` name the current branch; look it up once per command.
+        var head: ?[]const u8 = null;
         for (ops[1..]) |w| {
             if (w.dynamic) return finding(.leaving, "pushes a branch named by a variable");
             const spec = if (w.text.len > 0 and w.text[0] == '+') w.text[1..] else w.text;
@@ -659,7 +661,14 @@ fn push(ctx: Ctx, probe: anytype, rest: []const shell.Word) Error!?Finding {
             if (spec.len > 0 and spec[0] == ':') return finding(.leaving, "pushes a refspec that deletes a remote ref");
             const dst = if (std.mem.indexOfScalar(u8, spec, ':')) |i| spec[i + 1 ..] else spec;
             if (std.mem.startsWith(u8, dst, "refs/tags/")) return finding(.leaving, "pushes a tag");
-            const name = if (std.mem.startsWith(u8, dst, "refs/heads/")) dst["refs/heads/".len..] else dst;
+            var name = if (std.mem.startsWith(u8, dst, "refs/heads/")) dst["refs/heads/".len..] else dst;
+            if (eq(name, "HEAD") or eq(name, "@")) {
+                if (head == null) {
+                    const r = root orelse return finding(.leaving, "git push from outside a repo Lostty can check");
+                    head = probe.branch(r) orelse return finding(.leaving, "git push from a detached HEAD");
+                }
+                name = head.?;
+            }
             for (eff.protected_branches) |b| if (eq(b, name)) return .{ .group = .leaving, .why = try std.fmt.allocPrint(ctx.alloc, "pushes to {s}, a protected branch", .{name}) };
         }
         return null;
@@ -1167,4 +1176,26 @@ test "guard catalog: apply_patch run from the shell" {
     try std.testing.expectEqual(@as(?Group, .unreadable), try group(a, .{}, "cat p.diff | apply_patch"));
     try std.testing.expectEqual(@as(?Group, .unreadable), try group(a, .{}, "apply_patch <<EOF\n*** Begin Patch\n*** Add File: $HOME/x\n*** End Patch\nEOF"));
     try std.testing.expectEqual(@as(?Group, .unreadable), try group(a, .{}, "apply_patch \"$P\""));
+}
+
+test "guard catalog: pushing HEAD resolves to the current branch" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const ctx: Ctx = .{ .alloc = a, .cwd = "/r", .home = "/Users/me", .tmpdir = null, .config = config.Config.parse(a, "") };
+    const on_main = Fake{ .current = "main" };
+    for ([_][]const u8{ "git push origin HEAD", "git push origin @", "git push -u origin HEAD", "git push origin HEAD:HEAD" }) |src| {
+        const cmds = try shell.parse(a, src, "/Users/me");
+        const f = (try classify(ctx, on_main, cmds[0])) orelse {
+            std.debug.print("should ask: {s}\n", .{src});
+            return error.TestUnexpectedResult;
+        };
+        try std.testing.expectEqual(Group.leaving, f.group);
+    }
+    const on_feature = Fake{ .current = "feature" };
+    const plain = try shell.parse(a, "git push origin HEAD", "/Users/me");
+    try std.testing.expect((try classify(ctx, on_feature, plain[0])) == null);
+    // Detached: HEAD names no branch, so Lostty can't check it.
+    const detached = Fake{ .current = null };
+    try std.testing.expect((try classify(ctx, detached, plain[0])) != null);
 }
