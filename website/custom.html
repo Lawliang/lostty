@@ -726,8 +726,7 @@ p { margin: 0; }
 .skstrip-track{display:flex; align-items:stretch; width:max-content; will-change:transform}
 
 /* the cards: the skin's own background and texture with "❯ name", no
-   border, plus two things from Skin Shifter's cards: an Equip button
-   ("Equipped", filled, on the one being worn) and the polychrome foil and
+   border, plus Skin Shifter's polychrome foil and
    glare that follow the pointer as the card tilts toward it (--mx/--my,
    --rx/--ry, set by the script). Tapping anywhere on a card equips it. Dim
    except the one under the pointer */
@@ -741,9 +740,6 @@ p { margin: 0; }
 .skc.hot{transition:opacity .3s, transform .08s linear, box-shadow .3s; box-shadow:0 18px 40px -18px color-mix(in oklab, var(--sk-a1) 55%, transparent)}
 .skc-n{display:block; max-width:100%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
 .skc-n i{font-style:normal; color:var(--sk-a1)}
-.skc-equip{font:700 10.5px/1 var(--font-mono); letter-spacing:.1em; text-transform:uppercase; padding:5px 9px 4px; border-radius:5px;
-  background:color-mix(in oklab, var(--sk-a1) 18%, transparent); color:var(--sk-a1); box-shadow:inset 0 0 0 1px color-mix(in oklab, var(--sk-a1) 55%, transparent); transition:background .2s, color .2s}
-.skc:hover .skc-equip,.skc[aria-pressed="true"] .skc-equip{background:var(--sk-a1); color:var(--sk-bg)}
 .skc-foil,.skc-glare{position:absolute; inset:0; border-radius:inherit; pointer-events:none; z-index:3; opacity:0; transition:opacity .35s}
 .skc-foil{mix-blend-mode:color-dodge;
   background:repeating-linear-gradient(118deg, #ff3d7f 0%, #ffd84d 6%, #3dffb0 12%, #28e7ff 18%, #b06bff 24%, #ff3d7f 30%),
@@ -1133,20 +1129,9 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
 .sup-cta { margin-top: 28px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
 /* "Support Lostty" is the hero's primary button (mono, square corners, a pill on hover), with a heart */
 .sup-btn { font-family: var(--font-mono); }
-.sup-note { font-size: 13.5px; color: var(--ink-2); min-height: 1.6em; transition: opacity .25s; }
-.sup-note.swap { opacity: 0; }
-/* the three buttons in a row, stacked on phones */
-.sup-row { display: flex; justify-content: center; flex-wrap: wrap; gap: 14px; padding-block: 6px; }
-@media (max-width: 640px) {
-  .sup-row { flex-direction: column; align-items: center; }
-}
-/* Endorse in the accent; Share and Join the team grey */
-.sup-btn.sup-c2, .sup-btn.sup-c3 { background: #6B6573; border-color: #6B6573; color: #fff; }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .sup-btn.sup-c2, :root:not([data-theme="light"]) .sup-btn.sup-c3 { background: #4A4452; border-color: #4A4452; }
-}
-:root[data-theme="dark"] .sup-btn.sup-c2, :root[data-theme="dark"] .sup-btn.sup-c3 { background: #4A4452; border-color: #4A4452; }
-.sup-btn.sup-c2:hover, .sup-btn.sup-c2:focus-visible, .sup-btn.sup-c3:hover, .sup-btn.sup-c3:focus-visible { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+.sup-note { font-size: 13.5px; color: var(--ink-2); }
+/* the Endorse button, centred */
+.sup-row { display: flex; justify-content: center; padding-block: 6px; }
 /* a small inline GitHub avatar after "one developer", linking to the profile */
 .sup-nb { white-space: nowrap; } /* "developer" and the avatar stay together */
 .sup-me { display: inline-block; vertical-align: -.32em; margin-left: .3em; border-radius: 50%; line-height: 0; }
@@ -1430,7 +1415,7 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
               <h2 class="st-line"><span class="st-n" aria-hidden="true">1</span>Download</h2>
               <div class="st-actions">
                 <a class="btn primary" href="#download"><svg class="btn-ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="11" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M2 19h20" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>Download for Mac</a>
-                <span class="btn soon" aria-disabled="true">iOS App: private testflight</span>
+                <span class="btn soon" aria-disabled="true">iOS App: testflight</span>
               </div>
               <h2 class="st-line"><span class="st-n" aria-hidden="true">2</span>Pair devices</h2>
               <div class="st-actions st-qr-row"><svg class="st-qr" viewBox="-2 -2 29 29" aria-hidden="true"><rect x="-2" y="-2" width="29" height="29" rx="2.5" class="st-qr-bg"/><path d="M0 0h7v1h-7zM8 0h2v1h-2zM11 0h1v1h-1zM13 0h2v1h-2zM16 0h1v1h-1zM18 0h7v1h-7zM0 1h1v1h-1zM6 1h1v1h-1zM8 1h4v1h-4zM13 1h2v1h-2zM18 1h1v1h-1zM24 1h1v1h-1zM0 2h1v1h-1zM2 2h3v1h-3zM6 2h1v1h-1zM9 2h1v1h-1zM11 2h1v1h-1zM13 2h4v1h-4zM18 2h1v1h-1zM20 2h3v1h-3zM24 2h1v1h-1zM0 3h1v1h-1zM2 3h3v1h-3zM6 3h1v1h-1zM9 3h1v1h-1zM12 3h1v1h-1zM14 3h3v1h-3zM18 3h1v1h-1zM20 3h3v1h-3zM24 3h1v1h-1zM0 4h1v1h-1zM2 4h3v1h-3zM6 4h1v1h-1zM9 4h2v1h-2zM12 4h2v1h-2zM16 4h1v1h-1zM18 4h1v1h-1zM20 4h3v1h-3zM24 4h1v1h-1zM0 5h1v1h-1zM6 5h1v1h-1zM12 5h1v1h-1zM14 5h2v1h-2zM18 5h1v1h-1zM24 5h1v1h-1zM0 6h7v1h-7zM8 6h1v1h-1zM10 6h1v1h-1zM12 6h1v1h-1zM14 6h1v1h-1zM16 6h1v1h-1zM18 6h7v1h-7zM8 7h3v1h-3zM15 7h1v1h-1zM2 8h1v1h-1zM5 8h2v1h-2zM8 8h1v1h-1zM13 8h2v1h-2zM16 8h5v1h-5zM22 8h3v1h-3zM1 9h2v1h-2zM8 9h3v1h-3zM13 9h5v1h-5zM19 9h4v1h-4zM4 10h1v1h-1zM6 10h1v1h-1zM10 10h3v1h-3zM14 10h11v1h-11zM2 11h4v1h-4zM7 11h1v1h-1zM10 11h6v1h-6zM17 11h2v1h-2zM21 11h1v1h-1zM23 11h1v1h-1zM3 12h4v1h-4zM10 12h2v1h-2zM18 12h1v1h-1zM20 12h5v1h-5zM2 13h1v1h-1zM7 13h5v1h-5zM15 13h1v1h-1zM18 13h1v1h-1zM23 13h2v1h-2zM1 14h1v1h-1zM4 14h3v1h-3zM9 14h3v1h-3zM14 14h1v1h-1zM18 14h1v1h-1zM20 14h2v1h-2zM1 15h1v1h-1zM4 15h2v1h-2zM7 15h2v1h-2zM10 15h3v1h-3zM14 15h2v1h-2zM18 15h1v1h-1zM23 15h2v1h-2zM0 16h2v1h-2zM3 16h2v1h-2zM6 16h1v1h-1zM8 16h1v1h-1zM12 16h1v1h-1zM14 16h7v1h-7zM9 17h1v1h-1zM14 17h1v1h-1zM16 17h1v1h-1zM20 17h2v1h-2zM0 18h7v1h-7zM9 18h1v1h-1zM13 18h4v1h-4zM18 18h1v1h-1zM20 18h4v1h-4zM0 19h1v1h-1zM6 19h1v1h-1zM10 19h1v1h-1zM13 19h1v1h-1zM16 19h1v1h-1zM20 19h2v1h-2zM23 19h2v1h-2zM0 20h1v1h-1zM2 20h3v1h-3zM6 20h1v1h-1zM10 20h2v1h-2zM13 20h8v1h-8zM22 20h1v1h-1zM24 20h1v1h-1zM0 21h1v1h-1zM2 21h3v1h-3zM6 21h1v1h-1zM8 21h2v1h-2zM12 21h1v1h-1zM16 21h3v1h-3zM20 21h3v1h-3zM0 22h1v1h-1zM2 22h3v1h-3zM6 22h1v1h-1zM8 22h2v1h-2zM13 22h2v1h-2zM16 22h2v1h-2zM21 22h1v1h-1zM23 22h1v1h-1zM0 23h1v1h-1zM6 23h1v1h-1zM8 23h2v1h-2zM12 23h2v1h-2zM15 23h7v1h-7zM23 23h1v1h-1zM0 24h7v1h-7zM8 24h5v1h-5zM15 24h2v1h-2zM18 24h1v1h-1zM20 24h2v1h-2zM23 24h1v1h-1z"/></svg></div>
@@ -1519,16 +1504,12 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
         <div class="sup-mascot"><span class="ag-mascot-slot" data-mascot="ag-wave"></span></div>
         <h1 class="sup-title">Thanks for being here.</h1>
         <p class="sup-lede">Lostty is a small, independent project — maintained by one <span class="sup-nb">developer<a class="sup-me" href="https://github.com/Lawliang" target="_blank" rel="noopener" aria-label="Law Liang on GitHub"><img src="data:image/jpeg;base64,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" alt="" width="48" height="48"></a></span><br>It's free, open source and MIT licensed</p>
-        <!-- three ways to help, side by side (stacked on phones); the line
-             under them is the one for the button under the pointer -->
         <div class="sup-cta">
           <div class="sup-row" id="sup-row">
             <!-- the Stripe Checkout link goes in data-checkout; until then this one does nothing -->
             <a class="btn primary sup-btn" href="#support" data-checkout="" data-note="Thank you, truly."><svg class="btn-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z" fill="currentColor"/></svg>Endorse Lostty</a>
-            <a class="btn primary sup-btn sup-c2" href="#support" data-share data-note="Know someone who'd like a walk? Pass it along."><svg class="btn-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4M7.5 8.5 12 4l4.5 4.5M5 13v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Share</a>
-            <a class="btn primary sup-btn sup-c3" href="#docs-contributing" data-note="It's open source. Ideas and pull requests welcome."><svg class="btn-ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8.5" r="3.2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3.5 19c.6-3 2.8-4.6 5.5-4.6s4.9 1.6 5.5 4.6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="16.5" cy="9.5" r="2.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M16 14.6c2.3 0 4 1.3 4.6 3.9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>Join the team</a>
           </div>
-          <p class="sup-note" id="sup-note" aria-live="polite">Thank you, truly.</p>
+          <p class="sup-note">Thank you, truly.</p>
         </div>
         <div class="sup-grid">
           <div class="sup-block">
@@ -1865,36 +1846,6 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
   new MutationObserver(themeChanged).observe(root, { attributes: true, attributeFilter: ['data-theme'] });
   var schemeMQ = window.matchMedia('(prefers-color-scheme: dark)');
   if (schemeMQ.addEventListener) schemeMQ.addEventListener('change', themeChanged);
-
-  /* ---------------- support buttons ---------------- */
-  // Endorse / Share / Join the team: the line under them follows the one
-  // under the pointer (or focused), back to Endorse's when it leaves. Share
-  // opens the share sheet, or copies the link.
-  (function () {
-    var row = $('#sup-row');
-    if (!row) return;
-    var note = $('#sup-note'), btns = $$('.sup-btn', row), noteT = 0;
-    var first = btns[0].getAttribute('data-note');
-    function say(text) {
-      if (note.textContent === text) return;
-      clearTimeout(noteT);
-      note.classList.add('swap');
-      noteT = setTimeout(function () { note.textContent = text; note.classList.remove('swap'); }, 200);
-    }
-    btns.forEach(function (b) {
-      b.addEventListener('pointerenter', function () { say(b.getAttribute('data-note')); });
-      b.addEventListener('focus', function () { say(b.getAttribute('data-note')); });
-      b.addEventListener('click', function (e) {
-        if (!b.hasAttribute('data-share')) return;
-        e.preventDefault();
-        var url = location.href.split('#')[0];
-        if (navigator.share) navigator.share({ title: 'Lostty', url: url }).catch(function () {});
-        else if (navigator.clipboard) navigator.clipboard.writeText(url).then(function () { say('Link copied. Thank you for sharing!'); }, function () {});
-      });
-    });
-    row.addEventListener('pointerleave', function () { say(first); });
-    row.addEventListener('focusout', function (e) { if (!row.contains(e.relatedTarget)) say(first); });
-  })();
 
   /* ---------------- setup tabs (narrow screens) ---------------- */
   (function () {
@@ -2755,7 +2706,7 @@ void main(){
       b.type = 'button'; b.className = 'skc'; b.setAttribute('data-id', s.id);
       KEYS.forEach(function (k) { b.style.setProperty('--sk-' + k, s[k]); });
       b.innerHTML = '<span class="tex a"></span><span class="tex b"></span>' +
-        '<span class="skc-n"><i>❯</i> ' + s.id + '</span><span class="skc-equip">Equip</span>' +
+        '<span class="skc-n"><i>❯</i> ' + s.id + '</span>' +
         '<span class="skc-foil" aria-hidden="true"></span><span class="skc-glare" aria-hidden="true"></span>';
       setTex($$('.tex', b), s.tex);
       if (copy) { b.tabIndex = -1; b.setAttribute('aria-hidden', 'true'); b.setAttribute('data-copy', ''); }
@@ -2768,7 +2719,6 @@ void main(){
       cards.forEach(function (c) {
         var on = c.getAttribute('data-id') === id;
         c.setAttribute('aria-pressed', on ? 'true' : 'false');
-        $('.skc-equip', c).textContent = on ? 'Equipped' : 'Equip';
       });
     }
     mark(null);
