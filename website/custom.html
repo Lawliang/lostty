@@ -352,10 +352,10 @@ p { margin: 0; }
 .ag-aurora-fallback.ag-gone{display:none}
 /* as in Aurora: the Mac runs to the content's right edge and the iPhone hangs
    5% of the Mac's width past it, into the page margin (the section clips it) */
-.ag-stage{position:relative; perspective:1900px; padding:0 0 7em 0; min-width:0}
+.ag-stage{position:relative; perspective:146em; padding:0 0 7em 0; min-width:0}
 .ag-rig{position:relative; transform-style:preserve-3d;
   transform:rotateY(calc(-14deg + var(--px, 0) * 6deg)) rotateX(calc(8deg - var(--py, 0) * 5deg)) rotateZ(.6deg)}
-.ag-halo{position:absolute; inset:10% -6% -2% 8%; border-radius:50%; filter:blur(50px); opacity:.55; transform:translateZ(-120px);
+.ag-halo{position:absolute; inset:10% -6% -2% 8%; border-radius:50%; filter:blur(50px); opacity:.55; transform:translateZ(-9.2em);
   background:radial-gradient(closest-side, var(--magenta), color-mix(in srgb, var(--violet) 60%, transparent) 60%, transparent)}
 
 /* the Mac: Neon Signal's window. Neon's px are written here / 13, so they
@@ -405,7 +405,7 @@ p { margin: 0; }
    (16em across, Neon's 258px); the screen is in cqw of itself (240 Neon px
    across), so Neon's pixel values carry over and it all scales together */
 .ag-phone{position:absolute; right:-5%; bottom:-6.5em; width:16em; height:33.5em; border-radius:2.73em; padding:.56em; background:#050308;
-  transform:translateZ(110px) rotateY(5deg);
+  transform:translateZ(8.46em) rotateY(5deg);
   box-shadow:0 0 0 .093em #3b2d55, 0 0 0 .31em #0a0610, 0 0 0 .372em #2a1f3b, 0 2.48em 4.96em -1.49em #000, 0 0 5.6em -1.86em color-mix(in srgb, #28e7ff 35%, transparent)}
 .ag-pscreen{position:relative; height:100%; border-radius:2.23em; overflow:hidden; background:#000; color:#f3f1f7; container-type:inline-size;
   font-family:-apple-system, "SF Pro Text", "Onest", system-ui, sans-serif}
@@ -495,13 +495,11 @@ p { margin: 0; }
    a filter would pull it out of the 3D scene and let the other show through */
 .ag-mac,.ag-phone{transition:transform .8s cubic-bezier(.65, 0, .35, 1)}
 .ag-mac::after,.ag-phone::after{content:""; position:absolute; inset:0; border-radius:inherit; background:var(--paper); opacity:0; transition:opacity .5s; pointer-events:none; z-index:6}
-/* the picked device comes to the front: picking the Mac sends the iPhone back
-   behind it; picking the iPhone pushes the Mac further back. Both glide home
-   when both are lit again */
-.ag-stage[data-focus="phone"] .ag-mac{transform:translateZ(-90px)}
-.ag-stage[data-focus="phone"] .ag-phone{transform:translateZ(150px) rotateY(5deg)}
-.ag-stage[data-focus="mac"] .ag-mac{transform:translateZ(80px)}
-.ag-stage[data-focus="mac"] .ag-phone{transform:translateX(4%) translateZ(-60px) rotateY(5deg)}
+/* the picked device is the one in front, at the same size and place. The
+   iPhone already is; picking the Mac slides the iPhone just behind it, scaled
+   and shifted so its outline on screen doesn't change (measured in Chrome:
+   the depth is in em, so one set of numbers holds at every width) */
+.ag-stage[data-focus="mac"] .ag-phone{transform:translate(-7.72%, -4.49%) translateZ(-1.5em) rotateY(5deg) scale(1.0759)}
 .ag-stage[data-focus="phone"] .ag-mac::after,.ag-stage[data-focus="mac"] .ag-phone::after{opacity:.68}
 /* Kinetic Mono's axolotl, centred over both lists; it changes with the step */
 .ag-cats-mascot{grid-column:3 / -1; grid-row:1; justify-self:center; position:relative; width:64px; height:64px; margin-bottom:16px}
@@ -521,6 +519,7 @@ p { margin: 0; }
   .ag-stage-col{grid-template-columns:minmax(0, 49.6em); gap:24px; font-size:min(13px, calc(100cqi / 50))}
   /* stacked, the iPhone comes back inside the margin, as Aurora does below 1000px */
   .ag-stage{padding-right:4.5%}
+  .ag-stage[data-focus="mac"] .ag-phone{transform:translate(-8.46%, -4.49%) translateZ(-1.5em) rotateY(5deg) scale(1.0759)}
   /* stacked: heading, then the devices, then the lists */
   .ag-title{grid-row:1; margin-bottom:8px}
   .ag-stage-col > .ag-stage{grid-column:1; grid-row:2}
