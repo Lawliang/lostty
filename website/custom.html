@@ -479,7 +479,7 @@ p { margin: 0; }
    stage on top, the next ones under it, dimmer the further away they are;
    when the stage moves on, the top one slides up and out and the rest follow */
 .ag-cats{order:-1; display:flex; flex-direction:column; width:24rem; max-width:100%; position:relative; z-index:1}
-.ag-cat-tabs{display:flex; gap:28px; margin-bottom:12px}
+.ag-cat-tabs{display:flex; align-items:flex-end; gap:28px; margin-bottom:12px}
 .ag-cat{transition:opacity .4s}
 .ag-cats[data-focus="mac"] .ag-cat[data-cat="phone"],.ag-cats[data-focus="phone"] .ag-cat[data-cat="mac"]{opacity:.38}
 .ag-cats[data-focus] .ag-cat:hover{opacity:1}
@@ -512,8 +512,8 @@ p { margin: 0; }
    front out and back in, and flips data-front while it's clear of the other */
 .ag-stage[data-front="mac"] .ag-phone{transform:translate(-7.72%, -4.49%) translateZ(-1.5em) rotateY(5deg) scale(1.0759)}
 .ag-stage[data-focus="phone"] .ag-mac::after,.ag-stage[data-focus="mac"] .ag-phone::after{opacity:.68}
-/* Kinetic Mono's axolotl, centred over the list; it changes with the step */
-.ag-cats-mascot{align-self:center; position:relative; width:64px; height:64px; margin-bottom:16px}
+/* Kinetic Mono's axolotl, at the right end of the On Mac / On iPhone row; it changes with the step */
+.ag-cats-mascot{margin-left:auto; position:relative; width:64px; height:64px; margin-bottom:2px}
 .ag-cats-mascot img{position:relative; z-index:1; display:block; width:64px; height:64px; object-fit:contain}
 /* the shadow it stands on */
 .ag-cats-mascot::after{content:""; position:absolute; left:50%; bottom:-5px; width:58px; height:13px; transform:translateX(-50%); border-radius:50%;
@@ -1030,10 +1030,10 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
           </div>
         </div>
         <div class="ag-cats" id="ag-cats" role="group" aria-label="The loop, step by step">
-          <div class="ag-cats-mascot"><img id="ag-mascot" alt="" hidden></div>
           <div class="ag-cat-tabs">
             <div class="ag-cat" data-cat="mac"><button class="ag-cat-h" type="button" aria-pressed="false">On Mac</button></div>
             <div class="ag-cat" data-cat="phone"><button class="ag-cat-h" type="button" aria-pressed="false">On iPhone</button></div>
+            <div class="ag-cats-mascot"><img id="ag-mascot" alt="" hidden></div>
           </div>
           <div class="ag-car" id="ag-car">
             <ol class="ag-car-track">
