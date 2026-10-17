@@ -328,8 +328,18 @@ p { margin: 0; }
 /* no box behind the buttons, so the outlined one needs its own fill to keep the field out */
 .hero-cta .btn:not(.primary) { background: var(--paper); }
 .hero-cta .btn:not(.primary):hover { background: var(--ink); }
+/* phones and narrow windows: the copy starts right under the nav, over the
+   field (no clear band above it), with tighter gaps and slightly smaller
+   description and bullets, so the hero and the skin strip fit the first
+   screen of a phone. The field script tightens the boxes to match */
 @media (max-width: 899px) {
-  .hero-in { height: auto; align-items: flex-end; padding-top: 310px; }
+  .hero-in { height: auto; align-items: flex-start; padding-block: 20px 12px; }
+  .hero .lede, .hero-points, .hero-cta { margin-top: 28px; }
+  .hero .lede { font-size: 14px; }
+  .hero-points { font-size: 15px; }
+  /* both buttons on one row */
+  .hero-cta { gap: 10px; }
+  .hero-cta .btn { padding-inline: 14px; }
 }
 
 /* ---------- spinners and traces (skins, why) ---------- */
@@ -1715,7 +1725,9 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
       blocks.forEach(function (el) { el.style.transform = ''; });
       // Sideways, the field stops about G px from the ink: each edge snaps to
       // the nearest column, so that gap ("side") lands within half a column.
-      var G = 14, B = [];
+      // narrow (the CSS's 899px): smaller gaps all round, so the hero is shorter
+      var narrow = window.matchMedia('(max-width: 899px)').matches;
+      var G = narrow ? 10 : 14, B = [];
       blocks.forEach(function (el) {
         var r = hug(el);
         if (!r || !r.width) return;
@@ -1738,8 +1750,9 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
       var g0 = (n * chh - h0.h) / 2, k = Math.ceil((h0.y0 - g0) / chh);
       var place = [{ t: k * chh + g0, z: { r0: k, r1: k + n - 1 } }];
       var best = null;
-      for (var D = 30; D <= 60; D += 0.5) {
-        var y = place[0].t + h0.h, prev = place[0].z.r1, err = Math.abs(D - 44) * 0.05, list = [], ok = true;
+      var D0 = narrow ? 20 : 30, D1 = narrow ? 44 : 60, DT = narrow ? 28 : 44;
+      for (var D = D0; D <= D1; D += 0.5) {
+        var y = place[0].t + h0.h, prev = place[0].z.r1, err = Math.abs(D - DT) * 0.05, list = [], ok = true;
         for (var i = 1; i < B.length; i++) {
           var t = y + D, zz = rowsAt(B[i], t);
           if (zz.r0 <= prev + 1) { ok = false; break; }
@@ -1790,6 +1803,7 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
       });
       qz = rowsZ;
     }
+    var artUnder = false;
     function inQuiet(c, r) {
       for (var z = 0; z < qz.length; z++) { var q = qz[z]; if (c >= q.c0 && c <= q.c1 && r >= q.r0 && r <= q.r1) return true; }
       return false;
@@ -1800,6 +1814,7 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
       dpr = Math.min(2, window.devicePixelRatio || 1);
       cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
       fs = W < 600 ? 12 : 14;
+      artUnder = W < 900;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.font = '500 ' + fs + 'px "JetBrains Mono", ui-monospace, Menlo, monospace';
       ctx.textBaseline = 'top';
@@ -1870,7 +1885,8 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
         var I = v[i] + boost * 0.9;
         if (I > 1) I = 1;
         var inQ = inQuiet(c, r);
-        if (inQ && !dc) I *= 0.13;
+        // the axolotl is dimmed in the boxes too where it sits behind the copy (narrow)
+        if (inQ && (!dc || artUnder)) I *= 0.13;
         if (I < 0.07) continue;
         var colr, ch;
         if (!dc) {
