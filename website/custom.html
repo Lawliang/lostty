@@ -338,10 +338,10 @@ p { margin: 0; }
 .hero-points .pt-mark { color: var(--magenta-ink); }
 .hero-cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 40px; }
 /* hero buttons round into full pills on hover and keyboard focus */
-.hero-cta .btn, .dl-card .btn { transition: border-radius .35s cubic-bezier(.3, .7, .2, 1), transform .15s, background-color .15s, color .15s; }
+.hero-cta .btn, .dl-card .btn, .st-actions .btn { transition: border-radius .35s cubic-bezier(.3, .7, .2, 1), transform .15s, background-color .15s, color .15s; }
 /* just over half the button height: a full pill, without a long dead stretch
    (999px would spend most of the way back above the visible maximum) */
-.hero-cta .btn:hover, .hero-cta .btn:focus-visible { border-radius: 24px; }
+.hero-cta .btn:hover, .hero-cta .btn:focus-visible, .st-actions .btn.primary:hover, .st-actions .btn.primary:focus-visible { border-radius: 24px; }
 .dl-card .btn:hover, .dl-card .btn:focus-visible { border-radius: 20px; }
 /* a button for something not out yet (the iPhone app on TestFlight): looks like a button, does nothing */
 .btn.soon, .btn.soon:hover { cursor: default; background: color-mix(in srgb, var(--ink) 10%, var(--paper)); border-color: transparent; color: var(--ink-2); border-radius: 4px; }
@@ -912,8 +912,10 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
 /* Aurora's type in the card: Onest for the text and buttons (600 15px, 13px
    corners); the terminal and file names stay in mono */
 .inst-card { font-family: "Onest", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-.inst-card .btn { font: 600 15px/1 "Onest", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; padding: 15px 20px; border-radius: 13px; }
-.inst-card .btn.soon { border-radius: 13px; }
+.inst-card .setup-gh .btn { font: 600 15px/1 "Onest", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; padding: 15px 20px; border-radius: 13px; }
+/* the quick setup's buttons are the hero's (mono, square corners, the
+   primary rounding into a pill on hover); "iOS App" keeps its grey fill */
+.st-actions .btn.soon { border-radius: 4px; }
 /* Aurora's ghost button: the glass fill and hairline, no border, a 1px lift on hover */
 .inst-card .btn.btn-ghost, .inst-card .btn.btn-ghost:hover { border: 0; color: var(--ink); background: var(--g-fill); transition: transform .25s cubic-bezier(.22, .8, .2, 1); }
 .inst-card .btn.btn-ghost:hover { transform: translateY(-1px); }
@@ -1327,7 +1329,7 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
             <div class="st-title">
               <h2 class="st-line"><span class="st-n" aria-hidden="true">1</span>Download</h2>
               <div class="st-actions">
-                <a class="btn primary" href="#download">Download for Mac</a>
+                <a class="btn primary" href="#download"><svg class="btn-ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="11" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M2 19h20" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>Download for Mac</a>
                 <span class="btn soon" aria-disabled="true">iOS App - in progress</span>
               </div>
               <h2 class="st-line"><span class="st-n" aria-hidden="true">2</span>Pair devices with</h2>
