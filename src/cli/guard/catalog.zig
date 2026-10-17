@@ -650,7 +650,11 @@ fn push(ctx: Ctx, probe: anytype, rest: []const shell.Word) Error!?Finding {
     if (eff.push == .all) return finding(.leaving, if (forced) "git push --force overwrites the remote" else "git push sends commits off this Mac");
     // push = protected: only force, tags, deletes, and protected branches.
     if (forced) return finding(.leaving, "git push --force overwrites the remote");
-    if (has(rest, "--tags") or has(rest, "--delete") or has(rest, "--prune") or hasShort(rest, 'd')) return finding(.leaving, "pushes tags or deletes on the remote");
+    if (has(rest, "--tags") or has(rest, "--follow-tags") or has(rest, "--delete") or has(rest, "--prune") or hasShort(rest, 'd')) return finding(.leaving, "pushes tags or deletes on the remote");
+    if (has(rest, "--all") or has(rest, "--branches")) return finding(.leaving, "pushes every branch, main included");
+    if (ops.len >= 2) for (ops[1..]) |w| if (!w.dynamic and std.mem.indexOfScalar(u8, w.text, '*') != null) return finding(.leaving, "pushes the branches a pattern matches");
+    // Without a refspec, `push.default = matching` pushes every branch the remote also has.
+    if (ops.len < 2) if (root) |r| if (probe.pushesMatching(r)) return finding(.leaving, "pushes every branch, main included");
     if (ops.len >= 2) {
         // `HEAD` and `@` name the current branch; look it up once per command.
         var head: ?[]const u8 = null;
@@ -705,6 +709,8 @@ const Fake = struct {
     only_here: bool = false,
     pushed: bool = false,
     git_fails: bool = false,
+    /// `push.default` is `matching`.
+    matching: bool = false,
 
     pub fn repoRoot(self: Fake, cwd: []const u8) ?[]const u8 {
         const r = self.root orelse return null;
@@ -731,6 +737,9 @@ const Fake = struct {
     }
     pub fn headPushed(self: Fake, _: []const u8) bool {
         return self.pushed;
+    }
+    pub fn pushesMatching(self: Fake, _: []const u8) bool {
+        return self.matching;
     }
 };
 
@@ -920,6 +929,9 @@ const NoGit = struct {
     pub fn headPushed(_: NoGit, _: []const u8) bool {
         @panic("harmless call asked git");
     }
+    pub fn pushesMatching(_: NoGit, _: []const u8) bool {
+        @panic("harmless call asked git");
+    }
 };
 
 test "guard catalog: harmless calls never touch git" {
@@ -1060,6 +1072,34 @@ test "guard catalog: refspecs that delete or tag ask under the default" {
     }
     for ([_][]const u8{ "git push origin feature", "git push origin HEAD:feature", "git push -u origin feature" }) |src| {
         try std.testing.expectEqual(@as(?Group, null), try group(a, .{}, src));
+    }
+}
+
+test "guard catalog: pushes that send many branches ask" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    for ([_][]const u8{
+        "git push --all origin",                       "git push --branches origin",
+        "git push origin 'refs/heads/*:refs/heads/*'", "git push origin 'feat/*'",
+        "git push --follow-tags origin feature",
+    }) |src| {
+        if (try group(a, .{}, src) != Group.leaving) {
+            std.debug.print("should ask: {s}\n", .{src});
+            return error.TestUnexpectedResult;
+        }
+    }
+    for ([_][]const u8{ "git push", "git push origin" }) |src| {
+        try std.testing.expectEqual(@as(?Group, .leaving), try group(a, .{ .matching = true }, src));
+        try std.testing.expectEqual(@as(?Group, null), try group(a, .{}, src));
+    }
+    try std.testing.expectEqual(@as(?Group, null), try group(a, .{ .matching = true }, "git push origin feature"));
+    const ctx: Ctx = .{ .alloc = a, .cwd = "/r", .home = "/Users/me", .tmpdir = null, .config = config.Config.parse(a,
+        \\{"push":"all"}
+    ) };
+    for ([_][]const u8{ "git push --all origin", "git push origin 'feat/*'", "git push --follow-tags origin feature", "git push" }) |src| {
+        const cmds = try shell.parse(a, src, "/Users/me");
+        try std.testing.expect((try classify(ctx, Fake{}, cmds[0])) != null);
     }
 }
 

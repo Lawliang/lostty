@@ -296,6 +296,9 @@ const Fake = struct {
     pub fn headPushed(_: Fake, _: []const u8) bool {
         return false;
     }
+    pub fn pushesMatching(_: Fake, _: []const u8) bool {
+        return false;
+    }
 };
 
 fn env(a: Allocator) Env {
@@ -532,6 +535,9 @@ const NoGit = struct {
     }
     pub fn headPushed(_: NoGit, _: []const u8) bool {
         @panic("harmless call started git: headPushed");
+    }
+    pub fn pushesMatching(_: NoGit, _: []const u8) bool {
+        @panic("harmless call started git: pushesMatching");
     }
 };
 

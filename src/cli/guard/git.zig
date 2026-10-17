@@ -83,6 +83,12 @@ pub const Live = struct {
         return true;
     }
 
+    /// `push.default` is `matching`: a bare push sends every branch the remote has too.
+    pub fn pushesMatching(self: Live, root: []const u8) bool {
+        const out = self.git(root, &.{ "config", "--get", "push.default" }) orelse return false;
+        return std.mem.eql(u8, std.mem.trim(u8, out, " \n"), "matching");
+    }
+
     pub fn headPushed(self: Live, root: []const u8) bool {
         const out = self.git(root, &.{ "branch", "-r", "--contains", "HEAD" }) orelse return false;
         return std.mem.trim(u8, out, " \n").len > 0;
