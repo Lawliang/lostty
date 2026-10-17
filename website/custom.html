@@ -954,7 +954,9 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
 /* only the one not picked lights up on hover; the picked one keeps its colour */
 .setup-tab[aria-selected="false"]:hover { opacity: 1; color: var(--magenta-ink); }
 @media (max-width: 1000px) {
-  .setup-tabs { display: flex; gap: 28px; grid-column: 1 / -1; margin-bottom: -8px; }
+  /* the two tabs split the row, each centred in its half, with a divider under them */
+  .setup-tabs { display: grid; grid-template-columns: 1fr 1fr; grid-column: 1 / -1; padding-bottom: 12px; border-bottom: 1px solid var(--g-hair); }
+  .setup-tab { width: 100%; text-align: center; }
   .setup .setup-quick > .setup-k, .setup .setup-gh > .setup-k { display: none; }
   .setup[data-pane="quick"] .setup-gh, .setup[data-pane="cli"] .setup-quick { display: none; }
 }
