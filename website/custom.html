@@ -896,6 +896,19 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
 .links { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 26px; }
 
 /* ---------- install ---------- */
+/* the whole section sits in Aurora Glass's glass card (its .glass: a frosted
+   fill, 22px corners and a hairline that shades from white to magenta) */
+.glass { --g-fill: rgba(255, 255, 255, .52); --g-hair: rgba(70, 20, 70, .11); --g-hair-hi: #fff; --g-hair-tint: rgba(229, 25, 156, .38);
+  position: relative; background: var(--g-fill); border-radius: 22px;
+  -webkit-backdrop-filter: blur(22px) saturate(150%); backdrop-filter: blur(22px) saturate(150%); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .glass { --g-fill: rgba(24, 18, 32, .5); --g-hair: rgba(255, 255, 255, .075); --g-hair-hi: rgba(255, 255, 255, .28); --g-hair-tint: rgba(229, 25, 156, .5); }
+}
+:root[data-theme="dark"] .glass { --g-fill: rgba(24, 18, 32, .5); --g-hair: rgba(255, 255, 255, .075); --g-hair-hi: rgba(255, 255, 255, .28); --g-hair-tint: rgba(229, 25, 156, .5); }
+.glass::before { content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px; pointer-events: none;
+  background: linear-gradient(150deg, var(--g-hair-hi), var(--g-hair) 32%, var(--g-hair) 68%, var(--g-hair-tint));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; }
+.inst-card { padding: clamp(24px, 4vw, 52px); }
 /* one column, centred as a block; its text stays left-aligned */
 .inst { max-width: 40rem; margin-inline: auto; }
 #install .sec-head { text-align: center; }
@@ -1270,26 +1283,29 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
   <!-- INSTALL -->
   <section class="sec" id="install" style="border-top:0">
     <div class="wrap">
-      <header class="sec-head">
-        <div class="st-title">
-          <h2 class="st-line"><span class="st-n" aria-hidden="true">1</span>Download</h2>
-          <div class="st-actions">
-            <a class="btn primary" href="#download">Download for Mac</a>
-            <span class="btn soon" aria-disabled="true">TestFlight: coming soon</span>
+      <!-- in Aurora Glass's glass card, like its own download section -->
+      <div class="inst-card glass">
+        <header class="sec-head">
+          <div class="st-title">
+            <h2 class="st-line"><span class="st-n" aria-hidden="true">1</span>Download</h2>
+            <div class="st-actions">
+              <a class="btn primary" href="#download">Download for Mac</a>
+              <span class="btn soon" aria-disabled="true">TestFlight: coming soon</span>
+            </div>
+            <h2 class="st-line"><span class="st-n" aria-hidden="true">2</span>Pair</h2>
           </div>
-          <h2 class="st-line"><span class="st-n" aria-hidden="true">2</span>Pair</h2>
-        </div>
-      </header>
-      <div class="inst">
-        <div>
-          <h3 style="margin-bottom:12px">Then</h3>
-          <ol class="next">
-            <li><span>Download Lostty for Mac, drag it to <b>Applications</b> and open it.</span></li>
-            <li><span>Install the iPhone app from TestFlight (coming soon).</span></li>
-            <li><span>Open <b>Lostty → Phone Access… → Pair a Phone…</b> and scan the code with the phone.</span></li>
-          </ol>
-          <div class="links">
-            <a class="btn" href="#docs">Read Getting Started</a>
+        </header>
+        <div class="inst">
+          <div>
+            <h3 style="margin-bottom:12px">Then</h3>
+            <ol class="next">
+              <li><span>Download Lostty for Mac, drag it to <b>Applications</b> and open it.</span></li>
+              <li><span>Install the iPhone app from TestFlight (coming soon).</span></li>
+              <li><span>Open <b>Lostty → Phone Access… → Pair a Phone…</b> and scan the code with the phone.</span></li>
+            </ol>
+            <div class="links">
+              <a class="btn" href="#docs">Read Getting Started</a>
+            </div>
           </div>
         </div>
       </div>
