@@ -491,6 +491,8 @@ p { margin: 0; }
 .ag-cat-h{display:block; justify-self:start; border:0; background:none; padding:0 0 4px; margin:0; cursor:pointer; color:var(--fg); font:600 19px/1.4 var(--font-ui); letter-spacing:-.01em}
 .ag-cat-h:hover{color:var(--magenta-ink)}
 .ag-cat-h[aria-pressed="true"]{color:var(--magenta-ink)}
+/* tapping a device picks its list */
+.ag-mac,.ag-phone{cursor:pointer}
 /* the device that steps back fades under a veil of the page colour: opacity or
    a filter would pull it out of the 3D scene and let the other show through */
 .ag-mac::after,.ag-phone::after{content:""; position:absolute; inset:0; border-radius:inherit; background:var(--paper); opacity:0; transition:opacity .5s; pointer-events:none; z-index:6}
@@ -2261,13 +2263,20 @@ void main(){
       timer = setTimeout(tick, DUR[i]);
       i = (i + 1) % DUR.length;
     }
+    function pick(cat) {
+      setFocus(cat);
+      if (RM) { clearTimeout(timer); timer = setTimeout(() => setFocus(''), DUR.reduce((a, b) => a + b)); return; }
+      left = DUR.length - 1;
+    }
     $$('.ag-cat', cats).forEach(c => c.querySelector('.ag-cat-h').addEventListener('click', () => {
       // tapping the lit one again puts both back
       if (focus === c.dataset.cat) { if (RM) clearTimeout(timer); setFocus(''); return; }
-      setFocus(c.dataset.cat);
-      if (RM) { clearTimeout(timer); timer = setTimeout(() => setFocus(''), DUR.reduce((a, b) => a + b)); return; }
-      left = DUR.length - 1;
+      pick(c.dataset.cat);
     }));
+    // tapping a device picks its list too; tapping the one already picked
+    // keeps it picked for another full loop
+    $('.ag-mac', stage).addEventListener('click', () => pick('mac'));
+    $('.ag-phone', stage).addEventListener('click', () => pick('phone'));
     watch(stage);
     if (RM) setStep(1);
     else tick();
