@@ -632,6 +632,8 @@ p { margin: 0; }
   .skstrip h2{font-size:calc(min(644.8px, 99.2cqi) / 7.276)}
   .skstrip-head h2,.skstrip-foot h2{padding-inline:0}
 }
+/* on phones, the size of the other section headings instead */
+@container (max-width:640px){ .skstrip h2{font-size:clamp(32px, 5vw, 60px)} }
 .skstrip-run{overflow:hidden; padding-block:8px;
   -webkit-mask-image:linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent); mask-image:linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent)}
 /* the script moves the track: it slows to a stop while the pointer (or focus)
