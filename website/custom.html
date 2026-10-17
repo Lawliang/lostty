@@ -1120,7 +1120,10 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
 .sup-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 40px; text-align: left; }
 @media (max-width: 720px) { .sup-grid { grid-template-columns: minmax(0, 1fr); } }
 .sup-block { padding: 22px; border-radius: 16px; background: color-mix(in srgb, var(--ink) 4%, transparent); border: 1px solid var(--g-hair); }
-.sup-block h2 { font-size: 19px; line-height: 1.3; letter-spacing: -.015em; margin: 12px 0 8px; max-width: none; }
+/* the icon with its title beside it */
+.sup-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.sup-block h2 { font-size: 19px; line-height: 1.3; letter-spacing: -.015em; margin: 0; max-width: none; }
+.sup-ic { flex: none; }
 .sup-block p { font-size: 15px; line-height: 1.65; color: var(--ink-2); }
 .sup-block p + p { margin-top: 10px; }
 .sup-ic { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 10px; color: var(--magenta-ink); background: color-mix(in srgb, var(--magenta) 12%, transparent); }
@@ -1505,14 +1508,12 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
         </div>
         <div class="sup-grid">
           <div class="sup-block">
-            <span class="sup-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 7.5v5.5M12 16.4v.1" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span>
-            <h2>Not affiliated with anyone</h2>
+            <div class="sup-head"><span class="sup-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 7.5v5.5M12 16.4v.1" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span><h2>Not affiliated with anyone</h2></div>
             <p>Lostty isn't affiliated with, sponsored by or funded by any company. There are no ads, no paid tiers and no investors.</p>
             <p>That also means it makes no money on its own. It's a passion project, kept going by one person.</p>
           </div>
           <div class="sup-block">
-            <span class="sup-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></span>
-            <h2>If you'd like to chip in</h2>
+            <div class="sup-head"><span class="sup-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></span><h2>If you'd like to chip in</h2></div>
             <p>If Lostty has given you a few more walks outside and you'd like to support it, I'd really appreciate it. It helps keep the lights on, like the Apple Developer membership the iPhone app needs for TestFlight.</p>
             <p>No pressure at all. Using it, telling a friend, or filing a good bug report helps too.</p>
           </div>
