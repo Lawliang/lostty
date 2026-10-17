@@ -632,6 +632,14 @@ p { margin: 0; }
   .skstrip h2{font-size:calc(min(644.8px, 99.2cqi) / 7.276)}
   .skstrip-head h2,.skstrip-foot h2{padding-inline:0}
 }
+/* hidden until the strip is hovered or a card is tapped (.show, set by the
+   script), then they slide in, the top one from the left and the bottom one
+   from the right, and go again 8s after the last of either. They keep their
+   space, so nothing moves when they come and go */
+.skstrip h2{transition:opacity .5s, transform .7s cubic-bezier(.22, .8, .2, 1)}
+.skstrip:not(.show) .skstrip-head h2{opacity:0; transform:translateX(-48px)}
+.skstrip:not(.show) .skstrip-foot h2{transform:translateX(48px)}
+@media (prefers-reduced-motion: reduce){ .skstrip:not(.show) .skstrip-head h2,.skstrip:not(.show) .skstrip-foot h2{transform:none} }
 /* on phones, the size of the other section headings instead */
 @container (max-width:640px){ .skstrip h2{font-size:clamp(32px, 5vw, 60px)} }
 /* room above and below for the cards' tilt */
@@ -1177,9 +1185,9 @@ code { font-family: var(--font-mono); font-size: .92em; background: var(--paper-
 
   <!-- SKIN STRIP: cards drift right to left; tapping one re-skins the site and the demo's Mac -->
   <section class="skstrip" id="skin-strip">
-    <div class="wrap skstrip-head"><h2 data-decode>Unlock new skins...</h2></div>
+    <div class="wrap skstrip-head"><h2>Unlock new skins...</h2></div>
     <div class="skstrip-run"><div class="skstrip-track" id="skstrip-track"></div></div>
-    <div class="wrap skstrip-head skstrip-foot"><h2 data-decode>...by spending tokens.</h2></div>
+    <div class="wrap skstrip-head skstrip-foot"><h2>...by spending tokens.</h2></div>
   </section>
 
   <!-- INSTALL -->
@@ -2359,9 +2367,17 @@ void main(){
       themeChanged();
       document.dispatchEvent(new CustomEvent('lostty-skin'));
     }
+    // the titles: shown while the pointer is on the strip and when a card is
+    // tapped, hidden again 8s after the last of either
+    var strip = $('#skin-strip'), titleT = 0, onStrip = false, SHOW_MS = 8000;
+    function showTitles() {
+      strip.classList.add('show');
+      clearTimeout(titleT);
+      if (!onStrip) titleT = setTimeout(function () { strip.classList.remove('show'); }, SHOW_MS);
+    }
     track.addEventListener('click', function (e) {
       var c = e.target.closest('.skc');
-      if (c) wear(c.getAttribute('data-id'));
+      if (c) { wear(c.getAttribute('data-id')); showTitles(); }
     });
 
     // Skin Shifter's tilt: the card leans toward the pointer and the foil and
@@ -2405,8 +2421,8 @@ void main(){
     function setHold(n) { hold = n; go(); }
     var hovering = false, focused = false;
     function sync() { setHold(hovering || focused ? 1 : 0); }
-    run.addEventListener('pointerenter', function (e) { if (e.pointerType === 'mouse') { hovering = true; sync(); } });
-    run.addEventListener('pointerleave', function (e) { if (e.pointerType === 'mouse') { hovering = false; sync(); } });
+    run.addEventListener('pointerenter', function (e) { if (e.pointerType === 'mouse') { hovering = true; sync(); onStrip = true; showTitles(); } });
+    run.addEventListener('pointerleave', function (e) { if (e.pointerType === 'mouse') { hovering = false; sync(); onStrip = false; showTitles(); } });
     // keyboard focus only: a mouse click leaves focus on the card, which mustn't keep it stopped
     run.addEventListener('focusin', function (e) { var k = false; try { k = e.target.matches(':focus-visible'); } catch (_) {} if (k) { focused = true; sync(); } });
     run.addEventListener('focusout', function () { focused = false; sync(); });
