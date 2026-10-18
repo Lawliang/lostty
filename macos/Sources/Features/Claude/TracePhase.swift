@@ -10,6 +10,11 @@ enum TracePhase: Equatable {
 
     var isOff: Bool { self == .off }
 
+    /// Claude finished its turn; only its subagents or shells still work.
+    var subagentsOnly: Bool {
+        if case .racing(_, true) = self { true } else { false }
+    }
+
     func applying(_ state: ClaudeState, now: Date) -> TracePhase {
         switch (state, self) {
         case (.busy, .off): .racing(since: now)

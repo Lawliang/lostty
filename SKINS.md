@@ -132,6 +132,19 @@ A skin with the same name as a preset keeps the preset's trace unless it
 sets `trace`. `[defaults] trace = false` turns traces off. With Reduce
 Motion on, the border glows gently instead of racing.
 
+**Lostty → Claude Trace Style → Window Light** swaps the pane traces for
+the website's light: while Claude or Codex works in any pane of a window,
+one thin light circles that whole window's edge (title bar included), a
+lap every 3.2 seconds, its tail running from the skin's second trace color
+into its first and a white-hot tip, with a soft glow just inside the edge.
+It takes the focused pane's skin when that pane is working, otherwise
+another working pane's; panes without a skin give it the website's pink
+and cyan. A pane whose trace is off doesn't light it. A pane where only
+subagents or background shells still work keeps its bottom-edge glow,
+and the window light goes out. Claude Trace Path doesn't apply (it's
+greyed out), the Quick Terminal keeps its pane traces, and with Reduce
+Motion the window's edge breathes instead. **Skin Traces** goes back.
+
 ## Guard
 
 The guard is part of Lostty's agent coordination, which is off unless

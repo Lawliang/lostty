@@ -10,7 +10,7 @@ enum ClaudeHooksUI {
         let item = NSMenuItem(title: "Claude Integration…", action: #selector(MenuTarget.open(_:)), keyEquivalent: "")
         item.target = MenuTarget.shared
         menu.insertItem(item, at: menu.index(of: anchor) + 1)
-        TraceRouteMenu.install(after: item)
+        TraceRouteMenu.install(after: TraceStyleMenu.install(after: item) ?? item)
     }
 
     /// Install / Not now / Show changes.

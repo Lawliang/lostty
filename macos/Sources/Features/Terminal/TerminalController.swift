@@ -1047,6 +1047,7 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
             TerminalView(
                 ghostty: ghostty, viewModel: self, delegate: self,
                 extensionSidebar: (window as? TerminalWindow)?.extensionSidebarModel)
+                .environment(\.hostsWindowTrace, window is TerminalWindow)
         }
 
         // Set the initial content size on the container so that
@@ -1056,6 +1057,9 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
         container.initialContentSize = focusedSurface?.initialSize
 
         window.contentView = container
+
+        // Lostty: the Window Light Claude trace, over the whole window.
+        if let window = window as? TerminalWindow { WindowTraceHost.attach(to: window, controller: self) }
 
         // If we have a default size, we want to apply it.
         if let defaultSize {
