@@ -29,18 +29,8 @@ struct WindowTraceTests {
         #expect(lighting([c: .racing(since: since)])?.pane == c)
     }
 
-    @Test func onlySubagentsWorkingKeepsToTheBottom() {
-        let lit = lighting([b: .racing(since: since, subagents: true)])
-        #expect(lit?.pane == b)
-        #expect(lit?.circles == false)
-    }
-
-    @Test func claudeItselfWorkingBeatsSubagents() {
-        let phases: [UUID: TracePhase] = [a: .racing(since: since, subagents: true), c: .racing(since: since)]
-        // Even with the subagents' pane focused.
-        let lit = lighting(focused: a, phases)
-        #expect(lit?.pane == c)
-        #expect(lit?.circles == true)
+    @Test func onlySubagentsWorkingLeavesItDark() {
+        #expect(lighting([b: .racing(since: since, subagents: true)]) == nil)
     }
 
     @Test func theFocusedWorkingPaneWins() {
@@ -52,24 +42,16 @@ struct WindowTraceTests {
         #expect(lighting(focused: UUID(), phases)?.pane == a)
     }
 
-    @Test func aPaneWithNoSkinGivesWindowLightTheWebsitesPinkAndCyan() throws {
-        let lit = try #require(lighting([a: .racing(since: since)]))
-        #expect(lit.lightColors.primary == RGB(hex: "#ff3df2")!)
-        #expect(lit.lightColors.secondary == RGB(hex: "#28e7ff")!)
-        // Skin Traces keeps the unskinned hologram beam.
-        #expect(lit.trace == ResolvedTrace.resolve(skin: nil, enabled: true))
+    @Test func aPaneWithNoSkinGetsTheWebsitesPinkAndCyan() {
+        let lit = lighting([a: .racing(since: since)])
+        #expect(lit?.primary == RGB(hex: "#ff3df2")!)
+        #expect(lit?.secondary == RGB(hex: "#28e7ff")!)
     }
 
-    @Test func aSkinnedPaneUsesItsTraceColors() throws {
-        let lit = try #require(lighting([b: .racing(since: since)], skins: [b: skin("#46a2ff", "#ffd23d")]))
-        #expect(lit.lightColors.primary == RGB(hex: "#46a2ff")!)
-        #expect(lit.lightColors.secondary == RGB(hex: "#ffd23d")!)
-        #expect(lit.trace.color == RGB(hex: "#46a2ff")!)
-    }
-
-    @Test func thePanesPhaseDrivesTheSkinTrace() {
-        let started = Date(timeIntervalSinceReferenceDate: 42)
-        #expect(lighting([b: .racing(since: started)])?.phase == .racing(since: started))
+    @Test func aSkinnedPaneUsesItsTraceColors() {
+        let lit = lighting([b: .racing(since: since)], skins: [b: skin("#46a2ff", "#ffd23d")])
+        #expect(lit?.primary == RGB(hex: "#46a2ff")!)
+        #expect(lit?.secondary == RGB(hex: "#ffd23d")!)
     }
 
     @Test func panesWithTracesOffDontLightIt() {
@@ -93,42 +75,6 @@ struct WindowTraceTests {
         #expect(stops.map { Double($0.location) } == WindowTrace.stopLocations)
         #expect(stops[3].color == TraceColors.color(WindowTrace.websitePink))
         #expect(stops[4].color == .white)
-    }
-}
-
-struct WindowCornerTests {
-    private let rect = CGRect(x: 0, y: 0, width: 200, height: 100)
-
-    @Test func pointsAlongTheSidesStay() {
-        for p in [CGPoint(x: 100, y: 0), CGPoint(x: 0, y: 50), CGPoint(x: 200, y: 20), CGPoint(x: 16, y: 100)] {
-            #expect(EdgePath.bend(p, in: rect, radius: 16) == p)
-        }
-    }
-
-    @Test func cornersBendOntoTheArc() {
-        let bent = EdgePath.bend(CGPoint(x: 200, y: 0), in: rect, radius: 16)
-        let center = CGPoint(x: 184, y: 16)
-        #expect(abs(hypot(bent.x - center.x, bent.y - center.y) - 16) < 1e-9)
-        #expect(abs(bent.x - (184 + 16 / 2.squareRoot())) < 1e-9)
-        // Along the top, inside the corner's reach.
-        let near = EdgePath.bend(CGPoint(x: 195, y: 0), in: rect, radius: 16)
-        #expect(abs(hypot(near.x - center.x, near.y - center.y) - 16) < 1e-9)
-    }
-
-    @Test func squareCornersAreLeftAlone() {
-        #expect(EdgePath.bend(CGPoint(x: 0, y: 0), in: rect, radius: 0) == .zero)
-    }
-
-    @Test func aRoundedPathNeverLeavesTheWindow() {
-        let path = EdgePath(runs: [
-            .init(from: CGPoint(x: 0, y: 0), to: CGPoint(x: 200, y: 0), tangent: CGVector(dx: 1, dy: 0), normal: CGVector(dx: 0, dy: 1)),
-            .init(from: CGPoint(x: 200, y: 0), to: CGPoint(x: 200, y: 100), tangent: CGVector(dx: 0, dy: 1), normal: CGVector(dx: -1, dy: 0)),
-        ], rounding: (rect, 16))
-        for i in 0...100 {
-            let p = path.sample(at: Double(i) / 100).point
-            let center = CGPoint(x: min(max(p.x, 16), 184), y: min(max(p.y, 16), 84))
-            #expect(hypot(p.x - center.x, p.y - center.y) <= 16 + 1e-9)
-        }
     }
 }
 

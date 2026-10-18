@@ -1058,7 +1058,7 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
 
         window.contentView = container
 
-        // Lostty: the Claude trace, round the whole window.
+        // Lostty: the Window Light Claude trace, over the whole window.
         if let window = window as? TerminalWindow { WindowTraceHost.attach(to: window, controller: self) }
 
         // If we have a default size, we want to apply it.

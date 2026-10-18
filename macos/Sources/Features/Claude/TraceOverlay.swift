@@ -2,21 +2,23 @@
 import AppKit
 import SwiftUI
 
-/// The Claude trace for one pane (spec §4), where its window has no
-/// window trace (the Quick Terminal): terminal windows trace their whole
-/// edge instead (WindowTrace). Lives in SurfaceWrapper's ZStack; draws
-/// nothing (and is not in the tree) while the pane is idle.
+/// The Claude trace for one pane (spec §4). Lives in SurfaceWrapper's
+/// ZStack; draws nothing (and is not in the tree) while the pane is idle.
 struct ClaudeTraceLayer: View {
     let surfaceID: UUID
     @ObservedObject private var runtime = ClaudeRuntime.shared
     @ObservedObject private var skins = SkinsRuntime.shared.manager
     @Environment(\.hostsWindowTrace) private var hostsWindowTrace
+    @AppStorage(TraceStyle.defaultsKey, store: .ghostty) private var style = TraceStyle.initial
 
     var body: some View {
         let phase = runtime.phase(surfaceID)
-        if !hostsWindowTrace, !phase.isOff,
+        // In Window Light the window's light stands for Claude working;
+        // the pane keeps only its subagents' bottom glow.
+        let bottomOnly = hostsWindowTrace && style == .window
+        if !phase.isOff, !bottomOnly || phase.subagentsOnly,
            let trace = ResolvedTrace.resolve(skin: skins.effectiveSkin(surfaceID), enabled: skins.config.trace) {
-            TraceOverlay(phase: phase, trace: trace)
+            TraceOverlay(phase: phase, trace: trace, bottomOnly: bottomOnly)
                 .allowsHitTesting(false)
         }
     }
@@ -29,8 +31,6 @@ struct TraceOverlay: View {
     let trace: ResolvedTrace
     /// Only the subagents' bottom glow, without the racing head.
     var bottomOnly = false
-    /// A window's corner radius: the course bends round its corners.
-    var cornerRadius: CGFloat = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(TraceRoute.defaultsKey, store: .ghostty) private var route = TraceRoute.initial
     @State private var windowVisible = true
@@ -60,8 +60,7 @@ struct TraceOverlay: View {
                 if reduceMotion {
                     let intensity = TraceFrame.intensity(elapsed: elapsed)
                     if subagents { Self.drawBottomGlow(in: &ctx, rect: rect, level: intensity, colors: colors) }
-                    Self.drawCalmGlow(in: &ctx, outline: course.outline(in: rect, cornerRadius: innerRadius),
-                                      intensity: intensity, time: time, colors: colors)
+                    Self.drawCalmGlow(in: &ctx, outline: course.outline(in: rect), intensity: intensity, time: time, colors: colors)
                     return
                 }
 
@@ -71,9 +70,8 @@ struct TraceOverlay: View {
                 }
                 let legSeconds = TraceFrame.legSeconds(speed: trace.speed)
                 journey.motion.advance(to: elapsed, course: course, legSeconds: legSeconds)
-                var path = journey.motion.path(in: rect, at: elapsed, legSeconds: legSeconds)
+                let path = journey.motion.path(in: rect, at: elapsed, legSeconds: legSeconds)
                 guard path.length > 0 else { return }
-                if innerRadius > 0 { path.rounding = (rect, innerRadius) }
                 // The tail is sized by the person's route, so it keeps its
                 // length on the bottom edge; early on it is only as long as
                 // the way travelled.
@@ -87,9 +85,6 @@ struct TraceOverlay: View {
         }
         .background(OcclusionProbe(visible: $windowVisible))
     }
-
-    /// The corner radius of the course, set in from the window's edge.
-    private var innerRadius: CGFloat { max(0, cornerRadius - Self.inset) }
 
     /// The pane's inside edge. Degenerate panes collapse to a point so every
     /// position stays finite.

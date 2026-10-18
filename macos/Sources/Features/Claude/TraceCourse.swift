@@ -81,11 +81,11 @@ enum TraceCourse: Equatable {
     }
 
     /// Everything the course covers, for the Reduce Motion glow.
-    func outline(in rect: CGRect, cornerRadius: CGFloat = 0) -> Path {
-        guard self != .route(.all) else { return Path(roundedRect: rect, cornerRadius: cornerRadius) }
+    func outline(in rect: CGRect) -> Path {
+        guard self != .route(.all) else { return Path(rect) }
         var path = Path()
-        path.move(to: EdgePath.bend(corners[0].point(in: rect), in: rect, radius: cornerRadius))
-        path.addLine(to: EdgePath.bend(corners[1].point(in: rect), in: rect, radius: cornerRadius))
+        path.move(to: corners[0].point(in: rect))
+        path.addLine(to: corners[1].point(in: rect))
         return path
     }
 }
