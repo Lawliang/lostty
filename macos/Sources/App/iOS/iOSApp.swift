@@ -12,6 +12,8 @@ struct Ghostty_iOSApp: App {
         if ghostty_init(UInt(CommandLine.argc), CommandLine.unsafeArgv) != GHOSTTY_SUCCESS {
             preconditionFailure("Initialize ghostty backend failed")
         }
+        // Before any terminal looks up its font.
+        BundledTerminalFonts.register()
         _ghostty_app = StateObject(wrappedValue: Ghostty.App())
     }
 

@@ -7,12 +7,14 @@ struct SettingsView: View {
     @ObservedObject var sidebar: SidebarPreferences
     @ObservedObject var observer: ObserverPreferences
     @ObservedObject var handoff: ContextHandoffPreferences
+    @ObservedObject var font: TerminalFontPreferences
     /// The Mascot section is for the beta, the only build with the mascot.
     var showsMascot = LosttyChannel.current.showsMascot
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Form {
+                TerminalFontSection(font: font)
                 Section("Sidebar") {
                     Toggle("Hide sidebar", isOn: $sidebar.autoHide)
                     Text("Click the handle on the window's right edge, or drag it left, to show it; "
@@ -57,12 +59,99 @@ struct SettingsView: View {
     }
 }
 
+/// Font, size and line spacing for every terminal, and so for Claude Code
+/// and the other agents that run in one.
+private struct TerminalFontSection: View {
+    @ObservedObject var font: TerminalFontPreferences
+    @State private var installed: [String] = []
+
+    private static let spacings: [(label: String, value: String?)] = [
+        ("Normal", nil), ("+10%", "10%"), ("+20%", "20%"), ("+30%", "30%"),
+    ]
+
+    var body: some View {
+        Section("Terminal font") {
+            Picker("Font", selection: binding(\.family)) {
+                Text("\(TerminalFontSettings.defaultFamily) (built in)").tag(String?.none)
+                if !readable.isEmpty {
+                    Divider()
+                    ForEach(readable, id: \.self) { family in
+                        let included = BundledTerminalFonts.families.contains(family)
+                        Text(included ? "\(family) (included)" : family).tag(String?.some(family))
+                    }
+                }
+                if !others.isEmpty {
+                    Divider()
+                    ForEach(others, id: \.self) { Text($0).tag(String?.some($0)) }
+                }
+            }
+            Stepper(value: sizeBinding, in: 9...32, step: 1) {
+                LabeledContent("Size", value: "\(Int(font.settings.size ?? TerminalFontSettings.defaultSize)) pt")
+            }
+            Picker("Line spacing", selection: binding(\.cellHeight)) {
+                ForEach(spacings, id: \.label) { Text($0.label).tag($0.value) }
+            }
+            .pickerStyle(.segmented)
+            Text("Applies to every open terminal right away, including Claude Code. "
+                 + "Larger sizes and a little extra line spacing help most.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            if let error = font.error {
+                Text(error).font(.caption).foregroundStyle(.red)
+            }
+        }
+        .onAppear {
+            installed = TerminalFontCatalog.installedFamilies()
+        }
+    }
+
+    /// The suggested families that are installed, then everything else.
+    /// A family set by hand that isn't installed still shows, so the picker
+    /// never loses the current choice.
+    private var readable: [String] {
+        TerminalFontCatalog.readable.filter(installed.contains)
+    }
+
+    private var others: [String] {
+        var rest = installed.filter { !TerminalFontCatalog.readable.contains($0) }
+        if let family = font.settings.family, !installed.contains(family) { rest.insert(family, at: 0) }
+        return rest
+    }
+
+    private var spacings: [(label: String, value: String?)] {
+        guard let custom = font.settings.cellHeight,
+              !Self.spacings.contains(where: { $0.value == custom }) else { return Self.spacings }
+        return Self.spacings + [(custom, custom)]
+    }
+
+    private var sizeBinding: Binding<Double> {
+        Binding(
+            get: { font.settings.size ?? TerminalFontSettings.defaultSize },
+            set: { size in
+                var settings = font.settings
+                settings.size = size == TerminalFontSettings.defaultSize ? nil : size
+                font.set(settings)
+            })
+    }
+
+    private func binding<Value>(_ keyPath: WritableKeyPath<TerminalFontSettings, Value>) -> Binding<Value> {
+        Binding(
+            get: { font.settings[keyPath: keyPath] },
+            set: { value in
+                var settings = font.settings
+                settings[keyPath: keyPath] = value
+                font.set(settings)
+            })
+    }
+}
+
 struct SettingsView_Previews: PreviewProvider {
     static var previews: some View {
         SettingsView(
             sidebar: SidebarPreferences(defaults: UserDefaults(suiteName: "preview")!),
             observer: ObserverPreferences(defaults: UserDefaults(suiteName: "preview")!),
-            handoff: ContextHandoffPreferences(defaults: UserDefaults(suiteName: "preview")!))
+            handoff: ContextHandoffPreferences(defaults: UserDefaults(suiteName: "preview")!),
+            font: TerminalFontPreferences(configURL: { nil }, reloadConfig: {}))
     }
 }
 #endif
