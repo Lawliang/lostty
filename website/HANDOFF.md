@@ -101,9 +101,20 @@ Kinetic Mono as the base (JetBrains Mono, character-grid look, light "paper term
 ## Next task
 None open. Last done (2026-10-17): the Endorse amount popup and Stripe Checkout route, live on lostty.org. `STRIPE_SECRET_KEY` is a restricted live key ("lostty.org endorse", Checkout Sessions: Write) from idfk's live Stripe account, whose public name "idfk" shows on Checkout. Checked live without paying (a cs_live_ checkout opens); the paid return was checked with the 4242 test card locally. Owner: never test with real money. A secret set with `wrangler pages secret put` from Claude's `!` gets an empty value (no prompt); pipe it in (`pbpaste | wrangler pages secret put …`), and redeploy (retry the latest deployment) for it to take effect.
 
+## Performance (2026-10-17, after a report of lag switching skins)
+Measured in Chrome with a 4× CPU slowdown. Before, the phone page was 100% busy at the skins strip (47fps) and the desktop hero ran at 48fps. Now both hold 60fps at about 70% busy. The causes and fixes:
+- **The demo's tilt** set `--px`/`--py` on `#ag-rig` every frame. A custom property restyles the whole Mac and iPhone mockup each time, and more so with a skin on, because of its `color-mix()` colours. It now sets `rig.style.transform` directly. **Don't animate custom properties on big subtrees.**
+- **The Mac's trace and bloom** (blurred conic glow) spun all the time, even while invisible. They are now `paused` except in steps 0/4/5.
+- **Frame caps:**
+  - The hero field, the skin animations and the demo loop draw at most 60fps (120Hz screens doubled the work).
+  - The hero field drops to 30fps for good once frames average over 22ms apart. Its easing is scaled by the frames skipped (`steps`), so motion keeps its speed.
+- **The field's boxes** are a per-cell `quiet` mask (`markQuiet`), not a search per cell.
+- **Tried and reverted:** stamping glyphs from a sprite atlas instead of `fillText`. It was slower in Chrome.
+- Scripts: `perf2.cjs`/`trace.cjs`/`prof.cjs` style (CDP Performance metrics plus throttling) aren't in `tools/`. Rerun the idea if it regresses.
+
 ## Settled with the owner (2026-10-15, on recommendation)
 - Kept: the docs `LOSTTY(1)` man bar, the bullets' `❯` markers, and the hero button going to the Download page.
-- The field starts even if measuring the hero boxes throws (`try { quietZone(); } catch …` in `resize`).
+- The field starts even if measuring the hero boxes throws (`try { quietZone(); } catch …` in `markQuiet`, called from `resize` and `requiet`).
 
 ## Checking changes (`website/tools/`)
 

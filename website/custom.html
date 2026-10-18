@@ -480,8 +480,7 @@ p { margin: 0; }
 /* as in Aurora: the Mac runs to the content's right edge and the iPhone hangs
    5% of the Mac's width past it, into the page margin (the section clips it) */
 .ag-stage{position:relative; perspective:146em; padding:0 0 7em 0; min-width:0}
-.ag-rig{position:relative; transform-style:preserve-3d;
-  transform:rotateY(calc(-14deg + var(--px, 0) * 6deg)) rotateX(calc(8deg - var(--py, 0) * 5deg)) rotateZ(.6deg)}
+.ag-rig{position:relative; transform-style:preserve-3d; transform:rotateY(-14deg) rotateX(8deg) rotateZ(.6deg)}
 .ag-halo{position:absolute; inset:10% -6% -2% 8%; border-radius:50%; filter:blur(50px); opacity:.55; transform:translateZ(-9.2em);
   background:radial-gradient(closest-side, var(--magenta), color-mix(in srgb, var(--violet) 60%, transparent) 60%, transparent)}
 
@@ -525,11 +524,13 @@ p { margin: 0; }
 /* Claude's trace: Neon's comet running round the window edge while it works */
 .ag-trace,.ag-bloom{position:absolute; inset:-0.077em; border-radius:1em; pointer-events:none; opacity:0; transition:opacity .5s;
   background:conic-gradient(from var(--ang), transparent 0 64%, color-mix(in srgb, var(--mk-a2) 70%, transparent) 80%, var(--mk-a1) 93%, #fff 95%, transparent 96%);
-  animation:ag-spin 3.2s linear infinite}
+  animation:ag-spin 3.2s linear infinite paused}
 .ag-trace{padding:0.123em; z-index:3; -webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite:xor; mask-composite:exclude}
 .ag-bloom{inset:-0.462em; border-radius:1.385em; filter:blur(0.923em); z-index:-1}
 .ag-stage[data-step="0"] .ag-mac .ag-trace,.ag-stage[data-step="4"] .ag-mac .ag-trace,.ag-stage[data-step="5"] .ag-mac .ag-trace{opacity:1}
 .ag-stage[data-step="0"] .ag-mac .ag-bloom,.ag-stage[data-step="4"] .ag-mac .ag-bloom,.ag-stage[data-step="5"] .ag-mac .ag-bloom{opacity:.55}
+/* it only spins while it shows: the blurred bloom repaints every frame it turns */
+.ag-stage:is([data-step="0"],[data-step="4"],[data-step="5"]) .ag-mac :is(.ag-trace,.ag-bloom){animation-play-state:running}
 @keyframes ag-spin{to{--ang:360deg}}
 
 /* phone: Neon Signal's iPhone. The frame is in em like the rest of the rig
@@ -2032,9 +2033,11 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
       if (cv.width !== W) cv.width = W;
       if (cv.height !== H) cv.height = H;
     }
+    var tint = {};
     function paint(s, t, k) {
       if (!s || k <= 0) return;
-      c.save(); FX[s.id](c, W, H, t, colours(s), k * (light ? 1.25 : 1), u); c.restore();
+      var col = tint[s.id] || (tint[s.id] = colours(s));
+      c.save(); FX[s.id](c, W, H, t, col, k * (light ? 1.25 : 1), u); c.restore();
       c.globalAlpha = 1; c.shadowBlur = 0;
     }
     function draw(t) {
@@ -2045,9 +2048,11 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
       paint(cur, t, e);
       if (f >= 1) prev = null;
     }
+    // at most 60 frames a second, as on a 120Hz screen it would draw twice that
+    var drawn = 0;
     function frame(now) {
       raf = 0;
-      draw(now / 1000);
+      if (now - drawn >= 14) { draw(now / 1000); drawn = now; }
       if (seen && (cur || prev)) raf = requestAnimationFrame(frame);
     }
     function go() {
@@ -2061,7 +2066,7 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
       prev = cur; cur = s; fadeAt = performance.now();
       go();
     });
-    themeListeners.push(function () { readTheme(); if (reduce) draw(2); });
+    themeListeners.push(function () { readTheme(); tint = {}; if (reduce) draw(2); });
     readTheme(); fit();
     if (window.ResizeObserver) new ResizeObserver(function () { fit(); if (reduce || !raf) draw(reduce ? 2 : performance.now() / 1000); }).observe(cv);
     if ('IntersectionObserver' in window) {
@@ -2121,7 +2126,7 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
     if (!cv || !cv.getContext) return { pause: function () {}, resume: function () {}, relayout: function () {}, requiet: function () {} };
     var ctx = cv.getContext('2d');
     var mcv = document.createElement('canvas'), mctx = mcv.getContext('2d', { willReadFrequently: true });
-    var W = 0, H = 0, dpr = 1, fs = 14, cw = 8.4, chh = 17, cols = 0, rows = 0, N = 0;
+    var W = 0, H = 0, dpr = 1, fs = 14, cw = 8.4, chh = 17, cols = 0, rows = 0, N = 0, steps = 1;
     var v, cls, prevT, nextT, swAt, rnd, masks = {}, qz = [];
     var center = { x: 0, y: 0 }, maxD = 1;
     var mouse = { x: -9999, y: -9999, on: false }, ripples = [];
@@ -2398,9 +2403,15 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
       qz = rowsZ;
     }
     var artUnder = false;
-    function inQuiet(c, r) {
-      for (var z = 0; z < qz.length; z++) { var q = qz[z]; if (c >= q.c0 && c <= q.c1 && r >= q.r0 && r <= q.r1) return true; }
-      return false;
+    // the boxes as one flag per cell, so the frame loop needn't search them
+    var quiet = new Uint8Array(0);
+    function markQuiet() {
+      try { quietZone(); } catch (e) { qz = []; }
+      quiet = new Uint8Array(N);
+      qz.forEach(function (q) {
+        for (var r = Math.max(0, q.r0); r <= Math.min(rows - 1, q.r1); r++)
+          for (var c = Math.max(0, q.c0); c <= Math.min(cols - 1, q.c1); c++) quiet[r * cols + c] = 1;
+      });
     }
     function resize() {
       W = hero.clientWidth; H = hero.clientHeight;
@@ -2420,7 +2431,7 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
       for (var i = 0; i < N; i++) rnd[i] = Math.random();
       buildMasks();
       // a failed measurement only costs the dark boxes; the field still runs
-      try { quietZone(); } catch (e) { qz = []; }
+      markQuiet();
       var now = performance.now();
       setPhase(reduce ? 1 : phaseIdx, now, true);
       if (reduce || !running) drawFrame(now, true);
@@ -2457,12 +2468,14 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
       ripples = ripples.filter(function (rp) { return now - rp.t < 1700; });
       var nrip = ripples.length;
       var colorShift = Math.floor(t / 5200);
+      // the easing per 60fps frame, applied as many times as frames went by
+      var kOn = 1 - Math.pow(0.85, steps), kOff = 1 - Math.pow(0.93, steps);
       for (var i = 0; i < N; i++) {
         var c = i % cols, r = (i / cols) | 0;
         var tc = now >= swAt[i] ? nextT[i] : prevT[i];
         var n = flow(c, r, t);
         var target = tc ? 1 : n * amb;
-        v[i] += (target - v[i]) * (tc ? 0.15 : (still ? 1 : 0.07));
+        v[i] += (target - v[i]) * (tc ? kOn : (still ? 1 : kOff));
         if (tc) cls[i] = tc; else if (v[i] < 0.5) cls[i] = 0;
         var dc = cls[i];
         var x = c * cw, y = r * chh;
@@ -2478,7 +2491,7 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
         }
         var I = v[i] + boost * 0.9;
         if (I > 1) I = 1;
-        var inQ = inQuiet(c, r);
+        var inQ = quiet[i] === 1;
         // narrow, the axolotl sits behind the copy: nothing at all is drawn in
         // the boxes, so they stay solid like the desktop ones
         if (inQ && artUnder) continue;
@@ -2513,14 +2526,25 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
         for (var z = 0; z < bk.length; z += 3) ctx.fillText(bk[z + 2], bk[z], bk[z + 1]);
       }
     }
+    // At most 60 frames a second (a 120Hz screen would draw it twice as
+    // often for nothing), and 30 for good once the page has fallen behind:
+    // frames averaging over 22ms apart
+    var drawn = 0, lastNow = 0, gapAvg = 16.7, halfRate = false;
     function loop(now) {
       if (!running) return;
-      drawFrame(now, false);
+      if (lastNow) gapAvg += (Math.min(50, now - lastNow) - gapAvg) * 0.05;
+      lastNow = now;
+      if (gapAvg > 22) halfRate = true;
+      if (!drawn || now - drawn >= (halfRate ? 30 : 14)) {
+        steps = drawn ? Math.max(1, Math.min(3, Math.round((now - drawn) / 16.7))) : 1;
+        drawFrame(now, false);
+        steps = 1; drawn = now;
+      }
       raf = requestAnimationFrame(loop);
     }
     function sync() {
       var want = !reduce && inView && homeVisible && !document.hidden;
-      if (want && !running) { running = true; raf = requestAnimationFrame(loop); }
+      if (want && !running) { running = true; drawn = lastNow = 0; raf = requestAnimationFrame(loop); }
       else if (!want && running) { running = false; cancelAnimationFrame(raf); }
     }
     readColors();
@@ -2557,7 +2581,7 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
       // the field's animation stay as they are
       requiet: function () {
         if (!N) return;
-        try { quietZone(); } catch (e) { qz = []; }
+        markQuiet();
         if (reduce || !running) drawFrame(performance.now(), true);
       }
     };
@@ -2596,13 +2620,18 @@ macos/install.sh                   <span class="c-c"># release copy into /Applic
     addEventListener('pointermove', e => { tx = e.clientX / innerWidth; ty = e.clientY / innerHeight; moved = performance.now(); }, { passive: true });
     const t0 = performance.now();
     const draw = aurora();
+    // at most 60 frames a second (a 120Hz screen would run it twice as often)
+    let drawn = 0;
     function frame(now) {
-      if (live(rig)) {
+      if (live(rig) && now - drawn >= 14) {
+        drawn = now;
         const t = (now - t0) / 1000;
         if (now - moved > 4000) { tx = .5 + .18 * Math.sin(t * .25); ty = .35 + .1 * Math.cos(t * .2); }
         cx += (tx - cx) * .05; cy += (ty - cy) * .05;
-        rig.style.setProperty('--px', ((cx - .5) * 2).toFixed(4));
-        rig.style.setProperty('--py', ((cy - .5) * 2).toFixed(4));
+        // the transform itself, not --px/--py: a custom property on the rig
+        // restyles everything inside it each frame, a transform only the rig
+        const px = (cx - .5) * 2, py = (cy - .5) * 2;
+        rig.style.transform = `rotateY(${(-14 + px * 6).toFixed(3)}deg) rotateX(${(8 - py * 5).toFixed(3)}deg) rotateZ(.6deg)`;
         if (draw) draw(t + 20, cx, 1 - cy);
         tether();
       }
