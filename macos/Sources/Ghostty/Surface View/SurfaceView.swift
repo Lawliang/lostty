@@ -240,9 +240,8 @@ extension Ghostty {
                 }
 
                 #if canImport(AppKit)
-                // Lostty Claude trace: above the unfocused-split dimming, which it
-                // replaces while showing.
-                ClaudeReadyOverlay(surfaceID: surfaceView.id, cellSize: surfaceView.cellSize)
+                // Lostty: "Ready for response" covers the whole window
+                // (ClaudeReadyOverlay, in TerminalView).
                 if AgentCoordination.isOn { GuardBadgeOverlay(surfaceID: surfaceView.id) }
 
                 // Grab handle for dragging the window. We want this to appear at the very

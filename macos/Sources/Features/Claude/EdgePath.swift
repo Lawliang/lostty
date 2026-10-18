@@ -27,10 +27,27 @@ struct EdgePath {
     let runs: [Run]
     /// Total length in points.
     let length: Double
+    /// A window's rounded corners: points in a corner of `rect` bend onto
+    /// its arc of `radius`, so the head never leaves the window.
+    var rounding: (rect: CGRect, radius: CGFloat)?
 
-    init(runs: [Run]) {
+    init(runs: [Run], rounding: (rect: CGRect, radius: CGFloat)? = nil) {
         self.runs = runs
+        self.rounding = rounding
         length = runs.reduce(0) { $0 + $1.length }
+    }
+
+    /// `point` bent onto the arc of the rounded `rect`'s corner it falls
+    /// in; points along the straight stretches of the sides are kept.
+    static func bend(_ point: CGPoint, in rect: CGRect, radius: CGFloat) -> CGPoint {
+        let r = min(radius, rect.width / 2, rect.height / 2)
+        guard r > 0 else { return point }
+        let center = CGPoint(x: min(max(point.x, rect.minX + r), rect.maxX - r),
+                             y: min(max(point.y, rect.minY + r), rect.maxY - r))
+        guard center.x != point.x, center.y != point.y else { return point }
+        let dx = point.x - center.x, dy = point.y - center.y
+        let d = hypot(dx, dy)
+        return CGPoint(x: center.x + dx / d * r, y: center.y + dy / d * r)
     }
 
     func sample(at fraction: Double) -> Sample {
@@ -42,15 +59,20 @@ struct EdgePath {
             let l = run.length
             if d <= l, l > 0 {
                 let t = CGFloat(d / l)
-                return Sample(point: CGPoint(x: run.from.x + (run.to.x - run.from.x) * t,
-                                             y: run.from.y + (run.to.y - run.from.y) * t),
+                return Sample(point: bent(CGPoint(x: run.from.x + (run.to.x - run.from.x) * t,
+                                                  y: run.from.y + (run.to.y - run.from.y) * t)),
                               tangent: run.tangent, normal: run.normal)
             }
             d -= l
         }
         let last = runs.last { $0.length > 0 } ?? first
         let end = runs.last ?? first
-        return Sample(point: end.to, tangent: last.tangent, normal: last.normal)
+        return Sample(point: bent(end.to), tangent: last.tangent, normal: last.normal)
+    }
+
+    private func bent(_ point: CGPoint) -> CGPoint {
+        guard let rounding else { return point }
+        return Self.bend(point, in: rounding.rect, radius: rounding.radius)
     }
 
     /// The point `inward` points into the pane from the edge at `fraction`.

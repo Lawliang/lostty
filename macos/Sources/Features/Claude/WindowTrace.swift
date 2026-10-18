@@ -2,10 +2,11 @@
 import AppKit
 import SwiftUI
 
-/// The website's trace (website/custom.html, "Claude's trace"): one light
-/// circling a whole window's edge while Claude works in any of its panes.
-/// Shown instead of the pane traces when Lostty → Claude Trace Style is
-/// Window Light. A pane where only subagents work keeps its bottom glow.
+/// A terminal window's Claude trace, round the whole window's edge (title
+/// bar included) while Claude works in any of its panes. Skin Traces runs
+/// the working pane's skin trace there; Window Light (Lostty → Claude Trace
+/// Style) runs the website's light (website/custom.html, "Claude's trace").
+/// While only subagents or shells work, either keeps to the bottom edge.
 enum WindowTrace {
     /// One lap, as the website's `ag-spin`.
     static let lapSeconds: Double = 3.2
@@ -16,32 +17,43 @@ enum WindowTrace {
     static let websitePink = RGB(hex: "#ff3df2")!
     static let websiteCyan = RGB(hex: "#28e7ff")!
 
-    /// Which pane lights the window, and in what colors.
+    /// The pane whose trace the window shows.
     struct Lighting: Equatable {
         var pane: UUID
-        /// The head's color (the skin's trace color) and the tail's.
-        var primary: RGB
-        var secondary: RGB
+        var phase: TracePhase
+        var trace: ResolvedTrace
+        /// The pane has no skin, so Window Light takes the website's colors.
+        var unskinned: Bool
 
-        var colors: TraceColors { TraceColors(primary: primary, secondary: secondary) }
+        /// Window Light's head and tail colors.
+        var lightColors: TraceColors {
+            unskinned ? TraceColors(primary: WindowTrace.websitePink, secondary: WindowTrace.websiteCyan)
+                : TraceColors(trace)
+        }
+
+        /// Window Light circles the window; only subagents keep to the bottom.
+        var circles: Bool { !phase.isOff && !phase.subagentsOnly }
     }
 
-    /// The window is lit while Claude itself works in one of `panes` (not
-    /// only its subagents). The focused pane's skin wins when it works,
-    /// then the first in the window's order. Panes whose trace is off
+    /// The pane that lights the window: one where Claude itself works
+    /// before one where only subagents or shells do, and within each the
+    /// focused pane first, then the window's order. Panes whose trace is off
     /// (`trace = "none"`, `[defaults] trace = false`) don't light it.
     static func lighting(
         panes: [UUID], focused: UUID?, phases: [UUID: TracePhase], skin: (UUID) -> Skin?, enabled: Bool
     ) -> Lighting? {
         let order = focused.map { focused in panes.contains(focused) ? [focused] + panes.filter { $0 != focused } : panes } ?? panes
+        var subagents: Lighting?
         for pane in order {
-            guard case .racing(_, false) = phases[pane] ?? .off else { continue }
+            let phase = phases[pane] ?? .off
+            guard !phase.isOff else { continue }
             let paneSkin = skin(pane)
             guard let trace = ResolvedTrace.resolve(skin: paneSkin, enabled: enabled) else { continue }
-            if paneSkin == nil { return Lighting(pane: pane, primary: websitePink, secondary: websiteCyan) }
-            return Lighting(pane: pane, primary: trace.color, secondary: trace.color2)
+            let lighting = Lighting(pane: pane, phase: phase, trace: trace, unskinned: paneSkin == nil)
+            if lighting.circles { return lighting }
+            if subagents == nil { subagents = lighting }
         }
-        return nil
+        return subagents
     }
 
     /// The light's turn, in degrees clockwise from the top, `elapsed`
@@ -67,9 +79,9 @@ enum WindowTrace {
     }
 }
 
-/// Whether a pane's window draws the window light, so the pane leaves its
-/// own trace out in Window Light. Only standalone terminal windows do; the
-/// Quick Terminal keeps its pane traces.
+/// Whether a pane's window draws the window trace, so the pane leaves its
+/// own trace out. Only standalone terminal windows do; the Quick Terminal
+/// keeps its pane traces.
 private struct HostsWindowTraceKey: EnvironmentKey {
     static let defaultValue = false
 }
@@ -81,7 +93,7 @@ extension EnvironmentValues {
     }
 }
 
-/// The window's corner radius, which the light's edge follows.
+/// The window's corner radius, which the trace's edge follows.
 @MainActor
 final class WindowTraceEdge: ObservableObject {
     @Published var cornerRadius: CGFloat = 0
@@ -100,7 +112,7 @@ final class WindowTraceEdge: ObservableObject {
     }
 }
 
-/// The light over one window. Draws nothing until Claude works there.
+/// The trace over one window. Draws nothing until Claude works there.
 struct WindowTraceView: View {
     @ObservedObject var controller: BaseTerminalController
     @ObservedObject var sidebar: ExtensionSidebarModel
@@ -110,27 +122,46 @@ struct WindowTraceView: View {
     @AppStorage(TraceStyle.defaultsKey, store: .ghostty) private var style = TraceStyle.initial
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var windowVisible = true
-    /// The last lighting, kept while the light fades out.
-    @State private var shown: WindowTrace.Lighting?
+    /// Window Light's colors, kept while the light fades out.
+    @State private var shown: TraceColors?
     @State private var lit = false
     @State private var since = Date()
 
     private var lighting: WindowTrace.Lighting? {
-        guard style == .window else { return nil }
-        return WindowTrace.lighting(
+        WindowTrace.lighting(
             panes: controller.surfaceTree.map(\.id), focused: sidebar.focusedSurfaceID,
             phases: runtime.phases, skin: { skins.effectiveSkin($0) }, enabled: skins.config.trace)
     }
 
+    /// Window Light circling the window, rather than keeping to the bottom.
+    private var circling: WindowTrace.Lighting? {
+        guard style == .window, let lighting, lighting.circles else { return nil }
+        return lighting
+    }
+
     var body: some View {
+        ZStack {
+            if let lighting, style == .skin || !lighting.circles {
+                TraceOverlay(phase: lighting.phase, trace: lighting.trace, bottomOnly: style == .window,
+                             cornerRadius: edge.cornerRadius)
+            }
+            light
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+        .onAppear { light(circling) }
+        .onChange(of: circling) { light($0) }
+    }
+
+    private var light: some View {
         GeometryReader { geo in
             if let shown {
                 TimelineView(.animation(paused: !lit || !windowVisible)) { timeline in
                     let elapsed = timeline.date.timeIntervalSince(since)
                     if reduceMotion {
-                        calm(size: geo.size, colors: shown.colors, elapsed: elapsed)
+                        calm(size: geo.size, colors: shown, elapsed: elapsed)
                     } else {
-                        WindowTraceRing(colors: shown.colors, angle: WindowTrace.angle(elapsed: elapsed),
+                        WindowTraceRing(colors: shown, angle: WindowTrace.angle(elapsed: elapsed),
                                         cornerRadius: edge.cornerRadius, size: geo.size)
                     }
                 }
@@ -138,17 +169,13 @@ struct WindowTraceView: View {
         }
         .opacity(lit ? 1 : 0)
         .animation(.easeInOut(duration: WindowTrace.fadeSeconds), value: lit)
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
         .background(OcclusionProbe(visible: $windowVisible))
-        .onAppear { light(lighting) }
-        .onChange(of: lighting) { light($0) }
     }
 
     private func light(_ lighting: WindowTrace.Lighting?) {
         if let lighting {
             if !lit { since = Date() }
-            shown = lighting
+            shown = lighting.lightColors
         }
         lit = lighting != nil
     }
@@ -192,7 +219,7 @@ struct WindowTraceRing: View {
     }
 }
 
-/// Lays the window light over a terminal window's whole frame, title bar
+/// Lays the window trace over a terminal window's whole frame, title bar
 /// included, without taking clicks.
 @MainActor
 enum WindowTraceHost {
