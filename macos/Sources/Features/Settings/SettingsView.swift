@@ -14,9 +14,9 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 0) {
             Form {
                 Section("Sidebar") {
-                    Toggle("Automatically hide sidebar", isOn: $sidebar.autoHide)
-                    Text("Shows when you move the pointer to the window's right edge. "
-                         + "Stays open while an app is open.")
+                    Toggle("Hide sidebar", isOn: $sidebar.autoHide)
+                    Text("Click the handle on the window's right edge, or drag it left, to show it; "
+                         + "click it or drag it right to hide it again. Stays open while an app is open.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

@@ -17,9 +17,10 @@ enum NotificationPlacement {
 /// the terminal rather than covering it, the axolotl in the terminal's
 /// bottom-right corner, and the Claude usage bar below both. An open overlay extension covers the terminal content; an open
 /// sidebar extension grows out of the strip over the terminal's edge. With
-/// auto-hide on, the terminal takes the full width and the strip slides in
-/// over it from the right edge. The terminal never changes size for an
-/// app or for the strip showing and hiding.
+/// hiding on (the default), the terminal takes the full width and the strip
+/// slides in over it from the right edge, opened and closed with the
+/// floating handle there (SidebarHandle). The terminal never changes size
+/// for an app or for the strip showing and hiding.
 struct ExtensionSidebarLayout<Content: View>: View {
     @ObservedObject var model: ExtensionSidebarModel
     @ViewBuilder let content: () -> Content
@@ -78,21 +79,29 @@ struct ExtensionSidebarLayout<Content: View>: View {
     }
 
     /// Over the terminal's right edge: the open sidebar extension, and with
-    /// auto-hide the strip itself plus the hover edge that reveals it.
+    /// hiding on the strip itself, which the handle on its left edge pulls
+    /// out and pushes back. Hidden, only the handle is left on screen.
     @ViewBuilder private var trailingChrome: some View {
         if preferences.autoHide {
-            ZStack(alignment: .trailing) {
-                HoverEdge { autoHide.pointer(.edge, inside: $0) }
-                    .frame(width: 4)
-                    .frame(maxHeight: .infinity)
-                HStack(spacing: 0) {
-                    sidebarPanel
-                    ExtensionSidebarView(model: model)
-                        .shadow(color: .black.opacity(0.3), radius: 8, x: -2)
-                }
-                .onHover { autoHide.pointer(.sidebar, inside: $0) }
-                .offset(x: autoHide.isVisible ? 0 : ExtensionSidebarView.width + 16)
+            let width = ExtensionSidebarView.width
+            HStack(spacing: 0) {
+                sidebarPanel
+                ExtensionSidebarView(model: model)
+                    .shadow(color: .black.opacity(autoHide.isVisible ? 0.3 : 0), radius: 8, x: -2)
+                    .overlay(alignment: .leading) {
+                        // Nothing to close while an app holds the strip out.
+                        if model.active == nil {
+                            SidebarHandle(
+                                open: autoHide.isVisible,
+                                onTap: { autoHide.toggle() },
+                                onDrag: { autoHide.dragChanged($0) },
+                                onDragEnd: { autoHide.dragEnded(predicted: $0, width: width) })
+                                .offset(x: -SidebarHandle.hitWidth)
+                        }
+                    }
             }
+            .offset(x: autoHide.offset(width: width))
+            .animation(autoHide.drag == nil ? .easeOut(duration: 0.18) : nil, value: autoHide.offset(width: width))
         } else {
             sidebarPanel
         }

@@ -1,114 +1,75 @@
 #if os(macOS)
 import Foundation
 
-/// When an auto-hiding sidebar shows. Shown while the pointer is on the
-/// window's right edge or on the sidebar, or while an app is open; hidden
-/// `hideDelay` after none of those holds.
+/// When a hidden sidebar shows: opened from its handle on the window's
+/// right edge (a click, or a drag to the left past half its width) until
+/// closed the same way, and while an app is open.
 struct SidebarAutoHide: Equatable {
-    static let hideDelay: TimeInterval = 0.5
-
-    enum Region: Hashable {
-        /// The thin reveal strip at the window's right edge.
-        case edge
-        /// The sidebar itself, with any open panel.
-        case sidebar
-    }
-
-    enum State: Equatable {
-        case hidden
-        case shown
-        case hiding(deadline: Date)
-    }
-
-    private(set) var state: State = .hidden
+    /// Opened from the handle.
+    private(set) var open = false
     private var appOpen = false
-    private var inside: Set<Region> = []
 
-    var isVisible: Bool { state != .hidden }
+    var isVisible: Bool { open || appOpen }
 
-    var hideDeadline: Date? {
-        if case .hiding(let deadline) = state { return deadline }
-        return nil
+    /// A click on the handle.
+    mutating func toggle() {
+        open = !isVisible
     }
 
-    mutating func pointer(_ region: Region, inside isInside: Bool, now: Date) {
-        if isInside {
-            inside.insert(region)
-            state = .shown
-        } else {
-            inside.remove(region)
-            startHidingIfIdle(now: now)
-        }
+    mutating func appChanged(open appOpen: Bool) {
+        self.appOpen = appOpen
     }
 
-    mutating func appChanged(open: Bool, now: Date) {
-        appOpen = open
-        if open {
-            state = .shown
-        } else {
-            startHidingIfIdle(now: now)
-        }
+    /// A drag of the handle let go heading for `predicted` points (where
+    /// its speed would carry it; negative is leftward): the sidebar opens,
+    /// or stays open, when it would end up more than half out.
+    mutating func dragEnded(predicted: CGFloat, width: CGFloat) {
+        open = Self.offset(open: isVisible, drag: predicted, width: width) < width / 2
     }
 
-    mutating func tick(now: Date) {
-        if let deadline = hideDeadline, now >= deadline { state = .hidden }
-    }
-
-    private mutating func startHidingIfIdle(now: Date) {
-        guard inside.isEmpty, !appOpen, isVisible else { return }
-        state = .hiding(deadline: now.addingTimeInterval(Self.hideDelay))
+    /// How far right of its place the sidebar sits: `width` when hidden, 0
+    /// when shown, following the handle in between while it is dragged.
+    static func offset(open: Bool, drag: CGFloat?, width: CGFloat) -> CGFloat {
+        min(width, max(0, (open ? 0 : width) + (drag ?? 0)))
     }
 }
 
-/// Runs a window's `SidebarAutoHide` against the clock.
+/// A window's `SidebarAutoHide`, and the handle's drag in progress.
 @MainActor
 final class SidebarAutoHideDriver: ObservableObject {
-    typealias Scheduler = (TimeInterval, @escaping @MainActor () -> Void) -> Void
-
     @Published private(set) var machine = SidebarAutoHide()
+    /// Points the handle has been dragged, nil when it isn't.
+    @Published private(set) var drag: CGFloat?
 
-    private let now: () -> Date
-    private let schedule: Scheduler
+    /// Shown at all, if only partly while the handle is dragged.
+    var isVisible: Bool { machine.isVisible || drag != nil }
 
-    init(
-        now: @escaping () -> Date = Date.init,
-        schedule: @escaping Scheduler = { delay, work in
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-                MainActor.assumeIsolated { work() }
-            }
-        }
-    ) {
-        self.now = now
-        self.schedule = schedule
+    func offset(width: CGFloat) -> CGFloat {
+        SidebarAutoHide.offset(open: machine.isVisible, drag: drag, width: width)
     }
 
-    var isVisible: Bool { machine.isVisible }
-
-    func pointer(_ region: SidebarAutoHide.Region, inside: Bool) {
-        machine.pointer(region, inside: inside, now: now())
-        armHide()
+    func toggle() {
+        machine.toggle()
     }
 
     func appChanged(open: Bool) {
-        machine.appChanged(open: open, now: now())
-        armHide()
+        machine.appChanged(open: open)
     }
 
-    /// Auto-hide was just turned on or off.
+    func dragChanged(_ translation: CGFloat) {
+        drag = translation
+    }
+
+    func dragEnded(predicted: CGFloat, width: CGFloat) {
+        machine.dragEnded(predicted: predicted, width: width)
+        drag = nil
+    }
+
+    /// Hiding was just turned on or off.
     func reset(appOpen: Bool) {
         machine = SidebarAutoHide()
-        if appOpen { machine.appChanged(open: true, now: now()) }
-    }
-
-    private func armHide() {
-        guard let deadline = machine.hideDeadline else { return }
-        schedule(max(0, deadline.timeIntervalSince(now()))) { [weak self] in
-            guard let self else { return }
-            self.machine.tick(now: self.now())
-            // The timer can fire before the wall-clock deadline (clock
-            // adjustment); keep waiting rather than stay stuck in .hiding.
-            self.armHide()
-        }
+        drag = nil
+        machine.appChanged(open: appOpen)
     }
 }
 #endif

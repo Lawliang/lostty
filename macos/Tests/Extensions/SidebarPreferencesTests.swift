@@ -5,13 +5,13 @@ import Testing
 
 @MainActor
 struct SidebarPreferencesTests {
-    @Test func autoHideIsOffByDefaultAndRemembered() throws {
+    @Test func hidingIsOnByDefaultAndRemembered() throws {
         let defaults = try #require(UserDefaults(suiteName: "SidebarPreferencesTests-\(UUID().uuidString)"))
         let preferences = SidebarPreferences(defaults: defaults)
-        #expect(preferences.autoHide == false)
-        preferences.autoHide = true
-        #expect(defaults.bool(forKey: SidebarPreferences.autoHideKey))
-        #expect(SidebarPreferences(defaults: defaults).autoHide)
+        #expect(preferences.autoHide)
+        preferences.autoHide = false
+        #expect(defaults.object(forKey: SidebarPreferences.autoHideKey) as? Bool == false)
+        #expect(SidebarPreferences(defaults: defaults).autoHide == false)
         #expect(SidebarPreferences.autoHideKey == "LosttySidebarAutoHide")
     }
 }

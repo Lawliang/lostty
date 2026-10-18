@@ -4,103 +4,71 @@ import Testing
 @testable import Lostty
 
 struct SidebarAutoHideTests {
-    private let t0 = Date(timeIntervalSince1970: 1000)
+    private let width: CGFloat = 64
 
     @Test func startsHidden() {
         #expect(SidebarAutoHide().isVisible == false)
     }
 
-    @Test func theEdgeRevealsIt() {
+    @Test func clickingTheHandleOpensAndCloses() {
         var machine = SidebarAutoHide()
-        machine.pointer(.edge, inside: true, now: t0)
+        machine.toggle()
         #expect(machine.isVisible)
-    }
-
-    @Test func leavingHidesAfterTheDelay() {
-        var machine = SidebarAutoHide()
-        machine.pointer(.sidebar, inside: true, now: t0)
-        machine.pointer(.sidebar, inside: false, now: t0)
-        machine.tick(now: t0.addingTimeInterval(0.4))
-        #expect(machine.isVisible)
-        machine.tick(now: t0.addingTimeInterval(0.5))
+        machine.toggle()
         #expect(machine.isVisible == false)
     }
 
-    @Test func movingFromTheEdgeIntoTheSidebarKeepsItShown() {
+    @Test func draggingLeftPastHalfwayOpens() {
         var machine = SidebarAutoHide()
-        machine.pointer(.edge, inside: true, now: t0)
-        machine.pointer(.sidebar, inside: true, now: t0)
-        machine.pointer(.edge, inside: false, now: t0)
-        #expect(machine.hideDeadline == nil)
-        machine.tick(now: t0.addingTimeInterval(5))
+        machine.dragEnded(predicted: -20, width: width)
+        #expect(machine.isVisible == false)
+        machine.dragEnded(predicted: -40, width: width)
         #expect(machine.isVisible)
     }
 
-    @Test func comingBackCancelsTheHide() {
+    @Test func draggingRightPastHalfwayCloses() {
         var machine = SidebarAutoHide()
-        machine.pointer(.sidebar, inside: true, now: t0)
-        machine.pointer(.sidebar, inside: false, now: t0)
-        machine.pointer(.sidebar, inside: true, now: t0.addingTimeInterval(0.2))
-        machine.tick(now: t0.addingTimeInterval(1))
+        machine.toggle()
+        machine.dragEnded(predicted: 20, width: width)
         #expect(machine.isVisible)
-    }
-
-    @Test func neverHidesWhileAnAppIsOpen() {
-        var machine = SidebarAutoHide()
-        machine.pointer(.sidebar, inside: true, now: t0)
-        machine.appChanged(open: true, now: t0)
-        machine.pointer(.sidebar, inside: false, now: t0)
-        machine.tick(now: t0.addingTimeInterval(60))
-        #expect(machine.isVisible)
-    }
-
-    @Test func closingAnAppWithThePointerAwayStartsTheHide() {
-        var machine = SidebarAutoHide()
-        machine.appChanged(open: true, now: t0)
-        machine.appChanged(open: false, now: t0)
-        machine.tick(now: t0.addingTimeInterval(0.5))
+        machine.dragEnded(predicted: 40, width: width)
         #expect(machine.isVisible == false)
     }
 
-    @Test func closingAnAppWithThePointerOnTheSidebarKeepsIt() {
+    @Test func theStripFollowsTheDragWithinItsWidth() {
+        #expect(SidebarAutoHide.offset(open: false, drag: nil, width: width) == width)
+        #expect(SidebarAutoHide.offset(open: true, drag: nil, width: width) == 0)
+        #expect(SidebarAutoHide.offset(open: false, drag: -24, width: width) == 40)
+        #expect(SidebarAutoHide.offset(open: false, drag: -500, width: width) == 0)
+        #expect(SidebarAutoHide.offset(open: false, drag: 30, width: width) == width)
+        #expect(SidebarAutoHide.offset(open: true, drag: 10, width: width) == 10)
+    }
+
+    @Test func anOpenAppHoldsItOut() {
         var machine = SidebarAutoHide()
-        machine.pointer(.sidebar, inside: true, now: t0)
-        machine.appChanged(open: true, now: t0)
-        machine.appChanged(open: false, now: t0)
-        machine.tick(now: t0.addingTimeInterval(5))
+        machine.appChanged(open: true)
+        #expect(machine.isVisible)
+        machine.appChanged(open: false)
+        #expect(machine.isVisible == false)
+    }
+
+    @Test func openedFromTheHandleItStaysAfterAnAppCloses() {
+        var machine = SidebarAutoHide()
+        machine.toggle()
+        machine.appChanged(open: true)
+        machine.appChanged(open: false)
         #expect(machine.isVisible)
     }
 
     @MainActor
-    @Test func theDriverHidesWhenItsTimerFires() {
-        var clock = t0
-        var pending: [@MainActor () -> Void] = []
-        let driver = SidebarAutoHideDriver(now: { clock }, schedule: { _, work in pending.append(work) })
-        driver.pointer(.edge, inside: true)
-        driver.pointer(.edge, inside: false)
+    @Test func theDriverShowsTheStripWhileDragging() {
+        let driver = SidebarAutoHideDriver()
+        driver.dragChanged(-10)
         #expect(driver.isVisible)
-        clock = t0.addingTimeInterval(0.5)
-        pending.forEach { $0() }
+        #expect(driver.offset(width: width) == width - 10)
+        driver.dragEnded(predicted: -10, width: width)
         #expect(driver.isVisible == false)
-    }
-
-    @MainActor
-    @Test func theDriverRearmsWhenItsTimerFiresEarly() {
-        var clock = t0
-        var pending: [@MainActor () -> Void] = []
-        let driver = SidebarAutoHideDriver(now: { clock }, schedule: { _, work in pending.append(work) })
-        driver.pointer(.edge, inside: true)
-        driver.pointer(.edge, inside: false)
-        #expect(pending.count == 1)
-        clock = t0.addingTimeInterval(0.2)
-        let early = pending
-        pending = []
-        early.forEach { $0() }
-        #expect(driver.isVisible)
-        #expect(pending.count == 1)
-        clock = t0.addingTimeInterval(0.5)
-        pending.forEach { $0() }
-        #expect(driver.isVisible == false)
+        #expect(driver.offset(width: width) == width)
     }
 }
 
