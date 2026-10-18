@@ -10,16 +10,15 @@ final class SidebarPreferences: ObservableObject {
 
     private let defaults: UserDefaults
 
-    /// Hide the icon strip until it's opened from the handle on the
-    /// window's right edge. It never hides while an app is open. On unless
-    /// the person turned it off.
+    /// Hide the icon strip until the pointer reaches the window's right
+    /// edge. It never hides while an app is open.
     @Published var autoHide: Bool {
         didSet { defaults.set(autoHide, forKey: Self.autoHideKey) }
     }
 
     init(defaults: UserDefaults = .ghostty) {
         self.defaults = defaults
-        autoHide = defaults.object(forKey: Self.autoHideKey) as? Bool ?? true
+        autoHide = defaults.bool(forKey: Self.autoHideKey)
     }
 }
 #endif
