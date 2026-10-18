@@ -59,14 +59,14 @@ struct ExtensionSidebarModelTests {
         #expect(model.active == nil)
     }
 
-    @Test func sidebarOrderIsBranchesThenSkins() {
+    @Test func rowOrderIsBranchesThenSkins() {
         #expect(LosttyExtension.allCases == [.branches, .skins])
         #expect(LosttyExtension.branches.title == "Branches")
         #expect(LosttyExtension.skins.title == "Skins")
     }
 
-    @Test func branchesOpensInTheSidebarAndSkinsOverTheTerminal() {
-        #expect(LosttyExtension.branches.presentation == .sidebar(width: 340))
+    @Test func branchesCoversTheWindowAndSkinsTheTerminal() {
+        #expect(LosttyExtension.branches.presentation == .window)
         #expect(LosttyExtension.skins.presentation == .overlay)
     }
 
