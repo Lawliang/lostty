@@ -134,7 +134,7 @@ enum TerminalTextSize: String, CaseIterable, Identifiable {
 
 /// Every terminal's font; picked in Settings.
 enum TerminalFontChoice: String, CaseIterable, Identifiable {
-    case standard, hyperlegible, menlo
+    case standard, hyperlegible, geist, menlo
 
     static let key = "LosttyTerminalFont"
 
@@ -148,6 +148,7 @@ enum TerminalFontChoice: String, CaseIterable, Identifiable {
         switch self {
         case .standard: "JetBrains Mono"
         case .hyperlegible: "Atkinson Hyperlegible"
+        case .geist: "Geist Mono"
         case .menlo: "Menlo"
         }
     }
@@ -157,6 +158,7 @@ enum TerminalFontChoice: String, CaseIterable, Identifiable {
         switch self {
         case .standard: nil
         case .hyperlegible: BundledTerminalFonts.atkinson
+        case .geist: BundledTerminalFonts.geist
         case .menlo: "Menlo"
         }
     }
