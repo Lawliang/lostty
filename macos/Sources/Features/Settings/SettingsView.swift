@@ -4,7 +4,6 @@ import SwiftUI
 /// Lostty Settings: preferences that live in the app rather than the
 /// config file.
 struct SettingsView: View {
-    @ObservedObject var sidebar: SidebarPreferences
     @ObservedObject var observer: ObserverPreferences
     @ObservedObject var handoff: ContextHandoffPreferences
     @ObservedObject var font: TerminalFontPreferences
@@ -15,13 +14,6 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 0) {
             Form {
                 TerminalFontSection(font: font)
-                Section("Sidebar") {
-                    Toggle("Automatically hide sidebar", isOn: $sidebar.autoHide)
-                    Text("Shows when you move the pointer to the window's right edge. "
-                         + "Stays open while an app is open.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
                 if showsMascot {
                     Section("Mascot") {
                         Toggle("Summarize turns in the background", isOn: $observer.background)
@@ -148,7 +140,6 @@ private struct TerminalFontSection: View {
 struct SettingsView_Previews: PreviewProvider {
     static var previews: some View {
         SettingsView(
-            sidebar: SidebarPreferences(defaults: UserDefaults(suiteName: "preview")!),
             observer: ObserverPreferences(defaults: UserDefaults(suiteName: "preview")!),
             handoff: ContextHandoffPreferences(defaults: UserDefaults(suiteName: "preview")!),
             font: TerminalFontPreferences(configURL: { nil }, reloadConfig: {}))

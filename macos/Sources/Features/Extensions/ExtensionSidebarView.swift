@@ -1,56 +1,59 @@
 #if os(macOS)
 import SwiftUI
 
-/// The window's extensions sidebar: an always-on narrow strip on the right
-/// edge, the color of the title bar, with an iOS-style icon per extension.
+/// The window's extensions, as a slim row of small iOS-style icons along
+/// the bottom, right above the usage bar and the color of the title bar.
+/// Clicking an icon opens its app; clicking it again closes it.
 struct ExtensionSidebarView: View {
-    static let width: CGFloat = 64
+    static let height: CGFloat = 34
+    static let iconSize: CGFloat = 24
 
     @ObservedObject var model: ExtensionSidebarModel
     @ObservedObject private var skins = SkinsRuntime.shared.manager
 
     var body: some View {
-        VStack(spacing: 12) {
+        HStack(spacing: 10) {
             ForEach(model.available) { ext in
-                ZStack(alignment: .leading) {
-                    // Active indicator: only while this extension is open.
+                Button { model.select(ext) } label: {
+                    ExtensionIcon(ext: ext, skin: model.focusedSurfaceID.flatMap { skins.effectiveSkin($0) },
+                                  size: Self.iconSize)
+                        .overlay(alignment: .topTrailing) {
+                            // skins.toml has an error (the last good config stays active).
+                            if ext == .skins, skins.configError != nil {
+                                Circle().fill(Color.yellow)
+                                    .frame(width: 7, height: 7)
+                                    .overlay(Circle().strokeBorder(Color.black.opacity(0.35), lineWidth: 0.5))
+                                    .offset(x: 2, y: -2)
+                            }
+                        }
+                }
+                .buttonStyle(IconButtonStyle())
+                .accessibilityLabel(ext.title)
+                .help(ext.title)
+                // Active indicator: only while this extension is open.
+                .overlay(alignment: .bottom) {
                     Capsule()
                         .fill(Color(white: 0.95))
-                        .frame(width: 3, height: model.active == ext ? 28 : 8)
+                        .frame(width: model.active == ext ? 14 : 4, height: 2)
                         .opacity(model.active == ext ? 1 : 0)
-                        .offset(x: -1.5)
-
-                    Button { model.select(ext) } label: {
-                        ExtensionIcon(ext: ext, skin: model.focusedSurfaceID.flatMap { skins.effectiveSkin($0) })
-                            .overlay(alignment: .topTrailing) {
-                                // skins.toml has an error (the last good config stays active).
-                                if ext == .skins, skins.configError != nil {
-                                    Circle().fill(Color.yellow)
-                                        .frame(width: 10, height: 10)
-                                        .overlay(Circle().strokeBorder(Color.black.opacity(0.35), lineWidth: 0.5))
-                                        .offset(x: 3, y: -3)
-                                }
-                            }
-                    }
-                    .buttonStyle(IconButtonStyle())
-                    .accessibilityLabel(ext.title)
-                    .frame(width: Self.width)
+                        .offset(y: 4)
                 }
-                .frame(width: Self.width, height: 44)
             }
-
             Spacer(minLength: 0)
         }
-        .padding(.top, 14)
-        .frame(width: Self.width)
-        .frame(maxHeight: .infinity)
+        .padding(.horizontal, 10)
+        .frame(height: Self.height)
+        .frame(maxWidth: .infinity)
         .background(Color(nsColor: model.chromeColor ?? .windowBackgroundColor))
         .animation(.spring(response: 0.28, dampingFraction: 0.85), value: model.active)
     }
 }
 
-/// Shared shape for sidebar icons: iOS continuous corners.
-private let iconShape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+/// Shared shape for the icons: iOS continuous corners, in proportion to
+/// `size` (10pt on a 44pt icon).
+private func iconShape(_ size: CGFloat) -> RoundedRectangle {
+    RoundedRectangle(cornerRadius: size * 10 / 44, style: .continuous)
+}
 
 /// Presses scale the icon down a touch, like iOS.
 private struct IconButtonStyle: ButtonStyle {
@@ -63,17 +66,20 @@ private struct IconButtonStyle: ButtonStyle {
 
 /// Modern iOS icon edge: a faint light along the top, a soft drop shadow.
 private struct IOSIconChrome: ViewModifier {
+    let size: CGFloat
+
     func body(content: Content) -> some View {
+        let k = size / 44
         content
-            .clipShape(iconShape)
+            .clipShape(iconShape(size))
             .overlay(
-                iconShape.strokeBorder(
+                iconShape(size).strokeBorder(
                     LinearGradient(
                         colors: [Color.white.opacity(0.22), Color.white.opacity(0.04)],
                         startPoint: .top, endPoint: .bottom),
                     lineWidth: 0.75))
-            .shadow(color: .black.opacity(0.45), radius: 1, y: 1)
-            .shadow(color: .black.opacity(0.28), radius: 6, y: 4)
+            .shadow(color: .black.opacity(0.45), radius: 1 * k, y: 1 * k)
+            .shadow(color: .black.opacity(0.28), radius: 6 * k, y: 4 * k)
     }
 }
 
@@ -81,32 +87,35 @@ private struct ExtensionIcon: View {
     let ext: LosttyExtension
     /// The focused pane's skin, shown on the Skins icon.
     let skin: Skin?
+    let size: CGFloat
 
     var body: some View {
         switch ext {
         case .branches:
-            BranchesIcon()
+            BranchesIcon(size: size)
         case .skins:
-            SkinsIcon(skin: skin)
-                .frame(width: 44, height: 44)
-                .modifier(IOSIconChrome())
+            SkinsIcon(skin: skin, size: size)
+                .frame(width: size, height: size)
+                .modifier(IOSIconChrome(size: size))
         }
     }
 }
 
 /// A git-branch mark on deep green.
 private struct BranchesIcon: View {
+    let size: CGFloat
+
     var body: some View {
         ZStack {
             LinearGradient(
                 colors: [Color(red: 0.16, green: 0.56, blue: 0.38), Color(red: 0.03, green: 0.22, blue: 0.15)],
                 startPoint: .top, endPoint: .bottom)
             BranchGlyph()
-                .frame(width: 24, height: 24)
-                .shadow(color: Color(red: 0.55, green: 1, blue: 0.75).opacity(0.6), radius: 3)
+                .frame(width: size * 24 / 44, height: size * 24 / 44)
+                .shadow(color: Color(red: 0.55, green: 1, blue: 0.75).opacity(0.6), radius: size * 3 / 44)
         }
-        .frame(width: 44, height: 44)
-        .modifier(IOSIconChrome())
+        .frame(width: size, height: size)
+        .modifier(IOSIconChrome(size: size))
     }
 }
 
@@ -137,24 +146,27 @@ private struct BranchGlyph: View {
 /// The pane's current skin: its background with the accent diamond.
 private struct SkinsIcon: View {
     let skin: Skin?
+    let size: CGFloat
 
     var body: some View {
         let background = skin.map { Color(rgb: $0.background) } ?? Color(red: 0.16, green: 0.16, blue: 0.19)
         let accent = skin.map { Color(rgb: $0.accent) } ?? Color(white: 0.85)
+        let k = size / 44
         ZStack {
             background
             LinearGradient(colors: [Color.white.opacity(0.10), .clear], startPoint: .top, endPoint: .bottom)
-            RoundedRectangle(cornerRadius: 3, style: .continuous)
+            RoundedRectangle(cornerRadius: 3 * k, style: .continuous)
                 .fill(accent.opacity(0.25))
-                .overlay(RoundedRectangle(cornerRadius: 3, style: .continuous).strokeBorder(accent, lineWidth: 2))
-                .frame(width: 16, height: 16)
+                .overlay(RoundedRectangle(cornerRadius: 3 * k, style: .continuous).strokeBorder(accent, lineWidth: max(1.5, 2 * k)))
+                .frame(width: 16 * k, height: 16 * k)
                 .rotationEffect(.degrees(45))
-                .shadow(color: accent.opacity(0.6), radius: 4)
+                .shadow(color: accent.opacity(0.6), radius: 4 * k)
         }
     }
 }
 
-/// What an open extension shows in the terminal area.
+/// What an open extension shows: over the terminal (Skins) or the whole
+/// window below the title bar (Branches).
 struct ExtensionContentView: View {
     let ext: LosttyExtension
     @ObservedObject var model: ExtensionSidebarModel

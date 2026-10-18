@@ -6,7 +6,7 @@ it is in.
 - `cd` into a project and the pane re-skins; leave and it reverts.
 - Split panes are skinned independently.
 - Git repos you have not configured get a stable automatic skin.
-- Override any pane from the Skins icon in the sidebar or the `skins` command.
+- Override any pane from the Skins icon in the icon row (above the usage bar) or the `skins` command.
 
 ## Install
 
@@ -22,7 +22,7 @@ Its config lives in `~/.config/lostty/config`; an existing
 Copy `docs/skins/skins.example.toml` to `~/.config/lostty/skins/skins.toml`.
 (Lostty still reads an older `~/.config/ghostty-skins/` folder.)
 Errors never break the terminal: the last good config stays active and the
-Skins icon in the sidebar shows a yellow dot.
+Skins icon in the icon row shows a yellow dot.
 
 ## Presets
 
@@ -63,7 +63,7 @@ override and brings the mapped skin back.
 
 ## Saved Colors
 
-Click the Skins icon in the sidebar, then go to the Custom tab (the
+Click the Skins icon in the icon row, then go to the Custom tab (the
 terminal `skins` picker has no Custom tab). The "Any color" row lets you pick
 any background color with a native color panel or type a hex code. Click Save
 to add it to your saved swatches. Saved colors live in
@@ -72,7 +72,7 @@ Lostty windows (max 24).
 
 ## Override
 
-- Click the Skins icon in the sidebar on the right: the picker fills the
+- Click the Skins icon in the icon row along the bottom: the picker fills the
   terminal area. Pick a skin, color, or texture and it applies to the pane
   you were last in right away, and stays. Click the icon again (or the
   close button) to go back to the terminal. **Reset** undoes it.
@@ -101,7 +101,7 @@ While Claude Code is working in a pane, a light ray races around that
 pane's edge. The moment Claude finishes (or you interrupt it), the ray
 disappears. If Claude finishes (or asks for permission) while you are in
 another pane or app, that pane dims and shows **Ready for response** until
-you look at it. Each preset has its own trace; panes without a skin get a
+you look at it: each pane, each Claude, its own. Each preset has its own trace; panes without a skin get a
 pink-and-cyan beam.
 
 Codex works the same way: the trace runs while Codex works and stops when
@@ -131,6 +131,18 @@ Custom skins pick a trace in `skins.toml`:
 A skin with the same name as a preset keeps the preset's trace unless it
 sets `trace`. `[defaults] trace = false` turns traces off. With Reduce
 Motion on, the border glows gently instead of racing.
+
+**Lostty → Claude Trace Style → Window Light** swaps the skin traces for
+the website's light: while Claude or Codex works in a pane, one thin light
+circles that pane's edge (never the title bar or the bottom bar), a lap
+every 3.2 seconds, its tail running from the skin's second trace color
+into its first and a white-hot tip, with a soft glow just inside the edge.
+Each working pane has its own, in its own skin's colors; panes without a
+skin get the website's pink and cyan. A pane whose trace is off stays
+dark. A pane where only subagents or background shells still work keeps
+its bottom-edge glow, and its light goes out. Claude Trace Path doesn't
+apply (it's greyed out), and with Reduce Motion the pane's edge breathes
+instead. **Skin Traces** goes back.
 
 ## Guard
 
@@ -212,10 +224,18 @@ edge), follows focus between panes and splits, and catches a checkout
 within a couple of seconds. A worktree shows its repo's name. Outside a git
 repo (or in a home folder under git) there is no pill.
 
+## Icon Row
+
+Right above the usage bar, a slim row the color of the title bar holds
+small icons for Lostty's apps, from the left: Branches (beta) and Skins.
+Click one to open it, and again (or its close button) to close it. Skins
+fills the terminal area; Branches covers the whole window below the title
+bar until you close it (or press Escape).
+
 ## Claude Usage Bar
 
 A bar along the bottom of each window, as tall as the title bar and the
-same color as it and the sidebar, shows in the terminal's font the focused
+same color as it and the icon row above it, shows in the terminal's font the focused
 pane's Claude model, a block meter for the context with the tokens in the
 window (to the nearest thousand, e.g. `50K`), and a block meter with a
 percentage for one plan limit:

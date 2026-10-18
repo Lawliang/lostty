@@ -8,12 +8,18 @@ struct ClaudeTraceLayer: View {
     let surfaceID: UUID
     @ObservedObject private var runtime = ClaudeRuntime.shared
     @ObservedObject private var skins = SkinsRuntime.shared.manager
+    @AppStorage(TraceStyle.defaultsKey, store: .ghostty) private var style = TraceStyle.initial
 
     var body: some View {
         let phase = runtime.phase(surfaceID)
-        if !phase.isOff,
+        // In Window Light the website's light circles the pane while Claude
+        // itself works; while only subagents do, the pane keeps their
+        // bottom glow.
+        let windowLight = style == .window
+        if windowLight { PaneLightView(surfaceID: surfaceID) }
+        if !phase.isOff, !windowLight || phase.subagentsOnly,
            let trace = ResolvedTrace.resolve(skin: skins.effectiveSkin(surfaceID), enabled: skins.config.trace) {
-            TraceOverlay(phase: phase, trace: trace)
+            TraceOverlay(phase: phase, trace: trace, bottomOnly: windowLight)
                 .allowsHitTesting(false)
         }
     }
@@ -24,6 +30,8 @@ struct TraceOverlay: View {
 
     let phase: TracePhase
     let trace: ResolvedTrace
+    /// Only the subagents' bottom glow, without the racing head.
+    var bottomOnly = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(TraceRoute.defaultsKey, store: .ghostty) private var route = TraceRoute.initial
     @State private var windowVisible = true
@@ -46,6 +54,10 @@ struct TraceOverlay: View {
                 let colors = TraceColors(trace)
                 let time = timeline.date.timeIntervalSinceReferenceDate
                 ctx.blendMode = .plusLighter
+                if bottomOnly {
+                    Self.drawBottomGlow(in: &ctx, rect: rect, level: TraceFrame.intensity(elapsed: elapsed), colors: colors)
+                    return
+                }
                 if reduceMotion {
                     let intensity = TraceFrame.intensity(elapsed: elapsed)
                     if subagents { Self.drawBottomGlow(in: &ctx, rect: rect, level: intensity, colors: colors) }
@@ -118,7 +130,7 @@ struct TraceOverlay: View {
 
 /// Reports whether the hosting window is visible (not minimized or fully
 /// covered), so the animation can pause.
-private struct OcclusionProbe: NSViewRepresentable {
+struct OcclusionProbe: NSViewRepresentable {
     @Binding var visible: Bool
 
     func makeNSView(context: Context) -> Probe {

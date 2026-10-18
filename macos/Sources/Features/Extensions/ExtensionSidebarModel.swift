@@ -2,16 +2,18 @@
 import AppKit
 import Combine
 
-/// An extension reachable from the window's sidebar. Order is sidebar order.
+/// An extension reachable from the window's icon row, above the usage bar.
+/// Order is the row's order.
 enum LosttyExtension: String, CaseIterable, Identifiable {
     case branches
     case skins
 
-    /// How an open extension shows: over the terminal, or inside the
-    /// sidebar, which widens to `width` over the terminal's edge.
+    /// How an open extension shows: over the terminal, or over the whole
+    /// window below the title bar (the icon row and usage bar included),
+    /// until closed from its own close button.
     enum Presentation: Equatable {
         case overlay
-        case sidebar(width: CGFloat)
+        case window
     }
 
     var id: String { rawValue }
@@ -31,7 +33,7 @@ enum LosttyExtension: String, CaseIterable, Identifiable {
 
     var presentation: Presentation {
         switch self {
-        case .branches: .sidebar(width: 340)
+        case .branches: .window
         case .skins: .overlay
         }
     }
