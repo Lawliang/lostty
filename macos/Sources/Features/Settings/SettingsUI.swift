@@ -17,7 +17,8 @@ enum SettingsUI {
 
     static func show() {
         if window == nil {
-            let host = NSHostingController(rootView: SettingsView(sidebar: .shared, observer: .shared, handoff: .shared))
+            let host = NSHostingController(rootView: SettingsView(
+                sidebar: .shared, observer: .shared, handoff: .shared, font: .shared))
             let window = NSWindow(contentViewController: host)
             window.title = "Lostty Settings"
             window.styleMask = [.titled, .closable]
@@ -25,6 +26,8 @@ enum SettingsUI {
             window.center()
             self.window = window
         }
+        // The config file may have been edited by hand since last time.
+        TerminalFontPreferences.shared.refresh()
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
     }

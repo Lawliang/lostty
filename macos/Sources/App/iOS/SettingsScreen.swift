@@ -56,6 +56,7 @@ struct SettingsScreen: View {
         .safeAreaInset(edge: .bottom) {
             VStack(spacing: 10) {
                 if store.settings.paired { NotificationsRow() }
+                TerminalFontRow()
                 TerminalTextSizeRow()
             }
             .padding(.horizontal, LosttyTheme.margin)
@@ -125,6 +126,31 @@ private struct TerminalTextSizeRow: View {
                 Spacer()
                 Picker("Terminal Text Size", selection: $textSize) {
                     ForEach(TerminalTextSize.allCases) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.menu)
+                .labelsHidden()
+                .tint(LosttyTheme.textSecondary)
+            }
+            .padding(.leading, 16)
+            .padding(.trailing, 4)
+            .padding(.vertical, 6)
+        }
+    }
+}
+
+/// Every terminal's font. An open terminal picks it up when shown again.
+private struct TerminalFontRow: View {
+    @AppStorage(TerminalFontChoice.key) private var font: TerminalFontChoice = .standard
+
+    var body: some View {
+        LosttyCard(padding: 0) {
+            HStack {
+                Text("Terminal Font")
+                    .font(LosttyFont.body)
+                    .foregroundStyle(LosttyTheme.textPrimary)
+                Spacer()
+                Picker("Terminal Font", selection: $font) {
+                    ForEach(TerminalFontChoice.allCases) { Text($0.title).tag($0) }
                 }
                 .pickerStyle(.menu)
                 .labelsHidden()
