@@ -17,15 +17,23 @@ enum HookNotifications {
         }
     }
 
-    static func missing(_ agent: HookAgent, connect: (@MainActor () -> Void)? = nil) -> LosttyNotification {
-        LosttyNotification(
+    /// `coordination`: whether Lostty's agent coordination is on; off, the
+    /// bubble doesn't mention the guard.
+    static func missing(
+        _ agent: HookAgent, connect: (@MainActor () -> Void)? = nil, coordination: Bool = AgentCoordination.isOn
+    ) -> LosttyNotification {
+        let detail = switch (coordination, agent) {
+        case (true, .claude): "Lostty's guard and trace aren't set up for Claude: critical actions aren't checked, "
+            + "and there's no trace, Ready for response or usage."
+        case (true, _): "Lostty's guard and trace aren't set up for \(agent.title): critical actions aren't checked, "
+            + "and there's no trace or Ready for response."
+        case (false, .claude): "Lostty can't show the trace, Ready for response or usage for Claude."
+        case (false, _): "Lostty can't show the trace or Ready for response for \(agent.title)."
+        }
+        return LosttyNotification(
             kind: .hooksMissing(agent),
             title: "\(agent.title) isn't connected",
-            detail: agent == .claude
-                ? "Lostty's guard and trace aren't set up for Claude: critical actions aren't checked, "
-                    + "and there's no trace, Ready for response or usage."
-                : "Lostty's guard and trace aren't set up for \(agent.title): critical actions aren't checked, "
-                    + "and there's no trace or Ready for response.",
+            detail: detail,
             actionTitle: "Connect",
             action: connect)
     }
@@ -33,14 +41,26 @@ enum HookNotifications {
     static let codexTrustMessage = "Open Codex once and approve Lostty's hooks so the guard can run."
 
     /// `codexTrusted`: for Codex, whether its config.toml already trusts a
-    /// Lostty guard hook (nil when unknown or not Codex).
-    static func result(_ agent: HookAgent, exitCode: Int32, stderr: String, codexTrusted: Bool? = nil) -> LosttyNotification {
+    /// Lostty guard hook (nil when unknown or not Codex). `coordination`:
+    /// whether Lostty's agent coordination is on; off, there's no guard to
+    /// mention.
+    static func result(
+        _ agent: HookAgent, exitCode: Int32, stderr: String, codexTrusted: Bool? = nil,
+        coordination: Bool = AgentCoordination.isOn
+    ) -> LosttyNotification {
         guard exitCode == 0 else {
             let reason = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
             return LosttyNotification(
                 kind: .hooks(agent), style: .failure,
                 title: "Couldn't connect \(agent.title)",
                 detail: reason.isEmpty ? "The Lostty command-line tool did not run." : reason)
+        }
+        guard coordination else {
+            var detail = agent == .claude
+                ? "Restart any running Claude sessions to see the trace and usage."
+                : "Restart any running \(agent.title) sessions to see the trace."
+            if agent == .codex { detail += " Codex asks you to approve Lostty's hooks once." }
+            return LosttyNotification(kind: .hooks(agent), style: .success, title: "\(agent.title) connected", detail: detail)
         }
         var detail = "Lostty's guard and trace are set up for \(agent.title). "
             + "Restart any running \(agent.title) sessions: they pick up the hooks only when they start."
@@ -107,7 +127,7 @@ enum HookNotifications {
     static func connect(_ agent: HookAgent, center: LosttyNotifications = .shared) {
         DispatchQueue.global(qos: .userInitiated).async {
             let outcome = ClaudeHooksCLI().run("install", agent: agent)
-            let trusted: Bool? = agent == .codex && outcome.exitCode == 0 ? codexTrustsGuard() : nil
+            let trusted: Bool? = AgentCoordination.isOn && agent == .codex && outcome.exitCode == 0 ? codexTrustsGuard() : nil
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     center.post(result(agent, exitCode: outcome.exitCode, stderr: outcome.stderr, codexTrusted: trusted))

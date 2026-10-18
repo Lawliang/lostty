@@ -49,9 +49,12 @@ struct ClaudeHooksCLI {
 
 enum ClaudeHooksPrompt {
     /// Shown after a successful install or remove. Claude Code reads hooks
-    /// when a session starts, so running sessions need a restart.
-    static func successMessage(for op: String) -> String? {
+    /// when a session starts, so running sessions need a restart. With
+    /// Lostty's agent coordination off there's no guard to mention.
+    static func successMessage(for op: String, coordination: Bool = AgentCoordination.isOn) -> String? {
         switch op {
+        case "install" where !coordination: "Hooks installed. Restart any running Claude or Codex sessions to see the trace. "
+            + "Codex asks you to approve Lostty's hooks the first time."
         case "install": "Hooks installed: Lostty's guard and trace are set up. Restart any running Claude or Codex sessions; "
             + "they pick up the hooks only when they start. Codex asks you to approve Lostty's hooks once."
         case "remove": "Hooks removed. Restart any running Claude or Codex sessions to finish turning the trace off."

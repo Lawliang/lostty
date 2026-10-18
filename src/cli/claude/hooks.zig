@@ -37,25 +37,42 @@ const claude_events = [_]Event{
     .{ .name = "Notification", .state = "idle" },
     .{ .name = "SessionEnd", .state = "exit" },
     .{ .name = "PreToolUse", .state = "tool" },
-    .{ .name = "PreToolUse", .kind = .guard, .timeout = guard_timeout_seconds },
     .{ .name = "PostToolUse", .state = "done" },
     .{ .name = "SessionStart", .state = "start" },
 };
 
 /// Codex hook events (same hooks.json names). Codex has no session-end
 /// event (Lostty sees the process exit anyway), and PermissionRequest is
-/// left out: a hook there could count as an approval decision. Codex gets the
-/// guard on PreToolUse too (a deny holds in every approval mode).
+/// left out: a hook there could count as an approval decision.
 const codex_events = [_]Event{
     .{ .name = "UserPromptSubmit", .state = "busy" },
     .{ .name = "Stop", .state = "idle" },
+};
+
+/// Whether Lostty's agent coordination is on: `"enabled": true` in
+/// `~/.config/lostty/guard.json` (guard/config.zig). Off, the hooks are
+/// exactly the ones from before it was built.
+pub const Coordination = enum { off, on };
+
+/// What coordination adds: the guard on PreToolUse, for Claude and Codex
+/// (for Codex a deny holds in every approval mode).
+const coordination_events = [_]Event{
     .{ .name = "PreToolUse", .kind = .guard, .timeout = guard_timeout_seconds },
 };
 
-pub fn eventsFor(agent: Agent) []const Event {
-    return switch (agent) {
-        .claude => &claude_events,
-        .codex => &codex_events,
+const claude_coordination_events = claude_events ++ coordination_events;
+const codex_coordination_events = codex_events ++ coordination_events;
+
+pub fn eventsFor(agent: Agent, c: Coordination) []const Event {
+    return switch (c) {
+        .off => switch (agent) {
+            .claude => &claude_events,
+            .codex => &codex_events,
+        },
+        .on => switch (agent) {
+            .claude => &claude_coordination_events,
+            .codex => &codex_coordination_events,
+        },
     };
 }
 
@@ -153,8 +170,8 @@ fn isTimeout(v: Value, want: u32) bool {
 
 /// Whether `cmd` (with `timeout`) is exactly one of Lostty's current
 /// entries for `event_name`.
-fn isCurrent(alloc: Allocator, agent: Agent, event_name: []const u8, cmd: []const u8, timeout: Value) Allocator.Error!bool {
-    for (eventsFor(agent)) |e| {
+fn isCurrent(alloc: Allocator, agent: Agent, c: Coordination, event_name: []const u8, cmd: []const u8, timeout: Value) Allocator.Error!bool {
+    for (eventsFor(agent, c)) |e| {
         if (!std.mem.eql(u8, e.name, event_name)) continue;
         const exp = try command(alloc, agent, e);
         if (std.mem.eql(u8, cmd, exp) and isTimeout(timeout, e.timeout)) return true;
@@ -173,11 +190,11 @@ fn checkEvent(event_value: Value) EditError!void {
     }
 }
 
-pub fn status(alloc: Allocator, agent: Agent, root: Value) Allocator.Error!Status {
+pub fn status(alloc: Allocator, agent: Agent, c: Coordination, root: Value) Allocator.Error!Status {
     if (root != .object) return .unreadable;
     var current: usize = 0;
     var ours: usize = 0;
-    var n = eventsFor(agent).len;
+    var n = eventsFor(agent, c).len;
     if (root.object.get("hooks")) |hooks| {
         if (hooks != .object) return .unreadable;
         var it = hooks.object.iterator();
@@ -188,7 +205,7 @@ pub fn status(alloc: Allocator, agent: Agent, root: Value) Allocator.Error!Statu
                     const cmd = hookCommand(hook) orelse continue;
                     if (!isLosttyCommand(cmd)) continue;
                     ours += 1;
-                    if (try isCurrent(alloc, agent, entry.key_ptr.*, cmd, hook.object.get("timeout") orelse .null)) current += 1;
+                    if (try isCurrent(alloc, agent, c, entry.key_ptr.*, cmd, hook.object.get("timeout") orelse .null)) current += 1;
                 }
             }
         }
@@ -267,15 +284,15 @@ fn group(alloc: Allocator, agent: Agent, e: Event) Allocator.Error!Value {
 
 /// Adds Lostty's hooks, replacing older Lostty entries. Returns false when
 /// already installed in the current form (nothing to write).
-pub fn install(alloc: Allocator, agent: Agent, root: *Value) EditError!bool {
+pub fn install(alloc: Allocator, agent: Agent, c: Coordination, root: *Value) EditError!bool {
     if (root.* != .object) return error.Malformed;
-    if (try status(alloc, agent, root.*) == .installed) return false;
+    if (try status(alloc, agent, c, root.*) == .installed) return false;
     const gop = try root.object.getOrPut("hooks");
     if (!gop.found_existing) gop.value_ptr.* = .{ .object = std.json.ObjectMap.init(alloc) };
     if (gop.value_ptr.* != .object) return error.Malformed;
     const hooks = &gop.value_ptr.object;
     _ = try strip(hooks);
-    for (eventsFor(agent)) |e| {
+    for (eventsFor(agent, c)) |e| {
         const ev = try hooks.getOrPut(e.name);
         if (!ev.found_existing) ev.value_ptr.* = .{ .array = std.json.Array.init(alloc) };
         try ev.value_ptr.array.append(try group(alloc, agent, e));
@@ -307,9 +324,9 @@ pub fn remove(root: *Value) EditError!bool {
 }
 
 /// The `hooks` object install adds, for the app's "Show changes".
-pub fn preview(alloc: Allocator, agent: Agent) Allocator.Error!Value {
+pub fn preview(alloc: Allocator, agent: Agent, c: Coordination) Allocator.Error!Value {
     var hooks = std.json.ObjectMap.init(alloc);
-    for (eventsFor(agent)) |e| {
+    for (eventsFor(agent, c)) |e| {
         const gop = try hooks.getOrPut(e.name);
         if (!gop.found_existing) gop.value_ptr.* = .{ .array = std.json.Array.init(alloc) };
         try gop.value_ptr.array.append(try group(alloc, agent, e));
@@ -333,9 +350,9 @@ test "claude hooks: status of empty and missing" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    try std.testing.expectEqual(Status.not_installed, try status(a, .claude, try parseFixture(a, "{}")));
-    try std.testing.expectEqual(Status.not_installed, try status(a, .claude, try parseFixture(a, "{\"hooks\":{}}")));
-    try std.testing.expectEqual(Status.unreadable, try status(a, .claude, try parseFixture(a, "[]")));
+    try std.testing.expectEqual(Status.not_installed, try status(a, .claude, .off, try parseFixture(a, "{}")));
+    try std.testing.expectEqual(Status.not_installed, try status(a, .claude, .off, try parseFixture(a, "{\"hooks\":{}}")));
+    try std.testing.expectEqual(Status.unreadable, try status(a, .claude, .off, try parseFixture(a, "[]")));
 }
 
 test "claude hooks: install into empty object, then idempotent" {
@@ -343,13 +360,13 @@ test "claude hooks: install into empty object, then idempotent" {
     defer arena.deinit();
     const a = arena.allocator();
     var root = try parseFixture(a, "{}");
-    try std.testing.expect(try install(a, .claude, &root));
-    try std.testing.expectEqual(Status.installed, try status(a, .claude, root));
+    try std.testing.expect(try install(a, .claude, .off, &root));
+    try std.testing.expectEqual(Status.installed, try status(a, .claude, .off, root));
     const once = try stringify(a, root);
-    try std.testing.expect(!(try install(a, .claude, &root)));
+    try std.testing.expect(!(try install(a, .claude, .off, &root)));
     try std.testing.expectEqualStrings(once, try stringify(a, root));
     // Survives a write/read round trip.
-    try std.testing.expectEqual(Status.installed, try status(a, .claude, try parseFixture(a, once)));
+    try std.testing.expectEqual(Status.installed, try status(a, .claude, .off, try parseFixture(a, once)));
     try std.testing.expect(std.mem.indexOf(u8, once, "+claude-state busy") != null);
     try std.testing.expect(std.mem.indexOf(u8, once, "\"timeout\": 5") != null);
 }
@@ -361,7 +378,7 @@ test "claude hooks: install keeps user keys, order, numbers and hooks" {
     var root = try parseFixture(a,
         \\{"model":"opus","cleanupPeriodDays":30.0,"hooks":{"Stop":[{"hooks":[{"type":"command","command":"say done"}]}]},"zeta":true}
     );
-    try std.testing.expect(try install(a, .claude, &root));
+    try std.testing.expect(try install(a, .claude, .off, &root));
     const out = try stringify(a, root);
     // Key order of the top level is unchanged.
     const m = std.mem.indexOf(u8, out, "\"model\"").?;
@@ -384,9 +401,9 @@ test "claude hooks: outdated entries become partial and are replaced" {
     var root = try parseFixture(a,
         \\{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"[ -n \"$LOSTTY_SURFACE\" ] && old +claude-state idle"}]}]}}
     );
-    try std.testing.expectEqual(Status.partial, try status(a, .claude, root));
-    try std.testing.expect(try install(a, .claude, &root));
-    try std.testing.expectEqual(Status.installed, try status(a, .claude, root));
+    try std.testing.expectEqual(Status.partial, try status(a, .claude, .off, root));
+    try std.testing.expect(try install(a, .claude, .off, &root));
+    try std.testing.expectEqual(Status.installed, try status(a, .claude, .off, root));
     const out = try stringify(a, root);
     try std.testing.expect(std.mem.indexOf(u8, out, "old +claude-state") == null);
 }
@@ -398,9 +415,9 @@ test "claude hooks: remove takes out only Lostty entries" {
     var root = try parseFixture(a,
         \\{"model":"opus","hooks":{"Stop":[{"hooks":[{"type":"command","command":"say done"}]}]}}
     );
-    _ = try install(a, .claude, &root);
+    _ = try install(a, .claude, .off, &root);
     try std.testing.expect(try remove(&root));
-    try std.testing.expectEqual(Status.not_installed, try status(a, .claude, root));
+    try std.testing.expectEqual(Status.not_installed, try status(a, .claude, .off, root));
     const out = try stringify(a, root);
     try std.testing.expect(std.mem.indexOf(u8, out, "say done") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "UserPromptSubmit") == null);
@@ -412,7 +429,7 @@ test "claude hooks: remove drops an emptied hooks table" {
     defer arena.deinit();
     const a = arena.allocator();
     var root = try parseFixture(a, "{\"model\":\"opus\"}");
-    _ = try install(a, .claude, &root);
+    _ = try install(a, .claude, .off, &root);
     _ = try remove(&root);
     try std.testing.expectEqualStrings("{\n  \"model\": \"opus\"\n}\n", try stringify(a, root));
 }
@@ -446,12 +463,12 @@ test "claude hooks: malformed layouts are refused" {
     };
     for (bad) |text| {
         var root = try parseFixture(a, text);
-        try std.testing.expectEqual(Status.unreadable, try status(a, .claude, root));
-        try std.testing.expectError(error.Malformed, install(a, .claude, &root));
+        try std.testing.expectEqual(Status.unreadable, try status(a, .claude, .off, root));
+        try std.testing.expectError(error.Malformed, install(a, .claude, .off, &root));
         try std.testing.expectError(error.Malformed, remove(&root));
     }
     var arr = try parseFixture(a, "[]");
-    try std.testing.expectError(error.Malformed, install(a, .claude, &arr));
+    try std.testing.expectError(error.Malformed, install(a, .claude, .off, &arr));
 }
 
 test "claude hooks: command and detection" {
@@ -473,8 +490,8 @@ test "claude hooks: preview lists every event" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const out = try stringify(a, try preview(a, .claude));
-    for (eventsFor(.claude)) |e| try std.testing.expect(std.mem.indexOf(u8, out, e.name) != null);
+    const out = try stringify(a, try preview(a, .claude, .off));
+    for (eventsFor(.claude, .off)) |e| try std.testing.expect(std.mem.indexOf(u8, out, e.name) != null);
 }
 
 test "claude hooks: the handoff's events are installed" {
@@ -482,7 +499,7 @@ test "claude hooks: the handoff's events are installed" {
     defer arena.deinit();
     const a = arena.allocator();
     var root = try parseFixture(a, "{}");
-    try std.testing.expect(try install(a, .claude, &root));
+    try std.testing.expect(try install(a, .claude, .off, &root));
     const out = try stringify(a, root);
     try std.testing.expect(std.mem.indexOf(u8, out, "\"PostToolUse\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "+claude-state done") != null);
@@ -490,9 +507,9 @@ test "claude hooks: the handoff's events are installed" {
     try std.testing.expect(std.mem.indexOf(u8, out, "+claude-state start") != null);
     // An install from before the handoff is partial, so Settings offers the update.
     var old = try parseFixture(a, "{}");
-    try std.testing.expect(try install(a, .claude, &old));
+    try std.testing.expect(try install(a, .claude, .off, &old));
     _ = old.object.getPtr("hooks").?.object.orderedRemove("PostToolUse");
-    try std.testing.expectEqual(Status.partial, try status(a, .claude, old));
+    try std.testing.expectEqual(Status.partial, try status(a, .claude, .off, old));
 }
 
 test "claude hooks: the status line is added, updated and removed" {
@@ -500,20 +517,20 @@ test "claude hooks: the status line is added, updated and removed" {
     defer arena.deinit();
     const a = arena.allocator();
     var root = try parseFixture(a, "{}");
-    _ = try install(a, .claude, &root);
+    _ = try install(a, .claude, .off, &root);
     // Hooks from before the usage bar: partial until the status line is added.
     _ = root.object.orderedRemove("statusLine");
-    try std.testing.expectEqual(Status.partial, try status(a, .claude, root));
-    try std.testing.expect(try install(a, .claude, &root));
-    try std.testing.expectEqual(Status.installed, try status(a, .claude, root));
+    try std.testing.expectEqual(Status.partial, try status(a, .claude, .off, root));
+    try std.testing.expect(try install(a, .claude, .off, &root));
+    try std.testing.expectEqual(Status.installed, try status(a, .claude, .off, root));
     try std.testing.expect(std.mem.indexOf(u8, try stringify(a, root), "+claude-usage") != null);
     // An older Lostty status line is replaced.
     try root.object.put("statusLine", try parseFixture(a,
         \\{"type":"command","command":"[ -n \"$LOSTTY_SURFACE\" ] && old +claude-usage"}
     ));
-    try std.testing.expectEqual(Status.partial, try status(a, .claude, root));
-    try std.testing.expect(try install(a, .claude, &root));
-    try std.testing.expectEqual(Status.installed, try status(a, .claude, root));
+    try std.testing.expectEqual(Status.partial, try status(a, .claude, .off, root));
+    try std.testing.expect(try install(a, .claude, .off, &root));
+    try std.testing.expectEqual(Status.installed, try status(a, .claude, .off, root));
     try std.testing.expect(try remove(&root));
     try std.testing.expectEqualStrings("{}\n", try stringify(a, root));
 }
@@ -525,22 +542,52 @@ test "claude hooks: a user's own status line is kept" {
     var root = try parseFixture(a,
         \\{"statusLine":{"type":"command","command":"~/bin/my-status"}}
     );
-    try std.testing.expectEqual(Status.not_installed, try status(a, .claude, root));
-    try std.testing.expect(try install(a, .claude, &root));
-    try std.testing.expectEqual(Status.installed, try status(a, .claude, root));
+    try std.testing.expectEqual(Status.not_installed, try status(a, .claude, .off, root));
+    try std.testing.expect(try install(a, .claude, .off, &root));
+    try std.testing.expectEqual(Status.installed, try status(a, .claude, .off, root));
     try std.testing.expect(try remove(&root));
     const out = try stringify(a, root);
     try std.testing.expect(std.mem.indexOf(u8, out, "my-status") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "+claude-usage") == null);
 }
 
-test "codex hooks: install adds busy, idle and the guard" {
+test "codex hooks: install adds only the busy and idle events" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
     var root = try parseFixture(a, "{}");
-    try std.testing.expect(try install(a, .codex, &root));
-    try std.testing.expectEqual(Status.installed, try status(a, .codex, root));
+    try std.testing.expect(try install(a, .codex, .off, &root));
+    try std.testing.expectEqual(Status.installed, try status(a, .codex, .off, root));
+    const out = try stringify(a, root);
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"UserPromptSubmit\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"Stop\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "Notification") == null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "SessionEnd") == null);
+    // PermissionRequest stays out: a hook there might count as an approval.
+    try std.testing.expect(std.mem.indexOf(u8, out, "PermissionRequest") == null);
+    // Second install is a no-op; remove takes everything back out.
+    try std.testing.expect(!(try install(a, .codex, .off, &root)));
+    try std.testing.expect(try remove(&root));
+    try std.testing.expectEqual(Status.not_installed, try status(a, .codex, .off, root));
+}
+
+test "codex hooks: preview lists the two events" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const out = try stringify(a, try preview(a, .codex, .off));
+    try std.testing.expect(std.mem.indexOf(u8, out, "UserPromptSubmit") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "Notification") == null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "statusLine") == null);
+}
+
+test "codex hooks: with coordination on, install adds busy, idle and the guard" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var root = try parseFixture(a, "{}");
+    try std.testing.expect(try install(a, .codex, .on, &root));
+    try std.testing.expectEqual(Status.installed, try status(a, .codex, .on, root));
     const out = try stringify(a, root);
     try std.testing.expect(std.mem.indexOf(u8, out, "\"UserPromptSubmit\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "\"Stop\"") != null);
@@ -550,16 +597,16 @@ test "codex hooks: install adds busy, idle and the guard" {
     // PermissionRequest stays out: a hook there might count as an approval.
     try std.testing.expect(std.mem.indexOf(u8, out, "PermissionRequest") == null);
     // Second install is a no-op; remove takes everything back out.
-    try std.testing.expect(!(try install(a, .codex, &root)));
+    try std.testing.expect(!(try install(a, .codex, .on, &root)));
     try std.testing.expect(try remove(&root));
-    try std.testing.expectEqual(Status.not_installed, try status(a, .codex, root));
+    try std.testing.expectEqual(Status.not_installed, try status(a, .codex, .on, root));
 }
 
-test "codex hooks: preview lists the three events" {
+test "codex hooks: with coordination on, preview lists the three events" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const out = try stringify(a, try preview(a, .codex));
+    const out = try stringify(a, try preview(a, .codex, .on));
     try std.testing.expect(std.mem.indexOf(u8, out, "UserPromptSubmit") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "\"PreToolUse\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "+guard --agent=codex") != null);
@@ -572,18 +619,18 @@ test "claude hooks: install adds the guard for Claude and Codex" {
     defer arena.deinit();
     const a = arena.allocator();
     var c = try parseFixture(a, "{}");
-    try std.testing.expect(try install(a, .claude, &c));
+    try std.testing.expect(try install(a, .claude, .on, &c));
     const cout = try stringify(a, c);
     try std.testing.expect(std.mem.indexOf(u8, cout, "+guard --agent=claude") != null);
     try std.testing.expect(std.mem.indexOf(u8, cout, "\"timeout\": 15") != null);
-    try std.testing.expectEqual(Status.installed, try status(a, .claude, c));
+    try std.testing.expectEqual(Status.installed, try status(a, .claude, .on, c));
 
     var x = try parseFixture(a, "{}");
-    try std.testing.expect(try install(a, .codex, &x));
+    try std.testing.expect(try install(a, .codex, .on, &x));
     const xout = try stringify(a, x);
     try std.testing.expect(std.mem.indexOf(u8, xout, "+guard --agent=codex") != null);
     try std.testing.expect(std.mem.indexOf(u8, xout, "\"PreToolUse\"") != null);
-    try std.testing.expectEqual(Status.installed, try status(a, .codex, x));
+    try std.testing.expectEqual(Status.installed, try status(a, .codex, .on, x));
 }
 
 test "claude hooks: older hooks without the guard are partial" {
@@ -594,9 +641,9 @@ test "claude hooks: older hooks without the guard are partial" {
         \\{"hooks":{"UserPromptSubmit":[{"hooks":[{"type":"command","command":"[ -n \"$LOSTTY_SURFACE\" ] && [ -x \"$LOSTTY_BIN\" ] && \"$LOSTTY_BIN\" +claude-state busy; exit 0","timeout":5}]}],
         \\"Stop":[{"hooks":[{"type":"command","command":"[ -n \"$LOSTTY_SURFACE\" ] && [ -x \"$LOSTTY_BIN\" ] && \"$LOSTTY_BIN\" +claude-state idle; exit 0","timeout":5}]}]}}
     );
-    try std.testing.expectEqual(Status.partial, try status(a, .codex, root));
-    try std.testing.expect(try install(a, .codex, &root));
-    try std.testing.expectEqual(Status.installed, try status(a, .codex, root));
+    try std.testing.expectEqual(Status.partial, try status(a, .codex, .on, root));
+    try std.testing.expect(try install(a, .codex, .on, &root));
+    try std.testing.expectEqual(Status.installed, try status(a, .codex, .on, root));
 }
 
 test "claude hooks: the guard command keeps its exit code" {
@@ -614,7 +661,7 @@ test "claude hooks: remove takes out the guard too" {
     defer arena.deinit();
     const a = arena.allocator();
     var root = try parseFixture(a, "{}");
-    _ = try install(a, .codex, &root);
+    _ = try install(a, .codex, .on, &root);
     try std.testing.expect(try remove(&root));
     try std.testing.expect(std.mem.indexOf(u8, try stringify(a, root), "+guard") == null);
 }
@@ -664,12 +711,32 @@ test "codex hooks: an older guard hook is partial and gets replaced" {
     defer arena.deinit();
     const a = arena.allocator();
     var root = try parseFixture(a, "{}");
-    _ = try install(a, .codex, &root);
+    _ = try install(a, .codex, .on, &root);
     const old = "[ -n \"$LOSTTY_SURFACE\" ] && [ -x \"$LOSTTY_BIN\" ] || exit 0; exec \"$LOSTTY_BIN\" +guard --agent=codex";
     const text = try std.mem.replaceOwned(u8, a, try stringify(a, root), "[ -n \\\"$LOSTTY_SURFACE\\\" ] || exit 0; [ -x \\\"$LOSTTY_BIN\\\" ] || { echo 'Blocked by Lostty: its app moved or was deleted, so this cannot be checked. Do not try another way.' >&2; exit 2; }; exec \\\"$LOSTTY_BIN\\\" +guard --agent=codex", try std.mem.replaceOwned(u8, a, old, "\"", "\\\""));
     var stale = try parseFixture(a, text);
-    try std.testing.expectEqual(Status.partial, try status(a, .codex, stale));
-    try std.testing.expect(try install(a, .codex, &stale));
-    try std.testing.expectEqual(Status.installed, try status(a, .codex, stale));
+    try std.testing.expectEqual(Status.partial, try status(a, .codex, .on, stale));
+    try std.testing.expect(try install(a, .codex, .on, &stale));
+    try std.testing.expectEqual(Status.installed, try status(a, .codex, .on, stale));
     try std.testing.expect(std.mem.indexOf(u8, try stringify(a, stale), "exit 2") != null);
+}
+
+test "claude hooks: with coordination off, the guard hook is left out, and taken out" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    for ([_]Agent{ .claude, .codex }) |agent| {
+        try std.testing.expect(std.mem.indexOf(u8, try stringify(a, try preview(a, agent, .off)), "+guard") == null);
+        // Hooks installed with it on are partial once it's off; the update
+        // takes the guard out and leaves the rest.
+        var root = try parseFixture(a, "{}");
+        _ = try install(a, agent, .on, &root);
+        try std.testing.expectEqual(Status.installed, try status(a, agent, .on, root));
+        try std.testing.expectEqual(Status.partial, try status(a, agent, .off, root));
+        try std.testing.expect(try install(a, agent, .off, &root));
+        try std.testing.expectEqual(Status.installed, try status(a, agent, .off, root));
+        const out = try stringify(a, root);
+        try std.testing.expect(std.mem.indexOf(u8, out, "+guard") == null);
+        try std.testing.expect(std.mem.indexOf(u8, out, "+claude-state busy") != null);
+    }
 }
