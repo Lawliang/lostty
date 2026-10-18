@@ -2,6 +2,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Action = @import("ghostty.zig").Action;
 const hooks = @import("claude/hooks.zig");
+const guard_config = @import("guard/config.zig");
 
 pub const Options = struct {
     pub fn deinit(self: Options) void {
@@ -69,6 +70,8 @@ pub fn run(gpa: Allocator) !u8 {
         try stderr.writeAll("claude-hooks: HOME is not set\n");
         return 1;
     };
+    // Lostty's agent coordination adds its hooks only when it's turned on.
+    const coordination: hooks.Coordination = if (guard_config.Config.load(alloc, home).enabled()) .on else .off;
     // Claude always; Codex only when it is installed (~/.codex exists).
     var targets: std.ArrayList(Target) = .empty;
     // With --agent, only that agent; otherwise Claude, plus Codex when
@@ -85,7 +88,7 @@ pub fn run(gpa: Allocator) !u8 {
     if (chosen == .status) {
         var combined: ?hooks.Status = null;
         for (targets.items) |t| {
-            const s = switch (try applyAt(alloc, t.path, .status, t.agent)) {
+            const s = switch (try applyAt(alloc, t.path, .status, t.agent, coordination)) {
                 .status => |s| s,
                 else => unreachable,
             };
@@ -95,13 +98,13 @@ pub fn run(gpa: Allocator) !u8 {
         return 0;
     }
     if (chosen == .preview) {
-        try stdout.writeAll((try applyAt(alloc, targets.items[0].path, .preview, targets.items[0].agent)).preview);
+        try stdout.writeAll((try applyAt(alloc, targets.items[0].path, .preview, targets.items[0].agent, coordination)).preview);
         return 0;
     }
 
     for (targets.items) |t| {
         const name = @tagName(t.agent);
-        switch (try applyAt(alloc, t.path, chosen, t.agent)) {
+        switch (try applyAt(alloc, t.path, chosen, t.agent, coordination)) {
             .changed => |changed| try stdout.print("{s}: {s}\n", .{ name, switch (chosen) {
                 .install => if (changed) "installed" else "already installed",
                 else => if (changed) "removed" else "nothing to remove",
@@ -145,9 +148,10 @@ pub fn combine(a: hooks.Status, b: hooks.Status) hooks.Status {
     return .partial;
 }
 
-/// Runs `op` on `agent`'s hook file at `path` (absolute).
-pub fn applyAt(alloc: Allocator, path: []const u8, op: Op, agent: hooks.Agent) !Outcome {
-    if (op == .preview) return .{ .preview = try hooks.stringify(alloc, try hooks.preview(alloc, agent)) };
+/// Runs `op` on `agent`'s hook file at `path` (absolute), with or without
+/// coordination's hooks.
+pub fn applyAt(alloc: Allocator, path: []const u8, op: Op, agent: hooks.Agent, c: hooks.Coordination) !Outcome {
+    if (op == .preview) return .{ .preview = try hooks.stringify(alloc, try hooks.preview(alloc, agent, c)) };
 
     // Follow a symlinked settings.json (dotfile managers) so the rename
     // replaces the real file and the link stays a link.
@@ -178,11 +182,11 @@ pub fn applyAt(alloc: Allocator, path: []const u8, op: Op, agent: hooks.Agent) !
         .{ .object = std.json.ObjectMap.init(alloc) };
 
     if (op == .status) {
-        return .{ .status = if (bytes == null) .not_installed else try hooks.status(alloc, agent, root) };
+        return .{ .status = if (bytes == null) .not_installed else try hooks.status(alloc, agent, c, root) };
     }
 
     const changed = (switch (op) {
-        .install => hooks.install(alloc, agent, &root),
+        .install => hooks.install(alloc, agent, c, &root),
         .remove => hooks.remove(&root),
         .status, .preview => unreachable,
     }) catch |err| switch (err) {
@@ -239,9 +243,9 @@ test "claude hooks file: install creates a missing file and its directory" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
     const path = try tmpPath(a, tmp, ".claude/settings.json");
-    try std.testing.expectEqual(Outcome{ .status = .not_installed }, try applyAt(a, path, .status, .claude));
-    try std.testing.expectEqual(Outcome{ .changed = true }, try applyAt(a, path, .install, .claude));
-    try std.testing.expectEqual(Outcome{ .status = .installed }, try applyAt(a, path, .status, .claude));
+    try std.testing.expectEqual(Outcome{ .status = .not_installed }, try applyAt(a, path, .status, .claude, .off));
+    try std.testing.expectEqual(Outcome{ .changed = true }, try applyAt(a, path, .install, .claude, .off));
+    try std.testing.expectEqual(Outcome{ .status = .installed }, try applyAt(a, path, .status, .claude, .off));
     // No backup when there was no file.
     try std.testing.expectError(error.FileNotFound, readAll(a, try tmpPath(a, tmp, ".claude/settings.json.lostty-backup")));
 }
@@ -254,10 +258,10 @@ test "claude hooks file: install backs up, second install is a no-op" {
     defer tmp.cleanup();
     try tmp.dir.writeFile(.{ .sub_path = "settings.json", .data = "{\"model\":\"opus\"}\n" });
     const path = try tmpPath(a, tmp, "settings.json");
-    try std.testing.expectEqual(Outcome{ .changed = true }, try applyAt(a, path, .install, .claude));
+    try std.testing.expectEqual(Outcome{ .changed = true }, try applyAt(a, path, .install, .claude, .off));
     try std.testing.expectEqualStrings("{\"model\":\"opus\"}\n", try readAll(a, try tmpPath(a, tmp, "settings.json.lostty-backup")));
     const after = try readAll(a, path);
-    try std.testing.expectEqual(Outcome{ .changed = false }, try applyAt(a, path, .install, .claude));
+    try std.testing.expectEqual(Outcome{ .changed = false }, try applyAt(a, path, .install, .claude, .off));
     try std.testing.expectEqualStrings(after, try readAll(a, path));
     // No temp file is left behind.
     try std.testing.expectError(error.FileNotFound, readAll(a, try tmpPath(a, tmp, "settings.json.lostty-tmp")));
@@ -271,8 +275,8 @@ test "claude hooks file: invalid JSON is left untouched" {
     defer tmp.cleanup();
     try tmp.dir.writeFile(.{ .sub_path = "settings.json", .data = "{ \"model\": // comment\n}" });
     const path = try tmpPath(a, tmp, "settings.json");
-    try std.testing.expectEqual(Outcome{ .status = .unreadable }, try applyAt(a, path, .status, .claude));
-    const result = try applyAt(a, path, .install, .claude);
+    try std.testing.expectEqual(Outcome{ .status = .unreadable }, try applyAt(a, path, .status, .claude, .off));
+    const result = try applyAt(a, path, .install, .claude, .off);
     try std.testing.expect(result == .failed);
     try std.testing.expectEqualStrings("{ \"model\": // comment\n}", try readAll(a, path));
 }
@@ -284,7 +288,7 @@ test "claude hooks file: remove on a missing file changes nothing" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
     const path = try tmpPath(a, tmp, "settings.json");
-    try std.testing.expectEqual(Outcome{ .changed = false }, try applyAt(a, path, .remove, .claude));
+    try std.testing.expectEqual(Outcome{ .changed = false }, try applyAt(a, path, .remove, .claude, .off));
     try std.testing.expectError(error.FileNotFound, readAll(a, path));
 }
 
@@ -298,7 +302,7 @@ test "claude hooks: install follows a symlink" {
     try tmp.dir.writeFile(.{ .sub_path = "dotfiles/settings.json", .data = "{}" });
     try tmp.dir.symLink("dotfiles/settings.json", "settings.json", .{});
     const link = try tmpPath(a, tmp, "settings.json");
-    try std.testing.expectEqual(Outcome{ .changed = true }, try applyAt(a, link, .install, .claude));
+    try std.testing.expectEqual(Outcome{ .changed = true }, try applyAt(a, link, .install, .claude, .off));
     // The link is still a link, and the target got the hooks.
     var buf: [std.fs.max_path_bytes]u8 = undefined;
     _ = try tmp.dir.readLink("settings.json", &buf);
@@ -317,7 +321,7 @@ test "claude hooks file: install keeps the file's permissions" {
     try f.writeAll("{}");
     f.close();
     const path = try tmpPath(a, tmp, "settings.json");
-    try std.testing.expectEqual(Outcome{ .changed = true }, try applyAt(a, path, .install, .claude));
+    try std.testing.expectEqual(Outcome{ .changed = true }, try applyAt(a, path, .install, .claude, .off));
     try std.testing.expectEqual(@as(std.fs.File.Mode, 0o600), (try tmp.dir.statFile("settings.json")).mode & 0o777);
     try std.testing.expectEqual(@as(std.fs.File.Mode, 0o600), (try tmp.dir.statFile("settings.json.lostty-backup")).mode & 0o777);
 }
@@ -333,7 +337,7 @@ test "claude hooks file: write errors become a message and leave the file alone"
     // A read-only directory (e.g. a Nix store target) cannot take the backup.
     try std.posix.fchmod(tmp.dir.fd, 0o555);
     defer std.posix.fchmod(tmp.dir.fd, 0o755) catch {};
-    const result = try applyAt(a, path, .install, .claude);
+    const result = try applyAt(a, path, .install, .claude, .off);
     try std.testing.expect(result == .failed);
     try std.testing.expect(std.mem.indexOf(u8, result.failed, "AccessDenied") != null);
     try std.testing.expectEqualStrings("{}", try readAll(a, path));
@@ -347,7 +351,7 @@ test "claude hooks file: a dangling symlink is refused, not replaced" {
     defer tmp.cleanup();
     try tmp.dir.symLink("dotfiles/settings.json", "settings.json", .{});
     const link = try tmpPath(a, tmp, "settings.json");
-    const result = try applyAt(a, link, .install, .claude);
+    const result = try applyAt(a, link, .install, .claude, .off);
     try std.testing.expect(result == .failed);
     var buf: [std.fs.max_path_bytes]u8 = undefined;
     try std.testing.expectEqualStrings("dotfiles/settings.json", try tmp.dir.readLink("settings.json", &buf));
@@ -357,7 +361,7 @@ test "claude hooks file: preview needs no file" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const result = try applyAt(a, "/nonexistent/settings.json", .preview, .claude);
+    const result = try applyAt(a, "/nonexistent/settings.json", .preview, .claude, .off);
     try std.testing.expect(std.mem.indexOf(u8, result.preview, "SessionEnd") != null);
 }
 
@@ -387,8 +391,8 @@ test "claude hooks file: codex install writes hooks.json with its events" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
     const path = try tmpPath(a, tmp, ".codex/hooks.json");
-    try std.testing.expectEqual(Outcome{ .changed = true }, try applyAt(a, path, .install, .codex));
-    try std.testing.expectEqual(Outcome{ .status = .installed }, try applyAt(a, path, .status, .codex));
+    try std.testing.expectEqual(Outcome{ .changed = true }, try applyAt(a, path, .install, .codex, .off));
+    try std.testing.expectEqual(Outcome{ .status = .installed }, try applyAt(a, path, .status, .codex, .off));
     const text = try readAll(a, path);
     try std.testing.expect(std.mem.indexOf(u8, text, "+claude-state busy") != null);
     try std.testing.expect(std.mem.indexOf(u8, text, "SessionEnd") == null);

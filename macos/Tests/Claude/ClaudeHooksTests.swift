@@ -19,6 +19,11 @@ struct ClaudeHooksTests {
         #expect(ClaudeHooksPrompt.successMessage(for: "status") == nil)
     }
 
+    @Test func onlyCoordinationOnMentionsTheGuard() {
+        #expect(ClaudeHooksPrompt.successMessage(for: "install", coordination: false)?.contains("guard") == false)
+        #expect(ClaudeHooksPrompt.successMessage(for: "install", coordination: true)?.contains("guard") == true)
+    }
+
     @Test func runReportsAMissingBinary() {
         let cli = ClaudeHooksCLI(binary: URL(fileURLWithPath: "/nonexistent/ghostty"))
         let result = cli.run("status")

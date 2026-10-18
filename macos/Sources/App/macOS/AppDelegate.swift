@@ -288,18 +288,19 @@ class AppDelegate: NSObject,
 
         let center = UNUserNotificationCenter.current()
 
-        let guardDeny = UNNotificationAction(identifier: GuardRuntime.denyAction, title: "Deny", options: [.destructive])
-        let guardCategory = UNNotificationCategory(identifier: GuardRuntime.category, actions: [guardDeny], intentIdentifiers: [], options: [.customDismissAction])
-
-        center.setNotificationCategories([
+        var categories: Set<UNNotificationCategory> = [
             UNNotificationCategory(
                 identifier: Ghostty.userNotificationCategory,
                 actions: actions,
                 intentIdentifiers: [],
                 options: [.customDismissAction]
             ),
-            guardCategory,
-        ])
+        ]
+        if AgentCoordination.isOn {
+            let guardDeny = UNNotificationAction(identifier: GuardRuntime.denyAction, title: "Deny", options: [.destructive])
+            categories.insert(UNNotificationCategory(identifier: GuardRuntime.category, actions: [guardDeny], intentIdentifiers: [], options: [.customDismissAction]))
+        }
+        center.setNotificationCategories(categories)
         center.delegate = self
 
         // Observe our appearance so we can report the correct value to libghostty.
@@ -380,9 +381,11 @@ class AppDelegate: NSObject,
         // Restart to Update: notice a new build installed over this one.
         BundleWatch.shared.start()
         HookNotifications.checkAtLaunch()
-        GuardRuntime.shared.start()
-        ClaudeRuntime.shared.agentGone = { GuardRuntime.shared.agentGone($0) }
-        ClaudeRuntime.shared.agentSeen = { GuardRuntime.shared.agentSeen($0, kind: $1) }
+        if AgentCoordination.isOn {
+            GuardRuntime.shared.start()
+            ClaudeRuntime.shared.agentGone = { GuardRuntime.shared.agentGone($0) }
+            ClaudeRuntime.shared.agentSeen = { GuardRuntime.shared.agentSeen($0, kind: $1) }
+        }
 
         // Lostty Mobile: after a crash, offer to reopen the tmux sessions
         // the previous Lostty left running.
@@ -1038,6 +1041,11 @@ class AppDelegate: NSObject,
         didReceive: UNNotificationResponse,
         withCompletionHandler: @escaping () -> Void
     ) {
+        guard AgentCoordination.isOn else {
+            ghostty.handleUserNotification(response: didReceive)
+            withCompletionHandler()
+            return
+        }
         // The guard's runtime lives on the main actor; make sure we are there.
         let route: @MainActor () -> Void = { [self] in
             if !GuardRuntime.shared.handle(didReceive) {

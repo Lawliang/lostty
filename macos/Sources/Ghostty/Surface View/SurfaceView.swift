@@ -243,7 +243,7 @@ extension Ghostty {
                 // Lostty Claude trace: above the unfocused-split dimming, which it
                 // replaces while showing.
                 ClaudeReadyOverlay(surfaceID: surfaceView.id, cellSize: surfaceView.cellSize)
-                GuardBadgeOverlay(surfaceID: surfaceView.id)
+                if AgentCoordination.isOn { GuardBadgeOverlay(surfaceID: surfaceView.id) }
 
                 // Grab handle for dragging the window. We want this to appear at the very
                 // top Z-index os it isn't faded by the unfocused overlay.

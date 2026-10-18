@@ -106,24 +106,39 @@ struct HookNotificationsTests {
     }
 
     @Test func missingBubbleNamesTheAgentAndOffersConnect() {
-        let n = HookNotifications.missing(.codex)
+        let n = HookNotifications.missing(.codex, coordination: false)
         #expect(n.kind == .hooksMissing(.codex))
         #expect(n.title == "Codex isn't connected")
-        #expect(n.detail.contains("Lostty's guard and trace aren't set up for Codex"))
-        #expect(HookNotifications.missing(.claude).detail.contains("Lostty's guard and trace aren't set up for Claude"))
+        #expect(n.detail == "Lostty can't show the trace or Ready for response for Codex.")
+        #expect(HookNotifications.missing(.claude, coordination: false).detail
+            == "Lostty can't show the trace, Ready for response or usage for Claude.")
         #expect(n.actionTitle == "Connect")
     }
 
+    @Test func withCoordinationOnTheMissingBubbleNamesTheGuard() {
+        let n = HookNotifications.missing(.codex, coordination: true)
+        #expect(n.detail.contains("Lostty's guard and trace aren't set up for Codex"))
+        #expect(HookNotifications.missing(.claude, coordination: true).detail.contains("Lostty's guard and trace aren't set up for Claude"))
+    }
+
     @Test func connectedBubbleSaysToRestart() {
-        let claude = HookNotifications.result(.claude, exitCode: 0, stderr: "")
+        let claude = HookNotifications.result(.claude, exitCode: 0, stderr: "", coordination: false)
         #expect(claude.title == "Claude connected")
+        #expect(claude.detail == "Restart any running Claude sessions to see the trace and usage.")
+        #expect(claude.actionTitle == nil)
+        let codex = HookNotifications.result(.codex, exitCode: 0, stderr: "", coordination: false)
+        #expect(codex.detail == "Restart any running Codex sessions to see the trace. Codex asks you to approve Lostty's hooks once.")
+        #expect(!codex.detail.contains("guard"))
+    }
+
+    @Test func withCoordinationOnTheConnectedBubbleNamesTheGuard() {
+        let claude = HookNotifications.result(.claude, exitCode: 0, stderr: "", coordination: true)
         #expect(claude.detail.contains("guard"))
         #expect(claude.detail.contains("Restart"))
         #expect(!claude.detail.contains(HookNotifications.codexTrustMessage))
-        #expect(claude.actionTitle == nil)
-        let codex = HookNotifications.result(.codex, exitCode: 0, stderr: "", codexTrusted: false)
+        let codex = HookNotifications.result(.codex, exitCode: 0, stderr: "", codexTrusted: false, coordination: true)
         #expect(codex.detail.contains(HookNotifications.codexTrustMessage))
-        let trusted = HookNotifications.result(.codex, exitCode: 0, stderr: "", codexTrusted: true)
+        let trusted = HookNotifications.result(.codex, exitCode: 0, stderr: "", codexTrusted: true, coordination: true)
         #expect(!trusted.detail.contains(HookNotifications.codexTrustMessage))
     }
 

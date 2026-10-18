@@ -3,10 +3,11 @@ const Allocator = std.mem.Allocator;
 
 // The guard's settings: `~/.config/lostty/guard.json` over built-in
 // defaults. The file sits under ~/.config/lostty, which the guard itself
-// protects, so an agent can't loosen it. A missing or broken file means
-// the defaults: the guard never turns itself off over a typo.
+// protects, so an agent can't loosen it. Lostty's agent coordination, the
+// guard included, is off unless the file says `"enabled": true`; once on,
+// a broken setting means the defaults, never a looser rule.
 //
-//   { "enabled": false,   (pauses the guard: every call goes through)
+//   { "enabled": true,    (turns coordination on; anything else is off)
 //     "push": "all" | "protected",
 //     "protectedBranches": ["release"],
 //     "commands": ["deploy.sh"],
@@ -44,13 +45,13 @@ pub const Config = struct {
         return .{ .root = if (v == .object) v else null };
     }
 
-    /// False only for an exact top-level `"enabled": false`: the guard then
-    /// lets every call through (paused). Anything else, a broken file
-    /// included, keeps it on.
+    /// True only for an exact top-level `"enabled": true`. Off, Lostty
+    /// behaves as if its agent coordination were never built: no guard
+    /// hooks, and a guard call that still runs lets everything through.
     pub fn enabled(self: Config) bool {
-        const root = self.root orelse return true;
-        const v = root.object.get("enabled") orelse return true;
-        return !(v == .bool and !v.bool);
+        const root = self.root orelse return false;
+        const v = root.object.get("enabled") orelse return false;
+        return v == .bool and v.bool;
     }
 
     pub fn forRepo(self: Config, alloc: Allocator, repo: ?[]const u8) Allocator.Error!Effective {
@@ -135,20 +136,21 @@ test "guard config: defaults" {
     try std.testing.expect(!contains(e.deletable, "build"));
 }
 
-test "guard config: only an exact top-level \"enabled\": false turns the guard off" {
+test "guard config: only an exact top-level \"enabled\": true turns coordination on" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    try std.testing.expect(!Config.parse(a, "{\"enabled\":false}").enabled());
     try std.testing.expect(Config.parse(a, "{\"enabled\":true}").enabled());
-    try std.testing.expect(Config.parse(a, "{}").enabled());
-    try std.testing.expect(Config.parse(a, "not json").enabled());
-    try std.testing.expect((Config{ .root = null }).enabled());
-    // Anything but the boolean false keeps it on: a typo never disarms it.
-    try std.testing.expect(Config.parse(a, "{\"enabled\":\"false\"}").enabled());
-    try std.testing.expect(Config.parse(a, "{\"enabled\":0}").enabled());
+    try std.testing.expect(!Config.parse(a, "{\"enabled\":false}").enabled());
+    // No file, an empty or broken one: off.
+    try std.testing.expect(!(Config{ .root = null }).enabled());
+    try std.testing.expect(!Config.parse(a, "{}").enabled());
+    try std.testing.expect(!Config.parse(a, "not json").enabled());
+    // Anything but the boolean true is off.
+    try std.testing.expect(!Config.parse(a, "{\"enabled\":\"true\"}").enabled());
+    try std.testing.expect(!Config.parse(a, "{\"enabled\":1}").enabled());
     // Only the global setting counts, not a repo's.
-    try std.testing.expect(Config.parse(a, "{\"repos\":{\"/r\":{\"enabled\":false}}}").enabled());
+    try std.testing.expect(!Config.parse(a, "{\"repos\":{\"/r\":{\"enabled\":true}}}").enabled());
 }
 
 test "guard config: a repo adds to the global lists and can widen push" {

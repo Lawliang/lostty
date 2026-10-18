@@ -61,8 +61,8 @@ test "guard args: only an exact --agent=claude is Claude" {
 fn runFor(alloc: Allocator, pane: []const u8, agent: wire.Agent) !u8 {
     const home = std.posix.getenv("HOME") orelse return error.NoHome;
     const cfg = config.Config.load(alloc, home);
-    // Paused (`"enabled": false` in guard.json): the hooks stay installed,
-    // so Lostty doesn't see them as disconnected, and every call goes through.
+    // Coordination off (no `"enabled": true` in guard.json): Lostty doesn't
+    // install this hook, and one left from before lets every call through.
     if (!cfg.enabled()) return 0;
     // As claude_state.hookInput reads it.
     var buf: [4096]u8 = undefined;

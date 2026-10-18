@@ -134,9 +134,17 @@ Motion on, the border glows gently instead of racing.
 
 ## Guard
 
-In every Claude Code and Codex pane, Lostty stops a critical action before
-it runs and asks you, even when the agent skips its own permission
-prompts:
+The guard is part of Lostty's agent coordination, which is off unless
+`~/.config/lostty/guard.json` says `"enabled": true` (anything else, or no
+file, is off). Off, Lostty behaves as if it were never built: Connect and
+updates install only the trace hooks and take out a guard hook left from
+before, and the app starts no guard, shows no guard badge or approvals, and
+its hook messages don't mention the guard. After turning it on or off,
+restart Lostty, then update the hooks (**Lostty → Claude Integration…**).
+
+When it's on, in every Claude Code and Codex pane, Lostty stops a critical
+action before it runs and asks you, even when the agent skips its own
+permission prompts:
 
 - **Deleting what git can't get back:** untracked or ignored files,
   anything outside the repo, uncommitted changes, `git clean`, deleting a
