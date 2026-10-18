@@ -2,7 +2,7 @@
 import AppKit
 
 /// How the Claude trace looks while Claude works: each pane's own skin
-/// trace, or the website's light circling the whole window (WindowTrace).
+/// trace, or the website's light circling each working pane (WindowTrace).
 /// Saved in user defaults and set from Lostty → Claude Trace Style.
 enum TraceStyle: String, CaseIterable {
     case skin, window

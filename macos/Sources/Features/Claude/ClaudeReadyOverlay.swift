@@ -1,34 +1,26 @@
 #if os(macOS)
 import SwiftUI
 
-/// "Ready for response": shown over a whole window (every pane, the
-/// sidebar and the bottom bar; not the title bar) when Claude finished (or
-/// asks for permission) in one of its panes while you were elsewhere. The
-/// window dims and blurs, and a single terminal line floats in the middle
-/// at that pane's text size: a prompt in its skin's accent, the words typed
-/// out, and a blinking block cursor (see `ReadyAnimation`). Clicks pass
-/// through, so clicking the waiting pane focuses it, which dismisses the
-/// overlay.
+/// "Ready for response": shown over a pane whose Claude finished (or asks
+/// for permission) while you were elsewhere. The pane dims and blurs, and a
+/// single terminal line floats in the middle at the terminal's own text
+/// size: a prompt in the skin's accent, the words typed out, and a
+/// blinking block cursor (see `ReadyAnimation`). Clicks pass through, so clicking the pane focuses it, which
+/// dismisses the overlay.
 struct ClaudeReadyOverlay: View {
-    /// The window's panes, in its order.
-    let surfaces: [Ghostty.SurfaceView]
+    let surfaceID: UUID
+    /// The pane's cell size in points, to match the terminal's text size.
+    let cellSize: CGSize
     @ObservedObject private var runtime = ClaudeRuntime.shared
     @ObservedObject private var skins = SkinsRuntime.shared.manager
 
     var body: some View {
-        if let id = Self.waiting(in: surfaces.map(\.id), awaiting: runtime.awaiting),
-           let surface = surfaces.first(where: { $0.id == id }) {
+        if runtime.awaiting.contains(surfaceID) {
             ReadyLine(
-                fontSize: Self.fontSize(cellHeight: surface.cellSize.height),
-                accent: Self.accent(for: skins.effectiveSkin(id)))
+                fontSize: Self.fontSize(cellHeight: cellSize.height),
+                accent: Self.accent(for: skins.effectiveSkin(surfaceID)))
                 .allowsHitTesting(false)
         }
-    }
-
-    /// The waiting pane the overlay speaks for: the first in the window's
-    /// order. nil while none waits.
-    static func waiting(in panes: [UUID], awaiting: Set<UUID>) -> UUID? {
-        panes.first(where: awaiting.contains)
     }
 
     /// SF Mono's line is about 1.2em tall, so this matches one terminal row.

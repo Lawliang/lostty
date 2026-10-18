@@ -2,10 +2,11 @@
 import AppKit
 import SwiftUI
 
-/// The website's trace (website/custom.html, "Claude's trace"): one light
-/// circling a whole window's edge while Claude works in any of its panes.
-/// Shown instead of the pane traces when Lostty → Claude Trace Style is
-/// Window Light. A pane where only subagents work keeps its bottom glow.
+/// The website's trace (website/custom.html, "Claude's trace"): a light
+/// circling each pane's edge while Claude works in it, in that pane's
+/// colors. Shown instead of the skin traces when Lostty → Claude Trace
+/// Style is Window Light. A pane where only subagents work keeps its
+/// bottom glow.
 enum WindowTrace {
     /// One lap, as the website's `ag-spin`.
     static let lapSeconds: Double = 3.2
@@ -16,7 +17,7 @@ enum WindowTrace {
     static let websitePink = RGB(hex: "#ff3df2")!
     static let websiteCyan = RGB(hex: "#28e7ff")!
 
-    /// Which pane lights the window, and in what colors.
+    /// A lit pane's colors.
     struct Lighting: Equatable {
         var pane: UUID
         /// The head's color (the skin's trace color) and the tail's.
@@ -26,22 +27,15 @@ enum WindowTrace {
         var colors: TraceColors { TraceColors(primary: primary, secondary: secondary) }
     }
 
-    /// The window is lit while Claude itself works in one of `panes` (not
-    /// only its subagents). The focused pane's skin wins when it works,
-    /// then the first in the window's order. Panes whose trace is off
-    /// (`trace = "none"`, `[defaults] trace = false`) don't light it.
-    static func lighting(
-        panes: [UUID], focused: UUID?, phases: [UUID: TracePhase], skin: (UUID) -> Skin?, enabled: Bool
-    ) -> Lighting? {
-        let order = focused.map { focused in panes.contains(focused) ? [focused] + panes.filter { $0 != focused } : panes } ?? panes
-        for pane in order {
-            guard case .racing(_, false) = phases[pane] ?? .off else { continue }
-            let paneSkin = skin(pane)
-            guard let trace = ResolvedTrace.resolve(skin: paneSkin, enabled: enabled) else { continue }
-            if paneSkin == nil { return Lighting(pane: pane, primary: websitePink, secondary: websiteCyan) }
-            return Lighting(pane: pane, primary: trace.color, secondary: trace.color2)
-        }
-        return nil
+    /// A pane is lit while Claude itself works in it (not only its
+    /// subagents), in its skin's trace colors, or the website's with no
+    /// skin. Not when its trace is off (`trace = "none"`, `[defaults]
+    /// trace = false`).
+    static func lighting(pane: UUID, phase: TracePhase, skin: Skin?, enabled: Bool) -> Lighting? {
+        guard case .racing(_, false) = phase,
+              let trace = ResolvedTrace.resolve(skin: skin, enabled: enabled) else { return nil }
+        if skin == nil { return Lighting(pane: pane, primary: websitePink, secondary: websiteCyan) }
+        return Lighting(pane: pane, primary: trace.color, secondary: trace.color2)
     }
 
     /// The light's turn, in degrees clockwise from the top, `elapsed`
@@ -67,47 +61,11 @@ enum WindowTrace {
     }
 }
 
-/// Whether a pane's window draws the window light, so the pane leaves its
-/// own trace out in Window Light. Only standalone terminal windows do; the
-/// Quick Terminal keeps its pane traces.
-private struct HostsWindowTraceKey: EnvironmentKey {
-    static let defaultValue = false
-}
-
-extension EnvironmentValues {
-    var hostsWindowTrace: Bool {
-        get { self[HostsWindowTraceKey.self] }
-        set { self[HostsWindowTraceKey.self] = newValue }
-    }
-}
-
-/// The window's corner radius, which the light's edge follows.
-@MainActor
-final class WindowTraceEdge: ObservableObject {
-    @Published var cornerRadius: CGFloat = 0
-
-    func update(from window: NSWindow?) {
-        guard let window else { return }
-        let radius: CGFloat
-        if window.styleMask.contains(.fullScreen) {
-            radius = 0
-        } else if window.responds(to: Selector(("_cornerRadius"))), let r = window.value(forKey: "_cornerRadius") as? CGFloat {
-            radius = r
-        } else {
-            radius = 10
-        }
-        if cornerRadius != radius { cornerRadius = radius }
-    }
-}
-
-/// The light over one window. Draws nothing until Claude works there.
-struct WindowTraceView: View {
-    @ObservedObject var controller: BaseTerminalController
-    @ObservedObject var sidebar: ExtensionSidebarModel
-    @ObservedObject var edge: WindowTraceEdge
+/// The light round one pane. Draws nothing until Claude works there.
+struct PaneLightView: View {
+    let surfaceID: UUID
     @ObservedObject private var runtime = ClaudeRuntime.shared
     @ObservedObject private var skins = SkinsRuntime.shared.manager
-    @AppStorage(TraceStyle.defaultsKey, store: .ghostty) private var style = TraceStyle.initial
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var windowVisible = true
     /// The last lighting, kept while the light fades out.
@@ -116,10 +74,9 @@ struct WindowTraceView: View {
     @State private var since = Date()
 
     private var lighting: WindowTrace.Lighting? {
-        guard style == .window else { return nil }
-        return WindowTrace.lighting(
-            panes: controller.surfaceTree.map(\.id), focused: sidebar.focusedSurfaceID,
-            phases: runtime.phases, skin: { skins.effectiveSkin($0) }, enabled: skins.config.trace)
+        WindowTrace.lighting(
+            pane: surfaceID, phase: runtime.phase(surfaceID),
+            skin: skins.effectiveSkin(surfaceID), enabled: skins.config.trace)
     }
 
     var body: some View {
@@ -131,7 +88,7 @@ struct WindowTraceView: View {
                         calm(size: geo.size, colors: shown.colors, elapsed: elapsed)
                     } else {
                         WindowTraceRing(colors: shown.colors, angle: WindowTrace.angle(elapsed: elapsed),
-                                        cornerRadius: edge.cornerRadius, size: geo.size)
+                                        cornerRadius: 0, size: geo.size)
                     }
                 }
             }
@@ -156,16 +113,16 @@ struct WindowTraceView: View {
     /// Reduce Motion: no circling; the whole edge breathes with a 2s period.
     private func calm(size: CGSize, colors: TraceColors, elapsed: Double) -> some View {
         let breath = 0.25 + 0.35 * (0.5 + 0.5 * sin(2 * .pi * elapsed / 2))
-        return RoundedRectangle(cornerRadius: edge.cornerRadius).strokeBorder(colors.head, lineWidth: 2)
+        return Rectangle().strokeBorder(colors.head, lineWidth: 2)
             .opacity(breath)
             .frame(width: size.width, height: size.height)
     }
 }
 
 /// One frame of the light: the website's conic gradient turned `angle`
-/// round the window's center, seen through a thin line along the edge
-/// and, softer, a glow just inside it (the website's glow spills outside
-/// the window; a window can't draw there).
+/// round the pane's center, seen through a thin line along the edge and,
+/// softer, a glow just inside it (the website's glow spills outside the
+/// box; a pane can't draw there).
 struct WindowTraceRing: View {
     let colors: TraceColors
     let angle: Double
@@ -192,42 +149,4 @@ struct WindowTraceRing: View {
     }
 }
 
-/// Lays the window light over a terminal window's whole frame, title bar
-/// included, without taking clicks.
-@MainActor
-enum WindowTraceHost {
-    static func attach(to window: TerminalWindow, controller: BaseTerminalController) {
-        guard let frame = window.contentView?.superview else { return }
-        let edge = WindowTraceEdge()
-        let host = HostView(
-            rootView: WindowTraceView(controller: controller, sidebar: window.extensionSidebarModel, edge: edge),
-            edge: edge)
-        host.frame = frame.bounds
-        host.autoresizingMask = [.width, .height]
-        frame.addSubview(host, positioned: .above, relativeTo: nil)
-    }
-
-    final class HostView: NSHostingView<WindowTraceView> {
-        private var edge: WindowTraceEdge?
-
-        init(rootView: WindowTraceView, edge: WindowTraceEdge) {
-            self.edge = edge
-            super.init(rootView: rootView)
-        }
-
-        required init(rootView: WindowTraceView) {
-            super.init(rootView: rootView)
-        }
-
-        @available(*, unavailable)
-        required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
-
-        override func hitTest(_ point: NSPoint) -> NSView? { nil }
-
-        override func layout() {
-            super.layout()
-            edge?.update(from: window)
-        }
-    }
-}
 #endif

@@ -100,9 +100,8 @@ Overrides last until reset or until the pane closes. zsh and bash get the
 While Claude Code is working in a pane, a light ray races around that
 pane's edge. The moment Claude finishes (or you interrupt it), the ray
 disappears. If Claude finishes (or asks for permission) while you are in
-another pane or app, the whole window (every pane, the icon row and the
-bottom bar, but not the title bar) dims and shows **Ready for response**
-until you click that pane. Each preset has its own trace; panes without a skin get a
+another pane or app, that pane dims and shows **Ready for response** until
+you look at it: each pane, each Claude, its own. Each preset has its own trace; panes without a skin get a
 pink-and-cyan beam.
 
 Codex works the same way: the trace runs while Codex works and stops when
@@ -133,18 +132,17 @@ A skin with the same name as a preset keeps the preset's trace unless it
 sets `trace`. `[defaults] trace = false` turns traces off. With Reduce
 Motion on, the border glows gently instead of racing.
 
-**Lostty → Claude Trace Style → Window Light** swaps the pane traces for
-the website's light: while Claude or Codex works in any pane of a window,
-one thin light circles that whole window's edge (title bar included), a
-lap every 3.2 seconds, its tail running from the skin's second trace color
+**Lostty → Claude Trace Style → Window Light** swaps the skin traces for
+the website's light: while Claude or Codex works in a pane, one thin light
+circles that pane's edge (never the title bar or the bottom bar), a lap
+every 3.2 seconds, its tail running from the skin's second trace color
 into its first and a white-hot tip, with a soft glow just inside the edge.
-It takes the focused pane's skin when that pane is working, otherwise
-another working pane's; panes without a skin give it the website's pink
-and cyan. A pane whose trace is off doesn't light it. A pane where only
-subagents or background shells still work keeps its bottom-edge glow,
-and the window light goes out. Claude Trace Path doesn't apply (it's
-greyed out), the Quick Terminal keeps its pane traces, and with Reduce
-Motion the window's edge breathes instead. **Skin Traces** goes back.
+Each working pane has its own, in its own skin's colors; panes without a
+skin get the website's pink and cyan. A pane whose trace is off stays
+dark. A pane where only subagents or background shells still work keeps
+its bottom-edge glow, and its light goes out. Claude Trace Path doesn't
+apply (it's greyed out), and with Reduce Motion the pane's edge breathes
+instead. **Skin Traces** goes back.
 
 ## Guard
 

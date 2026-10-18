@@ -8,17 +8,18 @@ struct ClaudeTraceLayer: View {
     let surfaceID: UUID
     @ObservedObject private var runtime = ClaudeRuntime.shared
     @ObservedObject private var skins = SkinsRuntime.shared.manager
-    @Environment(\.hostsWindowTrace) private var hostsWindowTrace
     @AppStorage(TraceStyle.defaultsKey, store: .ghostty) private var style = TraceStyle.initial
 
     var body: some View {
         let phase = runtime.phase(surfaceID)
-        // In Window Light the window's light stands for Claude working;
-        // the pane keeps only its subagents' bottom glow.
-        let bottomOnly = hostsWindowTrace && style == .window
-        if !phase.isOff, !bottomOnly || phase.subagentsOnly,
+        // In Window Light the website's light circles the pane while Claude
+        // itself works; while only subagents do, the pane keeps their
+        // bottom glow.
+        let windowLight = style == .window
+        if windowLight { PaneLightView(surfaceID: surfaceID) }
+        if !phase.isOff, !windowLight || phase.subagentsOnly,
            let trace = ResolvedTrace.resolve(skin: skins.effectiveSkin(surfaceID), enabled: skins.config.trace) {
-            TraceOverlay(phase: phase, trace: trace, bottomOnly: bottomOnly)
+            TraceOverlay(phase: phase, trace: trace, bottomOnly: windowLight)
                 .allowsHitTesting(false)
         }
     }

@@ -82,10 +82,6 @@ struct TerminalView<ViewModel: TerminalViewModel>: View {
                     terminalContent
                 }
 
-                // Lostty: "Ready for response", over the panes, the sidebar
-                // and the usage bar alike.
-                ClaudeReadyOverlay(surfaces: Array(viewModel.surfaceTree))
-
                 if let surfaceView = lastFocusedSurface?.value {
                     TerminalCommandPaletteView(
                         surfaceView: surfaceView,
