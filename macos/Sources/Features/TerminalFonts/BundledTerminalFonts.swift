@@ -11,11 +11,17 @@ enum BundledTerminalFonts {
     /// (Fonts/AtkinsonHyperlegibleMono-OFL.txt).
     static let atkinson = "Atkinson Hyperlegible Mono"
 
-    static let families = [atkinson]
+    /// Geist Mono, Vercel's monospaced companion to Geist: the clean,
+    /// Inter-like look, with every character the same width. SIL Open Font
+    /// License (Fonts/GeistMono-OFL.txt).
+    static let geist = "Geist Mono"
+
+    static let families = [atkinson, geist]
 
     private static let files = [
         "AtkinsonHyperlegibleMono-Regular", "AtkinsonHyperlegibleMono-Bold",
         "AtkinsonHyperlegibleMono-Italic", "AtkinsonHyperlegibleMono-BoldItalic",
+        "GeistMono-Regular", "GeistMono-Bold", "GeistMono-Italic", "GeistMono-BoldItalic",
     ]
 
     /// Call before the first terminal opens.

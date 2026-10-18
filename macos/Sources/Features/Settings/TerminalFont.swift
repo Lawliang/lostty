@@ -109,7 +109,7 @@ enum TerminalFontCatalog {
     /// Families picked for legibility (clear 0/O, 1/l/I, open shapes), shown
     /// first when installed.
     static let readable = [
-        BundledTerminalFonts.atkinson, "SF Mono", "IBM Plex Mono", "Menlo",
+        BundledTerminalFonts.atkinson, BundledTerminalFonts.geist, "SF Mono", "IBM Plex Mono", "Menlo",
         "Source Code Pro", "Fira Code", "Cascadia Code", "Iosevka", "Hack",
     ]
 
