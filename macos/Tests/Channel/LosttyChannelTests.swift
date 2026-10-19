@@ -18,6 +18,11 @@ struct LosttyChannelTests {
         #expect(!LosttyChannel.stable.isBeta && !LosttyChannel.stable.showsMascot && !LosttyChannel.stable.hasBranches)
     }
 
+    @Test func theCanvasIsOnlyInTheBeta() {
+        #expect(LosttyChannel.beta.hasCanvas)
+        #expect(!LosttyChannel.stable.hasCanvas)
+    }
+
     @Test func theBetaIsNamedLosttyBeta() {
         #expect(LosttyChannel.beta.appName == "Lostty Beta")
         #expect(LosttyChannel.stable.appName == "Lostty")
