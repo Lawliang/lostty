@@ -69,6 +69,10 @@ final class ExtensionSidebarModel: ObservableObject {
     /// The title bar's color (the top pane's background), set by the window.
     @Published var chromeColor: NSColor?
 
+    /// The icon row is tucked away behind its handle until dragged up (or
+    /// the handle clicked); each window starts with it tucked away.
+    @Published var iconRowShown = false
+
     /// Gives keyboard focus back to the window's focused pane. Set by the
     /// window's controller.
     var focusTerminal: @MainActor () -> Void = {}
@@ -78,13 +82,14 @@ final class ExtensionSidebarModel: ObservableObject {
 
     /// The extensions this build offers, in sidebar order.
     let available: [LosttyExtension]
-    /// The axolotl in the terminal's corner (beta only).
+    /// The axolotl in the terminal's corner (beta only, and not on canvas
+    /// cards).
     let showsMascot: Bool
 
-    init(branches: BranchesModel? = nil, channel: LosttyChannel = .current) {
+    init(branches: BranchesModel? = nil, channel: LosttyChannel = .current, mascot: Bool = true) {
         self.branches = branches ?? BranchesModel()
         available = LosttyExtension.available(in: channel)
-        showsMascot = channel.showsMascot
+        showsMascot = mascot && channel.showsMascot
     }
 
     /// Clicking an icon opens its extension; clicking the open one closes it.
@@ -97,6 +102,24 @@ final class ExtensionSidebarModel: ObservableObject {
     /// A panel's back button and Esc.
     func close() {
         active = nil
+    }
+}
+
+/// The icon row's drawer: how much of the row shows while its handle is
+/// dragged (`dragged` is the drag's height, negative upward), and whether
+/// it ends shown when let go.
+enum IconRowDrawer {
+    static func reveal(shown: Bool, dragged: CGFloat) -> CGFloat {
+        let height = ExtensionSidebarView.height
+        return min(max((shown ? height : 0) - dragged, 0), height)
+    }
+
+    /// Past halfway, or flicked that way (`predicted`, where the drag
+    /// would come to rest), it goes; otherwise it springs back.
+    static func settle(shown: Bool, dragged: CGFloat, predicted: CGFloat) -> Bool {
+        let half = ExtensionSidebarView.height / 2
+        let travel = shown ? max(dragged, predicted) : -min(dragged, predicted)
+        return travel > half ? !shown : shown
     }
 }
 #endif
