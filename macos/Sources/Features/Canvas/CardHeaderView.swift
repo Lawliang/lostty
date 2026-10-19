@@ -207,62 +207,33 @@ final class CardWindowButtons: NSView {
 }
 
 /// What a card's title bar shows: the card's title in the middle, as a
-/// window's, and the focused pane's project pill and the card's agent state
-/// at the right, dimmed with the card while a pane waits on you.
+/// window's, and the focused pane's project pill at the right, dimmed with
+/// the card while a pane waits on you.
 struct CardHeaderContent: View {
     @ObservedObject var card: CardController
     @ObservedObject private var claude = ClaudeRuntime.shared
-    @ObservedObject private var activity = PaneActivity.shared
 
     var body: some View {
-        // Ready fades after a while without use; look again now and then.
-        TimelineView(.periodic(from: .now, by: 30)) { timeline in
-            let panes = card.surfaceTree.map(\.id)
-            ZStack {
-                Text(card.title)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    // Clear of the buttons at the left and the pill at the right.
-                    .padding(.horizontal, 150)
-                HStack(spacing: 8) {
-                    Spacer(minLength: 0)
-                    if let status = CardStatus.of(
-                        panes: panes, awaiting: claude.awaiting, phases: claude.phases,
-                        known: activity.known, lastActivity: activity.lastActivity, now: timeline.date) {
-                        CardStatusLabel(status: status)
-                    }
-                    ProjectPill(model: card.sidebar)
-                }
-                .padding(.trailing, 8)
+        ZStack {
+            Text(card.title)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                // Clear of the buttons at the left and the pill at the right.
+                .padding(.horizontal, 150)
+            HStack {
+                Spacer(minLength: 0)
+                ProjectPill(model: card.sidebar)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .overlay {
-                // The same dim as the panes' Ready for Response below it.
-                if ClaudeReadyOverlay.waiting(in: panes, awaiting: claude.awaiting) != nil {
-                    Color.black.opacity(0.45)
-                }
-            }
+            .padding(.trailing, 8)
         }
-    }
-}
-
-struct CardStatusLabel: View {
-    let status: CardStatus
-    var size: CGFloat = 11
-
-    var body: some View {
-        Text(status.title)
-            .font(.system(size: size, weight: .semibold))
-            .foregroundStyle(color)
-    }
-
-    private var color: Color {
-        switch status {
-        case .waiting: .orange
-        case .working: .pink
-        case .ready: .green
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .overlay {
+            // The same dim as the panes' Ready for Response below it.
+            if ClaudeReadyOverlay.waiting(in: card.surfaceTree.map(\.id), awaiting: claude.awaiting) != nil {
+                Color.black.opacity(0.45)
+            }
         }
     }
 }

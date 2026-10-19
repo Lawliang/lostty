@@ -35,9 +35,10 @@ optimizations.
 - **Gestures:** pinch zooms anywhere. Two-finger scroll pans over empty
   canvas and card headers, and scrolls the terminal when over one. Holding
   Option (⌥) pans from anywhere. A card moves by dragging its header.
-- **Agent aids, all four in the first beta:** a trace on each working card's
-  edge plus a status in its header; Jump to What Needs You; a zoomed-out
-  overview of status tiles; Ready for Response on the waiting card only.
+- **Agent aids in the first beta:** a trace on each working card's edge;
+  Jump to What Needs You; Ready for Response on the waiting card only.
+  (Status labels and zoomed-out status tiles were tried and dropped: cards
+  show their terminals at every zoom, with no "Ready" label.)
 
 ## 3. What it looks like
 
@@ -59,8 +60,8 @@ optimizations.
 - Each card looks like a small Lostty window. Its **title bar** (a standard
   title bar's height, in the color of its panes' background, as a window's)
   has the red, yellow and green buttons at the left, the card's title in
-  the middle, and the agent status (§5.1) and project pill (`lostty/skins`,
-  in the card's focused pane's skin) at the right. Red closes the card,
+  the middle, and the project pill (`lostty/skins`, in the card's focused
+  pane's skin) at the right. Red closes the card,
   yellow zooms out to every card (§3.4), green zooms to the card at 100%.
   The buttons are colored on the focused card and gray on the others, as on
   inactive windows. Drag the title bar to move the card. Double-click it to
@@ -72,7 +73,7 @@ optimizations.
   bindings.
 - While the canvas is zoomed away from 100%, SwiftUI can't take clicks: a
   click in a pane still goes to that pane, and a click on the card's icon
-  row, usage bar or tile zooms to the card at 100%.
+  row or usage bar zooms to the card at 100%.
 - Drag any card edge or corner to resize it. A card is at least 320 × 200
   points (at 100% zoom).
 - Cards may overlap; clicking a card brings it to the front and focuses it.
@@ -118,24 +119,17 @@ optimizations.
   720-point pane went from 89×22 at 100% to 92×21 at 200%). The shell sees
   that as a resize. This is the engine's existing content-scale
   call, the one a move to a Retina screen uses.
-- **Below 45%**, cards stop drawing their terminals and show a **status
-  tile** instead (§5.3). Coming back above 45% re-renders them.
 - **Panning** moves layers only; no terminal redraws (only the dot grid
   does, a single cheap fill).
 
 ## 5. Agent aids
 
-### 5.1 Card trace and status
+### 5.1 Card trace
 
 - The trace follows the Claude Trace Style setting, as in a window: Skin
   Traces runs on the working pane's own edge inside the card; Window Light
   runs the website's light round the **card's edge**, chosen the way a
   window's is (focused pane first, Claude itself before subagents only).
-- The header shows the card's agent state, each pane judged by the rules
-  the phone's rows and the sidebar mascot use (`PaneState`): **Waiting**
-  (Ready for Response is up), **Working** (a trace runs), **Ready** (used
-  lately), or nothing. The card shows its most urgent pane: Waiting, then
-  Working, then Ready.
 
 ### 5.2 Jump to What Needs You
 
@@ -144,20 +138,14 @@ optimizations.
   focuses that pane. Pressing it again goes to the next one, oldest wait
   first, wrapping round. With nothing waiting it beeps.
 
-### 5.3 Overview tiles
-
-- Below 45% zoom each card is a tile in its skin's colors: the project pill,
-  the agent state, and the pane's last action ("Editing Foo.swift") when
-  Claude is working. Clicking a tile zooms to that card (as ⌃⌘1).
-
-### 5.4 Ready for Response
+### 5.3 Ready for Response
 
 - A waiting pane dims **its card** (header included), not the canvas, with
   the same "❯ Ready for response" line. Focusing the pane clears it.
 
 ## 6. Performance rules
 
-- A card out of view, or shown as a tile, has its terminals paused with the
+- A card out of view has its terminals paused with the
   engine's occlusion call (what a hidden window gets), and resumed when it
   comes back into view. "In view" includes a margin of half a card so
   panning doesn't show a stale frame.
@@ -201,9 +189,9 @@ to Canvas in the terminal controller.
   its scaled clip view keeps clicks landing on the right cell. A dot grid
   view sits behind it.
 - `CardView`: an AppKit view with the header (AppKit, with a small SwiftUI
-  pill and status), the card's `TerminalView` in a hosting view (which
-  brings the split view and Ready for Response), the tile, and the Window
-  Light host.
+  title and pill), the card's `TerminalView` in a hosting view (which
+  brings the split view and Ready for Response), and the Window Light
+  host.
 - Code that finds a pane's controller through its window
   (`window.windowController as? BaseTerminalController`, `TerminalController.all`)
   goes through two card-aware lookups instead:
@@ -226,7 +214,7 @@ phone (the phone keeps listing sessions as now).
 1. `CanvasModel` with its tests.
 2. The canvas window, cards and headers (beta flag, Window → Canvas).
 3. Routing split, close and focus actions to cards.
-4. Gestures, zoom settle, culling and tiles.
+4. Gestures, zoom settle and culling.
 5. Agent aids (§5).
 6. Save and restore, including Restart to Update.
 7. Move to Canvas and Move to Window.

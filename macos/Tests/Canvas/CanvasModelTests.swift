@@ -95,11 +95,6 @@ struct CanvasZoomTests {
         #expect(CanvasZoom.clamped(0.8) == 0.8)
     }
 
-    @Test func cardsTurnToTilesBelowFortyFivePercent() {
-        #expect(CanvasZoom.showsTiles(at: 0.44))
-        #expect(!CanvasZoom.showsTiles(at: 0.45))
-    }
-
     @Test func zoomingToACardShowsAViewportOfItsCenter() {
         let rect = CanvasZoom.rect(centeredOn: CGPoint(x: 1000, y: 800), zoom: 2, viewport: CGSize(width: 1200, height: 800))
         #expect(rect == CGRect(x: 700, y: 600, width: 600, height: 400))
@@ -156,32 +151,6 @@ struct CanvasWaitsTests {
         // A pane waiting in a normal window isn't the canvas's.
         waits.update(awaiting: [c], now: t0)
         #expect(waits.next(after: nil, among: [a, b]) == nil)
-    }
-}
-
-struct CardStatusTests {
-    private let a = UUID(), b = UUID()
-    private let now = Date(timeIntervalSinceReferenceDate: 1_000)
-
-    private func status(
-        awaiting: Set<UUID> = [], working: Set<UUID> = [], known: Set<UUID> = [], used: [UUID: Date] = [:]
-    ) -> CardStatus? {
-        let phases = Dictionary(uniqueKeysWithValues: working.map { ($0, TracePhase.racing(since: now)) })
-        return CardStatus.of(panes: [a, b], awaiting: awaiting, phases: phases, known: known, lastActivity: used, now: now)
-    }
-
-    @Test func theMostUrgentPaneSpeaksForTheCard() {
-        #expect(status(awaiting: [a], working: [b]) == .waiting)
-        #expect(status(working: [b], known: [a], used: [a: now]) == .working)
-        #expect(status(known: [a], used: [a: now]) == .ready)
-        #expect(CardStatus.allCases.map(\.title) == ["Waiting", "Working", "Ready"])
-    }
-
-    @Test func idleOrUnknownPanesShowNothing() {
-        #expect(status() == nil)
-        #expect(status(known: [a], used: [a: now - SessionLabel.idleAfter - 1]) == nil)
-        // A pane in another card or window doesn't count.
-        #expect(CardStatus.of(panes: [a], awaiting: [b], phases: [:], known: [], lastActivity: [:], now: now) == nil)
     }
 }
 

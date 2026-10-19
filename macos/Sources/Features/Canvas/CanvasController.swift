@@ -340,7 +340,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         settleZoom()
     }
 
-    /// ⌃⌘1, double-clicking a header, clicking a tile: `card` centered at
+    /// ⌃⌘1, double-clicking a header, the green button: `card` centered at
     /// `zoom` (100%).
     func zoom(to card: CardController, zoom: CGFloat = 1) {
         guard let frame = model.card(card.id)?.frame else { return }
@@ -349,27 +349,24 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         settleZoom()
     }
 
-    /// The zoom stopped changing: tiles relayout, and cards switch between
-    /// their terminals and tiles.
+    /// The zoom stopped changing: the terminals re-render at it.
     func settleZoom() {
         settleWork?.cancel()
         settledZoom = scrollView.magnification
         for card in cards {
             for surface in card.surfaceTree { surface.canvasZoomDidSettle(settledZoom) }
         }
-        for view in views.values { view.zoomDidSettle(settledZoom) }
         updateVisibility()
         saveSoon()
     }
 
-    /// Which cards draw live, as tiles, or not at all: only those near the
-    /// view, and none while the canvas is hidden or covered.
+    /// Which cards draw: only those near the view, and none while the
+    /// canvas is hidden or covered.
     func updateVisibility() {
         let shown = window?.isVisible == true && window?.occlusionState.contains(.visible) == true
         let inView = model.cardsInView(scrollView.documentVisibleRect)
-        let tiles = CanvasZoom.showsTiles(at: settledZoom)
         for card in cards {
-            views[card.id]?.mode = !shown || !inView.contains(card.id) ? .hidden : tiles ? .tile : .live
+            views[card.id]?.mode = shown && inView.contains(card.id) ? .live : .hidden
         }
     }
 

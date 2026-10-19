@@ -156,22 +156,15 @@ struct CanvasModel: Equatable {
     }
 }
 
-/// The canvas's zoom: its limits, where cards turn into tiles, and what a
-/// zoom shows.
+/// The canvas's zoom: its limits, and what a zoom shows.
 enum CanvasZoom {
     static let minimum: CGFloat = 0.25
     static let maximum: CGFloat = 2
-    /// Below this, cards show status tiles instead of their terminals.
-    static let tilesBelow: CGFloat = 0.45
     /// No zoom change for this long and the terminals re-render at the new scale.
     static let settle: TimeInterval = 0.15
 
     static func clamped(_ zoom: CGFloat) -> CGFloat {
         min(max(zoom, minimum), maximum)
-    }
-
-    static func showsTiles(at zoom: CGFloat) -> Bool {
-        zoom < tilesBelow
     }
 
     /// The document rect a `viewport` of screen points shows at `zoom`,
@@ -241,36 +234,6 @@ struct CanvasWaits: Equatable {
         guard let first = waiting.first else { return nil }
         guard let current, let index = waiting.firstIndex(of: current) else { return first }
         return waiting[(index + 1) % waiting.count]
-    }
-}
-
-/// A card's agent state in its header and tile: its most urgent pane's,
-/// each pane judged as the phone's rows and the sidebar mascot judge it.
-enum CardStatus: CaseIterable, Equatable {
-    case waiting, working, ready
-
-    var title: String {
-        switch self {
-        case .waiting: "Waiting"
-        case .working: "Working"
-        case .ready: "Ready"
-        }
-    }
-
-    /// nil when no pane of `panes` waits, works, or was used lately.
-    static func of(
-        panes: [UUID], awaiting: Set<UUID>, phases: [UUID: TracePhase],
-        known: Set<UUID>, lastActivity: [UUID: Date], now: Date
-    ) -> CardStatus? {
-        let states = panes.compactMap { id -> PaneState? in
-            let waiting = awaiting.contains(id), working = phases[id] != nil
-            guard waiting || working || known.contains(id) else { return nil }
-            return PaneState(waiting: waiting, working: working, lastActivity: lastActivity[id], now: now)
-        }
-        if states.contains(.waiting) { return .waiting }
-        if states.contains(.working) { return .working }
-        if states.contains(.ready) { return .ready }
-        return nil
     }
 }
 

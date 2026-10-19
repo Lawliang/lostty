@@ -7,8 +7,8 @@ import SwiftUI
 /// A card on the canvas, a small Lostty window: a Mac window's title bar,
 /// corners, edge and shadow, its panes with their own icon row, usage bar
 /// and mascot (the window's own TerminalView, so splits and Ready for
-/// Response come with it), resize handles on its edges, its tile for
-/// zooming far out, and the Window Light round it. Puts its card's
+/// Response come with it), resize handles on its edges, and the Window
+/// Light round it. Puts its card's
 /// controller in the responder chain, so menu actions reach the card.
 final class CardView: NSView {
     /// A standard title bar's height.
@@ -17,9 +17,9 @@ final class CardView: NSView {
     static let chromeHeight = headerHeight + ExtensionSidebarView.height + ClaudeUsageBar.height
     static let cornerRadius: CGFloat = 10
 
-    /// Live: the terminals draw. Tile: a status tile instead (zoomed far
-    /// out). Hidden: out of view or the canvas is; the terminals pause.
-    enum Mode { case live, tile, hidden }
+    /// Live: the terminals draw. Hidden: out of view or the canvas is; the
+    /// terminals pause.
+    enum Mode { case live, hidden }
 
     let card: CardController
     private weak var canvas: CanvasController?
@@ -28,7 +28,6 @@ final class CardView: NSView {
     private let content = CardContentView()
     private let header: CardHeaderView
     private let terminal: CardTerminalHost
-    private let tile: NSHostingView<CardTile>
     private let trace: CardTraceHost
     private var handles: [CardEdgeHandle] = []
     /// Back-to-front position among the canvas's cards.
@@ -54,10 +53,6 @@ final class CardView: NSView {
         header = CardHeaderView(card: card, canvas: canvas)
         terminal = CardTerminalHost(rootView: CardTerminal(card: card))
         terminal.card = card
-        let open: () -> Void = { [weak canvas, weak card] in
-            if let canvas, let card { canvas.zoom(to: card) }
-        }
-        tile = NSHostingView(rootView: CardTile(card: card, zoom: canvas.settledZoom, open: open))
         trace = CardTraceHost(card: card)
         super.init(frame: .zero)
         wantsLayer = true
@@ -70,7 +65,6 @@ final class CardView: NSView {
         content.layer?.masksToBounds = true
         addSubview(content)
         content.addSubview(terminal)
-        content.addSubview(tile)
         content.addSubview(header)
         content.addSubview(trace)
         header.buttons.isActive = false
@@ -79,7 +73,6 @@ final class CardView: NSView {
             handles.append(handle)
             addSubview(handle)
         }
-        tile.isHidden = true
         // Light or dark to suit the skin, as a window's title bar is.
         chrome = card.sidebar.$chromeColor.sink { [weak self] color in
             self?.appearance = color.map { NSAppearance(named: $0.isLightColor ? .aqua : .darkAqua) } ?? nil
@@ -110,21 +103,13 @@ final class CardView: NSView {
         layer?.shadowPath = CGPath(roundedRect: bounds, cornerWidth: Self.cornerRadius, cornerHeight: Self.cornerRadius, transform: nil)
         header.frame = NSRect(x: 0, y: 0, width: bounds.width, height: Self.headerHeight)
         terminal.frame = NSRect(x: 0, y: Self.headerHeight, width: bounds.width, height: max(0, bounds.height - Self.headerHeight))
-        tile.frame = bounds
         trace.frame = bounds
         for handle in handles { handle.frame = CanvasModel.handleFrame(for: handle.edges, in: bounds) }
     }
 
-    /// A tile is one button: clicking it zooms to the card.
-    override func hitTest(_ point: NSPoint) -> NSView? {
-        let hit = super.hitTest(point)
-        if mode == .tile, hit != nil, !(hit is CardEdgeHandle) { return self }
-        return hit
-    }
-
-    /// A click on the tile, or on the card's SwiftUI controls while the
-    /// canvas is zoomed (see CardTerminalHost), zooms to the card at 100%,
-    /// where they take clicks.
+    /// A click on the card's SwiftUI controls while the canvas is zoomed
+    /// (see CardTerminalHost) zooms to the card at 100%, where they take
+    /// clicks.
     override func mouseDown(with event: NSEvent) {
         canvas?.focus(card)
         canvas?.zoom(to: card)
@@ -138,16 +123,9 @@ final class CardView: NSView {
         nextResponder = card
     }
 
-    /// The canvas's zoom settled: the tile keeps its text readable at it.
-    func zoomDidSettle(_ zoom: CGFloat) {
-        tile.rootView = CardTile(card: card, zoom: zoom, open: tile.rootView.open)
-    }
-
     private func applyMode() {
-        // The panes stay in the window (the tile covers them), so a hidden
-        // focused pane keeps keyboard focus instead of AppKit handing it on.
-        tile.isHidden = mode != .tile
-        header.isHidden = mode == .tile
+        // The panes stay shown, so a focused pane out of view keeps keyboard
+        // focus instead of AppKit handing it on.
         trace.isLit = mode == .live
         // What a hidden window's panes get: no drawing until shown again.
         for view in card.surfaceTree {
