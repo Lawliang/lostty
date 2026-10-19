@@ -1,6 +1,7 @@
 # Lostty Canvas — design
 
-Date: 2026-10-18. Status: approved in conversation; this spec awaits review.
+Date: 2026-10-18. Status: approved; refined while planning (see the
+plan, `docs/superpowers/plans/2026-10-18-lostty-canvas.md`).
 Branch: `canvas`, started from `window-light` (so it has the icon row,
 Window Light and the window-wide Ready for Response).
 
@@ -88,8 +89,8 @@ optimizations.
   terminal it scrolls that terminal. **⌥ + scroll** pans anywhere.
 - **⌃⌘0** zooms to fit every card. **⌃⌘1** zooms the focused card to 100%
   and centers it. Double-clicking a header does the same for that card.
-- **⌃⌘ + arrow keys** move focus to the nearest card in that direction and
-  pan to show it.
+- **⌃⌥⌘ + arrow keys** move focus to the nearest card in that direction and
+  pan to show it. (⌃⌘ + arrows already resize splits.)
 - Keyboard focus is a terminal pane, as in windows; the canvas only decides
   which card it's in.
 
@@ -106,26 +107,26 @@ optimizations.
   call, the one a move to a Retina screen uses.
 - **Below 45%**, cards stop drawing their terminals and show a **status
   tile** instead (§5.3). Coming back above 45% re-renders them.
-- **Panning** moves layers only; nothing redraws.
+- **Panning** moves layers only; no terminal redraws (only the dot grid
+  does, a single cheap fill).
 
 ## 5. Agent aids
 
 ### 5.1 Card trace and status
 
-- While Claude or Codex works in any of a card's panes, the trace runs on
-  the **card's edge**, chosen the way a window's is (focused pane first,
-  Claude itself before subagents only). It follows the Claude Trace Style
-  setting: Skin Traces runs the pane's skin trace round the card, Window
-  Light runs the website's light round the card.
-- The header shows the card's agent state, from its panes: **Working**
-  (a trace runs), **Waiting** (a pane shows Ready for Response), **Ready**
-  (a pane runs Claude or Codex, idle, already seen: what the phone's
-  session list calls Ready, from the same tmux session state), or nothing. Working outranks
-  Waiting, which outranks Ready.
+- The trace follows the Claude Trace Style setting, as in a window: Skin
+  Traces runs on the working pane's own edge inside the card; Window Light
+  runs the website's light round the **card's edge**, chosen the way a
+  window's is (focused pane first, Claude itself before subagents only).
+- The header shows the card's agent state, each pane judged by the rules
+  the phone's rows and the sidebar mascot use (`PaneState`): **Waiting**
+  (Ready for Response is up), **Working** (a trace runs), **Ready** (used
+  lately), or nothing. The card shows its most urgent pane: Waiting, then
+  Working, then Ready.
 
 ### 5.2 Jump to What Needs You
 
-- **⌃⌘J**, or the button at the left of the canvas's usage bar, pans and
+- **⌃⌘J**, or the Jump button in the canvas's title bar, pans and
   zooms to the next card with a pane waiting (Ready for Response) and
   focuses that pane. Pressing it again goes to the next one, oldest wait
   first, wrapping round. With nothing waiting it beeps.
@@ -150,14 +151,17 @@ optimizations.
 - Traces and Ready overlays exist only on cards that need them, and stop
   when the canvas window is hidden or covered.
 - The canvas surface, cards and headers are AppKit views; SwiftUI is used
-  only inside a card (header contents, the split view, overlays), never for
-  the canvas itself, so panning never re-evaluates SwiftUI.
+  only round the canvas (the icon row and usage bar, as in a window) and
+  inside a card (header contents, the split view, overlays), never for the
+  canvas itself, so panning never re-evaluates SwiftUI.
 
 ## 7. Save and restore
 
-- The canvas window uses the same window restoration as terminal windows.
-  It saves the viewport (center and zoom), and for each card its frame, its
-  stacking order and its split tree (saved as a window's is).
+- The canvas is saved with the app's own restorable state, as the Quick
+  Terminal is (window restoration skips hidden windows, and a hidden canvas
+  still holds running terminals). It saves whether it's shown, the
+  viewport (center and zoom), and for each card its frame, its stacking
+  order and its split tree (saved as a window's is).
 - Each pane reattaches to its tmux session the way a restored window's
   pane does, so **Restart to Update keeps the canvas** and its terminals.
 - A restored canvas that was hidden stays hidden until opened.
@@ -168,20 +172,30 @@ All new code is in `macos/Sources/Features/Canvas/`. Ghostty's own files
 get small hooks only: the menu items, `LosttyChannel.hasCanvas`, and Move
 to Canvas in the terminal controller.
 
-- `CanvasController` (an `NSWindowController`): owns the canvas window and
-  the model. Listens for the notifications that today reach a window's
-  controller (new split, close, focus split, equalize, resize split, toggle
-  split zoom, present terminal, drag ended), finds the card whose split tree
-  holds the pane, and applies the change to that card's tree, reusing
-  `SplitTree`'s operations.
-- `CanvasModel`: the cards (ID, frame in canvas coordinates, z-order, split
-  tree) and the viewport (center, zoom). Pure logic, unit-tested: lookups,
-  hit tests, placement, culling, jump order, tile threshold, encode/decode.
-- `CanvasView`: an AppKit view that draws the dot grid and lays out card
-  views from the viewport; handles pinch, scroll and ⌥-scroll.
-- `CardView`: an AppKit view with the header (a small SwiftUI view) and the
-  card's split view (`TerminalSplitTreeView` in a hosting view), plus the
-  card's trace and Ready overlays.
+- `CanvasController` (an `NSWindowController`): owns the canvas window,
+  the model and the cards; the window's delegate, passing on to the cards
+  what a window's controller hears (key, resign key).
+- `CardController`, one per card, **is a `BaseTerminalController`**, so a
+  card runs its splits exactly as a window does: the same split, close,
+  focus, zoom and resize notifications, the same undo and close
+  confirmations. Its `window` is the canvas window. It sits in the
+  responder chain under its card view, so menu actions reach it.
+- `CanvasModel`: the cards' frames (document points) back to front, plus
+  pure helpers: placement, hit tests, resizing, culling, neighbors, zoom
+  to fit, jump order, card status, the saved state. Unit-tested.
+- The canvas surface is an `NSScrollView` with magnification (25%–200%)
+  over a large flipped document view; AppKit pans and pinch-zooms it, and
+  its scaled clip view keeps clicks landing on the right cell. A dot grid
+  view sits behind it.
+- `CardView`: an AppKit view with the header (AppKit, with a small SwiftUI
+  pill and status), the card's `TerminalView` in a hosting view (which
+  brings the split view and Ready for Response), the tile, and the Window
+  Light host.
+- Code that finds a pane's controller through its window
+  (`window.windowController as? BaseTerminalController`, `TerminalController.all`)
+  goes through two card-aware lookups instead:
+  `BaseTerminalController.everyController` and
+  `Ghostty.SurfaceView.terminalController`.
 
 Out of scope for the first beta: more than one canvas, AppleScript and
 Shortcuts access to cards (scripts see only normal windows), a minimap,
@@ -225,3 +239,7 @@ phone (the phone keeps listing sessions as now).
 - **Ghostty actions with no card meaning** (new tab, toggle tab overview,
   window-level full screen per pane) are ignored on the canvas or applied
   to the canvas window as a whole; the plan lists each.
+- **Several cards in one window:** SwiftUI's focused values and AppKit's
+  responder chain were built for one terminal view per window. The canvas
+  routes focus itself (from the window's first responder) and puts each
+  card's controller in the chain; the spike checks both.
