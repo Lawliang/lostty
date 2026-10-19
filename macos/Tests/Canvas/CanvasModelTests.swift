@@ -129,18 +129,16 @@ struct CanvasZoomTests {
         #expect(CanvasZoom.contentScale(backing: 1, zoom: 5) == 2)
     }
 
-    @Test func gridDotsStayOnTheDocumentAsItPans() {
+    @Test func gridDotsMoveWithThePan() {
         #expect(CanvasGrid.firstDot(origin: .zero, zoom: 1) == .zero)
-        #expect(CanvasGrid.firstDot(origin: CGPoint(x: 10, y: 30), zoom: 1) == CGPoint(x: 8, y: 19.5))
+        #expect(CanvasGrid.firstDot(origin: CGPoint(x: 10, y: 30), zoom: 1) == CGPoint(x: 8, y: 7.125))
+        // At 25% the same document point is a quarter as far on screen.
+        #expect(CanvasGrid.firstDot(origin: CGPoint(x: 100, y: 0), zoom: 0.25) == CGPoint(x: 2, y: 0))
     }
 
-    @Test func gridDotsThinOutWhenZoomedFarOut() {
-        // The website's: two characters by one line of 15px JetBrains Mono.
-        #expect(CanvasGrid.gap(zoom: 1) == CGSize(width: 18, height: 24.75))
-        #expect(CanvasGrid.gap(zoom: 0.5) == CGSize(width: 18, height: 24.75))
-        #expect(CanvasGrid.gap(zoom: 0.25) == CGSize(width: 18, height: 24.75))
-        #expect(CanvasGrid.gap(zoom: 2) == CGSize(width: 36, height: 49.5))
-        #expect(CanvasGrid.firstDot(origin: CGPoint(x: 100, y: 0), zoom: 0.25) == CGPoint(x: 11, y: 0))
+    @Test func gridDotsKeepTheirSpacingAtEveryZoom() {
+        // Half the website's spacing each way, on screen, however zoomed.
+        #expect(CanvasGrid.spacing == CGSize(width: 9, height: 12.375))
     }
 }
 

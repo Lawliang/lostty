@@ -54,8 +54,9 @@ optimizations.
   own bottom bar; §3.2.)
 - The background is the Lostty website's: its paper color (`#0E0B12` dark,
   `#F3F2F6` light) and dot grid (`#2A2432` / `#CDC6D7` dots, solid to 1pt
-  and soft to 1.6pt, 18 × 24.75pt apart at 100%), the dots moving with
-  panning and scaling so motion reads.
+  and soft to 1.6pt), four times as dense: 9 × 12.375pt apart on screen at
+  every zoom (half the website's spacing each way), moving with panning so
+  motion reads.
 - It does not join native tab groups.
 
 ### 3.2 Cards

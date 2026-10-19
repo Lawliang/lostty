@@ -35,8 +35,9 @@ final class CanvasDocumentView: NSView {
     override var isFlipped: Bool { true }
 }
 
-/// The Lostty website's background: its paper color and dot grid, the
-/// dots moving with the canvas as it pans and zooms. The dots are one picture, a gap bigger than the view each way;
+/// The Lostty website's background: its paper color and dots, four times
+/// as dense, the same on screen at every zoom and moving as the canvas
+/// pans. The dots are one picture, a gap bigger than the view each way;
 /// panning only moves it (no drawing), and it's redrawn only when the gap
 /// (the zoom), the view's size or the appearance changes.
 final class CanvasGridView: NSView {
@@ -64,8 +65,7 @@ final class CanvasGridView: NSView {
     }
 
     /// What the picture was drawn for.
-    private var drawn: (gap: CGSize, size: CGSize, scale: CGFloat)?
-    private var redrawWork: DispatchWorkItem?
+    private var drawn: (size: CGSize, scale: CGFloat)?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -91,61 +91,30 @@ final class CanvasGridView: NSView {
         update()
     }
 
-    /// The canvas panned or zoomed. Panning only moves the picture; while
-    /// the zoom changes the picture is stretched to the new spacing and
-    /// redrawn once it rests (redrawing each step cost more than a frame).
+    /// The canvas panned or zoomed: the picture only moves (the dots keep
+    /// their spacing at every zoom), and is redrawn only for a new size,
+    /// screen or appearance.
     func update() {
         guard let scrollView, bounds.width > 0, bounds.height > 0 else { return }
-        let zoom = scrollView.magnification
-        let gap = CanvasGrid.gap(zoom: zoom)
+        let gap = CanvasGrid.spacing
         let scale = window?.backingScaleFactor ?? 2
+        // A whole number of gaps, so the picture is the same either way up.
+        let size = CGSize(width: ((bounds.width / gap.width).rounded(.up) + 2) * gap.width,
+                          height: ((bounds.height / gap.height).rounded(.up) + 2) * gap.height)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        if let drawn, drawn.scale == scale, covers(drawn, gap: gap) {
-            if drawn.gap != gap { redrawSoon() }
-        } else {
-            redraw(gap: gap, scale: scale)
+        if drawn?.size != size || drawn?.scale != scale {
+            dots.contents = picture(gap: gap, size: size, scale: scale)
+            dots.contentsScale = scale
+            dots.bounds = CGRect(origin: .zero, size: size)
+            drawn = (size, scale)
         }
-        guard let drawn else { CATransaction.commit(); return }
-        let stretch = gap.width / drawn.gap.width
-        dots.setAffineTransform(CGAffineTransform(scaleX: stretch, y: stretch))
         // Each dot sits mid-cell; one row and column of them start off-view.
-        let first = CanvasGrid.firstDot(origin: scrollView.contentView.bounds.origin, zoom: zoom)
+        let first = CanvasGrid.firstDot(origin: scrollView.contentView.bounds.origin, zoom: scrollView.magnification)
         let top = first.y - gap.height / 2 - gap.height
         dots.position = CGPoint(x: first.x - gap.width / 2 - gap.width,
-                                y: layer?.isGeometryFlipped == true ? top : bounds.height - top - drawn.size.height * stretch)
+                                y: layer?.isGeometryFlipped == true ? top : bounds.height - top - size.height)
         CATransaction.commit()
-    }
-
-    /// Whether the picture, stretched to `gap`, still covers the view.
-    private func covers(_ drawn: (gap: CGSize, size: CGSize, scale: CGFloat), gap: CGSize) -> Bool {
-        let stretch = gap.width / drawn.gap.width
-        guard stretch > 0.5, stretch < 2 else { return false }
-        return drawn.size.width * stretch >= bounds.width + 2 * gap.width
-            && drawn.size.height * stretch >= bounds.height + 2 * gap.height
-    }
-
-    private func redrawSoon() {
-        redrawWork?.cancel()
-        let work = DispatchWorkItem { [weak self] in
-            self?.drawn = nil
-            self?.update()
-        }
-        redrawWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + CanvasZoom.settle, execute: work)
-    }
-
-    /// Half as big again as the view (a whole number of gaps, so the
-    /// picture is the same either way up), so zooming out has room to
-    /// stretch before it must redraw.
-    private func redraw(gap: CGSize, scale: CGFloat) {
-        redrawWork?.cancel()
-        let size = CGSize(width: ((bounds.width * 1.5 / gap.width).rounded(.up) + 2) * gap.width,
-                          height: ((bounds.height * 1.5 / gap.height).rounded(.up) + 2) * gap.height)
-        dots.contents = picture(gap: gap, size: size, scale: scale)
-        dots.contentsScale = scale
-        dots.bounds = CGRect(origin: .zero, size: size)
-        drawn = (gap, size, scale)
     }
 
     /// The dots: one drawn, then stamped at every gap.

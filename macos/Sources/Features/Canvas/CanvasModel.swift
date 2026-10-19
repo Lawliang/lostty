@@ -207,33 +207,22 @@ enum CanvasZoom {
     }
 }
 
-/// The dot grid behind the cards: a dot every `spacing` document points,
-/// thinned out (doubled) until dots are `minimumGap` screen points apart.
+/// The dot grid behind the cards: a dot every `spacing` screen points.
 enum CanvasGrid {
-    /// The Lostty website's dot grid: two characters by one line of its
-    /// 15px JetBrains Mono (0.6em wide, 1.65 lines).
-    static let spacing = CGSize(width: 18, height: 24.75)
-    static let minimumGap: CGFloat = 12
-
-    /// The gap between dots on screen at `zoom`.
-    static func gap(zoom: CGFloat) -> CGSize {
-        var gap = CGSize(width: spacing.width * zoom, height: spacing.height * zoom)
-        while min(gap.width, gap.height) < minimumGap {
-            gap = CGSize(width: gap.width * 2, height: gap.height * 2)
-        }
-        return gap
-    }
+    /// The dots' spacing on screen, the same at every zoom: half the Lostty
+    /// website's each way (its grid is two characters by one line of its
+    /// 15px JetBrains Mono), four times as dense.
+    static let spacing = CGSize(width: 9, height: 12.375)
 
     /// Where the first dot sits on screen (the view's top-left at 0, 0) when
-    /// the view shows the document from `origin` at `zoom`, so dots stay put
-    /// on the document as it pans.
+    /// the view shows the document from `origin` at `zoom`, so dots move
+    /// with the canvas as it pans.
     static func firstDot(origin: CGPoint, zoom: CGFloat) -> CGPoint {
-        let gap = gap(zoom: zoom)
         func first(_ value: CGFloat, _ gap: CGFloat) -> CGFloat {
             let screen = value * zoom
             return (screen / gap).rounded(.up) * gap - screen
         }
-        return CGPoint(x: first(origin.x, gap.width), y: first(origin.y, gap.height))
+        return CGPoint(x: first(origin.x, spacing.width), y: first(origin.y, spacing.height))
     }
 }
 
