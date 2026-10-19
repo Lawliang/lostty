@@ -8,7 +8,7 @@ enum PaneFocus {
     @discardableResult
     static func focus(_ id: UUID) -> Bool {
         guard let surface = (NSApp.delegate as? AppDelegate)?.findSurface(forUUID: id),
-              let controller = surface.window?.windowController as? BaseTerminalController
+              let controller = surface.terminalController
         else { return false }
         NSApp.activate(ignoringOtherApps: true)
         surface.window?.makeKeyAndOrderFront(nil)

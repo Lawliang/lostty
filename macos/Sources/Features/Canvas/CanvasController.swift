@@ -19,7 +19,9 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     }
 
     /// Every card's controller, for the app's pane lookups.
-    static var allCards: [CardController] { shared?.cards ?? [] }
+    nonisolated static var allCards: [CardController] {
+        onMain { shared?.cards ?? [] }
+    }
 
     /// Closed cards kept so Undo can bring one back.
     static let retiredLimit = 10

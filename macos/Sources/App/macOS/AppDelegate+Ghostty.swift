@@ -6,11 +6,7 @@ import AppKit
 /// APIs for app-global information.
 extension AppDelegate: Ghostty.Delegate {
     func ghosttySurface(id: UUID) -> Ghostty.SurfaceView? {
-        for window in NSApp.windows {
-            guard let controller = window.windowController as? BaseTerminalController else {
-                continue
-            }
-
+        for controller in BaseTerminalController.everyController {
             for surface in controller.surfaceTree where surface.id == id {
                 return surface
             }

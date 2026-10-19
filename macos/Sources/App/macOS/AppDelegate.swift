@@ -575,8 +575,7 @@ class AppDelegate: NSObject,
     /// Lostty Mobile: whether any open pane is running something. Panes in
     /// tmux sessions ask tmux; the others answer as the core does.
     private static func anyPaneNeedsConfirmQuit() -> Bool {
-        NSApp.windows
-            .compactMap { $0.windowController as? BaseTerminalController }
+        BaseTerminalController.everyController
             .contains { $0.surfaceTree.contains(where: { $0.needsConfirmQuit }) }
     }
 
@@ -916,8 +915,7 @@ class AppDelegate: NSObject,
     }
 
     private func setDockBadge() {
-        let bellCount = NSApp.windows
-            .compactMap { $0.windowController as? BaseTerminalController }
+        let bellCount = BaseTerminalController.everyController
             .reduce(0) { $0 + ($1.bell ? 1 : 0) }
         let wantsBadge = ghostty.config.bellFeatures.contains(.attention) && bellCount > 0
         let label = wantsBadge ? (bellCount > 99 ? "99+" : String(bellCount)) : nil
@@ -1087,7 +1085,8 @@ class AppDelegate: NSObject,
     // MARK: - GhosttyAppDelegate
 
     func findSurface(forUUID uuid: UUID) -> Ghostty.SurfaceView? {
-        for c in TerminalController.all {
+        let controllers: [BaseTerminalController] = TerminalController.all + CanvasController.allCards
+        for c in controllers {
             for view in c.surfaceTree where view.id == uuid {
                 return view
             }

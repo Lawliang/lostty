@@ -1088,7 +1088,7 @@ extension Ghostty {
 
             // Handle focus-follows-mouse
             if let window,
-               let controller = window.windowController as? BaseTerminalController,
+               let controller = terminalController,
                !controller.commandPaletteIsShowing,
                window.isKeyWindow &&
                     !self.focused &&

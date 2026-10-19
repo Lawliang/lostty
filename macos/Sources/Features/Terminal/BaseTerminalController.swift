@@ -966,8 +966,7 @@ class BaseTerminalController: NSWindowController,
         // Source is not in our tree - search other windows
         var sourceController: BaseTerminalController?
         var sourceNode: SplitTree<Ghostty.SurfaceView>.Node?
-        for window in NSApp.windows {
-            guard let controller = window.windowController as? BaseTerminalController else { continue }
+        for controller in Self.everyController {
             guard controller !== self else { continue }
             if let node = controller.surfaceTree.root?.node(view: source) {
                 sourceController = controller
