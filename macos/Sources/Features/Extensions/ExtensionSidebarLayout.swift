@@ -1,12 +1,11 @@
 #if os(macOS)
 import SwiftUI
 
-/// Puts the extensions' icon row and the Claude usage bar below the
-/// terminal content, and the axolotl in the terminal's bottom-right corner.
-/// An open overlay extension (Skins) covers the terminal content; an open
-/// window extension (Branches) covers everything here, the icon row and
-/// usage bar included, until closed. The terminal never changes size for
-/// an app.
+/// Puts the bottom bar (Claude's usage, or the apps) below the terminal
+/// content, and the axolotl in the terminal's bottom-right corner. An open
+/// overlay extension (Skins) covers the terminal content; an open window
+/// extension (Branches) covers everything here, the bottom bar included,
+/// until closed. The terminal never changes size for an app.
 struct ExtensionSidebarLayout<Content: View>: View {
     @ObservedObject var model: ExtensionSidebarModel
     @ViewBuilder let content: () -> Content
@@ -41,7 +40,6 @@ struct ExtensionSidebarLayout<Content: View>: View {
                 }
                 // Above an open app, so it never hides a notification.
                 .overlay(alignment: .topTrailing) { NotificationStackView() }
-            ExtensionSidebarView(model: model)
             ClaudeUsageBar(model: model)
         }
         .overlay {

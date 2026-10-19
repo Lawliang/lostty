@@ -1,50 +1,51 @@
 #if os(macOS)
 import SwiftUI
 
-/// The window's extensions, as a slim row of small iOS-style icons along
-/// the bottom, right above the usage bar and the color of the title bar.
-/// Clicking an icon opens its app; clicking it again closes it.
-struct ExtensionSidebarView: View {
-    static let height: CGFloat = 34
-    static let iconSize: CGFloat = 24
+/// The window's apps, as the bottom bar shows them while its apps button is
+/// on: small iOS-style icons with their names. Clicking one opens its app;
+/// clicking it again closes it.
+struct ExtensionAppsRow: View {
+    static let iconSize: CGFloat = 18
 
     @ObservedObject var model: ExtensionSidebarModel
+    /// The bar's text color.
+    let ink: Color
     @ObservedObject private var skins = SkinsRuntime.shared.manager
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 14) {
             ForEach(model.available) { ext in
                 Button { model.select(ext) } label: {
-                    ExtensionIcon(ext: ext, skin: model.focusedSurfaceID.flatMap { skins.effectiveSkin($0) },
-                                  size: Self.iconSize)
-                        .overlay(alignment: .topTrailing) {
-                            // skins.toml has an error (the last good config stays active).
-                            if ext == .skins, skins.configError != nil {
-                                Circle().fill(Color.yellow)
-                                    .frame(width: 7, height: 7)
-                                    .overlay(Circle().strokeBorder(Color.black.opacity(0.35), lineWidth: 0.5))
-                                    .offset(x: 2, y: -2)
+                    HStack(spacing: 6) {
+                        ExtensionIcon(ext: ext, skin: model.focusedSurfaceID.flatMap { skins.effectiveSkin($0) },
+                                      size: Self.iconSize)
+                            .overlay(alignment: .topTrailing) {
+                                // skins.toml has an error (the last good config stays active).
+                                if ext == .skins, skins.configError != nil {
+                                    Circle().fill(Color.yellow)
+                                        .frame(width: 6, height: 6)
+                                        .overlay(Circle().strokeBorder(Color.black.opacity(0.35), lineWidth: 0.5))
+                                        .offset(x: 2, y: -2)
+                                }
                             }
-                        }
+                        Text(ext.title)
+                            .foregroundStyle(ink.opacity(model.active == ext ? 0.9 : 0.6))
+                    }
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(IconButtonStyle())
                 .accessibilityLabel(ext.title)
-                .help(ext.title)
-                // Active indicator: only while this extension is open.
-                .overlay(alignment: .bottom) {
+                // Active indicator: only while this app is open.
+                .overlay(alignment: .bottomLeading) {
                     Capsule()
-                        .fill(Color(white: 0.95))
-                        .frame(width: model.active == ext ? 14 : 4, height: 2)
+                        .fill(ink.opacity(0.9))
+                        .frame(width: model.active == ext ? 12 : 4, height: 2)
                         .opacity(model.active == ext ? 1 : 0)
-                        .offset(y: 4)
+                        .offset(x: (Self.iconSize - (model.active == ext ? 12 : 4)) / 2, y: 4)
                 }
             }
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 10)
-        .frame(height: Self.height)
-        .frame(maxWidth: .infinity)
-        .background(Color(nsColor: model.chromeColor ?? .windowBackgroundColor))
         .animation(.spring(response: 0.28, dampingFraction: 0.85), value: model.active)
     }
 }

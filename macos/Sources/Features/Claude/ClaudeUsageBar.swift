@@ -11,7 +11,9 @@ import SwiftUI
 /// limit lists every limit, and picking one tracks it here. In the beta, a
 /// line on the context meter marks where the conversation hands off, and
 /// clicking the context shows and sets that limit. Both are hidden without
-/// a Claude session in the focused pane. At the far right, the mute button.
+/// a Claude session in the focused pane. At the far right, the apps button
+/// and the mute button; while the apps button is on, the window's apps
+/// (`ExtensionAppsRow`) take the bar's place of the model and usage.
 struct ClaudeUsageBar: View {
     /// A standard title bar's height.
     static let height: CGFloat = NSWindow.frameRect(forContentRect: .zero, styleMask: [.titled]).height
@@ -41,20 +43,29 @@ struct ClaudeUsageBar: View {
 
     var body: some View {
         ZStack {
-            if hasSession {
+            if model.showsApps {
+                ExtensionAppsRow(model: model, ink: ink)
+                    // Clear of the apps and mute buttons.
+                    .padding(.leading, 12)
+                    .padding(.trailing, 72)
+                    .transition(.opacity)
+            } else if hasSession {
                 usageButton
                     // Equal on both sides so it stays centered, clear of
-                    // the model on the left and mute on the right.
+                    // the model on the left and the buttons on the right.
                     .padding(.horizontal, 110)
+                    .transition(.opacity)
             }
             HStack(spacing: 0) {
-                if hasSession { modelLabel }
+                if hasSession, !model.showsApps { modelLabel.transition(.opacity) }
                 Spacer(minLength: 0)
+                appsButton
                 muteButton
             }
             .padding(.leading, 12)
             .padding(.trailing, 8)
         }
+        .animation(.easeOut(duration: 0.15), value: model.showsApps)
         .font(ClaudeUsageFont.font(size: 12))
         .lineLimit(1)
         // Never wider than the window: a narrow one truncates the text.
@@ -111,6 +122,24 @@ struct ClaudeUsageBar: View {
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
                     .fill(ink.opacity(lit ? 0.07 : 0)))
             .contentShape(Rectangle())
+    }
+
+    /// A 2x2 grid; lit while the bar shows the apps.
+    private var appsButton: some View {
+        Button { model.toggleApps() } label: {
+            Image(systemName: model.showsApps ? "square.grid.2x2.fill" : "square.grid.2x2")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(ink.opacity(model.showsApps ? 0.9 : 0.5))
+                .frame(width: 24, height: 20)
+                .background(
+                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        .fill(ink.opacity(model.showsApps ? 0.12 : 0)))
+                .frame(width: 28, height: Self.height)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(model.showsApps ? "Hide apps" : "Show apps")
+        .help("Apps")
     }
 
     private var muteButton: some View {
