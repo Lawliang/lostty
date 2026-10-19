@@ -2,8 +2,9 @@
 import AppKit
 import SwiftUI
 
-/// The canvas's scroll view: two-finger scrolling over empty canvas pans
-/// it, in any direction (not locked to the swipe's main axis), pinching
+/// The canvas's scroll view: two-finger scrolling pans it, over a card too
+/// (⌥-scrolling over a pane scrolls the pane), in any direction (not
+/// locked to the swipe's main axis), pinching
 /// zooms it 25%–200% (its clip view scales, so clicks still land on the
 /// right cell), and it has no scrollers.
 final class CanvasScrollView: NSScrollView {

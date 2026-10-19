@@ -32,9 +32,10 @@ optimizations.
 - **A card is a split group:** a mini window with its own split tree. A
   fresh card holds one terminal; it splits like a window. Moving a window to
   the canvas keeps its splits.
-- **Gestures:** pinch zooms anywhere. Two-finger scroll pans over empty
-  canvas and card headers, and scrolls the terminal when over one. Holding
-  Option (⌥) pans from anywhere. A card moves by dragging its header.
+- **Gestures:** pinch zooms anywhere. Two-finger scroll pans from
+  anywhere, over a terminal too (focused or not); holding Option (⌥)
+  scrolls the terminal under the pointer instead. A card moves by dragging
+  its header.
 - **Agent aids in the first beta:** a trace on each working card's edge;
   Jump to What Needs You; Ready for Response on the waiting card only.
   (Status labels and zoomed-out status tiles were tried and dropped: cards
@@ -104,8 +105,9 @@ optimizations.
 ### 3.4 Moving around
 
 - **Pinch** zooms around the pointer, 25%–200%.
-- **Two-finger scroll** over empty canvas or a card header pans; over a
-  terminal it scrolls that terminal. **⌥ + scroll** pans anywhere.
+- **Two-finger scroll** pans anywhere, over terminals too. **⌥ + scroll**
+  over a terminal scrolls that terminal (its history, or the program in
+  it). Each gesture is decided as it starts, momentum included.
 - **⌃⌘0** zooms to fit every card. **⌃⌘1** zooms the focused card to 100%
   and centers it. Double-clicking a header does the same for that card.
 - **⌃⌥⌘ + arrow keys** move focus to the nearest card in that direction and
