@@ -55,4 +55,12 @@ struct CanvasMenuTests {
         #expect(left.keyEquivalent == String(Character(UnicodeScalar(NSLeftArrowFunctionKey)!)))
     }
 }
+
+struct CanvasRestoreTests {
+    @Test func theCanvasNeverOverwritesTheQuickTerminalsState() {
+        #expect(CanvasRestorableState.selfKey != QuickTerminalRestorableState.selfKey)
+        #expect(CanvasRestorableState.versionKey != QuickTerminalRestorableState.versionKey)
+        #expect(CanvasRestorableState.version == 1)
+    }
+}
 #endif

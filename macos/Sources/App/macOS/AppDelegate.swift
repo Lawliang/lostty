@@ -466,7 +466,8 @@ class AppDelegate: NSObject,
             // is possible to have other windows in a few scenarios:
             //   - if we're opening a URL since `application(_:openFile:)` is called before this.
             //   - if we're restoring from persisted state
-            if TerminalController.all.isEmpty && derivedConfig.initialWindow {
+            if TerminalController.all.isEmpty && CanvasController.shared?.window?.isVisible != true
+                && derivedConfig.initialWindow {
                 undoManager.disableUndoRegistration()
                 _ = TerminalController.newWindow(ghostty)
                 undoManager.enableUndoRegistration()
@@ -515,7 +516,8 @@ class AppDelegate: NSObject,
         // NOTE(mitchellh): I don't think we need this check at all anymore. I'm keeping it
         // here because I don't want to remove it in a patch release cycle but we should
         // target removing it soon.
-        if (windows.allSatisfy { !$0.isVisible }) {
+        // Lostty Canvas: a hidden canvas's running terminals still ask.
+        if (windows.allSatisfy { !$0.isVisible }) && CanvasController.allCards.isEmpty {
             return .terminateNow
         }
 
@@ -1023,6 +1025,11 @@ class AppDelegate: NSObject,
         default:
             break
         }
+
+        // Lostty Canvas: the canvas, shown or hidden.
+        if let canvas = CanvasController.shared, !canvas.cards.isEmpty {
+            canvas.restorableState().encode(with: coder)
+        }
     }
 
     func application(_ app: NSApplication, didDecodeRestorableState coder: NSCoder) {
@@ -1032,6 +1039,12 @@ class AppDelegate: NSObject,
         if ghostty.config.windowSaveState != "never",
             let state = QuickTerminalRestorableState(coder: coder) {
             quickTerminalControllerState = .pendingRestore(state)
+        }
+
+        // Lostty Canvas: the canvas's cards, their panes reattaching.
+        if ghostty.config.windowSaveState != "never", LosttyChannel.current.hasCanvas,
+           let state = CanvasRestorableState(coder: coder) {
+            CanvasController.restore(ghostty, state: state)
         }
     }
 
