@@ -94,7 +94,8 @@ final class CardView: NSView {
     }
 
     private func applyMode() {
-        terminal.isHidden = mode != .live
+        // The panes stay in the window (the tile covers them), so a hidden
+        // focused pane keeps keyboard focus instead of AppKit handing it on.
         tile.isHidden = mode != .tile
         header.isHidden = mode == .tile
         trace.isLit = mode == .live
@@ -125,7 +126,10 @@ final class CardTerminalHost: NSHostingView<CardTerminal> {
 
     override func hitTest(_ point: NSPoint) -> NSView? {
         let hit = super.hitTest(point)
-        guard hit === self, let card, let superview else { return hit }
+        // At 100% SwiftUI finds its panes itself, and its own controls over
+        // them (search bar, dividers, grab handle) must keep their clicks.
+        guard hit === self, let card, let superview,
+              (enclosingScrollView?.magnification ?? 1) != 1 else { return hit }
         for pane in card.surfaceTree where !pane.isHiddenOrHasHiddenAncestor {
             if pane.bounds.contains(pane.convert(point, from: superview)) { return pane }
         }

@@ -374,11 +374,13 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
         guard !tree.isEmpty, LosttyChannel.current.hasCanvas else { return }
         let focused = focusedSurface
         let size = CanvasController.cardSize(for: tree)
+        // The canvas first: with quit-after-last-window-closed, closing this
+        // window with no other open would quit and end the moved panes.
+        let canvas = CanvasController.show(ghostty, freshCard: false)
         // An empty tree closes this window (surfaceTreeDidChange).
         surfaceTree = .init()
         // The card takes the panes once this window's views have let them go.
-        DispatchQueue.main.async { [ghostty] in
-            let canvas = CanvasController.show(ghostty, freshCard: false)
+        DispatchQueue.main.async {
             let frame = canvas.model.placement(size: size, in: canvas.scrollView.documentVisibleRect)
             let card = canvas.addCard(tree: tree, frame: frame, focused: focused)
             canvas.focus(card)

@@ -55,6 +55,7 @@ final class CardController: BaseTerminalController {
     /// its own, and then it is the canvas's focused card.
     override func focusedSurfaceDidChange(to surface: Ghostty.SurfaceView?) {
         guard let surface, surfaceTree.contains(surface) else { return }
+        canvas?.cardWillFocus(self)
         super.focusedSurfaceDidChange(to: surface)
         header.focusedSurfaceID = surface.id
         canvas?.cardDidFocus(self)

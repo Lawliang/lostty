@@ -554,6 +554,11 @@ extension Ghostty {
         }
 
         func sizeDidChange(_ size: CGSize) {
+            // Lostty Canvas: mid-zoom, keep the size for when it settles.
+            if canvasZoomInFlight {
+                contentSize = size
+                return
+            }
             // Ghostty wants to know the actual framebuffer size... It is very important
             // here that we use "size" and NOT the view frame. If we're in the middle of
             // an animation (i.e. a fullscreen animation), the frame will not yet be updated.
@@ -919,6 +924,9 @@ extension Ghostty {
 
         override func viewDidChangeBackingProperties() {
             super.viewDidChangeBackingProperties()
+            // Lostty Canvas: mid-zoom the compositor scales the old pixels;
+            // canvasZoomDidSettle catches up.
+            guard !canvasZoomInFlight else { return }
 
             // The Core Animation compositing engine uses the layer's contentsScale property
             // to determine whether to scale its contents during compositing. When the window
@@ -957,10 +965,15 @@ extension Ghostty {
             setSurfaceSize(width: UInt32(scaledSize.width), height: UInt32(scaledSize.height))
         }
 
+        /// Lostty Canvas: true while the canvas's zoom is changing (a pinch):
+        /// the pane keeps its pixels and grid until the zoom settles.
+        var canvasZoomInFlight = false
+
         /// Lostty Canvas: the canvas's zoom settled. Its scaled clip view
         /// already makes this pane's pixels per point the screen's × the
         /// zoom; re-rasterize at that (crisp text) with the grid unchanged.
         func canvasZoomDidSettle(_ zoom: CGFloat) {
+            canvasZoomInFlight = false
             guard window != nil, frame.width > 0, frame.height > 0 else { return }
             viewDidChangeBackingProperties()
         }

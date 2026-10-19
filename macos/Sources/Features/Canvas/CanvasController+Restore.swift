@@ -6,13 +6,15 @@ extension CanvasController {
     /// cards back to front.
     func restorableState() -> CanvasRestorableState {
         let visible = scrollView.documentVisibleRect
+        // Never shown since launch: the view it came back with.
+        let view = placed ? (CGPoint(x: visible.midX, y: visible.midY), scrollView.magnification)
+            : (pendingView ?? (CanvasModel.middle, 1))
         let saved = model.cards.compactMap { entry -> CanvasSaved<SplitTree<Ghostty.SurfaceView>>.Card? in
             guard let card = cards.first(where: { $0.id == entry.id }), !card.surfaceTree.isEmpty else { return nil }
             return .init(frame: entry.frame, tree: card.surfaceTree, focused: card.focusedSurface?.id.uuidString)
         }
         return CanvasRestorableState(saved: .init(
-            visible: window?.isVisible ?? false, center: CGPoint(x: visible.midX, y: visible.midY),
-            zoom: scrollView.magnification, cards: saved))
+            visible: window?.isVisible ?? false, center: view.0, zoom: view.1, cards: saved))
     }
 
     /// Rebuilds the canvas at launch; shown only if it was.

@@ -40,13 +40,16 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     private(set) var views: [UUID: CardView] = [:]
     /// Closed cards with where they were, newest last, for Undo.
     private var retired: [(card: CardController, frame: CGRect)] = []
+    /// Cards whose panes are moving to a window: gone for good, not for Undo.
+    private var moving: Set<UUID> = []
     /// The zoom the terminals last rendered at.
     var settledZoom: CGFloat = 1
     var settleWork: DispatchWorkItem?
     var waits = CanvasWaits()
     /// The view to show when the window first opens (a restored canvas's).
     var pendingView: (center: CGPoint, zoom: CGFloat)?
-    private var placed = false
+    /// Whether the view was set the first time the window showed.
+    private(set) var placed = false
     private var eventMonitor: Any?
     private var cancellables: Set<AnyCancellable> = []
 
@@ -93,9 +96,14 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
 
     override func showWindow(_ sender: Any?) {
         super.showWindow(sender)
-        defer { updateVisibility() }
-        guard !placed else { return }
-        // The first time: lay out, then show the restored view or the middle.
+        placeIfNeeded()
+        updateVisibility()
+    }
+
+    /// The first time the window shows (by ⌃⌘K, or a pane brought forward):
+    /// lay out, then show the restored view or the middle.
+    private func placeIfNeeded() {
+        guard !placed, window?.isVisible == true else { return }
         placed = true
         window?.contentView?.layoutSubtreeIfNeeded()
         let view = pendingView ?? (CanvasModel.middle, 1)
@@ -204,15 +212,20 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         card.focusedSurfaceDidChange(to: surface)
     }
 
-    /// A card's pane took keyboard focus: it's the focused card now, in
-    /// front, with the window's title, icon row and outline.
-    func cardDidFocus(_ card: CardController) {
+    /// A card's pane is taking keyboard focus: the card is the focused one
+    /// from now on (before its pane is, so the pane never blinks unfocused),
+    /// in front.
+    func cardWillFocus(_ card: CardController) {
         let previous = focusedCard
         focusedCard = card
-        if previous !== card {
-            previous?.syncFocusToSurfaceTree()
-            bringToFront(card)
-        }
+        guard previous !== card else { return }
+        previous?.syncFocusToSurfaceTree()
+        bringToFront(card)
+    }
+
+    /// A card's pane took keyboard focus: the window's title, icon row and
+    /// outline follow it.
+    func cardDidFocus(_ card: CardController) {
         card.syncFocusToSurfaceTree()
         card.applyTitleToWindow()
         sidebar.focusedSurfaceID = card.focusedSurface?.id
@@ -262,11 +275,19 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         model.remove(card.id)
         cards.removeAll { $0 === card }
         views.removeValue(forKey: card.id)?.removeFromSuperview()
-        retired.append((card, frame))
-        if retired.count > Self.retiredLimit { retired.removeFirst() }
-        if focusedCard === card {
-            focusedCard = nil
-            if let next = model.cards.last.flatMap({ entry in cards.first { $0.id == entry.id } }) { focus(next) }
+        if !moving.contains(card.id) {
+            retired.append((card, frame))
+            if retired.count > Self.retiredLimit { retired.removeFirst() }
+        }
+        guard focusedCard === card else { return }
+        focusedCard = nil
+        guard let next = model.cards.last.flatMap({ entry in cards.first { $0.id == entry.id } }) else { return }
+        // A card closing while you work elsewhere never pulls the canvas forward.
+        if window?.isKeyWindow == true {
+            focus(next)
+        } else {
+            cardWillFocus(next)
+            cardDidFocus(next)
         }
     }
 
@@ -278,18 +299,36 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     }
 
     /// Move to Window: the card's panes become a normal window; nothing restarts.
+    /// The card's undo history goes with it: undoing a split it made would
+    /// pull the window's panes back into a second card.
     func moveToWindow(_ card: CardController) {
         let tree = card.surfaceTree
         guard !tree.isEmpty else { return }
+        let undo = (NSApp.delegate as? AppDelegate)?.undoManager
+        undo?.removeAllActions(withTarget: card)
+        moving.insert(card.id)
         card.surfaceTree = .init()
-        _ = TerminalController.newWindow(ghostty, tree: tree)
+        moving.remove(card.id)
+        // No "Undo New Window" either: undoing it would close the moved panes.
+        if let undo {
+            undo.disableUndoRegistration { _ = TerminalController.newWindow(ghostty, tree: tree) }
+        } else {
+            _ = TerminalController.newWindow(ghostty, tree: tree)
+        }
     }
 
     // MARK: View
 
     @objc private func canvasMoved() {
         updateVisibility()
-        if scrollView.magnification != settledZoom { scheduleSettle() }
+        saveSoon()
+        guard scrollView.magnification != settledZoom else { return }
+        // While the zoom moves the panes keep their pixels (the compositor
+        // scales them) and their grid; they re-render once it settles.
+        for card in cards {
+            for surface in card.surfaceTree where !surface.canvasZoomInFlight { surface.canvasZoomInFlight = true }
+        }
+        scheduleSettle()
     }
 
     private func center(on point: CGPoint) {
@@ -354,6 +393,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     }
 
     func windowDidBecomeKey(_ notification: Notification) {
+        placeIfNeeded()
         // Only the focused card restores keyboard focus to its pane.
         focusedCard?.windowDidBecomeKey(notification)
         for card in cards where card !== focusedCard { card.syncFocusToSurfaceTree() }
@@ -364,6 +404,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     }
 
     func windowDidChangeOcclusionState(_ notification: Notification) {
+        placeIfNeeded()
         updateVisibility()
     }
 
