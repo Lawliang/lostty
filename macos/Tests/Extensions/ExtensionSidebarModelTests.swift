@@ -35,32 +35,6 @@ struct ExtensionSidebarModelTests {
         #expect(ExtensionSidebarModel(channel: .beta, mascot: false).showsMascot == false)
     }
 
-    @Test func theIconRowStartsTuckedAway() throws {
-        #expect(try makeModel().0.iconRowShown == false)
-    }
-
-    @Test func draggingTheHandleRevealsTheRowUpToItsHeight() {
-        let h = ExtensionSidebarView.height
-        #expect(IconRowDrawer.reveal(shown: false, dragged: 0) == 0)
-        #expect(IconRowDrawer.reveal(shown: false, dragged: -10) == 10)
-        #expect(IconRowDrawer.reveal(shown: false, dragged: -500) == h)
-        #expect(IconRowDrawer.reveal(shown: false, dragged: 40) == 0)
-        #expect(IconRowDrawer.reveal(shown: true, dragged: 0) == h)
-        #expect(IconRowDrawer.reveal(shown: true, dragged: 10) == h - 10)
-    }
-
-    @Test func letGoPastHalfwayOrFlickedAndTheRowSnaps() {
-        let h = ExtensionSidebarView.height
-        // Up from tucked away: past halfway, or a flick, opens it.
-        #expect(IconRowDrawer.settle(shown: false, dragged: -(h / 2 + 1), predicted: -(h / 2 + 1)))
-        #expect(!IconRowDrawer.settle(shown: false, dragged: -5, predicted: -5))
-        #expect(IconRowDrawer.settle(shown: false, dragged: -5, predicted: -h))
-        // Down from shown: the same, the other way.
-        #expect(!IconRowDrawer.settle(shown: true, dragged: h / 2 + 1, predicted: h / 2 + 1))
-        #expect(IconRowDrawer.settle(shown: true, dragged: 5, predicted: 5))
-        #expect(!IconRowDrawer.settle(shown: true, dragged: 5, predicted: h))
-    }
-
     @Test func startsWithNothingOpen() throws {
         let (model, _) = try makeModel()
         #expect(model.active == nil)

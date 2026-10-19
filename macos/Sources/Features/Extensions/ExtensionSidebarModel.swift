@@ -69,10 +69,6 @@ final class ExtensionSidebarModel: ObservableObject {
     /// The title bar's color (the top pane's background), set by the window.
     @Published var chromeColor: NSColor?
 
-    /// The icon row is tucked away behind its handle until dragged up (or
-    /// the handle clicked); each window starts with it tucked away.
-    @Published var iconRowShown = false
-
     /// Gives keyboard focus back to the window's focused pane. Set by the
     /// window's controller.
     var focusTerminal: @MainActor () -> Void = {}
@@ -102,24 +98,6 @@ final class ExtensionSidebarModel: ObservableObject {
     /// A panel's back button and Esc.
     func close() {
         active = nil
-    }
-}
-
-/// The icon row's drawer: how much of the row shows while its handle is
-/// dragged (`dragged` is the drag's height, negative upward), and whether
-/// it ends shown when let go.
-enum IconRowDrawer {
-    static func reveal(shown: Bool, dragged: CGFloat) -> CGFloat {
-        let height = ExtensionSidebarView.height
-        return min(max((shown ? height : 0) - dragged, 0), height)
-    }
-
-    /// Past halfway, or flicked that way (`predicted`, where the drag
-    /// would come to rest), it goes; otherwise it springs back.
-    static func settle(shown: Bool, dragged: CGFloat, predicted: CGFloat) -> Bool {
-        let half = ExtensionSidebarView.height / 2
-        let travel = shown ? max(dragged, predicted) : -min(dragged, predicted)
-        return travel > half ? !shown : shown
     }
 }
 #endif

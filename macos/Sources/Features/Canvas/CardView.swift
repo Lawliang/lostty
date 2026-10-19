@@ -5,17 +5,16 @@ import GhosttyKit
 import SwiftUI
 
 /// A card on the canvas, a small Lostty window: a Mac window's title bar,
-/// corners, edge and shadow, its panes with their own icon row and usage
-/// bar (the window's own TerminalView, so splits and Ready for Response
-/// come with it), resize handles on its edges, and the Window Light round
-/// it. Puts its card's controller in the responder chain, so menu actions
-/// reach the card.
+/// corners, edge and shadow, its panes with their own icon row, usage bar
+/// and mascot (the window's own TerminalView, so splits and Ready for
+/// Response come with it), resize handles on its edges, and the Window
+/// Light round it. Puts its card's
+/// controller in the responder chain, so menu actions reach the card.
 final class CardView: NSView {
     /// A standard title bar's height.
     static let headerHeight = ClaudeUsageBar.height
-    /// The header, the icon row's handle (the row starts tucked away) and
-    /// the usage bar: a card's height past its panes'.
-    static let chromeHeight = headerHeight + IconRowHandle.height + ClaudeUsageBar.height
+    /// The header, icon row and usage bar: a card's height past its panes'.
+    static let chromeHeight = headerHeight + ExtensionSidebarView.height + ClaudeUsageBar.height
     static let cornerRadius: CGFloat = 10
 
     /// Live: the terminals draw. Hidden: out of view or the canvas is; the
