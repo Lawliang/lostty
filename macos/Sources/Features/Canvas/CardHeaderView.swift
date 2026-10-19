@@ -104,6 +104,10 @@ final class CardWindowButtons: NSView {
 
     static let diameter: CGFloat = 12
     static let spacing: CGFloat = 8
+    static var width: CGFloat {
+        let count = CGFloat(Button.allCases.count)
+        return count * diameter + (count - 1) * spacing
+    }
 
     var isActive = true {
         didSet { if isActive != oldValue { needsDisplay = true } }
@@ -125,8 +129,7 @@ final class CardWindowButtons: NSView {
     override var isFlipped: Bool { true }
 
     override var intrinsicContentSize: NSSize {
-        let count = CGFloat(Button.allCases.count)
-        return NSSize(width: count * Self.diameter + (count - 1) * Self.spacing, height: Self.diameter)
+        NSSize(width: Self.width, height: Self.diameter)
     }
 
     private func rect(_ button: Button) -> NSRect {
@@ -206,34 +209,62 @@ final class CardWindowButtons: NSView {
     }
 }
 
-/// What a card's title bar shows: the card's title in the middle, as a
-/// window's, and the focused pane's project pill at the right, dimmed with
-/// the card while a pane waits on you.
+/// What a card's title bar shows, laid out as a Lostty window's: after the
+/// buttons, the focused pane's folder icon and the card's title; at the
+/// right, the focused pane's project pill (its repo and branch, hidden
+/// outside a repo). Dimmed with the card while a pane waits on you.
 struct CardHeaderContent: View {
+    /// Clear of the close, minimize and zoom buttons.
+    static let titleInset: CGFloat = 12 + CardWindowButtons.width + 14
+
     @ObservedObject var card: CardController
+    @ObservedObject private var sidebar: ExtensionSidebarModel
     @ObservedObject private var claude = ClaudeRuntime.shared
 
+    init(card: CardController) {
+        self.card = card
+        sidebar = card.sidebar
+    }
+
+    private var focusedPane: Ghostty.SurfaceView? {
+        sidebar.focusedSurfaceID.flatMap { id in card.surfaceTree.first { $0.id == id } }
+    }
+
     var body: some View {
-        ZStack {
+        HStack(spacing: 6) {
+            if let pane = focusedPane { CardFolderIcon(pane: pane) }
             Text(card.title)
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.primary.opacity(0.8))
                 .lineLimit(1)
                 .truncationMode(.middle)
-                // Clear of the buttons at the left and the pill at the right.
-                .padding(.horizontal, 150)
-            HStack {
-                Spacer(minLength: 0)
-                ProjectPill(model: card.sidebar)
-            }
-            .padding(.trailing, 8)
+            Spacer(minLength: 8)
+            ProjectPill(model: card.sidebar)
         }
+        .padding(.leading, Self.titleInset)
+        .padding(.trailing, 8)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .overlay {
             // The same dim as the panes' Ready for Response below it.
             if ClaudeReadyOverlay.waiting(in: card.surfaceTree.map(\.id), awaiting: claude.awaiting) != nil {
                 Color.black.opacity(0.45)
             }
+        }
+    }
+}
+
+/// The folder a pane is in, as a window's title bar shows it (its proxy
+/// icon): the folder's own Finder icon.
+private struct CardFolderIcon: View {
+    @ObservedObject var pane: Ghostty.SurfaceView
+
+    var body: some View {
+        if let pwd = pane.pwd, !pwd.isEmpty {
+            Image(nsImage: NSWorkspace.shared.icon(forFile: pwd))
+                .resizable()
+                .interpolation(.high)
+                .frame(width: 16, height: 16)
+                .help(pwd)
         }
     }
 }

@@ -61,9 +61,10 @@ optimizations.
 
 - Each card looks like a small Lostty window. Its **title bar** (a standard
   title bar's height, in the color of its panes' background, as a window's)
-  has the red, yellow and green buttons at the left, the card's title in
-  the middle, and the project pill (`lostty/skins`, in the card's focused
-  pane's skin) at the right. Red closes the card,
+  has, as a Lostty window's does, the red, yellow and green buttons, then
+  the focused pane's folder icon and the card's title, at the left, and the
+  project pill (`lostty/skins`, the repo and branch in the focused pane's
+  skin, hidden outside a repo) at the right. Red closes the card,
   yellow zooms out to every card (§3.4), green zooms to the card at 100%.
   The buttons are colored on the focused card and gray on the others, as on
   inactive windows. Drag the title bar to move the card. Double-click it to
