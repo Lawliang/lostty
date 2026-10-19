@@ -186,13 +186,17 @@ enum CanvasZoom {
 /// The dot grid behind the cards: a dot every `spacing` document points,
 /// thinned out (doubled) until dots are `minimumGap` screen points apart.
 enum CanvasGrid {
-    static let spacing: CGFloat = 24
+    /// The Lostty website's dot grid: two characters by one line of its
+    /// 15px JetBrains Mono (0.6em wide, 1.65 lines).
+    static let spacing = CGSize(width: 18, height: 24.75)
     static let minimumGap: CGFloat = 12
 
     /// The gap between dots on screen at `zoom`.
-    static func gap(zoom: CGFloat) -> CGFloat {
-        var gap = spacing * zoom
-        while gap < minimumGap { gap *= 2 }
+    static func gap(zoom: CGFloat) -> CGSize {
+        var gap = CGSize(width: spacing.width * zoom, height: spacing.height * zoom)
+        while min(gap.width, gap.height) < minimumGap {
+            gap = CGSize(width: gap.width * 2, height: gap.height * 2)
+        }
         return gap
     }
 
@@ -201,11 +205,11 @@ enum CanvasGrid {
     /// on the document as it pans.
     static func firstDot(origin: CGPoint, zoom: CGFloat) -> CGPoint {
         let gap = gap(zoom: zoom)
-        func first(_ value: CGFloat) -> CGFloat {
+        func first(_ value: CGFloat, _ gap: CGFloat) -> CGFloat {
             let screen = value * zoom
             return (screen / gap).rounded(.up) * gap - screen
         }
-        return CGPoint(x: first(origin.x), y: first(origin.y))
+        return CGPoint(x: first(origin.x, gap.width), y: first(origin.y, gap.height))
     }
 }
 

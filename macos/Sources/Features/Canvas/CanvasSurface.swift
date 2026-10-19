@@ -34,28 +34,36 @@ final class CanvasDocumentView: NSView {
     override var isFlipped: Bool { true }
 }
 
-/// The canvas's faint Lostty purple, with a faint dot grid moving with it
-/// as it pans and zooms. The dots are one picture, a gap bigger than the view each way;
+/// The Lostty website's background: its paper color and dot grid, the
+/// dots moving with the canvas as it pans and zooms. The dots are one picture, a gap bigger than the view each way;
 /// panning only moves it (no drawing), and it's redrawn only when the gap
 /// (the zoom), the view's size or the appearance changes.
 final class CanvasGridView: NSView {
     weak var scrollView: NSScrollView?
     private let dots = CALayer()
 
-    /// A faint purple, from the Lostty skin's plum (#141016) in the dark
-    /// and a pale lavender in the light.
+    /// The website's `--paper` and `--dot` (website/custom.html).
     static let background = NSColor(name: "LosttyCanvasBackground") { appearance in
-        appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-            ? NSColor(srgbRed: 0.102, green: 0.078, blue: 0.125, alpha: 1)
-            : NSColor(srgbRed: 0.957, green: 0.937, blue: 0.973, alpha: 1)
+        isDark(appearance) ? hex(0x0E0B12) : hex(0xF3F2F6)
     }
     static let dot = NSColor(name: "LosttyCanvasDot") { appearance in
-        appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-            ? NSColor(srgbRed: 0.78, green: 0.70, blue: 0.86, alpha: 0.22)
-            : NSColor(srgbRed: 0.42, green: 0.33, blue: 0.50, alpha: 0.25)
+        isDark(appearance) ? hex(0x2A2432) : hex(0xCDC6D7)
     }
+    /// The website's dot: solid to 1pt, fading out by 1.6pt.
+    static let dotRadius: CGFloat = 1
+    static let dotFade: CGFloat = 1.6
+
+    private static func isDark(_ appearance: NSAppearance) -> Bool {
+        appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+    }
+
+    private static func hex(_ value: UInt32) -> NSColor {
+        NSColor(srgbRed: CGFloat((value >> 16) & 0xFF) / 255, green: CGFloat((value >> 8) & 0xFF) / 255,
+                blue: CGFloat(value & 0xFF) / 255, alpha: 1)
+    }
+
     /// What the picture was drawn for.
-    private var drawn: (gap: CGFloat, size: CGSize, scale: CGFloat)?
+    private var drawn: (gap: CGSize, size: CGSize, scale: CGFloat)?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -88,8 +96,8 @@ final class CanvasGridView: NSView {
         let gap = CanvasGrid.gap(zoom: zoom)
         let scale = window?.backingScaleFactor ?? 2
         // A whole number of gaps, so the picture is the same either way up.
-        let size = CGSize(width: ((bounds.width / gap).rounded(.up) + 2) * gap,
-                          height: ((bounds.height / gap).rounded(.up) + 2) * gap)
+        let size = CGSize(width: ((bounds.width / gap.width).rounded(.up) + 2) * gap.width,
+                          height: ((bounds.height / gap.height).rounded(.up) + 2) * gap.height)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         if drawn?.gap != gap || drawn?.size != size || drawn?.scale != scale {
@@ -100,15 +108,16 @@ final class CanvasGridView: NSView {
         }
         // Each dot sits mid-cell; one row and column of them start off-view.
         let first = CanvasGrid.firstDot(origin: scrollView.contentView.bounds.origin, zoom: zoom)
-        let top = first.y - gap / 2 - gap
-        dots.position = CGPoint(x: first.x - gap / 2 - gap,
+        let top = first.y - gap.height / 2 - gap.height
+        dots.position = CGPoint(x: first.x - gap.width / 2 - gap.width,
                                 y: layer?.isGeometryFlipped == true ? top : bounds.height - top - size.height)
         CATransaction.commit()
     }
 
-    private func picture(gap: CGFloat, size: CGSize, scale: CGFloat) -> CGImage? {
+    private func picture(gap: CGSize, size: CGSize, scale: CGFloat) -> CGImage? {
         guard let context = CGContext(
-            data: nil, width: Int(size.width * scale), height: Int(size.height * scale), bitsPerComponent: 8,
+            data: nil, width: Int((size.width * scale).rounded(.up)), height: Int((size.height * scale).rounded(.up)),
+            bitsPerComponent: 8,
             bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
         else { return nil }
         context.scaleBy(x: scale, y: scale)
@@ -116,19 +125,21 @@ final class CanvasGridView: NSView {
         effectiveAppearance.performAsCurrentDrawingAppearance {
             color = Self.dot.cgColor
         }
-        context.setFillColor(color)
-        let dot: CGFloat = 1.5
-        var rects: [CGRect] = []
-        var y = gap / 2
+        let clear = color.copy(alpha: 0) ?? NSColor.clear.cgColor
+        guard let gradient = CGGradient(
+            colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: [color, color, clear] as CFArray,
+            locations: [0, Self.dotRadius / Self.dotFade, 1]) else { return nil }
+        var y = gap.height / 2
         while y < size.height {
-            var x = gap / 2
+            var x = gap.width / 2
             while x < size.width {
-                rects.append(CGRect(x: x - dot / 2, y: y - dot / 2, width: dot, height: dot))
-                x += gap
+                let center = CGPoint(x: x, y: y)
+                context.drawRadialGradient(gradient, startCenter: center, startRadius: 0,
+                                           endCenter: center, endRadius: Self.dotFade, options: [])
+                x += gap.width
             }
-            y += gap
+            y += gap.height
         }
-        context.fill(rects)
         return context.makeImage()
     }
 }

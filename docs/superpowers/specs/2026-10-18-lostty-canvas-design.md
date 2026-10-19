@@ -51,9 +51,10 @@ optimizations.
   quitting with terminal windows open does.
 - Its title bar shows the focused card's project pill. (Each card has its
   own icon row, usage bar and mascot; §3.2.)
-- The background is a faint Lostty purple (from the Lostty skin's plum in
-  the dark, a pale lavender in the light) with a faint dot grid that moves
-  with panning and scaling, so motion reads.
+- The background is the Lostty website's: its paper color (`#0E0B12` dark,
+  `#F3F2F6` light) and dot grid (`#2A2432` / `#CDC6D7` dots, solid to 1pt
+  and soft to 1.6pt, 18 × 24.75pt apart at 100%), the dots moving with
+  panning and scaling so motion reads.
 - It does not join native tab groups.
 
 ### 3.2 Cards

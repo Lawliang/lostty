@@ -109,12 +109,15 @@ struct CanvasZoomTests {
 
     @Test func gridDotsStayOnTheDocumentAsItPans() {
         #expect(CanvasGrid.firstDot(origin: .zero, zoom: 1) == .zero)
-        #expect(CanvasGrid.firstDot(origin: CGPoint(x: 10, y: 30), zoom: 1) == CGPoint(x: 14, y: 18))
+        #expect(CanvasGrid.firstDot(origin: CGPoint(x: 10, y: 30), zoom: 1) == CGPoint(x: 8, y: 19.5))
     }
 
     @Test func gridDotsThinOutWhenZoomedFarOut() {
-        #expect(CanvasGrid.gap(zoom: 1) == 24)
-        #expect(CanvasGrid.gap(zoom: 0.25) == 12)
+        // The website's: two characters by one line of 15px JetBrains Mono.
+        #expect(CanvasGrid.gap(zoom: 1) == CGSize(width: 18, height: 24.75))
+        #expect(CanvasGrid.gap(zoom: 0.5) == CGSize(width: 18, height: 24.75))
+        #expect(CanvasGrid.gap(zoom: 0.25) == CGSize(width: 18, height: 24.75))
+        #expect(CanvasGrid.gap(zoom: 2) == CGSize(width: 36, height: 49.5))
         #expect(CanvasGrid.firstDot(origin: CGPoint(x: 100, y: 0), zoom: 0.25) == CGPoint(x: 11, y: 0))
     }
 }
