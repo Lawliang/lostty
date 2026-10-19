@@ -11,9 +11,9 @@ import GhosttyKit
 final class CardController: BaseTerminalController {
     let id = UUID()
     private(set) weak var canvas: CanvasController?
-    /// The card's own icon row and usage bar, as a window has (no mascot on
-    /// the canvas); also
-    /// what its header's pill and its light follow.
+    /// The card's own bottom bar (usage, or the apps), as a window has (no
+    /// mascot on the canvas); also what its header's pill and its light
+    /// follow.
     let sidebar = ExtensionSidebarModel(mascot: false)
     private var appearanceCancellables: Set<AnyCancellable> = []
 
@@ -78,7 +78,7 @@ final class CardController: BaseTerminalController {
         canvas?.cardTreeDidChange(self, from: from, to: to)
     }
 
-    /// The card's header, icon row and usage bar take its panes' background,
+    /// The card's header and bottom bar take its panes' background,
     /// as a window's title bar does: the focused pane's when it borders the
     /// top, else the top-left pane's.
     override func syncAppearance() {

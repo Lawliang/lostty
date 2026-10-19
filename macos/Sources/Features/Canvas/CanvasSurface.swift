@@ -213,8 +213,8 @@ final class CanvasSurfaceView: NSView {
     }
 }
 
-/// The canvas inside the window's SwiftUI layout (the icon row and usage
-/// bar below it). SwiftUI never re-evaluates for a pan or zoom.
+/// The canvas as the window's SwiftUI content. SwiftUI never re-evaluates
+/// for a pan or zoom.
 struct CanvasSurface: NSViewRepresentable {
     let view: CanvasSurfaceView
 

@@ -33,7 +33,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     /// The card holding keyboard focus, or that last held it.
     private(set) weak var focusedCard: CardController?
     /// The title bar's pill follows the focused card's pane. (Each card has
-    /// its own icon row and usage bar.)
+    /// its own bottom bar.)
     let sidebar = ExtensionSidebarModel()
 
     private let surface = CanvasSurfaceView()
@@ -214,8 +214,8 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         bringToFront(card)
     }
 
-    /// A card's pane took keyboard focus: the window's title, icon row and
-    /// outline follow it.
+    /// A card's pane took keyboard focus: the window's title, pill and the
+    /// cards' shadows follow it.
     func cardDidFocus(_ card: CardController) {
         card.syncFocusToSurfaceTree()
         card.applyTitleToWindow()

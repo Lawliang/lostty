@@ -5,16 +5,16 @@ import GhosttyKit
 import SwiftUI
 
 /// A card on the canvas, a small Lostty window: a Mac window's title bar,
-/// corners, edge and shadow, its panes with their own icon row, usage bar
-/// and mascot (the window's own TerminalView, so splits and Ready for
-/// Response come with it), resize handles on its edges, and the Window
-/// Light round it. Puts its card's
-/// controller in the responder chain, so menu actions reach the card.
+/// corners, edge and shadow, its panes with their own bottom bar (the
+/// window's own TerminalView, so splits and Ready for Response come with
+/// it), resize handles on its edges, and the Window Light round it. Puts
+/// its card's controller in the responder chain, so menu actions reach the
+/// card.
 final class CardView: NSView {
     /// A standard title bar's height.
     static let headerHeight = ClaudeUsageBar.height
-    /// The header, icon row and usage bar: a card's height past its panes'.
-    static let chromeHeight = headerHeight + ExtensionSidebarView.height + ClaudeUsageBar.height
+    /// The header and bottom bar: a card's height past its panes'.
+    static let chromeHeight = headerHeight + ClaudeUsageBar.height
     static let cornerRadius: CGFloat = 10
 
     /// Live: the terminals draw. Hidden: out of view or the canvas is; the
@@ -141,7 +141,7 @@ final class CardContentView: NSView {
     override var isFlipped: Bool { true }
 }
 
-/// A card's panes, icon row and usage bar: the window's terminal view. The
+/// A card's panes and bottom bar: the window's terminal view. The
 /// panes leave the Window Light to the card.
 struct CardTerminal: View {
     let card: CardController
@@ -153,10 +153,10 @@ struct CardTerminal: View {
     }
 }
 
-/// Hosts a card's panes, icon row and usage bar. While the canvas is zoomed
+/// Hosts a card's panes and bottom bar. While the canvas is zoomed
 /// (an ancestor is magnified) SwiftUI finds the wrong spot for a click (its
 /// hit test is off by the zoom) and drops clicks on its own controls
-/// (spike check S5, and the icon row): so then a click in a pane goes to
+/// (spike check S5, and the apps): so then a click in a pane goes to
 /// that pane, and any other goes to the card, which zooms to 100%.
 final class CardTerminalHost: NSHostingView<CardTerminal> {
     weak var card: CardController?

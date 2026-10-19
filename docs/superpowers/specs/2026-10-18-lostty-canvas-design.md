@@ -50,7 +50,7 @@ optimizations.
   when you reopen it. Quitting Lostty with the canvas open asks, as
   quitting with terminal windows open does.
 - Its title bar shows the focused card's project pill. (Each card has its
-  own icon row, usage bar and mascot; §3.2.)
+  own bottom bar; §3.2.)
 - The background is the Lostty website's: its paper color (`#0E0B12` dark,
   `#F3F2F6` light) and dot grid (`#2A2432` / `#CDC6D7` dots, solid to 1pt
   and soft to 1.6pt, 18 × 24.75pt apart at 100%), the dots moving with
@@ -69,13 +69,13 @@ optimizations.
   inactive windows. Drag the title bar to move the card. Double-click it to
   zoom to the card (§3.4).
 - Under the title bar, the card's **split tree**, drawn by today's split
-  view, then its own **icon row and usage bar**, as a window has (no
-  mascot on the canvas). Splitting, resizing splits, closing panes
+  view, then its own **bottom bar** (Claude's usage, or the apps behind
+  its apps button), as a window has (no mascot on the canvas). Splitting, resizing splits, closing panes
   and moving focus between panes work as in a window, with the same key
   bindings.
 - While the canvas is zoomed away from 100%, SwiftUI can't take clicks: a
-  click in a pane still goes to that pane, and a click on the card's icon
-  row or usage bar zooms to the card at 100%.
+  click in a pane still goes to that pane, and a click on the card's
+  bottom bar zooms to the card at 100%.
 - Drag any card edge or corner to resize it. A card is at least 320 × 200
   points (at 100% zoom). Its terminals keep their size while you drag (their
   pixels pinned top-left) and resize once, on release; so does dragging a
@@ -159,7 +159,7 @@ optimizations.
 - Traces and Ready overlays exist only on cards that need them, and stop
   when the canvas window is hidden or covered.
 - The canvas surface, cards and headers are AppKit views; SwiftUI is used
-  only round the canvas (the icon row and usage bar, as in a window) and
+  only round the canvas (each card's bottom bar, as in a window) and
   inside a card (header contents, the split view, overlays), never for the
   canvas itself, so panning never re-evaluates SwiftUI.
 
