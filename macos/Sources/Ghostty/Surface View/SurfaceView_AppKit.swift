@@ -937,7 +937,10 @@ extension Ghostty {
                 // property changes. Otherwise it will apply a scale animation to the layer
                 // contents which looks pretty janky.
                 CATransaction.setDisableActions(true)
-                layer?.contentsScale = window.backingScaleFactor
+                // Lostty Canvas: on a zoomed canvas a point covers more (or
+                // fewer) pixels than the screen's scale.
+                let backing = convertToBacking(NSRect(x: 0, y: 0, width: 1, height: 1)).width
+                layer?.contentsScale = backing > 0 ? backing : window.backingScaleFactor
                 CATransaction.commit()
             }
 
@@ -952,6 +955,14 @@ extension Ghostty {
             // When our scale factor changes, so does our fb size so we send that too
             let scaledSize = self.convertToBacking(contentSize)
             setSurfaceSize(width: UInt32(scaledSize.width), height: UInt32(scaledSize.height))
+        }
+
+        /// Lostty Canvas: the canvas's zoom settled. Its scaled clip view
+        /// already makes this pane's pixels per point the screen's × the
+        /// zoom; re-rasterize at that (crisp text) with the grid unchanged.
+        func canvasZoomDidSettle(_ zoom: CGFloat) {
+            guard window != nil, frame.width > 0, frame.height > 0 else { return }
+            viewDidChangeBackingProperties()
         }
 
         override func mouseDown(with event: NSEvent) {

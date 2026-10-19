@@ -102,10 +102,11 @@ optimizations.
 - **When the zoom settles** (no change for 150ms), every visible card's
   terminals re-render at the new pixel scale: the pane's content scale is
   set to the screen's backing scale × zoom, so glyphs rasterize at their
-  on-screen size. Rows stay the same; columns can move by one at some
-  zooms (a cell is a whole number of pixels, so its width in points rounds
-  differently at each scale; spike finding), which the shell sees as a
-  one-column resize. This is the engine's existing content-scale
+  on-screen size. Only 100% keeps the grid exactly: a cell is a whole
+  number of pixels, so its size in points rounds differently at each
+  scale, and a settled zoom can change the grid by a few percent (a
+  720-point pane went from 89×22 at 100% to 92×21 at 200%). The shell sees
+  that as a resize. This is the engine's existing content-scale
   call, the one a move to a Retina screen uses.
 - **Below 45%**, cards stop drawing their terminals and show a **status
   tile** instead (§5.3). Coming back above 45% re-renders them.

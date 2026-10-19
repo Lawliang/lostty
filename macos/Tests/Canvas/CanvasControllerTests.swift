@@ -41,5 +41,18 @@ struct CanvasMenuTests {
         #expect(menu.items.last === anchor)
         #expect(menu.items[menu.items.count - 2].isSeparatorItem)
     }
+
+    @Test func theCanvasShortcutsStayClearOfTheTerminals() throws {
+        let (menu, anchor) = windowMenu()
+        CanvasMenu.install(before: anchor, channel: .beta)
+        func item(_ title: String) throws -> NSMenuItem { try #require(menu.items.flatMap { [$0] + ($0.submenu?.items ?? []) }.first { $0.title == title }) }
+        #expect(try item("Jump to What Needs You").keyEquivalent == "j")
+        #expect(try item("Jump to What Needs You").keyEquivalentModifierMask == [.control, .command])
+        #expect(try item("Zoom to Fit").keyEquivalent == "0")
+        #expect(try item("Zoom Card to 100%").keyEquivalent == "1")
+        let left = try item("Select Card Left")
+        #expect(left.keyEquivalentModifierMask == [.control, .option, .command])
+        #expect(left.keyEquivalent == String(Character(UnicodeScalar(NSLeftArrowFunctionKey)!)))
+    }
 }
 #endif

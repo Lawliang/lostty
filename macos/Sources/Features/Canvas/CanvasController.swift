@@ -186,6 +186,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         if let placed = model.card(card.id)?.frame { view.frame = placed }
         updateVisibility()
         saveSoon()
+        for surface in card.surfaceTree { surface.canvasZoomDidSettle(settledZoom) }
     }
 
     func card(holding surface: Ghostty.SurfaceView) -> CardController? {
@@ -253,6 +254,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         }
         updateVisibility()
         saveSoon()
+        for surface in card.surfaceTree { surface.canvasZoomDidSettle(settledZoom) }
     }
 
     private func retire(_ card: CardController) {
@@ -287,6 +289,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
 
     @objc private func canvasMoved() {
         updateVisibility()
+        if scrollView.magnification != settledZoom { scheduleSettle() }
     }
 
     private func center(on point: CGPoint) {
@@ -316,6 +319,9 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     func settleZoom() {
         settleWork?.cancel()
         settledZoom = scrollView.magnification
+        for card in cards {
+            for surface in card.surfaceTree { surface.canvasZoomDidSettle(settledZoom) }
+        }
         for view in views.values { view.zoomDidSettle(settledZoom) }
         updateVisibility()
         saveSoon()
@@ -336,9 +342,6 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     func saveSoon() {
         NSApp.invalidateRestorableState()
     }
-
-    /// Jump to What Needs You; Task 4 fills it in.
-    func jump() {}
 
     // MARK: NSWindowDelegate
 
