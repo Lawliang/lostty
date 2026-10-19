@@ -79,6 +79,8 @@ final class CardView: NSView {
             self?.header.needsDisplay = true
             self?.header.buttons.needsDisplay = true
             self?.needsDisplay = true
+            // Behind the panes: fills any sliver a held or zoomed grid leaves.
+            self?.content.layer?.backgroundColor = color?.cgColor
         }
     }
 
@@ -147,6 +149,7 @@ struct CardTerminal: View {
     var body: some View {
         TerminalView(ghostty: card.ghostty, viewModel: card, delegate: card, extensionSidebar: card.sidebar)
             .environment(\.hostsWindowTrace, true)
+            .environment(\.splitDragChanged) { [weak card] dragging in card?.holdGrids(dragging) }
     }
 }
 
@@ -208,6 +211,7 @@ final class CardEdgeHandle: NSView {
     override func mouseDown(with event: NSEvent) {
         guard let frame = canvas?.model.card(card.id)?.frame, let point = documentPoint(event) else { return }
         start = (point, frame)
+        card.holdGrids(true)
     }
 
     override func mouseDragged(with event: NSEvent) {
@@ -219,6 +223,7 @@ final class CardEdgeHandle: NSView {
     override func mouseUp(with event: NSEvent) {
         guard start != nil else { return }
         start = nil
+        card.holdGrids(false)
         canvas?.cardFrameDidSettle()
     }
 

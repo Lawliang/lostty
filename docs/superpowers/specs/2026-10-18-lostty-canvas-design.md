@@ -75,7 +75,9 @@ optimizations.
   click in a pane still goes to that pane, and a click on the card's icon
   row or usage bar zooms to the card at 100%.
 - Drag any card edge or corner to resize it. A card is at least 320 × 200
-  points (at 100% zoom).
+  points (at 100% zoom). Its terminals keep their size while you drag (their
+  pixels pinned top-left) and resize once, on release; so does dragging a
+  split divider inside a card. Normal windows still resize live.
 - Cards may overlap; clicking a card brings it to the front and focuses it.
 - Closing a card's last pane closes the card. The close button closes all
   its panes, asking first as closing a window with running programs does.
@@ -113,12 +115,15 @@ optimizations.
 - **When the zoom settles** (no change for 150ms), every visible card's
   terminals re-render at the new pixel scale: the pane's content scale is
   set to the screen's backing scale × zoom, so glyphs rasterize at their
-  on-screen size. Only 100% keeps the grid exactly: a cell is a whole
-  number of pixels, so its size in points rounds differently at each
-  scale, and a settled zoom can change the grid by a few percent (a
-  720-point pane went from 89×22 at 100% to 92×21 at 200%). The shell sees
-  that as a resize. This is the engine's existing content-scale
-  call, the one a move to a Retina screen uses.
+  on-screen size. **Zooming never resizes a terminal**: a pane keeps the
+  grid it has at 100% at every zoom. (A cell is a whole number of pixels,
+  so its size in points rounds differently at each scale; left alone, a
+  720-point pane went from 89×22 at 100% to 92×21 at 200%, and every such
+  resize leaves a copy of a zsh prompt in tmux's history.) The pane's size
+  moves by whole cells to hold the grid, leaving a sliver of background at
+  most. Where the grid doesn't quite fit it draws up to ~10% under the
+  zoom's scale; where the font can't shrink enough (far out, e.g. 30%) it
+  draws at its 100% pixels and the compositor scales them down.
 - **Panning** moves layers only; no terminal redraws (only the dot grid
   does, a single cheap fill).
 

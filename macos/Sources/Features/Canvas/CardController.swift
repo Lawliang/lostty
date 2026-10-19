@@ -132,6 +132,12 @@ final class CardController: BaseTerminalController {
         super.focusSurface(view)
     }
 
+    /// While the card's edge or one of its split dividers is dragged, its
+    /// panes hold their grids; they resize once, on release.
+    func holdGrids(_ hold: Bool) {
+        for surface in surfaceTree { surface.canvasResizeHeld = hold }
+    }
+
     /// ⇧⌘W closes the card, not the canvas.
     override func closeWindow(_ sender: Any) {
         closeCard()
