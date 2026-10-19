@@ -27,7 +27,7 @@ struct CanvasModel: Equatable {
     static let size: CGFloat = 100_000
     static let middle = CGPoint(x: size / 2, y: size / 2)
     /// A new card's size, and the smallest a card can be, at 100%.
-    static let newCardSize = CGSize(width: 720, height: 440)
+    static let newCardSize = CGSize(width: 720, height: 500)
     static let minimumCardSize = CGSize(width: 320, height: 200)
     /// How far a new card steps down and right off another's corner.
     static let nudge: CGFloat = 32

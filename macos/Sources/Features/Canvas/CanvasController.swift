@@ -32,7 +32,8 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     private(set) var cards: [CardController] = []
     /// The card holding keyboard focus, or that last held it.
     private(set) weak var focusedCard: CardController?
-    /// The icon row, usage bar and title-bar pill follow the focused card's pane.
+    /// The title bar's pill follows the focused card's pane. (Each card has
+    /// its own icon row and usage bar.)
     let sidebar = ExtensionSidebarModel()
 
     private let surface = CanvasSurfaceView()
@@ -82,9 +83,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         super.init(window: window)
         window.delegate = self
         let surface = surface
-        window.contentView = NSHostingView(rootView: ExtensionSidebarLayout(model: sidebar) {
-            CanvasSurface(view: surface)
-        })
+        window.contentView = NSHostingView(rootView: CanvasSurface(view: surface))
         if !window.setFrameUsingName("LosttyCanvas") { window.center() }
         window.setFrameAutosaveName("LosttyCanvas")
         installTitleAccessory()
@@ -133,9 +132,6 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         ClaudeRuntime.shared.$awaiting
             .sink { [weak self] awaiting in self?.waits.update(awaiting: awaiting, now: Date()) }
             .store(in: &cancellables)
-        sidebar.focusTerminal = { [weak self] in
-            if let surface = self?.focusedCard?.focusedSurface { Ghostty.moveFocus(to: surface) }
-        }
         // A terminal has no use for pinches, so pinching anywhere zooms the
         // canvas; ⌥-scrolling pans it even over a terminal.
         eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.magnify, .scrollWheel]) { [weak self] event in
@@ -171,7 +167,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         let card = CardController(ghostty, canvas: self, tree: tree)
         if let focused, tree.contains(focused) {
             card.focusedSurface = focused
-            card.header.focusedSurfaceID = focused.id
+            card.sidebar.focusedSurfaceID = focused.id
         }
         add(card, frame: frame ?? model.placement(size: Self.cardSize(for: tree), in: scrollView.documentVisibleRect))
         return card
@@ -181,7 +177,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     static func cardSize(for tree: SplitTree<Ghostty.SurfaceView>) -> CGSize {
         let panes = tree.viewBounds()
         guard panes.width > 0, panes.height > 0 else { return CanvasModel.newCardSize }
-        return CGSize(width: panes.width, height: panes.height + CardView.headerHeight)
+        return CGSize(width: panes.width, height: panes.height + CardView.chromeHeight)
     }
 
     private func add(_ card: CardController, frame: CGRect) {

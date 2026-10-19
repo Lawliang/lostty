@@ -1,22 +1,31 @@
 #if os(macOS)
 import AppKit
+import Combine
 import GhosttyKit
 import SwiftUI
 
-/// A card on the canvas: its header, its panes (the window's own
-/// TerminalView, so splits and Ready for Response come with it), resize
-/// handles on its edges, its tile for zooming far out, and the Window Light
-/// round it. Puts its card's controller in the responder chain, so menu
-/// actions reach the card.
+/// A card on the canvas, a small Lostty window: a Mac window's title bar,
+/// corners, edge and shadow, its panes with their own icon row, usage bar
+/// and mascot (the window's own TerminalView, so splits and Ready for
+/// Response come with it), resize handles on its edges, its tile for
+/// zooming far out, and the Window Light round it. Puts its card's
+/// controller in the responder chain, so menu actions reach the card.
 final class CardView: NSView {
-    static let headerHeight: CGFloat = 24
-    static let cornerRadius: CGFloat = 8
+    /// A standard title bar's height.
+    static let headerHeight = ClaudeUsageBar.height
+    /// The header, icon row and usage bar: a card's height past its panes'.
+    static let chromeHeight = headerHeight + ExtensionSidebarView.height + ClaudeUsageBar.height
+    static let cornerRadius: CGFloat = 10
 
     /// Live: the terminals draw. Tile: a status tile instead (zoomed far
     /// out). Hidden: out of view or the canvas is; the terminals pause.
     enum Mode { case live, tile, hidden }
 
     let card: CardController
+    private weak var canvas: CanvasController?
+    /// Everything but the resize handles, clipped to the corners; the card
+    /// itself draws the shadow outside them.
+    private let content = CardContentView()
     private let header: CardHeaderView
     private let terminal: CardTerminalHost
     private let tile: NSHostingView<CardTile>
@@ -24,17 +33,24 @@ final class CardView: NSView {
     private var handles: [CardEdgeHandle] = []
     /// Back-to-front position among the canvas's cards.
     var stackIndex = 0
+    private var chrome: AnyCancellable?
 
     var mode: Mode = .live {
         didSet { if mode != oldValue { applyMode() } }
     }
 
+    /// The focused card is the active window: colored buttons, a deeper
+    /// shadow. The others look like inactive windows.
     var isFocusedCard = false {
-        didSet { needsDisplay = true }
+        didSet {
+            needsDisplay = true
+            header.buttons.isActive = isFocusedCard
+        }
     }
 
     init(card: CardController, canvas: CanvasController) {
         self.card = card
+        self.canvas = canvas
         header = CardHeaderView(card: card, canvas: canvas)
         terminal = CardTerminalHost(rootView: CardTerminal(card: card))
         terminal.card = card
@@ -45,18 +61,32 @@ final class CardView: NSView {
         trace = CardTraceHost(card: card)
         super.init(frame: .zero)
         wantsLayer = true
-        layer?.cornerRadius = Self.cornerRadius
-        layer?.masksToBounds = true
-        addSubview(terminal)
-        addSubview(tile)
-        addSubview(header)
-        addSubview(trace)
+        layer?.masksToBounds = false
+        layer?.shadowColor = NSColor.black.cgColor
+        layer?.shadowOffset = CGSize(width: 0, height: -6)
+        content.wantsLayer = true
+        content.layer?.cornerRadius = Self.cornerRadius
+        content.layer?.cornerCurve = .continuous
+        content.layer?.masksToBounds = true
+        addSubview(content)
+        content.addSubview(terminal)
+        content.addSubview(tile)
+        content.addSubview(header)
+        content.addSubview(trace)
+        header.buttons.isActive = false
         for edges in CanvasModel.handleEdges {
             let handle = CardEdgeHandle(edges: edges, card: card, canvas: canvas)
             handles.append(handle)
             addSubview(handle)
         }
         tile.isHidden = true
+        // Light or dark to suit the skin, as a window's title bar is.
+        chrome = card.sidebar.$chromeColor.sink { [weak self] color in
+            self?.appearance = color.map { NSAppearance(named: $0.isLightColor ? .aqua : .darkAqua) } ?? nil
+            self?.header.needsDisplay = true
+            self?.header.buttons.needsDisplay = true
+            self?.needsDisplay = true
+        }
     }
 
     @available(*, unavailable)
@@ -65,19 +95,39 @@ final class CardView: NSView {
     override var isFlipped: Bool { true }
     override var wantsUpdateLayer: Bool { true }
 
-    /// The focused card has an accent outline; the others a hairline.
+    /// A Mac window's hairline edge, and its shadow: deeper on the active one.
     override func updateLayer() {
-        layer?.borderColor = (isFocusedCard ? NSColor.controlAccentColor : NSColor.separatorColor).cgColor
-        layer?.borderWidth = isFocusedCard ? 1 : 0.5
+        let dark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        content.layer?.borderColor = (dark ? NSColor(white: 1, alpha: 0.18) : NSColor(white: 0, alpha: 0.22)).cgColor
+        content.layer?.borderWidth = 0.5
+        layer?.shadowOpacity = isFocusedCard ? 0.45 : 0.25
+        layer?.shadowRadius = isFocusedCard ? 18 : 8
     }
 
     override func layout() {
         super.layout()
+        content.frame = bounds
+        layer?.shadowPath = CGPath(roundedRect: bounds, cornerWidth: Self.cornerRadius, cornerHeight: Self.cornerRadius, transform: nil)
         header.frame = NSRect(x: 0, y: 0, width: bounds.width, height: Self.headerHeight)
         terminal.frame = NSRect(x: 0, y: Self.headerHeight, width: bounds.width, height: max(0, bounds.height - Self.headerHeight))
         tile.frame = bounds
         trace.frame = bounds
         for handle in handles { handle.frame = CanvasModel.handleFrame(for: handle.edges, in: bounds) }
+    }
+
+    /// A tile is one button: clicking it zooms to the card.
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let hit = super.hitTest(point)
+        if mode == .tile, hit != nil, !(hit is CardEdgeHandle) { return self }
+        return hit
+    }
+
+    /// A click on the tile, or on the card's SwiftUI controls while the
+    /// canvas is zoomed (see CardTerminalHost), zooms to the card at 100%,
+    /// where they take clicks.
+    override func mouseDown(with event: NSEvent) {
+        canvas?.focus(card)
+        canvas?.zoom(to: card)
     }
 
     /// The card's controller answers menu actions (Split Right, Close…) for
@@ -106,34 +156,47 @@ final class CardView: NSView {
     }
 }
 
-/// A card's panes: the window's terminal view without the icon row and
-/// usage bar (the canvas has one for all its cards). The panes leave the
-/// Window Light to the card.
+/// A card's contents, laid out top-down as the card is.
+final class CardContentView: NSView {
+    override var isFlipped: Bool { true }
+}
+
+/// A card's panes, icon row and usage bar: the window's terminal view. The
+/// panes leave the Window Light to the card.
 struct CardTerminal: View {
     let card: CardController
 
     var body: some View {
-        TerminalView(ghostty: card.ghostty, viewModel: card, delegate: card)
+        TerminalView(ghostty: card.ghostty, viewModel: card, delegate: card, extensionSidebar: card.sidebar)
             .environment(\.hostsWindowTrace, true)
     }
 }
 
-/// Hosts a card's panes. SwiftUI misses its panes when the canvas is
-/// zoomed (an ancestor is magnified): a click it keeps for itself that
-/// falls inside a pane goes to the pane (spike check S5).
+/// Hosts a card's panes, icon row and usage bar. While the canvas is zoomed
+/// (an ancestor is magnified) SwiftUI finds the wrong spot for a click (its
+/// hit test is off by the zoom) and drops clicks on its own controls
+/// (spike check S5, and the icon row): so then a click in a pane goes to
+/// that pane, and any other goes to the card, which zooms to 100%.
 final class CardTerminalHost: NSHostingView<CardTerminal> {
     weak var card: CardController?
 
     override func hitTest(_ point: NSPoint) -> NSView? {
-        let hit = super.hitTest(point)
         // At 100% SwiftUI finds its panes itself, and its own controls over
         // them (search bar, dividers, grab handle) must keep their clicks.
-        guard hit === self, let card, let superview,
-              (enclosingScrollView?.magnification ?? 1) != 1 else { return hit }
+        guard let card, let superview, (enclosingScrollView?.magnification ?? 1) != 1 else {
+            return super.hitTest(point)
+        }
+        guard frame.contains(point) else { return nil }
         for pane in card.surfaceTree where !pane.isHiddenOrHasHiddenAncestor {
             if pane.bounds.contains(pane.convert(point, from: superview)) { return pane }
         }
-        return hit
+        return enclosingCardView
+    }
+
+    private var enclosingCardView: CardView? {
+        var view = superview
+        while let next = view, !(next is CardView) { view = next.superview }
+        return view as? CardView
     }
 }
 
@@ -214,7 +277,7 @@ final class CardTraceHost: NSView {
 
     private func update() {
         if isLit, host == nil {
-            let host = NSHostingView(rootView: WindowTraceView(controller: card, sidebar: card.header, edge: edge))
+            let host = NSHostingView(rootView: WindowTraceView(controller: card, sidebar: card.sidebar, edge: edge))
             host.frame = bounds
             host.autoresizingMask = [.width, .height]
             addSubview(host)

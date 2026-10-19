@@ -31,7 +31,7 @@ struct CardTile: View {
 
     private var content: some View {
         VStack(alignment: .leading, spacing: 6) {
-            ProjectPill(model: card.header)
+            ProjectPill(model: card.sidebar)
             if let status = CardStatus.of(
                 panes: panes, awaiting: claude.awaiting, phases: claude.phases,
                 known: activity.known, lastActivity: activity.lastActivity, now: Date()) {

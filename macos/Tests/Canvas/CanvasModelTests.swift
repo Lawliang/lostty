@@ -15,7 +15,7 @@ struct CanvasModelTests {
     }
 
     @Test func aNewCardGoesInTheMiddleOfTheView() {
-        #expect(CanvasModel().placement(in: visible) == CGRect(x: 50_240, y: 50_180, width: 720, height: 440))
+        #expect(CanvasModel().placement(in: visible) == CGRect(x: 50_240, y: 50_150, width: 720, height: 500))
     }
 
     @Test func aNewCardStepsOffAnotherOnesCorner() {

@@ -48,28 +48,38 @@ optimizations.
   Space). Closing it hides it; its terminals keep running and come back
   when you reopen it. Quitting Lostty with the canvas open asks, as
   quitting with terminal windows open does.
-- Its title bar shows the focused card's project pill. Its bottom has the
-  icon row and the usage bar, as a normal window's does, following the
-  focused card.
+- Its title bar shows the focused card's project pill. (Each card has its
+  own icon row, usage bar and mascot; §3.2.)
 - The background is the plain window background with a faint dot grid that
   moves with panning and scaling, so motion reads.
 - It does not join native tab groups.
 
 ### 3.2 Cards
 
-- A **header** strip (24pt): the project pill (`lostty/skins`, in the
-  card's focused pane's skin), the agent status (§5.1), and a close button.
-  Drag the header to move the card. Double-click the header to zoom to the
-  card (§3.4).
-- Under the header, the card's **split tree**, drawn by today's split view.
-  Splitting, resizing splits, closing panes and moving focus between panes
-  work as in a window, with the same key bindings.
+- Each card looks like a small Lostty window. Its **title bar** (a standard
+  title bar's height, in the color of its panes' background, as a window's)
+  has the red, yellow and green buttons at the left, the card's title in
+  the middle, and the agent status (§5.1) and project pill (`lostty/skins`,
+  in the card's focused pane's skin) at the right. Red closes the card,
+  yellow zooms out to every card (§3.4), green zooms to the card at 100%.
+  The buttons are colored on the focused card and gray on the others, as on
+  inactive windows. Drag the title bar to move the card. Double-click it to
+  zoom to the card (§3.4).
+- Under the title bar, the card's **split tree**, drawn by today's split
+  view, then its own **icon row and usage bar**, with the mascot in the
+  panes' corner, as a window has. Splitting, resizing splits, closing panes
+  and moving focus between panes work as in a window, with the same key
+  bindings.
+- While the canvas is zoomed away from 100%, SwiftUI can't take clicks: a
+  click in a pane still goes to that pane, and a click on the card's icon
+  row, usage bar or tile zooms to the card at 100%.
 - Drag any card edge or corner to resize it. A card is at least 320 × 200
   points (at 100% zoom).
 - Cards may overlap; clicking a card brings it to the front and focuses it.
 - Closing a card's last pane closes the card. The close button closes all
   its panes, asking first as closing a window with running programs does.
-- The focused card has a 1pt accent outline; others have a hairline.
+- A card has a Mac window's rounded corners, hairline edge and shadow; the
+  focused card's shadow is deeper.
 
 ### 3.3 Getting terminals on and off
 

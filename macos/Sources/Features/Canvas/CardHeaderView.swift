@@ -2,30 +2,33 @@
 import AppKit
 import SwiftUI
 
-/// A card's header: its project pill and agent state, and a close button.
-/// Dragging it moves the card; double-clicking zooms to the card at 100%;
-/// its menu moves the card to a window or closes it.
+/// A card's title bar, drawn as a Mac window's: close, minimize and zoom
+/// buttons, the title, and the project pill and agent state. Dragging it
+/// moves the card; double-clicking zooms to the card at 100%; its menu
+/// moves the card to a window or closes it.
 final class CardHeaderView: NSView {
     private let card: CardController
     private weak var canvas: CanvasController?
     private let content: PassthroughHostingView<CardHeaderContent>
-    private let close = NSButton()
+    let buttons: CardWindowButtons
     private var start: (point: CGPoint, origin: CGPoint)?
 
     init(card: CardController, canvas: CanvasController) {
         self.card = card
         self.canvas = canvas
         content = PassthroughHostingView(rootView: CardHeaderContent(card: card))
+        buttons = CardWindowButtons { [weak card, weak canvas] button in
+            guard let card, let canvas else { return }
+            switch button {
+            case .close: card.closeCard()
+            case .minimize: canvas.zoomToFit()
+            case .zoom: canvas.zoom(to: card)
+            }
+        }
         super.init(frame: .zero)
         wantsLayer = true
-        close.image = NSImage(systemSymbolName: "xmark", accessibilityDescription: "Close Card")
-        close.isBordered = false
-        close.imageScaling = .scaleProportionallyDown
-        close.target = self
-        close.action = #selector(closeCard)
-        close.toolTip = "Close Card"
         addSubview(content)
-        addSubview(close)
+        addSubview(buttons)
     }
 
     @available(*, unavailable)
@@ -35,13 +38,14 @@ final class CardHeaderView: NSView {
     override var wantsUpdateLayer: Bool { true }
 
     override func updateLayer() {
-        layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+        layer?.backgroundColor = (card.sidebar.chromeColor ?? .windowBackgroundColor).cgColor
     }
 
     override func layout() {
         super.layout()
         content.frame = bounds
-        close.frame = NSRect(x: bounds.width - 24, y: 4, width: 16, height: 16)
+        let size = buttons.intrinsicContentSize
+        buttons.frame = NSRect(x: 12, y: (bounds.height - size.height) / 2, width: size.width, height: size.height)
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -88,8 +92,123 @@ final class CardHeaderView: NSView {
     }
 }
 
-/// What a card's header shows: the focused pane's project pill and the
-/// card's agent state, dimmed with the card while a pane waits on you.
+/// A Mac window's red, yellow and green buttons, for a card: colored on the
+/// focused card and gray on the others, as on inactive windows, with their
+/// symbols while the pointer is over them. Red closes the card, yellow
+/// zooms out to every card, green zooms to the card at 100%. AppKit, so
+/// they take clicks however far the canvas is zoomed.
+final class CardWindowButtons: NSView {
+    enum Button: CaseIterable {
+        case close, minimize, zoom
+    }
+
+    static let diameter: CGFloat = 12
+    static let spacing: CGFloat = 8
+
+    var isActive = true {
+        didSet { if isActive != oldValue { needsDisplay = true } }
+    }
+    private var hovering = false {
+        didSet { if hovering != oldValue { needsDisplay = true } }
+    }
+    private let action: (Button) -> Void
+    private var pressed: Button?
+
+    init(action: @escaping (Button) -> Void) {
+        self.action = action
+        super.init(frame: .zero)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    override var isFlipped: Bool { true }
+
+    override var intrinsicContentSize: NSSize {
+        let count = CGFloat(Button.allCases.count)
+        return NSSize(width: count * Self.diameter + (count - 1) * Self.spacing, height: Self.diameter)
+    }
+
+    private func rect(_ button: Button) -> NSRect {
+        let index = CGFloat(Button.allCases.firstIndex(of: button) ?? 0)
+        return NSRect(x: index * (Self.diameter + Self.spacing), y: 0, width: Self.diameter, height: Self.diameter)
+    }
+
+    private func button(at point: NSPoint) -> Button? {
+        Button.allCases.first { rect($0).insetBy(dx: -Self.spacing / 2, dy: -4).contains(point) }
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let dark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        for button in Button.allCases {
+            let circle = NSBezierPath(ovalIn: rect(button).insetBy(dx: 0.25, dy: 0.25))
+            let (fill, stroke) = colors(button, dark: dark)
+            fill.setFill()
+            circle.fill()
+            stroke.setStroke()
+            circle.lineWidth = 0.5
+            circle.stroke()
+            if hovering, isActive { drawSymbol(button) }
+        }
+    }
+
+    private func colors(_ button: Button, dark: Bool) -> (NSColor, NSColor) {
+        guard isActive || hovering else {
+            return dark
+                ? (NSColor(white: 0.36, alpha: 1), NSColor(white: 0.30, alpha: 1))
+                : (NSColor(white: 0.86, alpha: 1), NSColor(white: 0.78, alpha: 1))
+        }
+        switch button {
+        case .close: return (NSColor(srgbRed: 1, green: 0.373, blue: 0.341, alpha: 1), NSColor(srgbRed: 0.878, green: 0.267, blue: 0.243, alpha: 1))
+        case .minimize: return (NSColor(srgbRed: 0.996, green: 0.737, blue: 0.180, alpha: 1), NSColor(srgbRed: 0.871, green: 0.631, blue: 0.137, alpha: 1))
+        case .zoom: return (NSColor(srgbRed: 0.157, green: 0.784, blue: 0.251, alpha: 1), NSColor(srgbRed: 0.102, green: 0.671, blue: 0.161, alpha: 1))
+        }
+    }
+
+    private func drawSymbol(_ button: Button) {
+        let name = switch button {
+        case .close: "xmark"
+        case .minimize: "minus"
+        case .zoom: "plus"
+        }
+        let config = NSImage.SymbolConfiguration(pointSize: 7, weight: .bold)
+            .applying(.init(paletteColors: [NSColor(white: 0, alpha: 0.55)]))
+        guard let image = NSImage(systemSymbolName: name, accessibilityDescription: nil)?.withSymbolConfiguration(config) else { return }
+        let r = rect(button)
+        image.draw(in: NSRect(x: r.midX - image.size.width / 2, y: r.midY - image.size.height / 2,
+                              width: image.size.width, height: image.size.height),
+                   from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        for area in trackingAreas { removeTrackingArea(area) }
+        addTrackingArea(NSTrackingArea(rect: bounds.insetBy(dx: -4, dy: -4),
+                                       options: [.mouseEnteredAndExited, .activeInKeyWindow], owner: self))
+    }
+
+    override func mouseEntered(with event: NSEvent) { hovering = true }
+    override func mouseExited(with event: NSEvent) { hovering = false }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let local = convert(point, from: superview)
+        return button(at: local) != nil ? self : nil
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        pressed = button(at: convert(event.locationInWindow, from: nil))
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        defer { pressed = nil }
+        guard let pressed, button(at: convert(event.locationInWindow, from: nil)) == pressed else { return }
+        action(pressed)
+    }
+}
+
+/// What a card's title bar shows: the card's title in the middle, as a
+/// window's, and the focused pane's project pill and the card's agent state
+/// at the right, dimmed with the card while a pane waits on you.
 struct CardHeaderContent: View {
     @ObservedObject var card: CardController
     @ObservedObject private var claude = ClaudeRuntime.shared
@@ -99,17 +218,25 @@ struct CardHeaderContent: View {
         // Ready fades after a while without use; look again now and then.
         TimelineView(.periodic(from: .now, by: 30)) { timeline in
             let panes = card.surfaceTree.map(\.id)
-            HStack(spacing: 8) {
-                ProjectPill(model: card.header)
-                if let status = CardStatus.of(
-                    panes: panes, awaiting: claude.awaiting, phases: claude.phases,
-                    known: activity.known, lastActivity: activity.lastActivity, now: timeline.date) {
-                    CardStatusLabel(status: status)
+            ZStack {
+                Text(card.title)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    // Clear of the buttons at the left and the pill at the right.
+                    .padding(.horizontal, 150)
+                HStack(spacing: 8) {
+                    Spacer(minLength: 0)
+                    if let status = CardStatus.of(
+                        panes: panes, awaiting: claude.awaiting, phases: claude.phases,
+                        known: activity.known, lastActivity: activity.lastActivity, now: timeline.date) {
+                        CardStatusLabel(status: status)
+                    }
+                    ProjectPill(model: card.sidebar)
                 }
-                Spacer(minLength: 0)
+                .padding(.trailing, 8)
             }
-            .padding(.leading, 8)
-            .padding(.trailing, 32)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .overlay {
                 // The same dim as the panes' Ready for Response below it.

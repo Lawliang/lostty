@@ -1,5 +1,6 @@
 #if os(macOS)
 import AppKit
+import Combine
 import GhosttyKit
 
 /// One card on the canvas: a split group run exactly as a window's panes
@@ -10,8 +11,10 @@ import GhosttyKit
 final class CardController: BaseTerminalController {
     let id = UUID()
     private(set) weak var canvas: CanvasController?
-    /// The card's focused pane, for its header's pill and its light.
-    let header = ExtensionSidebarModel()
+    /// The card's own icon row, usage bar and mascot, as a window has; also
+    /// what its header's pill and its light follow.
+    let sidebar = ExtensionSidebarModel()
+    private var appearanceCancellables: Set<AnyCancellable> = []
 
     init(
         _ ghostty: Ghostty.App, canvas: CanvasController,
@@ -21,7 +24,12 @@ final class CardController: BaseTerminalController {
         super.init(ghostty, baseConfig: baseConfig, surfaceTree: tree)
         // As in a new window, the first pane starts focused.
         focusedSurface = surfaceTree.first
-        header.focusedSurfaceID = focusedSurface?.id
+        sidebar.focusedSurfaceID = focusedSurface?.id
+        // Closing a sidebar app hands keyboard focus back to the pane.
+        sidebar.focusTerminal = { [weak self] in
+            if let surface = self?.focusedSurface { Ghostty.moveFocus(to: surface) }
+        }
+        watchAppearance()
     }
 
     @available(*, unavailable)
@@ -57,18 +65,54 @@ final class CardController: BaseTerminalController {
         guard let surface, surfaceTree.contains(surface) else { return }
         canvas?.cardWillFocus(self)
         super.focusedSurfaceDidChange(to: surface)
-        header.focusedSurfaceID = surface.id
+        sidebar.focusedSurfaceID = surface.id
+        watchAppearance()
         canvas?.cardDidFocus(self)
     }
 
     /// Panes added or gone: the canvas keeps, retires or brings back the card.
     override func surfaceTreeDidChange(from: SplitTree<Ghostty.SurfaceView>, to: SplitTree<Ghostty.SurfaceView>) {
         super.surfaceTreeDidChange(from: from, to: to)
+        watchAppearance()
         canvas?.cardTreeDidChange(self, from: from, to: to)
     }
 
-    /// Only the focused card titles the canvas window.
+    /// The card's header, icon row and usage bar take its panes' background,
+    /// as a window's title bar does: the focused pane's when it borders the
+    /// top, else the top-left pane's.
+    override func syncAppearance() {
+        sidebar.chromeColor = chromePane.map {
+            NSColor($0.backgroundColor ?? $0.derivedConfig.backgroundColor).withAlphaComponent(1)
+        }
+    }
+
+    private var chromePane: Ghostty.SurfaceView? {
+        guard let root = surfaceTree.root else { return nil }
+        if let focusedSurface, let node = root.node(view: focusedSurface),
+           root.spatial().doesBorder(side: .up, from: node) {
+            return focusedSurface
+        }
+        return root.leftmostLeaf()
+    }
+
+    /// Follows the chrome pane's colors as they change (a skin, a theme).
+    private func watchAppearance() {
+        appearanceCancellables.removeAll()
+        syncAppearance()
+        guard let pane = chromePane else { return }
+        // The publishers fire before the change lands; look once it has.
+        pane.$derivedConfig.map { _ in () }.merge(with: pane.$backgroundColor.map { _ in () })
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in self?.syncAppearance() }
+            .store(in: &appearanceCancellables)
+    }
+
+    /// The card's own title bar shows its title; only the focused card
+    /// titles the canvas window.
+    @Published private(set) var title = "Lostty"
+
     override func applyTitleToWindow() {
+        title = windowTitle
         guard isFocusedCard else { return }
         super.applyTitleToWindow()
     }

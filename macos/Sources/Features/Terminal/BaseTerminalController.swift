@@ -877,19 +877,18 @@ class BaseTerminalController: NSWindowController,
         applyTitleToWindow()
     }
 
+    /// The title to show: the override if set, else the focused pane's.
+    var windowTitle: String {
+        if let titleOverride {
+            return computeTitle(title: titleOverride, bell: focusedSurface?.bell ?? false)
+        }
+        return lastComputedTitle
+    }
+
     /// Shows the title on the window. A canvas card overrides it, so only
     /// the focused card titles the shared canvas window.
     func applyTitleToWindow() {
-        guard let window else { return }
-
-        if let titleOverride {
-            window.title = computeTitle(
-                title: titleOverride,
-                bell: focusedSurface?.bell ?? false)
-            return
-        }
-
-        window.title = lastComputedTitle
+        window?.title = windowTitle
     }
 
     func pwdDidChange(to: URL?) {
