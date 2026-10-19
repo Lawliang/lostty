@@ -51,8 +51,9 @@ optimizations.
   quitting with terminal windows open does.
 - Its title bar shows the focused card's project pill. (Each card has its
   own icon row, usage bar and mascot; §3.2.)
-- The background is the plain window background with a faint dot grid that
-  moves with panning and scaling, so motion reads.
+- The background is a faint Lostty purple (from the Lostty skin's plum in
+  the dark, a pale lavender in the light) with a faint dot grid that moves
+  with panning and scaling, so motion reads.
 - It does not join native tab groups.
 
 ### 3.2 Cards
@@ -67,8 +68,8 @@ optimizations.
   inactive windows. Drag the title bar to move the card. Double-click it to
   zoom to the card (§3.4).
 - Under the title bar, the card's **split tree**, drawn by today's split
-  view, then its own **icon row and usage bar**, with the mascot in the
-  panes' corner, as a window has. Splitting, resizing splits, closing panes
+  view, then its own **icon row and usage bar**, as a window has (no
+  mascot on the canvas). Splitting, resizing splits, closing panes
   and moving focus between panes work as in a window, with the same key
   bindings.
 - While the canvas is zoomed away from 100%, SwiftUI can't take clicks: a

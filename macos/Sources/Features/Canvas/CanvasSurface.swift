@@ -34,13 +34,26 @@ final class CanvasDocumentView: NSView {
     override var isFlipped: Bool { true }
 }
 
-/// The faint dot grid behind the canvas, moving with it as it pans and
-/// zooms. The dots are one picture, a gap bigger than the view each way;
+/// The canvas's faint Lostty purple, with a faint dot grid moving with it
+/// as it pans and zooms. The dots are one picture, a gap bigger than the view each way;
 /// panning only moves it (no drawing), and it's redrawn only when the gap
 /// (the zoom), the view's size or the appearance changes.
 final class CanvasGridView: NSView {
     weak var scrollView: NSScrollView?
     private let dots = CALayer()
+
+    /// A faint purple, from the Lostty skin's plum (#141016) in the dark
+    /// and a pale lavender in the light.
+    static let background = NSColor(name: "LosttyCanvasBackground") { appearance in
+        appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            ? NSColor(srgbRed: 0.102, green: 0.078, blue: 0.125, alpha: 1)
+            : NSColor(srgbRed: 0.957, green: 0.937, blue: 0.973, alpha: 1)
+    }
+    static let dot = NSColor(name: "LosttyCanvasDot") { appearance in
+        appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            ? NSColor(srgbRed: 0.78, green: 0.70, blue: 0.86, alpha: 0.22)
+            : NSColor(srgbRed: 0.42, green: 0.33, blue: 0.50, alpha: 0.25)
+    }
     /// What the picture was drawn for.
     private var drawn: (gap: CGFloat, size: CGSize, scale: CGFloat)?
 
@@ -58,7 +71,7 @@ final class CanvasGridView: NSView {
     override var wantsUpdateLayer: Bool { true }
 
     override func updateLayer() {
-        layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+        layer?.backgroundColor = Self.background.cgColor
         drawn = nil
         update()
     }
@@ -101,7 +114,7 @@ final class CanvasGridView: NSView {
         context.scaleBy(x: scale, y: scale)
         var color = NSColor.clear.cgColor
         effectiveAppearance.performAsCurrentDrawingAppearance {
-            color = NSColor.tertiaryLabelColor.withAlphaComponent(0.35).cgColor
+            color = Self.dot.cgColor
         }
         context.setFillColor(color)
         let dot: CGFloat = 1.5

@@ -11,9 +11,10 @@ import GhosttyKit
 final class CardController: BaseTerminalController {
     let id = UUID()
     private(set) weak var canvas: CanvasController?
-    /// The card's own icon row, usage bar and mascot, as a window has; also
+    /// The card's own icon row and usage bar, as a window has (no mascot on
+    /// the canvas); also
     /// what its header's pill and its light follow.
-    let sidebar = ExtensionSidebarModel()
+    let sidebar = ExtensionSidebarModel(mascot: false)
     private var appearanceCancellables: Set<AnyCancellable> = []
 
     init(
