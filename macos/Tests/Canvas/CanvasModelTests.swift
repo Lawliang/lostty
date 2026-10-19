@@ -14,6 +14,28 @@ struct CanvasModelTests {
         return model
     }
 
+    @Test func aCardBesideAnotherGoesToItsRightTheSameSize() {
+        let a = UUID()
+        let from = CGRect(x: 1000, y: 1000, width: 600, height: 400)
+        let model = model([(a, from)])
+        #expect(model.placement(beside: a) == CGRect(x: 1624, y: 1000, width: 600, height: 400))
+    }
+
+    @Test func aCardBesideAnotherTakesTheFirstFreeSide() {
+        let a = UUID(), b = UUID(), c = UUID()
+        let from = CGRect(x: 1000, y: 1000, width: 600, height: 400)
+        // Right is taken: below.
+        var model = model([(a, from), (b, CGRect(x: 1700, y: 1100, width: 300, height: 300))])
+        #expect(model.placement(beside: a) == CGRect(x: 1000, y: 1424, width: 600, height: 400))
+        // Right and below are taken: left.
+        model.add(c, frame: CGRect(x: 1000, y: 1500, width: 600, height: 400))
+        #expect(model.placement(beside: a) == CGRect(x: 376, y: 1000, width: 600, height: 400))
+    }
+
+    @Test func noCardNoPlaceBeside() {
+        #expect(CanvasModel().placement(beside: UUID()) == nil)
+    }
+
     @Test func aNewCardGoesInTheMiddleOfTheView() {
         #expect(CanvasModel().placement(in: visible) == CGRect(x: 50_240, y: 50_150, width: 720, height: 500))
     }

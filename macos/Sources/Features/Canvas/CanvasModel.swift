@@ -31,6 +31,8 @@ struct CanvasModel: Equatable {
     static let minimumCardSize = CGSize(width: 320, height: 200)
     /// How far a new card steps down and right off another's corner.
     static let nudge: CGFloat = 32
+    /// The space between a card and one made beside it (⌘T).
+    static let besideGap: CGFloat = 24
     /// The room round the cards when zooming to fit them.
     static let fitMargin: CGFloat = 40
     /// The resize strips along a card's edges, and the squares at its corners.
@@ -73,6 +75,21 @@ struct CanvasModel: Equatable {
 
     /// Where a new card of `size` goes: centered in `visible`, stepped down
     /// and right while its top-left corner would sit on another card's.
+    /// ⌘T: a card the size of card `id`, beside it: to its right, else
+    /// below, left or above, the first side no card covers; else further
+    /// right, past whatever is there. Nil without that card.
+    func placement(beside id: UUID) -> CGRect? {
+        guard let from = card(id)?.frame else { return nil }
+        let across = from.width + Self.besideGap, down = from.height + Self.besideGap
+        let sides = [CGPoint(x: across, y: 0), CGPoint(x: 0, y: down), CGPoint(x: -across, y: 0), CGPoint(x: 0, y: -down)]
+            + (2...20).map { CGPoint(x: across * CGFloat($0), y: 0) }
+        for side in sides {
+            let spot = Self.clamped(from.offsetBy(dx: side.x, dy: side.y))
+            if !cards.contains(where: { $0.frame.intersects(spot) }) { return spot }
+        }
+        return Self.clamped(from.offsetBy(dx: Self.nudge, dy: Self.nudge))
+    }
+
     func placement(size: CGSize = newCardSize, in visible: CGRect) -> CGRect {
         var frame = CGRect(
             x: (visible.midX - size.width / 2).rounded(), y: (visible.midY - size.height / 2).rounded(),

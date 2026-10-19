@@ -154,6 +154,16 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         return card
     }
 
+    /// ⌘T on a card: a new card beside it, as big, starting where its
+    /// focused pane is (`baseConfig`), shown and focused.
+    @discardableResult
+    func newCard(beside other: CardController, baseConfig: Ghostty.SurfaceConfiguration?) -> CardController {
+        let card = CardController(ghostty, canvas: self, baseConfig: baseConfig)
+        add(card, frame: model.placement(beside: other.id) ?? model.placement(in: scrollView.documentVisibleRect))
+        focus(card)
+        return card
+    }
+
     /// A card holding `tree`: panes moved in from a window, or restored.
     @discardableResult
     func addCard(

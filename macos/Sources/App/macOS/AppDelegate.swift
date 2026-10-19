@@ -906,6 +906,15 @@ class AppDelegate: NSObject,
         guard let surfaceView = notification.object as? Ghostty.SurfaceView else { return }
         guard let window = surfaceView.window else { return }
 
+        // Lostty Canvas: new_tab from a card's pane makes a card beside it.
+        let onCard = MainActor.assumeIsolated {
+            guard let canvas = CanvasController.shared, let card = canvas.card(holding: surfaceView) else { return false }
+            let config = notification.userInfo?[Ghostty.Notification.NewSurfaceConfigKey] as? Ghostty.SurfaceConfiguration
+            canvas.newCard(beside: card, baseConfig: config)
+            return true
+        }
+        if onCard { return }
+
         // We only want to listen to new tabs if the focused parent is
         // a regular terminal controller.
         guard window.windowController is TerminalController else { return }
@@ -1151,6 +1160,15 @@ class AppDelegate: NSObject,
     }
 
     @IBAction func newTab(_ sender: Any?) {
+        // Lostty Canvas: on the canvas, New Tab makes a card beside the
+        // focused one, starting where its focused pane is.
+        if let canvas = CanvasController.key, let card = canvas.focusedCard {
+            let config = card.focusedSurface?.surface.map {
+                Ghostty.SurfaceConfiguration(from: ghostty_surface_inherited_config($0, GHOSTTY_SURFACE_CONTEXT_TAB))
+            }
+            canvas.newCard(beside: card, baseConfig: config)
+            return
+        }
         _ = TerminalController.newTab(
             ghostty,
             from: TerminalController.preferredParent?.window
