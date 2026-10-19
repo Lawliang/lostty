@@ -367,6 +367,24 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
         return c
     }
 
+    /// Lostty Canvas: this window's panes, splits and all, become a card on
+    /// the canvas and the window closes; nothing restarts.
+    func moveToCanvas() {
+        let tree = surfaceTree
+        guard !tree.isEmpty, LosttyChannel.current.hasCanvas else { return }
+        let focused = focusedSurface
+        let size = CanvasController.cardSize(for: tree)
+        // An empty tree closes this window (surfaceTreeDidChange).
+        surfaceTree = .init()
+        // The card takes the panes once this window's views have let them go.
+        DispatchQueue.main.async { [ghostty] in
+            let canvas = CanvasController.show(ghostty, freshCard: false)
+            let frame = canvas.model.placement(size: size, in: canvas.scrollView.documentVisibleRect)
+            let card = canvas.addCard(tree: tree, frame: frame, focused: focused)
+            canvas.focus(card)
+        }
+    }
+
     static func newTab(
         _ ghostty: Ghostty.App,
         from parent: NSWindow? = nil,

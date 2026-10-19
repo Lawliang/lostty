@@ -33,7 +33,12 @@ final class CanvasMenu: NSObject, NSMenuItemValidation {
             submenu.addItem(item)
         }
         view.submenu = submenu
-        return [item("Canvas", #selector(showCanvas(_:)), "k", [.control, .command]), view]
+        return [
+            item("Canvas", #selector(showCanvas(_:)), "k", [.control, .command]),
+            item("Move to Canvas", #selector(moveToCanvas(_:)), "", []),
+            item("Move to Window", #selector(moveToWindow(_:)), "", []),
+            view,
+        ]
     }
 
     private static func key(_ code: Int) -> String {
@@ -53,6 +58,15 @@ final class CanvasMenu: NSObject, NSMenuItemValidation {
     @objc private func showCanvas(_ sender: Any?) {
         guard let ghostty = (NSApp.delegate as? AppDelegate)?.ghostty else { return }
         CanvasController.show(ghostty)
+    }
+
+    @objc private func moveToCanvas(_ sender: Any?) {
+        (NSApp.keyWindow?.windowController as? TerminalController)?.moveToCanvas()
+    }
+
+    @objc private func moveToWindow(_ sender: Any?) {
+        guard let canvas = CanvasController.key, let card = canvas.focusedCard else { return }
+        canvas.moveToWindow(card)
     }
 
     @objc private func jump(_ sender: Any?) {
@@ -77,6 +91,8 @@ final class CanvasMenu: NSObject, NSMenuItemValidation {
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         switch item.action {
         case #selector(showCanvas(_:)): true
+        case #selector(moveToCanvas(_:)): NSApp.keyWindow?.windowController is TerminalController
+        case #selector(moveToWindow(_:)): CanvasController.key?.focusedCard != nil
         default: CanvasController.key != nil
         }
     }

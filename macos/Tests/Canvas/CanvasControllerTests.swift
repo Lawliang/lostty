@@ -42,6 +42,14 @@ struct CanvasMenuTests {
         #expect(menu.items[menu.items.count - 2].isSeparatorItem)
     }
 
+    @Test func windowsAndCardsTradePlaces() throws {
+        let (menu, anchor) = windowMenu()
+        CanvasMenu.install(before: anchor, channel: .beta)
+        let titles = menu.items.map(\.title)
+        #expect(titles.contains("Move to Canvas"))
+        #expect(titles.contains("Move to Window"))
+    }
+
     @Test func theCanvasShortcutsStayClearOfTheTerminals() throws {
         let (menu, anchor) = windowMenu()
         CanvasMenu.install(before: anchor, channel: .beta)
