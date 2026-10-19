@@ -31,9 +31,9 @@ struct CanvasModel: Equatable {
     static let minimumCardSize = CGSize(width: 320, height: 200)
     /// How far a new card steps down and right off another's corner.
     static let nudge: CGFloat = 32
-    /// The space between a card and one made beside it (⌘T): as close as
-    /// keeps their edges apart.
-    static let besideGap: CGFloat = 4
+    /// The space between a card and one made beside it (⌘T): none, edge to
+    /// edge.
+    static let besideGap: CGFloat = 0
     /// The room round the cards when zooming to fit them.
     static let fitMargin: CGFloat = 40
     /// The resize strips along a card's edges, and the squares at its corners.
@@ -86,9 +86,15 @@ struct CanvasModel: Equatable {
             + (2...20).map { CGPoint(x: across * CGFloat($0), y: 0) }
         for side in sides {
             let spot = Self.clamped(from.offsetBy(dx: side.x, dy: side.y))
-            if !cards.contains(where: { $0.frame.intersects(spot) }) { return spot }
+            // Sharing an edge isn't covering.
+            if !cards.contains(where: { Self.overlap($0.frame, spot) }) { return spot }
         }
         return Self.clamped(from.offsetBy(dx: Self.nudge, dy: Self.nudge))
+    }
+
+    private static func overlap(_ a: CGRect, _ b: CGRect) -> Bool {
+        let both = a.intersection(b)
+        return !both.isNull && both.width > 0 && both.height > 0
     }
 
     func placement(size: CGSize = newCardSize, in visible: CGRect) -> CGRect {
