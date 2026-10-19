@@ -6,7 +6,7 @@ it is in.
 - `cd` into a project and the pane re-skins; leave and it reverts.
 - Split panes are skinned independently.
 - Git repos you have not configured get a stable automatic skin.
-- Override any pane from the Skins icon in the icon row (above the usage bar) or the `skins` command.
+- Override any pane from Skins in the bottom bar's apps (the 2x2 grid button) or the `skins` command.
 
 ## Install
 
@@ -22,7 +22,7 @@ Its config lives in `~/.config/lostty/config`; an existing
 Copy `docs/skins/skins.example.toml` to `~/.config/lostty/skins/skins.toml`.
 (Lostty still reads an older `~/.config/ghostty-skins/` folder.)
 Errors never break the terminal: the last good config stays active and the
-Skins icon in the icon row shows a yellow dot.
+Skins icon in the bottom bar's apps shows a yellow dot.
 
 ## Presets
 
@@ -63,7 +63,7 @@ override and brings the mapped skin back.
 
 ## Saved Colors
 
-Click the Skins icon in the icon row, then go to the Custom tab (the
+Open Skins from the bottom bar's apps, then go to the Custom tab (the
 terminal `skins` picker has no Custom tab). The "Any color" row lets you pick
 any background color with a native color panel or type a hex code. Click Save
 to add it to your saved swatches. Saved colors live in
@@ -72,7 +72,7 @@ Lostty windows (max 24).
 
 ## Override
 
-- Click the Skins icon in the icon row along the bottom: the picker fills the
+- Click the 2x2 grid in the bottom bar, then Skins: the picker fills the
   terminal area. Pick a skin, color, or texture and it applies to the pane
   you were last in right away, and stays. Click the icon again (or the
   close button) to go back to the terminal. **Reset** undoes it.
@@ -224,18 +224,19 @@ edge), follows focus between panes and splits, and catches a checkout
 within a couple of seconds. A worktree shows its repo's name. Outside a git
 repo (or in a home folder under git) there is no pill.
 
-## Icon Row
+## Apps
 
-Right above the usage bar, a slim row the color of the title bar holds
-small icons for Lostty's apps, from the left: Branches (beta) and Skins.
-Click one to open it, and again (or its close button) to close it. Skins
-fills the terminal area; Branches covers the whole window below the title
-bar until you close it (or press Escape).
+The 2x2 grid button in the bottom bar, left of the mute button, swaps the
+bar's Claude usage for Lostty's apps, from the left: Branches (beta) and
+Skins. Click one to open it, and again (or its close button) to close it.
+Skins fills the terminal area; Branches covers the whole window below the
+title bar until you close it (or press Escape). Click the grid again to put
+the usage back; an open app stays open.
 
 ## Claude Usage Bar
 
 A bar along the bottom of each window, as tall as the title bar and the
-same color as it and the icon row above it, shows in the terminal's font the focused
+same color as it, shows in the terminal's font the focused
 pane's Claude model, a block meter for the context with the tokens in the
 window (to the nearest thousand, e.g. `50K`), and a block meter with a
 percentage for one plan limit:

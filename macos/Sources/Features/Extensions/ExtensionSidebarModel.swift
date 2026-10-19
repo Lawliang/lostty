@@ -2,15 +2,15 @@
 import AppKit
 import Combine
 
-/// An extension reachable from the window's icon row, above the usage bar.
-/// Order is the row's order.
+/// An extension reachable from the bottom bar's apps button. Order is the
+/// order the bar shows them in.
 enum LosttyExtension: String, CaseIterable, Identifiable {
     case branches
     case skins
 
     /// How an open extension shows: over the terminal, or over the whole
-    /// window below the title bar (the icon row and usage bar included),
-    /// until closed from its own close button.
+    /// window below the title bar (the bottom bar included), until closed
+    /// from its own close button.
     enum Presentation: Equatable {
         case overlay
         case window
@@ -68,6 +68,8 @@ final class ExtensionSidebarModel: ObservableObject {
     }
     /// The title bar's color (the top pane's background), set by the window.
     @Published var chromeColor: NSColor?
+    /// The bottom bar shows the apps in place of Claude's usage.
+    @Published private(set) var showsApps = false
 
     /// Gives keyboard focus back to the window's focused pane. Set by the
     /// window's controller.
@@ -92,6 +94,12 @@ final class ExtensionSidebarModel: ObservableObject {
     func select(_ ext: LosttyExtension) {
         guard available.contains(ext) else { return }
         active = active == ext ? nil : ext
+    }
+
+    /// The bottom bar's apps button: shows the apps, or puts the usage back.
+    /// An open app stays open either way.
+    func toggleApps() {
+        showsApps.toggle()
     }
 
     /// A panel's back button and Esc.

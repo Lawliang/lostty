@@ -37,6 +37,24 @@ struct ExtensionSidebarModelTests {
         #expect(model.focusedSurfaceID == nil)
     }
 
+    @Test func theBarShowsUsageUntilTheAppsButton() throws {
+        let (model, _) = try makeModel()
+        #expect(model.showsApps == false)
+        model.toggleApps()
+        #expect(model.showsApps)
+        model.toggleApps()
+        #expect(model.showsApps == false)
+    }
+
+    @Test func hidingTheAppsLeavesAnOpenAppOpen() throws {
+        let (model, _) = try makeModel()
+        model.toggleApps()
+        model.select(.skins)
+        model.toggleApps()
+        #expect(model.active == .skins)
+        #expect(model.showsApps == false)
+    }
+
     @Test func clickingAnIconOpensItAndClickingAgainCloses() throws {
         let (model, _) = try makeModel()
         model.select(.skins)
