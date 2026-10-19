@@ -31,8 +31,9 @@ struct CanvasModel: Equatable {
     static let minimumCardSize = CGSize(width: 320, height: 200)
     /// How far a new card steps down and right off another's corner.
     static let nudge: CGFloat = 32
-    /// The space between a card and one made beside it (⌘T).
-    static let besideGap: CGFloat = 24
+    /// The space between a card and one made beside it (⌘T): as close as
+    /// keeps their edges apart.
+    static let besideGap: CGFloat = 4
     /// The room round the cards when zooming to fit them.
     static let fitMargin: CGFloat = 40
     /// The resize strips along a card's edges, and the squares at its corners.

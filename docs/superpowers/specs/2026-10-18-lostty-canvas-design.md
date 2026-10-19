@@ -95,7 +95,7 @@ optimizations.
   card is focused) does the reverse: the card becomes a normal window.
 - **⌘N** (New Window) while the canvas is key makes a new card in the middle
   of the view instead of a window. **⌘T** (New Tab, from the keyboard or
-  the File menu) makes a card beside the focused one, as big, starting in
+  the File menu) makes a card beside the focused one (4pt apart), as big, starting in
   its focused pane's folder: to its right, else below, left or above,
   whichever side is free. Cards have no tabs of their own.
 - A new card opens 720 × 500 points at the current zoom, centered in view,
