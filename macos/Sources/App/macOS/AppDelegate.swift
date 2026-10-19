@@ -361,6 +361,8 @@ class AppDelegate: NSObject,
         SettingsUI.installMenuItem(after: menuOpenConfig)
         // Restart to Update in the app menu, once a new build is installed.
         RestartUI.installMenuItem(after: menuOpenConfig)
+        // Lostty Beta: the canvas, in the Window menu.
+        CanvasMenu.install(before: menuBringAllToFront)
         // Each turn's end, from the agent hooks: the usage breakdown, and in
         // the beta the mascot's turn observer, which also finds out which
         // summarizer it can use. Before the restart resume, which hands it
@@ -888,6 +890,14 @@ class AppDelegate: NSObject,
     @objc private func ghosttyNewWindow(_ notification: Notification) {
         let configAny = notification.userInfo?[Ghostty.Notification.NewSurfaceConfigKey]
         let config = configAny as? Ghostty.SurfaceConfiguration
+        // Lostty Canvas: new_window from a card's pane makes a card.
+        let onCard = MainActor.assumeIsolated {
+            guard let surface = notification.object as? Ghostty.SurfaceView,
+                  let canvas = CanvasController.shared, canvas.card(holding: surface) != nil else { return false }
+            canvas.newCard(baseConfig: config)
+            return true
+        }
+        if onCard { return }
         _ = TerminalController.newWindow(ghostty, withBaseConfig: config)
     }
 
@@ -1120,6 +1130,11 @@ class AppDelegate: NSObject,
     }
 
     @IBAction func newWindow(_ sender: Any?) {
+        // Lostty Canvas: on the canvas, New Window makes a card.
+        if let canvas = CanvasController.key {
+            canvas.newCard()
+            return
+        }
         _ = TerminalController.newWindow(ghostty)
     }
 

@@ -877,7 +877,9 @@ class BaseTerminalController: NSWindowController,
         applyTitleToWindow()
     }
 
-    private func applyTitleToWindow() {
+    /// Shows the title on the window. A canvas card overrides it, so only
+    /// the focused card titles the shared canvas window.
+    func applyTitleToWindow() {
         guard let window else { return }
 
         if let titleOverride {
