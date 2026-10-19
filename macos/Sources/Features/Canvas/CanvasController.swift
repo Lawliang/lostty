@@ -133,18 +133,13 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
             .sink { [weak self] awaiting in self?.waits.update(awaiting: awaiting, now: Date()) }
             .store(in: &cancellables)
         // A terminal has no use for pinches, so pinching anywhere zooms the
-        // canvas; ⌥-scrolling pans it even over a terminal.
-        eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.magnify, .scrollWheel]) { [weak self] event in
+        // canvas. (⌥-scrolling over a pane, which pans the canvas, is the
+        // pane's to pass on: a scroll-wheel monitor would turn off AppKit's
+        // smooth, off-main-thread scrolling.)
+        eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.magnify]) { [weak self] event in
             guard let self, event.window === window else { return event }
-            if event.type == .magnify {
-                scrollView.magnify(with: event)
-                return nil
-            }
-            if event.modifierFlags.contains(.option) {
-                scrollView.scrollWheel(with: event)
-                return nil
-            }
-            return event
+            scrollView.magnify(with: event)
+            return nil
         }
     }
 

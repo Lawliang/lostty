@@ -988,15 +988,18 @@ extension Ghostty {
             didSet { if oldValue, !canvasResizeHeld { sizeDidChange(contentSize) } }
         }
 
-        /// Lostty Canvas: the canvas's zoom when this pane is on a card.
-        private var canvasZoom: CGFloat? {
+        /// Lostty Canvas: the canvas when this pane is on a card.
+        private var canvasScrollView: CanvasScrollView? {
             var view = superview
             while let next = view {
-                if let canvas = next as? CanvasScrollView { return canvas.magnification }
+                if let canvas = next as? CanvasScrollView { return canvas }
                 view = next.superview
             }
             return nil
         }
+
+        /// Lostty Canvas: the canvas's zoom when this pane is on a card.
+        private var canvasZoom: CGFloat? { canvasScrollView?.magnification }
 
         /// Lostty Canvas: sizes the surface at a zoom other than 100% with
         /// the grid it has at 100%, so zooming never resizes the terminal,
@@ -1223,6 +1226,11 @@ extension Ghostty {
         }
 
         override func scrollWheel(with event: NSEvent) {
+            // Lostty Canvas: ⌥-scrolling over a pane on a card pans the canvas.
+            if event.modifierFlags.contains(.option), let canvas = canvasScrollView {
+                canvas.scrollWheel(with: event)
+                return
+            }
             guard let surfaceModel else { return }
 
             var x = event.scrollingDeltaX
