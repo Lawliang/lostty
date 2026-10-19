@@ -64,6 +64,7 @@ final class CanvasGridView: NSView {
 
     /// What the picture was drawn for.
     private var drawn: (gap: CGSize, size: CGSize, scale: CGFloat)?
+    private var redrawWork: DispatchWorkItem?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -89,53 +90,93 @@ final class CanvasGridView: NSView {
         update()
     }
 
-    /// The canvas panned or zoomed.
+    /// The canvas panned or zoomed. Panning only moves the picture; while
+    /// the zoom changes the picture is stretched to the new spacing and
+    /// redrawn once it rests (redrawing each step cost more than a frame).
     func update() {
         guard let scrollView, bounds.width > 0, bounds.height > 0 else { return }
         let zoom = scrollView.magnification
         let gap = CanvasGrid.gap(zoom: zoom)
         let scale = window?.backingScaleFactor ?? 2
-        // A whole number of gaps, so the picture is the same either way up.
-        let size = CGSize(width: ((bounds.width / gap.width).rounded(.up) + 2) * gap.width,
-                          height: ((bounds.height / gap.height).rounded(.up) + 2) * gap.height)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        if drawn?.gap != gap || drawn?.size != size || drawn?.scale != scale {
-            dots.contents = picture(gap: gap, size: size, scale: scale)
-            dots.contentsScale = scale
-            dots.bounds = CGRect(origin: .zero, size: size)
-            drawn = (gap, size, scale)
+        if let drawn, drawn.scale == scale, covers(drawn, gap: gap) {
+            if drawn.gap != gap { redrawSoon() }
+        } else {
+            redraw(gap: gap, scale: scale)
         }
+        guard let drawn else { CATransaction.commit(); return }
+        let stretch = gap.width / drawn.gap.width
+        dots.setAffineTransform(CGAffineTransform(scaleX: stretch, y: stretch))
         // Each dot sits mid-cell; one row and column of them start off-view.
         let first = CanvasGrid.firstDot(origin: scrollView.contentView.bounds.origin, zoom: zoom)
         let top = first.y - gap.height / 2 - gap.height
         dots.position = CGPoint(x: first.x - gap.width / 2 - gap.width,
-                                y: layer?.isGeometryFlipped == true ? top : bounds.height - top - size.height)
+                                y: layer?.isGeometryFlipped == true ? top : bounds.height - top - drawn.size.height * stretch)
         CATransaction.commit()
     }
 
+    /// Whether the picture, stretched to `gap`, still covers the view.
+    private func covers(_ drawn: (gap: CGSize, size: CGSize, scale: CGFloat), gap: CGSize) -> Bool {
+        let stretch = gap.width / drawn.gap.width
+        guard stretch > 0.5, stretch < 2 else { return false }
+        return drawn.size.width * stretch >= bounds.width + 2 * gap.width
+            && drawn.size.height * stretch >= bounds.height + 2 * gap.height
+    }
+
+    private func redrawSoon() {
+        redrawWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            self?.drawn = nil
+            self?.update()
+        }
+        redrawWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + CanvasZoom.settle, execute: work)
+    }
+
+    /// Half as big again as the view (a whole number of gaps, so the
+    /// picture is the same either way up), so zooming out has room to
+    /// stretch before it must redraw.
+    private func redraw(gap: CGSize, scale: CGFloat) {
+        redrawWork?.cancel()
+        let size = CGSize(width: ((bounds.width * 1.5 / gap.width).rounded(.up) + 2) * gap.width,
+                          height: ((bounds.height * 1.5 / gap.height).rounded(.up) + 2) * gap.height)
+        dots.contents = picture(gap: gap, size: size, scale: scale)
+        dots.contentsScale = scale
+        dots.bounds = CGRect(origin: .zero, size: size)
+        drawn = (gap, size, scale)
+    }
+
+    /// The dots: one drawn, then stamped at every gap.
     private func picture(gap: CGSize, size: CGSize, scale: CGFloat) -> CGImage? {
-        guard let context = CGContext(
-            data: nil, width: Int((size.width * scale).rounded(.up)), height: Int((size.height * scale).rounded(.up)),
-            bitsPerComponent: 8,
-            bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
-        else { return nil }
-        context.scaleBy(x: scale, y: scale)
+        let space = CGColorSpaceCreateDeviceRGB()
+        let info = CGImageAlphaInfo.premultipliedLast.rawValue
         var color = NSColor.clear.cgColor
         effectiveAppearance.performAsCurrentDrawingAppearance {
             color = Self.dot.cgColor
         }
-        let clear = color.copy(alpha: 0) ?? NSColor.clear.cgColor
-        guard let gradient = CGGradient(
-            colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: [color, color, clear] as CFArray,
-            locations: [0, Self.dotRadius / Self.dotFade, 1]) else { return nil }
+        let side = Self.dotFade * 2
+        guard let stamp = CGContext(
+            data: nil, width: Int((side * scale).rounded(.up)), height: Int((side * scale).rounded(.up)),
+            bitsPerComponent: 8, bytesPerRow: 0, space: space, bitmapInfo: info),
+            let gradient = CGGradient(
+                colorsSpace: space, colors: [color, color, color.copy(alpha: 0) ?? color] as CFArray,
+                locations: [0, Self.dotRadius / Self.dotFade, 1])
+        else { return nil }
+        stamp.scaleBy(x: scale, y: scale)
+        let middle = CGPoint(x: Self.dotFade, y: Self.dotFade)
+        stamp.drawRadialGradient(gradient, startCenter: middle, startRadius: 0, endCenter: middle,
+                                 endRadius: Self.dotFade, options: [])
+        guard let dot = stamp.makeImage(), let context = CGContext(
+            data: nil, width: Int((size.width * scale).rounded(.up)), height: Int((size.height * scale).rounded(.up)),
+            bitsPerComponent: 8, bytesPerRow: 0, space: space, bitmapInfo: info)
+        else { return nil }
+        context.scaleBy(x: scale, y: scale)
         var y = gap.height / 2
         while y < size.height {
             var x = gap.width / 2
             while x < size.width {
-                let center = CGPoint(x: x, y: y)
-                context.drawRadialGradient(gradient, startCenter: center, startRadius: 0,
-                                           endCenter: center, endRadius: Self.dotFade, options: [])
+                context.draw(dot, in: CGRect(x: x - Self.dotFade, y: y - Self.dotFade, width: side, height: side))
                 x += gap.width
             }
             y += gap.height
