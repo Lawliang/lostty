@@ -18,6 +18,13 @@ struct CardFocusTests {
 }
 
 @MainActor
+struct CanvasScrollTests {
+    @Test func twoFingersPanDiagonallyNotJustAlongOneAxis() {
+        #expect(!CanvasScrollView().usesPredominantAxisScrolling)
+    }
+}
+
+@MainActor
 struct CanvasMenuTests {
     private func windowMenu() -> (NSMenu, NSMenuItem) {
         let menu = NSMenu()

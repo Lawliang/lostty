@@ -3,8 +3,9 @@ import AppKit
 import SwiftUI
 
 /// The canvas's scroll view: two-finger scrolling over empty canvas pans
-/// it, pinching zooms it 25%–200% (its clip view scales, so clicks still
-/// land on the right cell), and it has no scrollers.
+/// it, in any direction (not locked to the swipe's main axis), pinching
+/// zooms it 25%–200% (its clip view scales, so clicks still land on the
+/// right cell), and it has no scrollers.
 final class CanvasScrollView: NSScrollView {
     let document = CanvasDocumentView(frame: NSRect(x: 0, y: 0, width: CanvasModel.size, height: CanvasModel.size))
 
@@ -15,6 +16,7 @@ final class CanvasScrollView: NSScrollView {
         maxMagnification = CanvasZoom.maximum
         hasHorizontalScroller = false
         hasVerticalScroller = false
+        usesPredominantAxisScrolling = false
         drawsBackground = false
         contentView.drawsBackground = false
         contentView.postsBoundsChangedNotifications = true
