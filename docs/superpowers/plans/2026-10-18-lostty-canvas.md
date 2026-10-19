@@ -1364,7 +1364,7 @@ final class CardView: NSView {
 
     let card: CardController
     private let header: CardHeaderView
-    private let terminal: NSHostingView<CardTerminal>
+    private let terminal: CardTerminalHost
     private let tile: NSHostingView<CardTile>
     private let trace: CardTraceHost
     private var handles: [CardEdgeHandle] = []
@@ -1382,7 +1382,8 @@ final class CardView: NSView {
     init(card: CardController, canvas: CanvasController) {
         self.card = card
         header = CardHeaderView(card: card, canvas: canvas)
-        terminal = NSHostingView(rootView: CardTerminal(card: card))
+        terminal = CardTerminalHost(rootView: CardTerminal(card: card))
+        terminal.card = card
         let open: () -> Void = { [weak canvas, weak card] in
             if let canvas, let card { canvas.zoom(to: card) }
         }
@@ -1459,6 +1460,22 @@ struct CardTerminal: View {
     var body: some View {
         TerminalView(ghostty: card.ghostty, viewModel: card, delegate: card)
             .environment(\.hostsWindowTrace, true)
+    }
+}
+
+/// Hosts a card's panes. SwiftUI misses its panes when the canvas is
+/// zoomed (an ancestor is magnified): a click it keeps for itself that
+/// falls inside a pane goes to the pane (spike check S5).
+final class CardTerminalHost: NSHostingView<CardTerminal> {
+    weak var card: CardController?
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let hit = super.hitTest(point)
+        guard hit === self, let card, let superview else { return hit }
+        for pane in card.surfaceTree where !pane.isHiddenOrHasHiddenAncestor {
+            if pane.bounds.contains(pane.convert(point, from: superview)) { return pane }
+        }
+        return hit
     }
 }
 
@@ -2535,7 +2552,7 @@ Run: `macos/skins-test.sh CanvasMenuTests` → FAIL (`Jump to What Needs You` no
 
 - [ ] **Step 2: Add the zoom hook to the pane**
 
-Use the variant Task 0 recorded in `docs/superpowers/specs/2026-10-18-lostty-canvas-spike.md`.
+Use the variant Task 0 recorded in `docs/superpowers/specs/2026-10-18-lostty-canvas-spike.md`. **The spike found variant A** (keep variant B only as the record of the alternative).
 
 **Variant A** (the canvas's magnification reaches `convertToBacking`). In `SurfaceView_AppKit.swift`, in `viewDidChangeBackingProperties()`, replace
 
@@ -3054,7 +3071,7 @@ Ask the owner to try each, and record pass/fail:
 | H2 | Drag a header to move a card; drag an edge and a corner to resize; it stops at 320 × 200; clicking a back card brings it forward and keeps typing in it. |
 | H3 | ⌘D splits inside a card; ⌘W closes a pane; `exit` in a card's last pane removes the card; Edit → Undo brings it back where it was. |
 | H4 | Two-finger scroll over empty canvas pans; over a terminal scrolls it; ⌥-scroll over a terminal pans. |
-| H5 | Pinch to 200% and 50%: soft while pinching, crisp a moment after; the shell's `tput cols` is unchanged; click-drag selects the text under the pointer at both zooms. |
+| H5 | Pinch to 200% and 50%: soft while pinching, crisp a moment after; `tput lines` is unchanged (`tput cols` may move by one, spike finding); click-drag selects the text under the pointer at both zooms; at 200% the search bar (⌘F) and a split divider still take clicks. |
 | H6 | Below 45% cards become tiles; a tile click zooms to that card at 100%; ⌃⌘0 fits all; ⌃⌘1 zooms the focused card; double-clicking a header does too; ⌃⌥⌘ + arrows move between cards. |
 | H7 | With Window Light chosen, a working Claude lights its card's edge; with Skin Traces, the pane's own edge. The header shows Working / Waiting / Ready; a waiting card dims, header included. Two cards waiting: ⌃⌘J goes to the older one first, then the other, then beeps when none are left. (Use the scratch `busy.sh` from the window-light work, or a tiny Claude prompt.) |
 | H8 | Close the canvas (it hides); quit the Debug app and relaunch it with `open -n`: the canvas stays hidden; ⌃⌘K shows its cards, attached to the same tmux sessions (history intact), and no "reopen sessions?" prompt names them. Then repeat with the canvas shown. (Never Restart to Update the Debug build; quit + `open -n` is the stand-in.) |
