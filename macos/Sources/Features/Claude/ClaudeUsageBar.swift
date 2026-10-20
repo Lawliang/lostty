@@ -13,7 +13,9 @@ import SwiftUI
 /// clicking the context shows and sets that limit. Both are hidden without
 /// a Claude session in the focused pane. At the far right, the apps
 /// button; while it's on, the window's apps
-/// (`ExtensionAppsRow`) take the bar's place of the model and usage.
+/// (`ExtensionAppsRow`) take the bar's place of the model and usage. A
+/// narrow window drops the model first, then shortens the meters
+/// (`ClaudeUsageFit`), so every window still shows how it's doing.
 struct ClaudeUsageBar: View {
     /// A standard title bar's height.
     static let height: CGFloat = NSWindow.frameRect(forContentRect: .zero, styleMask: [.titled]).height
@@ -26,6 +28,7 @@ struct ClaudeUsageBar: View {
     @State private var showingDetails = false
     @State private var showingHandoff = false
     @State private var hovered: Part?
+    @State private var width: CGFloat = 0
 
     private enum Part { case context, limit }
 
@@ -41,7 +44,8 @@ struct ClaudeUsageBar: View {
     private var hasSession: Bool { pane.map { usage.sessions.contains($0) } ?? false }
 
     var body: some View {
-        ZStack {
+        let fit = self.fit
+        return ZStack {
             if model.showsApps {
                 ExtensionAppsRow(model: model, ink: ink)
                     // Clear of the apps button.
@@ -49,14 +53,14 @@ struct ClaudeUsageBar: View {
                     .padding(.trailing, 44)
                     .transition(.opacity)
             } else if hasSession {
-                usageButton
+                usageButton(fit.style)
                     // Equal on both sides so it stays centered, clear of
-                    // the model on the left and the apps button on the right.
-                    .padding(.horizontal, 110)
+                    // the apps button on the right.
+                    .padding(.horizontal, ClaudeUsageFit.trailing + ClaudeUsageFit.gap)
                     .transition(.opacity)
             }
             HStack(spacing: 0) {
-                if hasSession, !model.showsApps { modelLabel.transition(.opacity) }
+                if hasSession, !model.showsApps, fit.showsModel { modelLabel.transition(.opacity) }
                 Spacer(minLength: 0)
                 appsButton
             }
@@ -70,14 +74,35 @@ struct ClaudeUsageBar: View {
         .frame(minWidth: 0, maxWidth: .infinity)
         .frame(height: Self.height)
         .clipped()
+        .background(GeometryReader { geo in
+            Color.clear
+                .onAppear { width = geo.size.width }
+                .onChange(of: geo.size.width) { width = $0 }
+        })
         .background(Color(nsColor: chrome))
     }
 
-    private var usageButton: some View {
+    private var modelName: String { pane.flatMap { usage.models[$0] } ?? "" }
+
+    /// The meters' style at the bar's width, and whether the model fits.
+    private var fit: (style: ClaudeUsageFit.Style, showsModel: Bool) {
+        ClaudeUsageFit.fit(
+            width: width, model: modelName.isEmpty ? nil : ClaudeUsageFont.width("✳ " + modelName),
+            meters: ClaudeUsageFit.styles.map(metersWidth))
+    }
+
+    /// Both chips in a style: their text, padding and the space between.
+    private func metersWidth(_ style: ClaudeUsageFit.Style) -> CGFloat {
+        let armed = pane.map { handoff.isArmed($0) } ?? false
+        return ClaudeUsageFont.width(contextText(style)) + ClaudeUsageFont.width(limitText(style))
+            + 2 * 16 + 6 + (armed ? ClaudeUsageFont.width("  ") : 0)
+    }
+
+    private func usageButton(_ style: ClaudeUsageFit.Style) -> some View {
         HStack(spacing: 6) {
             if handsOff {
                 Button { showingHandoff.toggle() } label: {
-                    chip(contextLine, lit: hovered == .context || showingHandoff)
+                    chip(contextLine(style), lit: hovered == .context || showingHandoff)
                 }
                 .buttonStyle(.plain)
                 .onHover { hover(.context, $0) }
@@ -86,11 +111,11 @@ struct ClaudeUsageBar: View {
                                           armed: pane.flatMap { handoff.line($0) })
                 }
             } else {
-                chip(contextLine, lit: false)
+                chip(contextLine(style), lit: false)
             }
             Button { showingDetails.toggle() } label: {
                 // Ticks so a limit that resets while nothing reports drops to 0%.
-                chip(TimelineView(.everyMinute) { _ in limitLine }, lit: hovered == .limit || showingDetails)
+                chip(TimelineView(.everyMinute) { _ in limitLine(style) }, lit: hovered == .limit || showingDetails)
             }
             .buttonStyle(.plain)
             .onHover { hover(.limit, $0) }
@@ -142,32 +167,56 @@ struct ClaudeUsageBar: View {
 
     private var modelLabel: some View {
         Text("✳ ").foregroundColor(Color(red: 0.85, green: 0.47, blue: 0.34))
-            + Text(pane.flatMap { usage.models[$0] } ?? "").foregroundColor(ink.opacity(0.6))
+            + Text(modelName).foregroundColor(ink.opacity(0.6))
     }
 
-    private var contextLine: some View {
+    /// `Context ▓▓░░░░░░░░ 50K`, as `contextLine` draws it in `style`.
+    private func contextText(_ style: ClaudeUsageFit.Style) -> String {
         let context = pane.flatMap { usage.contexts[$0] }
+        return (style.labels ? "Context " : "") + ClaudeUsageBlocks.string(context?.percent ?? 0, cells: style.cells)
+            + (style.cells > 0 ? " " : "") + ClaudeUsageFormat.thousands(context?.used ?? 0)
+    }
+
+    /// `Session ▓░░░░░░░░░ 2%`, as `limitLine` draws it in `style`.
+    private func limitText(_ style: ClaudeUsageFit.Style) -> String {
+        let limit = usage.percent(usage.tracked) ?? 0
+        return (style.labels ? usage.tracked.shortTitle + " " : "")
+            + ClaudeUsageBlocks.string(limit, cells: style.cells)
+            + (style.cells > 0 ? " " : "") + ClaudeUsageFormat.percent(limit)
+    }
+
+    /// The number alone takes the meter's color, so it still shows how full.
+    private func number(_ percent: Double, _ style: ClaudeUsageFit.Style) -> Color {
+        style.cells > 0 ? ink.opacity(0.9) : ClaudeUsageBlocks.fill(for: percent, accent: accent)
+    }
+
+    private func contextLine(_ style: ClaudeUsageFit.Style) -> some View {
+        let context = pane.flatMap { usage.contexts[$0] }
+        let percent = context?.percent ?? 0
         let armed = pane.map { handoff.isArmed($0) } ?? false
 
         return HStack(alignment: .firstTextBaseline, spacing: 0) {
-            Text("Context ").foregroundColor(ink.opacity(0.6))
-            ClaudeUsageBlocks.text(context?.percent ?? 0, accent: accent, empty: ink.opacity(0.28))
-                .overlay(alignment: .leading) {
-                    if let mark = handoffMark(context) {
-                        // A line across the meter where the handoff limit falls.
-                        GeometryReader { meter in
-                            Rectangle()
-                                .fill(ink.opacity(0.85))
-                                .frame(width: 1.5, height: meter.size.height + 4)
-                                .offset(x: meter.size.width * mark - 0.75, y: -2)
+            if style.labels { Text("Context ").foregroundColor(ink.opacity(0.6)) }
+            if style.cells > 0 {
+                ClaudeUsageBlocks.text(percent, accent: accent, empty: ink.opacity(0.28), cells: style.cells)
+                    .overlay(alignment: .leading) {
+                        if let mark = handoffMark(context) {
+                            // A line across the meter where the handoff limit falls.
+                            GeometryReader { meter in
+                                Rectangle()
+                                    .fill(ink.opacity(0.85))
+                                    .frame(width: 1.5, height: meter.size.height + 4)
+                                    .offset(x: meter.size.width * mark - 0.75, y: -2)
+                            }
                         }
                     }
-                }
-            (Text(" " + ClaudeUsageFormat.thousands(context?.used ?? 0)).foregroundColor(ink.opacity(0.9))
+            }
+            (Text((style.cells > 0 ? " " : "") + ClaudeUsageFormat.thousands(context?.used ?? 0))
+                .foregroundColor(number(percent, style))
                 + (armed ? Text(" ") + Text(Image(systemName: "arrow.triangle.2.circlepath")).foregroundColor(accent)
                     : Text("")))
         }
-        .help(armed ? "Will hand off at the next clean break" : "")
+        .help(armed ? "Will hand off at the next clean break" : style.labels ? "" : "Context")
     }
 
     /// Where the handoff limit falls on the context meter, 0...1, while
@@ -178,13 +227,52 @@ struct ClaudeUsageBar: View {
         return min(1, Double(limit) / Double(context.size))
     }
 
-    private var limitLine: some View {
+    private func limitLine(_ style: ClaudeUsageFit.Style) -> some View {
         let metric = usage.tracked
         let limit = usage.percent(metric) ?? 0
 
-        return Text(metric.shortTitle + " ").foregroundColor(ink.opacity(0.6))
-            + ClaudeUsageBlocks.text(limit, accent: accent, empty: ink.opacity(0.28))
-            + Text(" " + ClaudeUsageFormat.percent(limit)).foregroundColor(ink.opacity(0.9))
+        return (Text(style.labels ? metric.shortTitle + " " : "").foregroundColor(ink.opacity(0.6))
+            + ClaudeUsageBlocks.text(limit, accent: accent, empty: ink.opacity(0.28), cells: style.cells)
+            + Text((style.cells > 0 ? " " : "") + ClaudeUsageFormat.percent(limit)).foregroundColor(number(limit, style)))
+            .help(style.labels ? "" : metric.title)
+    }
+}
+
+/// How the bar fits its width. The meters stay centered and take the
+/// roomiest style that fits clear of the edges; the model, the least
+/// needed, shows at the left only beside the roomiest. The narrowest
+/// window keeps both meters as `▓▓░░░ 50K  ▓░░░░ 2%`, or just the numbers
+/// in the meters' colors.
+enum ClaudeUsageFit {
+    struct Style: Equatable {
+        let labels: Bool
+        let cells: Int
+    }
+
+    /// Roomiest first.
+    static let styles = [
+        Style(labels: true, cells: ClaudeUsageBlocks.cells),
+        Style(labels: true, cells: 5),
+        Style(labels: false, cells: 5),
+        Style(labels: false, cells: 0),
+    ]
+    /// Space kept between the meters and what's beside them.
+    static let gap: CGFloat = 12
+    /// The model's inset from the left edge.
+    static let leading: CGFloat = 12
+    /// The apps button and its inset from the right edge.
+    static let trailing: CGFloat = 36
+
+    /// The style for a bar `width` wide, given the model's width (nil with
+    /// none) and the meters' in each of `styles`, and whether the model shows.
+    static func fit(width: CGFloat, model: CGFloat?, meters: [CGFloat]) -> (style: Style, showsModel: Bool) {
+        // Centered, so each side needs room for the wider of its neighbors.
+        func fits(_ meters: CGFloat, beside side: CGFloat) -> Bool { meters + 2 * (side + gap) <= width }
+        if let model, let roomiest = meters.first, fits(roomiest, beside: max(leading + model, trailing)) {
+            return (styles[0], true)
+        }
+        let index = meters.firstIndex { fits($0, beside: trailing) } ?? styles.count - 1
+        return (styles[index], false)
     }
 }
 
@@ -207,10 +295,16 @@ enum ClaudeUsageBlocks {
         }
     }
 
-    static func text(_ percent: Double, accent: Color, empty: Color) -> Text {
-        let used = filled(percent)
+    static func text(_ percent: Double, accent: Color, empty: Color, cells: Int = cells) -> Text {
+        let used = filled(percent, cells: cells)
         return Text(String(repeating: "▓", count: used)).foregroundColor(fill(for: percent, accent: accent))
             + Text(String(repeating: "░", count: cells - used)).foregroundColor(empty)
+    }
+
+    /// The meter's characters, uncolored.
+    static func string(_ percent: Double, cells: Int = cells) -> String {
+        let used = filled(percent, cells: cells)
+        return String(repeating: "▓", count: used) + String(repeating: "░", count: cells - used)
     }
 }
 
@@ -231,6 +325,12 @@ enum ClaudeUsageFont {
 
     static func font(size: CGFloat) -> Font {
         name.map { .custom($0, size: size) } ?? .system(size: size, design: .monospaced)
+    }
+
+    /// How wide `text` is in the font, for fitting the bar.
+    static func width(_ text: String, size: CGFloat = 12) -> CGFloat {
+        let font = name.flatMap { NSFont(name: $0, size: size) } ?? .monospacedSystemFont(ofSize: size, weight: .regular)
+        return ceil((text as NSString).size(withAttributes: [.font: font]).width)
     }
 }
 
