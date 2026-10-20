@@ -12,16 +12,13 @@ extension CanvasController {
     }
 
     /// ⌃⌘J: the next pane waiting on you, oldest first, round and round:
-    /// its card at 100% and the pane focused. A beep with none.
+    /// its card at 100% and the pane focused. Nothing, when none is.
     func jump() {
         let panes = Set(cards.flatMap { $0.surfaceTree.map(\.id) })
         guard let id = waits.next(after: focusedCard?.focusedSurface?.id, among: panes),
               let card = cards.first(where: { $0.surfaceTree.contains { $0.id == id } }),
               let surface = card.surfaceTree.first(where: { $0.id == id })
-        else {
-            NSSound.beep()
-            return
-        }
+        else { return }
         if window?.isVisible != true { showWindow(nil) }
         zoom(to: card)
         card.focusSurface(surface)
@@ -31,10 +28,7 @@ extension CanvasController {
     func moveFocus(_ direction: CanvasModel.Direction) {
         guard let from = focusedCard, let id = model.neighbor(of: from.id, direction),
               let card = cards.first(where: { $0.id == id })
-        else {
-            NSSound.beep()
-            return
-        }
+        else { return }
         reveal(card)
         focus(card)
     }

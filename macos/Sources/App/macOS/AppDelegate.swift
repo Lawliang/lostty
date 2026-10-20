@@ -823,21 +823,8 @@ class AppDelegate: NSObject,
     }
 
     @objc private func ghosttyBellDidRing(_ notification: Notification) {
-        // Lostty: the usage bar's mute silences the bell.
-        let muted = LosttyMute.isMuted()
-
-        if ghostty.config.bellFeatures.contains(.system), !muted {
-            NSSound.beep()
-        }
-
-        if ghostty.config.bellFeatures.contains(.audio), !muted {
-            if let configPath = ghostty.config.bellAudioPath,
-               let sound = NSSound(contentsOfFile: configPath.path, byReference: false) {
-                sound.volume = ghostty.config.bellAudioVolume
-                sound.play()
-            }
-        }
-
+        // Lostty makes no sounds: the bell never beeps or plays
+        // `bell-audio-path`, whatever `bell-features` says.
         if ghostty.config.bellFeatures.contains(.attention) {
             // Bounce the dock icon if we're not focused.
             NSApp.requestUserAttention(.informationalRequest)
@@ -1089,19 +1076,17 @@ class AppDelegate: NSObject,
         withCompletionHandler: (UNNotificationPresentationOptions) -> Void
     ) {
         if willPresent.request.content.userInfo["lostty"] as? String == "guard" {
-            withCompletionHandler([.banner, .sound, .list])
+            withCompletionHandler([.banner, .list])
             return
         }
         // Lostty: Stay Awake's notices carry no surface, so show them here.
         if willPresent.request.content.userInfo["lostty"] as? String == "stay-awake" {
-            withCompletionHandler(LosttyMute.isMuted() ? [.banner] : [.banner, .sound])
+            withCompletionHandler([.banner])
             return
         }
         let shouldPresent = ghostty.shouldPresentNotification(notification: willPresent)
-        // Lostty: the usage bar's mute keeps notifications silent.
-        var options: UNNotificationPresentationOptions = shouldPresent ? [.banner, .sound] : []
-        if LosttyMute.isMuted() { options.remove(.sound) }
-        withCompletionHandler(options)
+        // Lostty: notifications are always silent.
+        withCompletionHandler(shouldPresent ? [.banner] : [])
     }
 
     // MARK: - GhosttyAppDelegate

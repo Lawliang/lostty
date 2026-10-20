@@ -137,6 +137,13 @@ class BaseTerminalController: NSWindowController,
         fatalError("init(coder:) is not supported for this view")
     }
 
+    /// Lostty makes no sounds: a key nothing takes is dropped, not beeped
+    /// at (the end of the window's responder chain is its controller).
+    override func noResponder(for eventSelector: Selector) {
+        guard eventSelector != #selector(NSResponder.keyDown(with:)) else { return }
+        super.noResponder(for: eventSelector)
+    }
+
     init(_ ghostty: Ghostty.App,
          baseConfig base: Ghostty.SurfaceConfiguration? = nil,
          surfaceTree tree: SplitTree<Ghostty.SurfaceView>? = nil

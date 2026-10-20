@@ -11,8 +11,8 @@ import SwiftUI
 /// limit lists every limit, and picking one tracks it here. In the beta, a
 /// line on the context meter marks where the conversation hands off, and
 /// clicking the context shows and sets that limit. Both are hidden without
-/// a Claude session in the focused pane. At the far right, the apps button
-/// and the mute button; while the apps button is on, the window's apps
+/// a Claude session in the focused pane. At the far right, the apps
+/// button; while it's on, the window's apps
 /// (`ExtensionAppsRow`) take the bar's place of the model and usage.
 struct ClaudeUsageBar: View {
     /// A standard title bar's height.
@@ -21,7 +21,6 @@ struct ClaudeUsageBar: View {
     @ObservedObject var model: ExtensionSidebarModel
     @ObservedObject private var usage = ClaudeUsageRuntime.shared
     @ObservedObject private var skins = SkinsRuntime.shared.manager
-    @ObservedObject private var mute = LosttyMute.shared
     @ObservedObject private var handoff = ContextHandoffCoordinator.shared
     @ObservedObject private var handoffSettings = ContextHandoffPreferences.shared
     @State private var showingDetails = false
@@ -45,14 +44,14 @@ struct ClaudeUsageBar: View {
         ZStack {
             if model.showsApps {
                 ExtensionAppsRow(model: model, ink: ink)
-                    // Clear of the apps and mute buttons.
+                    // Clear of the apps button.
                     .padding(.leading, 12)
-                    .padding(.trailing, 72)
+                    .padding(.trailing, 44)
                     .transition(.opacity)
             } else if hasSession {
                 usageButton
                     // Equal on both sides so it stays centered, clear of
-                    // the model on the left and the buttons on the right.
+                    // the model on the left and the apps button on the right.
                     .padding(.horizontal, 110)
                     .transition(.opacity)
             }
@@ -60,7 +59,6 @@ struct ClaudeUsageBar: View {
                 if hasSession, !model.showsApps { modelLabel.transition(.opacity) }
                 Spacer(minLength: 0)
                 appsButton
-                muteButton
             }
             .padding(.leading, 12)
             .padding(.trailing, 8)
@@ -140,18 +138,6 @@ struct ClaudeUsageBar: View {
         .buttonStyle(.plain)
         .accessibilityLabel(model.showsApps ? "Hide apps" : "Show apps")
         .help("Apps")
-    }
-
-    private var muteButton: some View {
-        Button { mute.isMuted.toggle() } label: {
-            Image(systemName: mute.isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(ink.opacity(mute.isMuted ? 0.85 : 0.5))
-                .frame(width: 28, height: Self.height)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(mute.isMuted ? "Unmute terminal sounds" : "Mute terminal sounds")
     }
 
     private var modelLabel: some View {

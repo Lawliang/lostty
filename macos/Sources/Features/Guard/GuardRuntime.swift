@@ -174,7 +174,6 @@ final class GuardRuntime: ObservableObject {
         content.subtitle = request.check.groupLabel
         content.body = request.check.input
         content.categoryIdentifier = category
-        content.sound = .default
         content.userInfo = ["lostty": "guard", "request": request.id, "surface": request.check.pane]
         let note = UNNotificationRequest(identifier: notificationID(request.id), content: content, trigger: nil)
         UNUserNotificationCenter.current().add(note)

@@ -93,6 +93,12 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
+    /// A key nothing on the canvas takes is dropped, not beeped at.
+    override func noResponder(for eventSelector: Selector) {
+        guard eventSelector != #selector(NSResponder.keyDown(with:)) else { return }
+        super.noResponder(for: eventSelector)
+    }
+
     override func showWindow(_ sender: Any?) {
         super.showWindow(sender)
         placeIfNeeded()

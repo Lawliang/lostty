@@ -1426,7 +1426,7 @@ extension Ghostty {
             body: String,
             requireFocus: Bool = true) {
             let center = UNUserNotificationCenter.current()
-            center.requestAuthorization(options: [.alert, .sound]) { _, error in
+            center.requestAuthorization(options: [.alert]) { _, error in
                 if let error = error {
                     Ghostty.logger.error("Error while requesting notification authorization: \(error)")
                 }
