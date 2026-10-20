@@ -8,6 +8,36 @@ struct CanvasModelTests {
     private let a = UUID(), b = UUID(), c = UUID()
     private let visible = CGRect(x: 50_000, y: 50_000, width: 1200, height: 800)
 
+    @Test func windowsMovingInTogetherMakeRowsCenteredInTheView() {
+        let size = CGSize(width: 400, height: 300)
+        let frames = CanvasModel().placements(sizes: Array(repeating: size, count: 3), in: visible)
+        // Two across, two rows: 800 × 600 around the view's middle (50_600, 50_400).
+        #expect(frames == [
+            CGRect(x: 50_200, y: 50_100, width: 400, height: 300),
+            CGRect(x: 50_600, y: 50_100, width: 400, height: 300),
+            CGRect(x: 50_200, y: 50_400, width: 400, height: 300),
+        ])
+    }
+
+    @Test func aRowIsAsTallAsItsTallestWindow() {
+        let frames = CanvasModel().placements(
+            sizes: [CGSize(width: 400, height: 300), CGSize(width: 400, height: 500), CGSize(width: 400, height: 300)],
+            in: visible)
+        #expect(frames[2].minY == frames[0].minY + 500)
+    }
+
+    @Test func windowsMovingInGoRightOfCardsTheyWouldCover() {
+        var model = CanvasModel()
+        model.add(a, frame: CGRect(x: 50_000, y: 49_000, width: 1000, height: 2000))
+        let frames = model.placements(sizes: Array(repeating: CGSize(width: 400, height: 300), count: 2), in: visible)
+        #expect(frames.map(\.origin) == [CGPoint(x: 51_000, y: 49_000), CGPoint(x: 51_400, y: 49_000)])
+    }
+
+    @Test func oneWindowMovingInGoesWhereANewCardWould() {
+        let size = CGSize(width: 400, height: 300)
+        #expect(CanvasModel().placements(sizes: [size], in: visible) == [CanvasModel().placement(size: size, in: visible)])
+    }
+
     private func model(_ frames: [(UUID, CGRect)]) -> CanvasModel {
         var model = CanvasModel()
         for (id, frame) in frames { model.add(id, frame: frame) }

@@ -344,10 +344,14 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         scrollView.reflectScrolledClipView(scrollView.contentView)
     }
 
-    /// ⌃⌘0: every card in view.
-    func zoomToFit() {
+    /// ⌃⌘0: every card in view, zoomed no closer than `atMost`.
+    func zoomToFit(atMost cap: CGFloat = CanvasZoom.maximum) {
         guard let rect = model.fitRect else { return }
         scrollView.magnify(toFit: rect)
+        if scrollView.magnification > cap {
+            scrollView.magnification = cap
+            center(on: CGPoint(x: rect.midX, y: rect.midY))
+        }
         settleZoom()
     }
 

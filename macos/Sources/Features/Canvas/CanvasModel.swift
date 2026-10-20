@@ -107,6 +107,34 @@ struct CanvasModel: Equatable {
         return Self.clamped(frame)
     }
 
+    /// Where cards of `sizes` go when several windows move in at once: rows
+    /// of them, edge to edge, about as many across as down, centered in
+    /// the view, or right of every card already there if that would cover
+    /// one. A single card goes where `placement(size:in:)` puts it.
+    func placements(sizes: [CGSize], in visible: CGRect) -> [CGRect] {
+        guard sizes.count > 1 else { return sizes.map { placement(size: $0, in: visible) } }
+        let across = Int(Double(sizes.count).squareRoot().rounded(.up))
+        var frames: [CGRect] = []
+        var x: CGFloat = 0, y: CGFloat = 0, rowHeight: CGFloat = 0
+        for (index, size) in sizes.enumerated() {
+            if index > 0, index.isMultiple(of: across) {
+                x = 0
+                y += rowHeight + Self.besideGap
+                rowHeight = 0
+            }
+            frames.append(CGRect(origin: CGPoint(x: x, y: y), size: size))
+            x += size.width + Self.besideGap
+            rowHeight = max(rowHeight, size.height)
+        }
+        let block = frames.reduce(CGRect.null) { $0.union($1) }
+        var origin = CGPoint(x: (visible.midX - block.width / 2).rounded(), y: (visible.midY - block.height / 2).rounded())
+        if cards.contains(where: { Self.overlap($0.frame, CGRect(origin: origin, size: block.size)) }) {
+            let taken = cards.reduce(CGRect.null) { $0.union($1.frame) }
+            origin = CGPoint(x: taken.maxX + Self.besideGap, y: taken.minY)
+        }
+        return frames.map { Self.clamped($0.offsetBy(dx: origin.x, dy: origin.y)) }
+    }
+
     /// `frame` at least the minimum size and inside the document.
     static func clamped(_ frame: CGRect) -> CGRect {
         let width = min(max(frame.width, minimumCardSize.width), size)

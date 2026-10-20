@@ -93,6 +93,16 @@ optimizations.
 
 - **Window → Move to Canvas** moves the current window's whole split tree
   onto the canvas as a new card (the window closes; nothing restarts).
+- **Window → Move All Windows to Canvas** moves every terminal window (each
+  tab its own window) onto the canvas at once, as rows of cards edge to
+  edge, about as many across as down, centered in the view (or right of the
+  cards already there if they'd cover one), then zooms to fit them all, at
+  no more than 100%. The key window's card is focused.
+- **Asked, not assumed:** opening an empty canvas (⌃⌘K) while windows are
+  open asks "Bring your N windows onto the canvas?" (Move All N, or Start
+  Empty), and Move to Canvas with other windows open asks "Move your N other
+  windows too?" (Move All, or Just This One). "Don't ask again" remembers
+  the answer.
 - **Move to Window** in a card's header menu (and the Window menu while a
   card is focused) does the reverse: the card becomes a normal window.
 - **⌘N** (New Window) while the canvas is key makes a new card in the middle

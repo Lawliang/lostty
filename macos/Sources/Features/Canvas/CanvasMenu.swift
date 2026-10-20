@@ -36,6 +36,7 @@ final class CanvasMenu: NSObject, NSMenuItemValidation {
         return [
             item("Canvas", #selector(showCanvas(_:)), "k", [.control, .command]),
             item("Move to Canvas", #selector(moveToCanvas(_:)), "", []),
+            item("Move All Windows to Canvas", #selector(moveAllToCanvas(_:)), "", []),
             item("Move to Window", #selector(moveToWindow(_:)), "", []),
             view,
         ]
@@ -55,13 +56,32 @@ final class CanvasMenu: NSObject, NSMenuItemValidation {
         return item
     }
 
+    private var ghostty: Ghostty.App? { (NSApp.delegate as? AppDelegate)?.ghostty }
+    private var keyTerminal: TerminalController? { NSApp.keyWindow?.windowController as? TerminalController }
+
+    /// Opening an empty canvas while windows are open asks to bring them.
     @objc private func showCanvas(_ sender: Any?) {
-        guard let ghostty = (NSApp.delegate as? AppDelegate)?.ghostty else { return }
-        CanvasController.show(ghostty)
+        guard let ghostty else { return }
+        let windows = CanvasImport.windows(first: keyTerminal)
+        if CanvasController.shared?.cards.isEmpty != false, !windows.isEmpty,
+           CanvasImport.shouldMoveAll(windows.count, opening: true) {
+            CanvasImport.move(ghostty, windows, focus: keyTerminal)
+        } else {
+            CanvasController.show(ghostty)
+        }
     }
 
+    /// Moving one window while others are open asks to move them too.
     @objc private func moveToCanvas(_ sender: Any?) {
-        (NSApp.keyWindow?.windowController as? TerminalController)?.moveToCanvas()
+        guard let ghostty, let window = keyTerminal else { return }
+        let windows = CanvasImport.windows(first: window)
+        let all = windows.count > 1 && CanvasImport.shouldMoveAll(windows.count, opening: false)
+        CanvasImport.move(ghostty, all ? windows : [window], focus: window)
+    }
+
+    @objc private func moveAllToCanvas(_ sender: Any?) {
+        guard let ghostty else { return }
+        CanvasImport.move(ghostty, CanvasImport.windows(first: keyTerminal), focus: keyTerminal)
     }
 
     @objc private func moveToWindow(_ sender: Any?) {
@@ -92,6 +112,7 @@ final class CanvasMenu: NSObject, NSMenuItemValidation {
         switch item.action {
         case #selector(showCanvas(_:)): true
         case #selector(moveToCanvas(_:)): NSApp.keyWindow?.windowController is TerminalController
+        case #selector(moveAllToCanvas(_:)): !TerminalController.all.isEmpty
         case #selector(moveToWindow(_:)): CanvasController.key?.focusedCard != nil
         default: CanvasController.key != nil
         }
