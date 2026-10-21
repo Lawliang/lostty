@@ -163,6 +163,7 @@ build_dmg() {
     -destination generic/platform=macOS -archivePath "$DIR/Lostty.xcarchive" -derivedDataPath "$DERIVED" \
     -allowProvisioningUpdates DEVELOPMENT_TEAM=$TEAM CODE_SIGN_STYLE=Automatic CODE_SIGN_IDENTITY="Apple Development" \
     MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$BUILD" LOSTTY_UPDATE_FEED="$CH_FEED" \
+    LOSTTY_BUILD_COMMIT="$(git rev-parse --short "$COMMIT")" \
     ENABLE_CODE_COVERAGE=NO CLANG_COVERAGE_MAPPING=NO "$@" \
     > "$DIR/archive.log" 2>&1 || failed "$DIR/archive.log" "the $CH archive failed"
   xcodebuild -exportArchive -archivePath "$DIR/Lostty.xcarchive" -exportPath "$DIR/export" \

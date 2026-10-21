@@ -81,6 +81,7 @@ private struct NotificationBubble: View {
         case .attention: "link"
         case .success: "checkmark"
         case .failure: "exclamationmark"
+        case .update: "arrow.up"
         }
     }
 
@@ -89,6 +90,7 @@ private struct NotificationBubble: View {
         case .attention: Color(red: 0.36, green: 0.36, blue: 0.95)
         case .success: Color(red: 0.2, green: 0.7, blue: 0.4)
         case .failure: Color(red: 0.9, green: 0.36, blue: 0.3)
+        case .update: LosttyTheme.accent
         }
     }
 }

@@ -96,6 +96,11 @@ struct TerminalView<ViewModel: TerminalViewModel>: View {
                 if viewModel.updateOverlayIsVisible {
                     UpdateOverlay()
                 }
+
+                // Lostty: what's new, or a new build ready to restart into.
+                if let extensionSidebar {
+                    WhatsNewOverlay(window: ObjectIdentifier(extensionSidebar))
+                }
             }
             .frame(maxWidth: .greatestFiniteMagnitude, maxHeight: .greatestFiniteMagnitude)
         }

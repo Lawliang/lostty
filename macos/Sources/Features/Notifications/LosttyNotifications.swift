@@ -32,6 +32,8 @@ struct LosttyNotification: Identifiable {
         case hooks(HookAgent)
         /// A context handoff didn't reach its fresh window.
         case handoff(UUID)
+        /// A new Lostty is ready for Restart to Update.
+        case update
 
         /// Bubbles in the same slot replace each other (a connect result
         /// takes the place of its agent's "not connected" bubble).
@@ -39,12 +41,13 @@ struct LosttyNotification: Identifiable {
             switch self {
             case .hooksMissing(let agent), .hooks(let agent): "hooks-\(agent.rawValue)"
             case .handoff(let pane): "handoff-\(pane.uuidString)"
+            case .update: "update"
             }
         }
     }
 
     /// Sets the bubble's icon and color.
-    enum Style { case attention, success, failure }
+    enum Style { case attention, success, failure, update }
 
     let id = UUID()
     let kind: Kind
@@ -53,6 +56,8 @@ struct LosttyNotification: Identifiable {
     let detail: String
     var actionTitle: String?
     var action: (@MainActor () -> Void)?
+    /// Stays until dismissed or replaced, instead of fading.
+    var persistent = false
 }
 
 /// App-wide notification bubbles, shown in the top-right of each terminal
@@ -92,9 +97,14 @@ final class LosttyNotifications: ObservableObject {
         forget(id)
     }
 
+    /// The bubble in `kind`'s slot, if one is up.
+    func dismiss(kind: LosttyNotification.Kind) {
+        for item in items where item.kind.slot == kind.slot { dismiss(item.id) }
+    }
+
     /// A window displayed the bubble: start its countdown (once).
     func markShown(_ id: UUID) {
-        guard items.contains(where: { $0.id == id }), !shown.contains(id) else { return }
+        guard let item = items.first(where: { $0.id == id }), !item.persistent, !shown.contains(id) else { return }
         shown.insert(id)
         countdown(id)
     }

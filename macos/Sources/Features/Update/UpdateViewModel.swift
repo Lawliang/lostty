@@ -375,5 +375,8 @@ enum UpdateState: Equatable {
         var isAutoUpdate = false
         let retryTerminatingApplication: () -> Void
         let dismiss: () -> Void
+        /// Lostty: the update a background install waits to put in, for
+        /// the What's New card.
+        var appcastItem: SUAppcastItem?
     }
 }

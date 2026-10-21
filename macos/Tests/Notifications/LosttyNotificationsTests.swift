@@ -64,6 +64,19 @@ struct LosttyNotificationsTests {
         #expect(center.items.isEmpty)
     }
 
+    @Test func aPersistentBubbleStaysUntilDismissed() {
+        let center = make()
+        var n = note(.update)
+        n.persistent = true
+        center.post(n)
+        center.markShown(n.id)
+        center.setHovering(n.id, true)
+        center.setHovering(n.id, false)
+        #expect(harness.pending.isEmpty)
+        center.dismiss(kind: .update)
+        #expect(center.items.isEmpty)
+    }
+
     @Test func postingTheSameKindReplacesIt() {
         let center = make()
         center.post(note(.hooksMissing(.claude)))

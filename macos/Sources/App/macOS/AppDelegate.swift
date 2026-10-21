@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 import UserNotifications
 import OSLog
@@ -135,6 +136,20 @@ class AppDelegate: NSObject,
     let updateController = UpdateController()
     var updateViewModel: UpdateViewModel {
         updateController.viewModel
+    }
+
+    /// Lostty: Settings → Updates, applied as it changes.
+    private var updatePreferenceWatch: AnyCancellable?
+
+    /// Lostty's updates: release builds check daily, and download in the
+    /// background or ask first (Settings → Updates); a build made on this Mac
+    /// never checks (UpdateFeed). Setting both every time also means Sparkle
+    /// never asks "check automatically?".
+    private func applyUpdateSchedule(autoUpdate: Ghostty.Config.AutoUpdate?, installsAutomatically: Bool) {
+        let schedule = UpdateFeed.schedule(hasFeed: UpdateFeed.current != nil, autoUpdate: autoUpdate,
+                                           installsAutomatically: installsAutomatically)
+        updateController.updater.automaticallyChecksForUpdates = schedule.checks
+        updateController.updater.automaticallyDownloadsUpdates = schedule.downloads
     }
 
     /// The elapsed time since the process was started
@@ -378,6 +393,13 @@ class AppDelegate: NSObject,
         LosttyStatusItem.shared.installIfEnabled()
         // Restart to Update: notice a new build installed over this one.
         BundleWatch.shared.start()
+        // A new build ready: a banner, and a card in the next window.
+        WhatsNewCenter.shared.start(updates: updateViewModel)
+        // Settings → Updates applies at once (its new value, mid-change).
+        updatePreferenceWatch = UpdatePreferences.shared.$installsAutomatically.dropFirst().sink { [weak self] automatic in
+            guard let self else { return }
+            applyUpdateSchedule(autoUpdate: ghostty.config.autoUpdate, installsAutomatically: automatic)
+        }
         HookNotifications.checkAtLaunch()
 
         // Lostty Mobile: after a crash, offer to reopen the tmux sessions
@@ -917,12 +939,8 @@ class AppDelegate: NSObject,
         default: UserDefaults.ghostty.removeObject(forKey: "NSQuitAlwaysKeepsWindows")
         }
 
-        // Lostty's updates: release builds check daily and ask first; a build
-        // made on this Mac never checks (UpdateFeed). Setting both every time
-        // also means Sparkle never asks "check automatically?".
-        let schedule = UpdateFeed.schedule(hasFeed: UpdateFeed.current != nil, autoUpdate: config.autoUpdate)
-        updateController.updater.automaticallyChecksForUpdates = schedule.checks
-        updateController.updater.automaticallyDownloadsUpdates = schedule.downloads
+        applyUpdateSchedule(autoUpdate: config.autoUpdate,
+                            installsAutomatically: UpdatePreferences.installsAutomatically())
 
         // Config could change keybindings, so update everything that depends on that
         syncMenuShortcuts(config)
