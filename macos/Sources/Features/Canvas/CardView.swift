@@ -90,10 +90,12 @@ final class CardView: NSView {
     override var isFlipped: Bool { true }
     override var wantsUpdateLayer: Bool { true }
 
-    /// A Mac window's hairline edge, and its shadow: deeper on the active one.
+    /// A Mac window's hairline edge, white on the active card, and its
+    /// shadow: deeper on the active one.
     override func updateLayer() {
         let dark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-        content.layer?.borderColor = (dark ? NSColor(white: 1, alpha: 0.18) : NSColor(white: 0, alpha: 0.22)).cgColor
+        let edge = isFocusedCard ? NSColor.white : dark ? NSColor(white: 1, alpha: 0.18) : NSColor(white: 0, alpha: 0.22)
+        content.layer?.borderColor = edge.cgColor
         content.layer?.borderWidth = 0.5
         layer?.shadowOpacity = isFocusedCard ? 0.45 : 0.25
         layer?.shadowRadius = isFocusedCard ? 18 : 8
@@ -200,12 +202,30 @@ final class CardEdgeHandle: NSView {
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
     override func resetCursorRects() {
-        let cursor: NSCursor = switch edges {
-        case .left, .right: .resizeLeftRight
-        case .top, .bottom: .resizeUpDown
-        default: .crosshair
+        addCursorRect(bounds, cursor: Self.cursor(for: edges))
+    }
+
+    /// A window's resize cursor for the edge or corner: diagonal at the
+    /// corners from macOS 15 (a crosshair before).
+    static func cursor(for edges: CanvasModel.Edges) -> NSCursor {
+        guard #available(macOS 15, *) else {
+            return switch edges {
+            case .left, .right: .resizeLeftRight
+            case .top, .bottom: .resizeUpDown
+            default: .crosshair
+            }
         }
-        addCursorRect(bounds, cursor: cursor)
+        let position: NSCursor.FrameResizePosition = switch edges {
+        case .left: .left
+        case .right: .right
+        case .top: .top
+        case .bottom: .bottom
+        case [.left, .top]: .topLeft
+        case [.right, .top]: .topRight
+        case [.left, .bottom]: .bottomLeft
+        default: .bottomRight
+        }
+        return .frameResize(position: position, directions: .all)
     }
 
     override func mouseDown(with event: NSEvent) {

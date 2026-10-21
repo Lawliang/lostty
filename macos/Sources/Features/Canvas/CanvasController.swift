@@ -128,6 +128,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     }
 
     private func observe() {
+        scrollView.document.clicked = { [weak self] in self?.canvasClicked() }
         NotificationCenter.default.addObserver(
             self, selector: #selector(canvasMoved), name: NSView.boundsDidChangeNotification, object: scrollView.contentView)
         // Focus follows the window's first responder: whichever card holds
@@ -217,6 +218,18 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     private func firstResponderChanged(_ responder: NSResponder?) {
         guard let surface = responder as? Ghostty.SurfaceView, let card = card(holding: surface) else { return }
         card.focusedSurfaceDidChange(to: surface)
+    }
+
+    /// A click on the canvas itself, between the cards, lets go of the
+    /// focused card: no pane has the keyboard, and scrolling pans the canvas
+    /// over every pane.
+    private func canvasClicked() {
+        guard let previous = focusedCard else { return }
+        focusedCard = nil
+        window?.makeFirstResponder(scrollView.document)
+        previous.syncFocusToSurfaceTree()
+        sidebar.focusedSurfaceID = nil
+        for view in views.values { view.isFocusedCard = false }
     }
 
     /// A card's pane is taking keyboard focus: the card is the focused one

@@ -27,6 +27,12 @@ extension CanvasController {
             canvas.addCard(tree: card.tree, frame: card.frame, focused: focused)
         }
         canvas.pendingView = (state.saved.center, state.saved.zoom)
+        // The front card was the focused one: it takes keyboard focus when
+        // the canvas is next key, not now (that would pull it forward).
+        if let front = canvas.model.cards.last.flatMap({ entry in canvas.cards.first { $0.id == entry.id } }) {
+            canvas.cardWillFocus(front)
+            canvas.cardDidFocus(front)
+        }
         if state.saved.visible {
             canvas.showWindow(nil)
         } else {
