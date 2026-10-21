@@ -22,6 +22,9 @@ struct RestartHandoff: Codable, Equatable {
     /// Each pane's conversation file for the turn observer, by pane UUID;
     /// nil from a build before the observer.
     var transcripts: [String: String]? = nil
+    /// Every terminal window, to rebuild as it was; nil from a build before
+    /// the snapshot, or with no windows open.
+    var windows: WindowSnapshot? = nil
 
     /// Older than this, it's not a restart's: a crash's prompt applies.
     static let maxAge: TimeInterval = 120
@@ -52,8 +55,14 @@ struct RestartHandoff: Codable, Equatable {
 
     /// The handoff at `url`, deleted whether or not it reads.
     static func take(from url: URL) -> RestartHandoff? {
-        guard let data = try? Data(contentsOf: url) else { return nil }
+        let handoff = peek(at: url)
         try? FileManager.default.removeItem(at: url)
+        return handoff
+    }
+
+    /// The handoff at `url`, left in place.
+    static func peek(at url: URL) -> RestartHandoff? {
+        guard let data = try? Data(contentsOf: url) else { return nil }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .secondsSince1970
         return try? decoder.decode(RestartHandoff.self, from: data)
