@@ -14,6 +14,8 @@ struct TraceFrame: Equatable {
     var length: Double
     /// Overall opacity, 0...1.
     var intensity: Double
+    /// The glowing circle round the head (TraceDraw.flare).
+    var headGlow = true
 
     /// Fades in over `TraceTiming.fadeIn` from the trace's start.
     static func intensity(elapsed: TimeInterval) -> Double {

@@ -63,7 +63,7 @@ final class TraceRouteMenu: NSObject, NSMenuDelegate, NSMenuItemValidation {
 
     /// The window light always goes all the way round: no path to pick.
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
-        TraceStyle.current() == .skin
+        TraceStyle.current() != .window
     }
 
     @objc private func choose(_ sender: NSMenuItem) {

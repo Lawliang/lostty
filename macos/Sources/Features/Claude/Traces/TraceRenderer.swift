@@ -63,7 +63,8 @@ enum TraceDraw {
              color: { colors.hot($0) .opacity(falloff($0)) })
 
         if sparkles { self.sparkles(&ctx, path, frame: frame, time: time, colors: colors, scale: scale) }
-        flare(&ctx, path.sample(at: frame.head), time: time, colors: colors, intensity: frame.intensity, scale: scale)
+        flare(&ctx, path.sample(at: frame.head), time: time, colors: colors, intensity: frame.intensity, scale: scale,
+              glow: frame.headGlow)
     }
 
     /// Strokes the tail behind the head as `pieces` short segments. `t` runs
@@ -98,16 +99,19 @@ enum TraceDraw {
         }
     }
 
-    /// The head: a bloom, a streak stretched along the direction of travel,
-    /// a cross glint, and a white-hot point, all flickering.
+    /// The head: a bloom (unless `glow` is off), a streak stretched along
+    /// the direction of travel, a cross glint, and a white-hot point, all
+    /// flickering.
     static func flare(
         _ ctx: inout GraphicsContext, _ head: EdgePath.Sample, time: Double, colors: TraceColors,
-        intensity: Double, scale: CGFloat = 1
+        intensity: Double, scale: CGFloat = 1, glow bloom: Bool = true
     ) {
         let f = flicker(time) * intensity
         let p = head.point
-        glow(&ctx, at: p, radius: 24 * scale, color: colors.head, opacity: 0.55 * f)
-        glow(&ctx, at: p, radius: 10 * scale, color: colors.head, opacity: 0.9 * f)
+        if bloom {
+            glow(&ctx, at: p, radius: 24 * scale, color: colors.head, opacity: 0.55 * f)
+            glow(&ctx, at: p, radius: 10 * scale, color: colors.head, opacity: 0.9 * f)
+        }
 
         // Streak: long behind the head, short ahead, white at the center.
         let back = 34 * scale, ahead = 10 * scale

@@ -19,7 +19,7 @@ struct ClaudeTraceLayer: View {
         if windowLight { PaneLightView(surfaceID: surfaceID) }
         if !phase.isOff, !windowLight || phase.subagentsOnly,
            let trace = ResolvedTrace.resolve(skin: skins.effectiveSkin(surfaceID), enabled: skins.config.trace) {
-            TraceOverlay(phase: phase, trace: trace, bottomOnly: windowLight)
+            TraceOverlay(phase: phase, trace: trace, bottomOnly: windowLight, headGlow: style != .skinNoGlow)
                 .allowsHitTesting(false)
         }
     }
@@ -32,6 +32,8 @@ struct TraceOverlay: View {
     let trace: ResolvedTrace
     /// Only the subagents' bottom glow, without the racing head.
     var bottomOnly = false
+    /// The glowing circle round the racing head.
+    var headGlow = true
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(TraceRoute.defaultsKey, store: .ghostty) private var route = TraceRoute.initial
     @State private var windowVisible = true
@@ -77,7 +79,8 @@ struct TraceOverlay: View {
                 // length on the bottom edge; early on it is only as long as
                 // the way travelled.
                 let tail = min(path.length, trace.length * TraceCourse.route(route).lapLength(in: rect))
-                let frame = TraceFrame(head: 1, length: tail / path.length, intensity: TraceFrame.intensity(elapsed: elapsed))
+                let frame = TraceFrame(
+                    head: 1, length: tail / path.length, intensity: TraceFrame.intensity(elapsed: elapsed), headGlow: headGlow)
                 Self.drawBottomGlow(in: &ctx, rect: rect, level: journey.motion.bottomGlow(at: elapsed) * frame.intensity,
                                     colors: colors)
                 TraceRenderers.renderer(for: trace.style)

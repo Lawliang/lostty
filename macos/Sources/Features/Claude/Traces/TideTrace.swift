@@ -22,7 +22,8 @@ struct TideTrace: TraceRenderer {
         glow.addFilter(.blur(radius: 2))
         glow.stroke(wave, with: .color(colors.head.opacity(frame.intensity)), lineWidth: 5)
         ctx.stroke(wave, with: .color(Color.white.opacity(0.8 * frame.intensity)), style: StrokeStyle(lineWidth: 1.6, lineCap: .round))
-        TraceDraw.flare(&ctx, path.sample(at: frame.head), time: time, colors: colors, intensity: frame.intensity)
+        TraceDraw.flare(&ctx, path.sample(at: frame.head), time: time, colors: colors, intensity: frame.intensity,
+                        glow: frame.headGlow)
     }
 }
 #endif

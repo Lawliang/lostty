@@ -96,8 +96,8 @@ struct TraceStyleTests {
         #expect(TraceStyle.current(in: defaults) == .skin)
     }
 
-    @Test func menuOffersSkinTracesThenWindowLight() {
-        #expect(TraceStyle.allCases.map(\.title) == ["Skin Traces", "Window Light"])
+    @Test func menuOffersSkinTracesWithAndWithoutTheGlowThenWindowLight() {
+        #expect(TraceStyle.allCases.map(\.title) == ["Skin Traces", "Skin Traces, No Head Glow", "Window Light"])
     }
 
     @Test func onlySubagentsWorkingIsSubagentsOnly() {

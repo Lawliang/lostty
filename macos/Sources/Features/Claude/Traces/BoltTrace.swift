@@ -31,7 +31,8 @@ struct BoltTrace: TraceRenderer {
         ctx.stroke(bolt, with: .color(Color.white.opacity(0.95 * flicker)), style: StrokeStyle(lineWidth: 2.2, lineJoin: .bevel))
         glow.stroke(forks, with: .color(colors.head.opacity(0.8 * flicker)), lineWidth: 4)
         ctx.stroke(forks, with: .color(Color.white.opacity(0.7 * flicker)), lineWidth: 1.2)
-        TraceDraw.flare(&ctx, path.sample(at: frame.head), time: time, colors: colors, intensity: flicker, scale: 1.1)
+        TraceDraw.flare(&ctx, path.sample(at: frame.head), time: time, colors: colors, intensity: flicker, scale: 1.1,
+                       glow: frame.headGlow)
     }
 }
 #endif
