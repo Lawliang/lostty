@@ -1,5 +1,6 @@
 #if os(macOS)
 import Foundation
+import OSLog
 
 /// What a finished program printed and how it exited.
 struct ProcessResult: Equatable, Sendable {
@@ -19,6 +20,8 @@ struct ProcessResult: Equatable, Sendable {
 /// a thread, so the readers would never run and every call would time out.
 /// Private serial queues are overcommit and always get a thread.
 enum ProcessRunner {
+    private static let logger = Logger(subsystem: "com.lawliang.lostty", category: "process")
+
     /// nil when the program can't start or runs past `timeout`. `onStart`
     /// gets the pid, so a caller can kill a run it no longer wants.
     /// `environment` is added to Lostty's own, or with `inheritEnvironment`
@@ -32,6 +35,20 @@ enum ProcessRunner {
         stdin: String? = nil,
         timeout: TimeInterval,
         onStart: ((Int32) -> Void)? = nil
+    ) -> ProcessResult? {
+        // Its own autorelease pool: Foundation autoreleases the pipes' file
+        // handles, which close only when a pool drains, and a caller on a
+        // thread that never returns to its pool would leak them.
+        autoreleasepool {
+            launch(executable, args, cwd: cwd, environment: environment, inheritEnvironment: inheritEnvironment,
+                   stdin: stdin, timeout: timeout, onStart: onStart)
+        }
+    }
+
+    // swiftlint:disable:next function_parameter_count
+    private static func launch(
+        _ executable: String, _ args: [String], cwd: String?, environment: [String: String],
+        inheritEnvironment: Bool, stdin: String?, timeout: TimeInterval, onStart: ((Int32) -> Void)?
     ) -> ProcessResult? {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executable)
@@ -67,6 +84,7 @@ enum ProcessRunner {
         do {
             try process.run()
         } catch {
+            logger.error("couldn't start \(executable, privacy: .public): \(error, privacy: .public)")
             return nil
         }
         onStart?(process.processIdentifier)

@@ -1,6 +1,7 @@
 #if os(macOS)
 import Foundation
 import LosttyRemote
+import OSLog
 
 /// Runs `tmux -L lostty …` synchronously. Each call takes a few
 /// milliseconds; run it off the main thread except where a decision is
@@ -14,6 +15,8 @@ struct TmuxClient {
     /// How long a call may take before Lostty gives up on it: a hung tmux
     /// must not freeze closing a pane or quitting.
     var timeout: TimeInterval = 2
+
+    private static let logger = Logger(subsystem: "com.lawliang.lostty", category: "tmux")
 
     static func locate(
         path: String? = ProcessInfo.processInfo.environment["PATH"],
@@ -39,7 +42,16 @@ struct TmuxClient {
     }
 
     /// stdout of `executable <arguments>` when it exits 0 within `timeout`.
+    ///
+    /// In its own autorelease pool: Foundation autoreleases the pipe's file
+    /// handles, and they close only when a pool drains. SessionWatcher's
+    /// thread never returns to its pool, so without this every wait leaked
+    /// a pipe until, past 10,240 open files, no launch could start.
     private func exec(_ executable: String, _ arguments: [String]) -> String? {
+        autoreleasepool { launch(executable, arguments) }
+    }
+
+    private func launch(_ executable: String, _ arguments: [String]) -> String? {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executable)
         process.arguments = arguments
@@ -51,6 +63,7 @@ struct TmuxClient {
         do {
             try process.run()
         } catch {
+            Self.logger.error("couldn't start \(executable, privacy: .public): \(error, privacy: .public)")
             return nil
         }
 

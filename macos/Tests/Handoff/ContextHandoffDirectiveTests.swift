@@ -7,7 +7,7 @@ import Testing
 struct ContextHandoffDirectiveTests {
     @Test func theLimitDirectiveCarriesTheNumbersAndTheFormat() {
         let text = ContextHandoffDirective.text(level: .limit, used: 312_400, limit: 300_000, ceiling: 400_000,
-                                                byButton: false, problem: nil)
+                                                byButton: false, problem: nil, file: "/tmp/pane.handoff.md")
         #expect(text.contains("312k"))
         #expect(text.contains("300k"))
         #expect(text.contains("next clean break"))
@@ -16,9 +16,16 @@ struct ContextHandoffDirectiveTests {
         #expect(text.count < 4_000)
     }
 
+    @Test func theDirectiveNamesTheHandoffFile() {
+        let text = ContextHandoffDirective.text(level: .limit, used: 312_400, limit: 300_000, ceiling: 400_000,
+                                                byButton: false, problem: nil, file: "/tmp/pane.handoff.md")
+        #expect(text.contains("/tmp/pane.handoff.md"))
+        #expect(text.contains("Write tool"))
+    }
+
     @Test func theCeilingDirectiveSaysThisTurn() {
         let text = ContextHandoffDirective.text(level: .ceiling, used: 401_000, limit: 300_000, ceiling: 400_000,
-                                                byButton: false, problem: nil)
+                                                byButton: false, problem: nil, file: "/tmp/pane.handoff.md")
         #expect(text.contains("end of this turn"))
         #expect(text.contains("400k"))
         #expect(text.count < 4_000)
@@ -26,14 +33,14 @@ struct ContextHandoffDirectiveTests {
 
     @Test func theButtonDirectiveSaysTheUserAsked() {
         let text = ContextHandoffDirective.text(level: .limit, used: 150_000, limit: 300_000, ceiling: 400_000,
-                                                byButton: true, problem: nil)
+                                                byButton: true, problem: nil, file: "/tmp/pane.handoff.md")
         #expect(text.contains("The user asked"))
         #expect(!text.contains("300k"))
     }
 
     @Test func aProblemLeadsTheDirective() {
         let text = ContextHandoffDirective.text(level: .limit, used: 320_000, limit: 300_000, ceiling: 400_000,
-                                                byButton: false, problem: "Your handoff had no 'Active workflow'.")
+                                                byButton: false, problem: "Your handoff had no 'Active workflow'.", file: "/tmp/pane.handoff.md")
         #expect(text.hasPrefix("Lostty: Your handoff had no 'Active workflow'."))
     }
 

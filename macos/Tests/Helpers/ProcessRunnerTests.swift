@@ -58,5 +58,29 @@ struct ProcessRunnerTests {
             "/usr/bin/env", [], environment: ["ONLY": "1"], inheritEnvironment: false, timeout: 5))
         #expect(result.stdout == "ONLY=1\n")
     }
+
+    /// SessionWatcher's thread never returns to its autorelease pool; a run
+    /// there mustn't leave its pipes open.
+    @Test func closesItsPipesOnAThreadThatNeverDrains() async {
+        let grown = await openFilesGrowth { _ = ProcessRunner.run("/usr/bin/true", [], timeout: 5) }
+        #expect(grown < 20)
+    }
+}
+
+/// How many more files are open after `body` runs 50 times on a thread
+/// whose autorelease pool doesn't drain until it ends. Other tests running
+/// at the same time can open a few.
+func openFilesGrowth(_ body: @escaping @Sendable () -> Void) async -> Int {
+    await withCheckedContinuation { done in
+        Thread {
+            let before = openFiles()
+            for _ in 0..<50 { body() }
+            done.resume(returning: openFiles() - before)
+        }.start()
+    }
+}
+
+private func openFiles() -> Int {
+    (0..<getdtablesize()).filter { fcntl($0, F_GETFD) != -1 }.count
 }
 #endif

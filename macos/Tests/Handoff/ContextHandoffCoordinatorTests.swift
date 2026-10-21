@@ -120,6 +120,49 @@ struct ContextHandoffCoordinatorTests {
         #expect(saved.count == 1)
     }
 
+    @Test func theHandoffFileIsTakenOverTheReply() throws {
+        let c = make()
+        c.contextChanged(pane, used: 312_000, size: 1_000_000)
+        try FileManager.default.createDirectory(at: store.panes, withIntermediateDirectories: true)
+        try "## Where we are\nFrom the file.\n## Active workflow\nnone\n## Next\ncontinue\n"
+            .write(to: store.handoffFile(pane), atomically: true, encoding: .utf8)
+        c.signal(pane, .stopped(transcript: "/t1"))
+        #expect(c.panes[pane]?.phase == .pending)
+        #expect(c.countdowns[pane]?.summary == "From the file.")
+        #expect(!FileManager.default.fileExists(atPath: store.handoffFile(pane).path))
+        runPending()
+        #expect(world.typed.first?.1 == [.text("/clear"), .enter])
+        #expect(c.countdowns[pane] == nil)
+    }
+
+    @Test func theCountdownRunsFiveSecondsBeforeTheClear() {
+        let c = make()
+        c.contextChanged(pane, used: 312_000, size: 1_000_000)
+        world.replies["/t1"] = handoff
+        c.signal(pane, .stopped(transcript: "/t1"))
+        #expect(world.pending.last?.delay == 5)
+        let countdown = c.countdowns[pane]
+        #expect(countdown?.seconds == 5)
+        #expect(countdown?.summary == "Quit item committed.")
+    }
+
+    @Test func skipKeepsTheConversationAndAsksAgainAtTheNextBreak() throws {
+        let c = make()
+        c.contextChanged(pane, used: 312_000, size: 1_000_000)
+        world.replies["/t1"] = handoff
+        c.signal(pane, .stopped(transcript: "/t1"))
+        c.skip(pane)
+        #expect(c.countdowns[pane] == nil)
+        runPending()
+        #expect(world.typed.isEmpty)
+        #expect(c.panes[pane]?.phase == .armed)
+        #expect(try String(contentsOf: sayFile, encoding: .utf8).contains("next clean break"))
+        // The next clean break hands off again.
+        world.replies["/t2"] = handoff
+        c.signal(pane, .stopped(transcript: "/t2"))
+        #expect(c.panes[pane]?.phase == .pending)
+    }
+
     @Test func typingDuringTheGraceCancels() {
         let c = make()
         c.contextChanged(pane, used: 312_000, size: 1_000_000)
@@ -364,6 +407,23 @@ struct ContextHandoffCoordinatorTests {
         world.pending.removeAll { $0.delay == ContextHandoffCoordinator.freshTimeout }
         runPending()
         #expect(world.typed.last?.1 == [.text(ContextHandoffDirective.continueLine(.wait)), .enter])
+    }
+}
+
+struct ContextHandoffCountdownTests {
+    let countdown = ContextHandoffCountdown(start: Date(timeIntervalSince1970: 100), seconds: 5, summary: "")
+
+    @Test func theBarEmptiesOverTheCountdown() {
+        #expect(countdown.remaining(at: Date(timeIntervalSince1970: 100)) == 1)
+        #expect(countdown.remaining(at: Date(timeIntervalSince1970: 102.5)) == 0.5)
+        #expect(countdown.remaining(at: Date(timeIntervalSince1970: 109)) == 0)
+    }
+
+    @Test func theSecondsCountDownFromFiveAndNeverShowZero() {
+        #expect(countdown.secondsLeft(at: Date(timeIntervalSince1970: 100)) == 5)
+        #expect(countdown.secondsLeft(at: Date(timeIntervalSince1970: 100.2)) == 5)
+        #expect(countdown.secondsLeft(at: Date(timeIntervalSince1970: 104.5)) == 1)
+        #expect(countdown.secondsLeft(at: Date(timeIntervalSince1970: 106)) == 1)
     }
 }
 #endif
