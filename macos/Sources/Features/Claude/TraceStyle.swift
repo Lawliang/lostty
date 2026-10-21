@@ -2,10 +2,11 @@
 import AppKit
 
 /// How the Claude trace looks while Claude works: each pane's own skin
-/// trace, or the website's light circling each working pane (WindowTrace).
+/// trace, the same without the glowing circle at its head, or the
+/// website's light circling each working pane (WindowTrace).
 /// Saved in user defaults and set from Lostty → Claude Trace Style.
 enum TraceStyle: String, CaseIterable {
-    case skin, window
+    case skin, skinNoGlow, window
 
     static let defaultsKey = "LosttyTraceStyle"
     /// What a new Lostty shows until the person picks another.
@@ -14,6 +15,7 @@ enum TraceStyle: String, CaseIterable {
     var title: String {
         switch self {
         case .skin: "Skin Traces"
+        case .skinNoGlow: "Skin Traces, No Head Glow"
         case .window: "Window Light"
         }
     }
