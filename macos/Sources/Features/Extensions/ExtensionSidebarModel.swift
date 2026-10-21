@@ -70,6 +70,8 @@ final class ExtensionSidebarModel: ObservableObject {
     @Published var chromeColor: NSColor?
     /// The bottom bar shows the apps in place of Claude's usage.
     @Published private(set) var showsApps = false
+    /// A new window's "what's it for?" question, over everything in it.
+    @Published var newWindowPrompt: NewWindowPrompt?
 
     /// Gives keyboard focus back to the window's focused pane. Set by the
     /// window's controller.

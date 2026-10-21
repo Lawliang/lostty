@@ -86,6 +86,11 @@ struct TerminalView<ViewModel: TerminalViewModel>: View {
                 // and the usage bar alike.
                 ClaudeReadyOverlay(surfaces: Array(viewModel.surfaceTree))
 
+                // Lostty: a new window's "what's it for?", over it all.
+                if let extensionSidebar {
+                    NewWindowPromptOverlay(sidebar: extensionSidebar)
+                }
+
                 if let surfaceView = lastFocusedSurface?.value {
                     TerminalCommandPaletteView(
                         surfaceView: surfaceView,

@@ -227,6 +227,15 @@ extension Ghostty {
         var surface: ghostty_surface_t? {
             surfaceModel?.unsafeCValue
         }
+
+        /// Lostty: frees the engine's surface (ending its shell) while this
+        /// view lives on. The engine may message a surface until it's freed,
+        /// through this view, so a view dropped first can be messaged dead;
+        /// a caller retiring a pane outside the split tree's own closing
+        /// calls this, then holds the view a moment longer.
+        func releaseSurface() {
+            surfaceModel = nil
+        }
         /// Current scrollbar state, cached here for persistence across rebuilds
         /// of the SwiftUI view hierarchy, for example when changing splits
         var scrollbar: Ghostty.Action.Scrollbar?

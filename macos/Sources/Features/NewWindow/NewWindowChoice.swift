@@ -1,85 +1,46 @@
 #if os(macOS)
 import AppKit
 
-/// ⌘N from a terminal inside a git repo asks what the new window is for,
-/// since windows in one folder share its branch (switching it in one
-/// switches it in all): continuing on this branch (the same folder, as
-/// before), a new branch in a worktree of its own, or a new project
-/// (starting at home). Outside a repo, ⌘N just opens the window.
+/// ⌘N from a terminal inside a git repo opens the window at once, asking
+/// over it what it's for (`NewWindowPrompt`), since windows in one folder
+/// share its branch (switching it in one switches it in all): continuing
+/// on this branch (the same folder, as before), a new branch in a worktree
+/// of its own, or a new project (starting at home). Outside a repo, ⌘N
+/// just opens the window.
 @MainActor
 enum NewWindowChoice {
-    enum Choice { case continueHere, newBranch, newProject }
-
-    /// Opens a new window starting from `config`'s folder, asking first when
-    /// that folder is in a repo.
     static func newWindow(_ ghostty: Ghostty.App, config: Ghostty.SurfaceConfiguration?) {
-        guard let pwd = config?.workingDirectory, let repo = NewWindowRepo.read(pwd: pwd) else {
-            _ = TerminalController.newWindow(ghostty, withBaseConfig: config)
-            return
-        }
-        switch ask(repo) {
-        case .continueHere:
-            _ = TerminalController.newWindow(ghostty, withBaseConfig: config)
-        case .newProject:
-            var home = config ?? Ghostty.SurfaceConfiguration()
-            home.workingDirectory = NSHomeDirectory()
-            _ = TerminalController.newWindow(ghostty, withBaseConfig: home)
-        case .newBranch:
-            guard let branch = askBranch(repo) else { return }
-            Task {
-                // Off the main thread: checking out a big repo takes a moment.
-                let made = await Task.detached { NewWindowRepo.addWorktree(repo, branch: branch) }.value
-                switch made {
-                case .success(let path):
-                    var there = config ?? Ghostty.SurfaceConfiguration()
-                    there.workingDirectory = path
-                    _ = TerminalController.newWindow(ghostty, withBaseConfig: there)
-                case .failure(let error):
-                    let alert = NSAlert()
-                    alert.messageText = "Couldn't make the worktree"
-                    alert.informativeText = error.message
-                    alert.runModal()
-                }
+        let controller = TerminalController.newWindow(ghostty, withBaseConfig: config)
+        guard let pwd = config?.workingDirectory, let repo = NewWindowRepo.read(pwd: pwd),
+              let window = controller.window as? TerminalWindow else { return }
+        let sidebar = window.extensionSidebarModel
+        sidebar.newWindowPrompt = NewWindowPrompt(repo: repo, window: window) { [weak controller, weak sidebar] folder in
+            sidebar?.newWindowPrompt = nil
+            guard let controller else { return }
+            if let folder {
+                restart(controller, in: folder, config: config)
+            } else if let surface = controller.focusedSurface {
+                Ghostty.moveFocus(to: surface)
             }
-        case nil:
-            return
         }
     }
 
-    /// The question; nil when cancelled.
-    private static func ask(_ repo: NewWindowRepo) -> Choice? {
-        let alert = NSAlert()
-        alert.messageText = "What's this window for?"
-        let on = repo.branch.map { " on \($0)" } ?? ""
-        alert.informativeText = "This terminal is in \(repo.name)\(on). Windows in the same folder share its "
-            + "branch: switching it in one switches it in all of them."
-        alert.addButton(withTitle: repo.branch.map { "Continue on \($0)" } ?? "Continue Here")
-        alert.addButton(withTitle: "New Branch and Worktree…")
-        alert.addButton(withTitle: "New Project")
-        alert.addButton(withTitle: "Cancel")
-        switch alert.runModal() {
-        case .alertFirstButtonReturn: return .continueHere
-        case .alertSecondButtonReturn: return .newBranch
-        case .alertThirdButtonReturn: return .newProject
-        default: return nil
-        }
-    }
-
-    /// The new branch's name; nil when cancelled or left empty.
-    private static func askBranch(_ repo: NewWindowRepo) -> String? {
-        let alert = NSAlert()
-        alert.messageText = "New branch in its own worktree"
-        let from = repo.branch.map { "Starts from \($0), in" } ?? "Starts here, in"
-        alert.informativeText = "\(from) \(repo.name)/\(NewWindowRepo.worktrees). Other windows stay on their branches."
-        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 24))
-        field.placeholderString = "branch-name"
-        alert.accessoryView = field
-        alert.addButton(withTitle: "Create")
-        alert.addButton(withTitle: "Cancel")
-        alert.window.initialFirstResponder = field
-        guard alert.runModal() == .alertFirstButtonReturn else { return nil }
-        let name = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        return name.isEmpty ? nil : name
+    /// The window's terminal starts over in `folder`; the first one's shell
+    /// (and its tmux session) ends.
+    private static func restart(_ controller: TerminalController, in folder: String, config: Ghostty.SurfaceConfiguration?) {
+        guard let app = controller.ghostty.app else { return }
+        var there = config ?? Ghostty.SurfaceConfiguration()
+        there.workingDirectory = folder
+        let surface = Ghostty.SurfaceView(app, baseConfig: there)
+        let old = Array(controller.surfaceTree)
+        controller.surfaceTree = .init(view: surface)
+        controller.focusedSurface = surface
+        DispatchQueue.main.async { Ghostty.moveFocus(to: surface) }
+        // The engine may still message the first terminal (its pointer, its
+        // title) until its surface is freed, and it messages it through the
+        // view: free the surface first, and the view once that's done.
+        for view in old { view.releaseSurface() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { withExtendedLifetime(old) {} }
     }
 }
 
