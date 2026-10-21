@@ -157,6 +157,13 @@ final class TmuxClientTests {
         #expect(client.run(["list-sessions"]) == nil)
     }
 
+    /// SessionWatcher calls it on a thread that never returns to its
+    /// autorelease pool: each call must still close its pipe.
+    @Test func runClosesItsPipeOnAThreadThatNeverDrains() async {
+        let grown = await openFilesGrowth { _ = TmuxClient(tmuxPath: "/usr/bin/true").run([]) }
+        #expect(grown < 20)
+    }
+
     /// A stand-in tmux that lists `sessions` (4 columns) and appends every
     /// other call's arguments to `log`.
     private func loggingTmux(sessions: String, log: URL) throws -> TmuxClient {
