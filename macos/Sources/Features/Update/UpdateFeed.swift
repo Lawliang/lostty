@@ -24,14 +24,17 @@ enum UpdateFeed {
         var downloads: Bool
     }
 
-    /// No feed: never check. A feed: check daily and ask first, unless the
-    /// `auto-update` config says otherwise.
-    static func schedule(hasFeed: Bool, autoUpdate: Ghostty.Config.AutoUpdate?) -> Schedule {
+    /// No feed: never check. A feed: check daily, and download in the
+    /// background or ask first as Settings says, unless the `auto-update`
+    /// config says otherwise.
+    static func schedule(hasFeed: Bool, autoUpdate: Ghostty.Config.AutoUpdate?,
+                         installsAutomatically: Bool) -> Schedule {
         guard hasFeed else { return Schedule(checks: false, downloads: false) }
         switch autoUpdate {
         case .off: return Schedule(checks: false, downloads: false)
         case .download: return Schedule(checks: true, downloads: true)
-        case .check, nil: return Schedule(checks: true, downloads: false)
+        case .check: return Schedule(checks: true, downloads: false)
+        case nil: return Schedule(checks: true, downloads: installsAutomatically)
         }
     }
 

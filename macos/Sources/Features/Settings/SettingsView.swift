@@ -7,6 +7,9 @@ struct SettingsView: View {
     @ObservedObject var observer: ObserverPreferences
     @ObservedObject var handoff: ContextHandoffPreferences
     @ObservedObject var font: TerminalFontPreferences
+    @ObservedObject var updates: UpdatePreferences
+    /// A build made on this Mac updates with install.sh, not the updater.
+    var hasUpdateFeed = UpdateFeed.current != nil
     /// The Mascot section is for the beta, the only build with the mascot.
     var showsMascot = LosttyChannel.current.showsMascot
 
@@ -35,6 +38,17 @@ struct SettingsView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+                }
+                Section("Updates") {
+                    Toggle("Install updates automatically", isOn: $updates.installsAutomatically)
+                        .disabled(!hasUpdateFeed)
+                    Text(hasUpdateFeed
+                         ? "Lostty downloads each update in the background and offers Restart to Update, "
+                            + "which keeps your terminals open. Off, it asks before downloading. "
+                            + "auto-update in the config file, when set, wins."
+                         : UpdateFeed.localBuildMessage)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
             .formStyle(.grouped)
@@ -142,7 +156,8 @@ struct SettingsView_Previews: PreviewProvider {
         SettingsView(
             observer: ObserverPreferences(defaults: UserDefaults(suiteName: "preview")!),
             handoff: ContextHandoffPreferences(defaults: UserDefaults(suiteName: "preview")!),
-            font: TerminalFontPreferences(configURL: { nil }, reloadConfig: {}))
+            font: TerminalFontPreferences(configURL: { nil }, reloadConfig: {}),
+            updates: UpdatePreferences(defaults: UserDefaults(suiteName: "preview")!))
     }
 }
 #endif

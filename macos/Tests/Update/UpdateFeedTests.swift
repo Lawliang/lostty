@@ -31,19 +31,29 @@ struct UpdateFeedTests {
 
     @Test func noFeedNeverChecks() {
         for setting: Ghostty.Config.AutoUpdate? in [nil, .off, .check, .download] {
-            #expect(UpdateFeed.schedule(hasFeed: false, autoUpdate: setting)
-                == UpdateFeed.Schedule(checks: false, downloads: false))
+            for automatic in [true, false] {
+                #expect(UpdateFeed.schedule(hasFeed: false, autoUpdate: setting, installsAutomatically: automatic)
+                    == UpdateFeed.Schedule(checks: false, downloads: false))
+            }
         }
     }
 
-    @Test func aFeedChecksAndAsksFirst() {
-        #expect(UpdateFeed.schedule(hasFeed: true, autoUpdate: nil) == UpdateFeed.Schedule(checks: true, downloads: false))
-        #expect(UpdateFeed.schedule(hasFeed: true, autoUpdate: .check) == UpdateFeed.Schedule(checks: true, downloads: false))
+    @Test func aFeedChecksAndDownloadsAsSettingsSays() {
+        #expect(UpdateFeed.schedule(hasFeed: true, autoUpdate: nil, installsAutomatically: true)
+            == UpdateFeed.Schedule(checks: true, downloads: true))
+        #expect(UpdateFeed.schedule(hasFeed: true, autoUpdate: nil, installsAutomatically: false)
+            == UpdateFeed.Schedule(checks: true, downloads: false))
     }
 
     @Test func theAutoUpdateSettingStillWins() {
-        #expect(UpdateFeed.schedule(hasFeed: true, autoUpdate: .off) == UpdateFeed.Schedule(checks: false, downloads: false))
-        #expect(UpdateFeed.schedule(hasFeed: true, autoUpdate: .download) == UpdateFeed.Schedule(checks: true, downloads: true))
+        for automatic in [true, false] {
+            #expect(UpdateFeed.schedule(hasFeed: true, autoUpdate: .check, installsAutomatically: automatic)
+                == UpdateFeed.Schedule(checks: true, downloads: false))
+            #expect(UpdateFeed.schedule(hasFeed: true, autoUpdate: .off, installsAutomatically: automatic)
+                == UpdateFeed.Schedule(checks: false, downloads: false))
+            #expect(UpdateFeed.schedule(hasFeed: true, autoUpdate: .download, installsAutomatically: automatic)
+                == UpdateFeed.Schedule(checks: true, downloads: true))
+        }
     }
 
     @Test func checkingOnALocalBuildExplainsWhy() {

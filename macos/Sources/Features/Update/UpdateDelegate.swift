@@ -17,10 +17,16 @@ extension UpdateDriver: SPUUpdaterDelegate {
     func updater(_ updater: SPUUpdater, willInstallUpdateOnQuit item: SUAppcastItem, immediateInstallationBlock immediateInstallHandler: @escaping () -> Void) -> Bool {
         viewModel.state = .installing(.init(
             isAutoUpdate: true,
-            retryTerminatingApplication: immediateInstallHandler,
+            // Lostty: installing now relaunches the app, so the quit keeps
+            // every session (LosttyRestart), as Restart to Update's does.
+            retryTerminatingApplication: {
+                MainActor.assumeIsolated { LosttyRestart.restart(reason: .sparkle) }
+                immediateInstallHandler()
+            },
             dismiss: { [weak viewModel] in
                 viewModel?.state = .idle
-            }
+            },
+            appcastItem: item
         ))
         return true
     }

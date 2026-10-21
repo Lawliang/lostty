@@ -42,12 +42,14 @@ export PATH="$(brew --prefix zig@0.15)/bin:$PATH"
 ENGINE_VERSION="$(sed -n 's/^ *\.version = "\(.*\)",$/\1/p' build.zig.zon)-dev+$(git rev-parse --short HEAD)"
 zig build -Demit-macos-app=false -Doptimize=ReleaseFast -Dversion-string="$ENGINE_VERSION"
 mkdir -p macos/build
+# The commit goes in the app, so the What's New card knows each build.
+COMMIT=$(git rev-parse --short HEAD)
 # The scheme turns code coverage on for every build. An instrumented Lostty
 # drops a default.profraw wherever its Claude hooks run, so switch it off.
 env -i HOME="$HOME" PATH=/usr/bin:/bin:/usr/sbin:/sbin \
   xcodebuild -project macos/Lostty.xcodeproj -scheme Lostty -configuration ReleaseLocal \
   SYMROOT="$PWD/macos/build" ENABLE_CODE_COVERAGE=NO CLANG_COVERAGE_MAPPING=NO \
-  "$@" build > macos/build/last-install.log 2>&1 || true
+  LOSTTY_BUILD_COMMIT="$COMMIT" "$@" build > macos/build/last-install.log 2>&1 || true
 grep -q "\*\* BUILD SUCCEEDED \*\*" macos/build/last-install.log || {
   tail -20 macos/build/last-install.log
   echo "Build failed; see macos/build/last-install.log" >&2
@@ -59,7 +61,16 @@ WANT=""; [ "$CHANNEL" = beta ] && WANT=beta
   echo "The build isn't the $CHANNEL channel; see macos/build/last-install.log" >&2
   exit 1
 }
-if [ -e "$APP" ] && codesign -dv "$APP" >/dev/null 2>&1; then
+# What's new since the build this replaces, for the What's New card when
+# WhatsNew.md hasn't changed: its commits (none on a first install). Before
+# signing: a file added to the app after would break its signature.
+PREV=$(/usr/libexec/PlistBuddy -c 'Print :LosttyBuildCommit' /Applications/Lostty.app/Contents/Info.plist 2>/dev/null || true)
+rm -f "$APP/Contents/Resources/BuildNotes.md"
+if [ -n "$PREV" ] && [ "$PREV" != "$COMMIT" ] && git merge-base --is-ancestor "$PREV" HEAD 2>/dev/null; then
+  git log --no-merges --format=%s "$PREV..HEAD" | python3 -I macos/release_helper.py notes \
+    > "$APP/Contents/Resources/BuildNotes.md"
+fi
+if [ -e "$APP" ] && codesign --verify --deep --strict "$APP" >/dev/null 2>&1; then
   echo "$APP is already signed by the build; not re-signing."
 else
   echo "$APP is unsigned or invalid; ad-hoc signing (preserving entitlements/flags)."

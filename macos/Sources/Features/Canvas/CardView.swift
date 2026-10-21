@@ -143,7 +143,8 @@ struct CardTerminal: View {
     let card: CardController
 
     var body: some View {
-        TerminalView(ghostty: card.ghostty, viewModel: card, delegate: card, extensionSidebar: card.sidebar)
+        TerminalView(
+            ghostty: card.ghostty, viewModel: card, delegate: card, extensionSidebar: card.sidebar, showsWhatsNew: false)
             .environment(\.splitDragChanged) { [weak card] dragging in card?.holdGrids(dragging) }
     }
 }
