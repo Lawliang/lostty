@@ -402,6 +402,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     /// The app saves its restorable state (and the canvas with it) soon.
     func saveSoon() {
         NSApp.invalidateRestorableState()
+        LastSessionStore.shared.noteChange()
     }
 
     // MARK: NSWindowDelegate

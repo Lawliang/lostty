@@ -394,6 +394,9 @@ class AppDelegate: NSObject,
         // (Claude's state, Stay Awake, the window setting, hooks). Before
         // Stay Awake's crash restore, the hooks check and the Claude sync.
         LosttyRestart.resumeIfRestarted()
+        // After the Mac restarts (or a quit): "Continue your last session?";
+        // then the session is kept up to date for next time.
+        SessionRestore.offerAtLaunch(ghostty)
         // Lostty Mobile: put back power settings a crashed Lostty left
         // changed, then the menu bar icon (Stay Awake for Phone).
         StayAwakeStore.shared.start()
@@ -488,8 +491,9 @@ class AppDelegate: NSObject,
             // is possible to have other windows in a few scenarios:
             //   - if we're opening a URL since `application(_:openFile:)` is called before this.
             //   - if we're restoring from persisted state
+            // Lostty: not while "Continue your last session?" is up.
             if TerminalController.all.isEmpty && CanvasController.shared?.window?.isVisible != true
-                && derivedConfig.initialWindow {
+                && derivedConfig.initialWindow && !SessionRestore.offers {
                 undoManager.disableUndoRegistration()
                 _ = TerminalController.newWindow(ghostty)
                 undoManager.enableUndoRegistration()
@@ -604,6 +608,9 @@ class AppDelegate: NSObject,
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        // Lostty: the session as it is, for "Continue your last session?".
+        LastSessionStore.shared.saveForQuit()
+
         // We have no notifications we want to persist after death,
         // so remove them all now. In the future we may want to be
         // more selective and only remove surface-targeted notifications.
@@ -1060,7 +1067,7 @@ class AppDelegate: NSObject,
         // Restart to Update it comes back from Lostty's own snapshot
         // (WindowSnapshot), not twice.
         if ghostty.config.windowSaveState != "never", LosttyChannel.current.hasCanvas,
-           !LosttyRestart.restoresFromSnapshot,
+           !LosttyRestart.restoresFromSnapshot, !SessionRestore.offers,
            let state = CanvasRestorableState(coder: coder) {
             CanvasController.restore(ghostty, state: state)
         }

@@ -104,8 +104,9 @@ class TerminalWindowRestoration: NSObject, NSWindowRestoration {
         }
 
         // Lostty: after Restart to Update the windows come back from its own
-        // snapshot (WindowSnapshot), not twice.
-        if LosttyRestart.restoresFromSnapshot {
+        // snapshot (WindowSnapshot), not twice; after the Mac restarts, from
+        // the last session if you Continue (SessionRestore).
+        if LosttyRestart.restoresFromSnapshot || SessionRestore.offers {
             completionHandler(nil, nil)
             return
         }
