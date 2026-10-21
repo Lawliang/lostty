@@ -46,6 +46,8 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     /// The zoom the terminals last rendered at.
     var settledZoom: CGFloat = 1
     var settleWork: DispatchWorkItem?
+    /// The glide to a card under way (CanvasController+Glide).
+    var glide: CanvasGlide?
     var waits = CanvasWaits()
     /// The view to show when the window first opens (a restored canvas's).
     var pendingView: (center: CGPoint, zoom: CGFloat)?
@@ -145,6 +147,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         // smooth, off-main-thread scrolling.)
         eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.magnify]) { [weak self] event in
             guard let self, event.window === window else { return event }
+            stopGlide()
             scrollView.magnify(with: event)
             return nil
         }
@@ -351,7 +354,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         scheduleSettle()
     }
 
-    private func center(on point: CGPoint) {
+    func center(on point: CGPoint) {
         let size = scrollView.contentView.bounds.size
         scrollView.contentView.scroll(to: CGPoint(x: point.x - size.width / 2, y: point.y - size.height / 2))
         scrollView.reflectScrolledClipView(scrollView.contentView)
@@ -368,13 +371,11 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         settleZoom()
     }
 
-    /// ⌃⌘1, double-clicking a header, the green button: `card` centered at
-    /// `zoom` (100%).
+    /// ⌃⌘1, double-clicking a header, the green button: glides to `card`
+    /// centered at `zoom` (100%).
     func zoom(to card: CardController, zoom: CGFloat = 1) {
         guard let frame = model.card(card.id)?.frame else { return }
-        scrollView.magnify(toFit: CanvasZoom.rect(
-            centeredOn: CGPoint(x: frame.midX, y: frame.midY), zoom: zoom, viewport: scrollView.contentSize))
-        settleZoom()
+        glide(to: CanvasView(center: CGPoint(x: frame.midX, y: frame.midY), zoom: zoom))
     }
 
     /// The zoom stopped changing: the terminals re-render at it.
