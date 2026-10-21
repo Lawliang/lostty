@@ -24,12 +24,14 @@ enum ContextHandoffKey: Equatable {
 
 /// Each pane's context handoff (spec §4): arms past the limit or on the
 /// bubble's button, queues the directive for the hooks, takes the agent's
-/// handoff at a turn's end, and after a grace clears the window and starts
-/// the fresh one from it.
+/// handoff at a turn's end (the file it wrote, else its reply's block), and
+/// after a countdown you can skip (`countdowns`) clears the window and
+/// starts the fresh one from it.
 @MainActor
 final class ContextHandoffCoordinator: ObservableObject {
     static let shared = ContextHandoffCoordinator(deps: .live)
-    static let grace: TimeInterval = 3
+    /// The countdown before the window clears: the pane's card shows it.
+    static let grace: TimeInterval = 5
     static let freshTimeout: TimeInterval = 15
     /// After the start hook, before typing: the fresh window settles.
     static let continueDelay: TimeInterval = 1
@@ -56,6 +58,8 @@ final class ContextHandoffCoordinator: ObservableObject {
     @Published private(set) var panes: [UUID: ContextHandoffPane] = [:]
     /// The bubble's last word on a pane: done, or failed.
     @Published private(set) var notes: [UUID: String] = [:]
+    /// Panes counting down to their clear, for the card over the pane.
+    @Published private(set) var countdowns: [UUID: ContextHandoffCountdown] = [:]
 
     private let deps: Dependencies
     /// Each pane's latest conversation file, from its turn ends.
@@ -170,6 +174,8 @@ final class ContextHandoffCoordinator: ObservableObject {
 
     private func arm(_ pane: UUID, level: ContextHandoffLevel, used: Int, size: Int, byButton: Bool) {
         notes[pane] = nil
+        // A handoff file left from before isn't this conversation's.
+        deps.store.removeHandoffFile(pane)
         panes[pane] = ContextHandoffPane(phase: .armed, level: level, byButton: byButton, saidAt: used,
                                          used: used, size: size)
         say(pane, problem: nil)
@@ -183,11 +189,12 @@ final class ContextHandoffCoordinator: ObservableObject {
             level: state.level, used: state.used,
             limit: ContextHandoffPolicy.limit(setting: setting, size: state.size),
             ceiling: ContextHandoffPolicy.ceiling(setting: setting, size: state.size),
-            byButton: state.byButton, problem: problem))
+            byButton: state.byButton, problem: problem, file: deps.store.handoffFile(pane).path))
     }
 
     private func disarm(_ pane: UUID) {
         bump(pane)
+        countdowns[pane] = nil
         nudgeWaiting.remove(pane)
         panes[pane] = nil
         deps.store.removeAll(pane)
@@ -231,6 +238,12 @@ final class ContextHandoffCoordinator: ObservableObject {
         }
     }
 
+    /// The countdown card's Skip: no handoff this time. The agent hands off
+    /// again at its next clean break.
+    func skip(_ pane: UUID) {
+        interrupted(pane)
+    }
+
     /// A key typed in a pane (the app forwards every terminal's).
     func keyTyped(_ pane: UUID) {
         typed.insert(pane)
@@ -246,6 +259,7 @@ final class ContextHandoffCoordinator: ObservableObject {
         nudgeWaiting.remove(pane)
         guard state.phase == .pending else { return }
         bump(pane)
+        countdowns[pane] = nil
         state.phase = .armed
         state.handoff = nil
         state.saidAt = state.used
@@ -260,17 +274,22 @@ final class ContextHandoffCoordinator: ObservableObject {
         conversations[pane] = path
         working.remove(pane)
         guard panes[pane]?.phase == .armed else { return }
+        // The file the directive names; agents told before it, or that
+        // couldn't write it, end their reply with the block instead.
+        if let file = deps.store.takeHandoffFile(pane) {
+            return took(pane, ContextHandoffExtract.parse(file: file))
+        }
         let gen = bump(pane)
         deps.readReply(path) { [weak self] reply in
             guard let self, self.generation[pane] == gen else { return }
-            self.replied(pane, reply ?? "")
+            self.took(pane, ContextHandoffExtract.find(in: reply ?? ""))
         }
     }
 
-    private func replied(_ pane: UUID, _ reply: String) {
+    private func took(_ pane: UUID, _ found: Result<ContextHandoff, ContextHandoffProblem>) {
         // A prompt came in while the reply was read: the agent works again.
         guard var state = panes[pane], state.phase == .armed, !working.contains(pane) else { return }
-        switch ContextHandoffExtract.find(in: reply) {
+        switch found {
         case .success where typed.contains(pane):
             // Your prompt may hold half a message: ask again at the next break.
             notes[pane] = Self.typingNote
@@ -285,6 +304,7 @@ final class ContextHandoffCoordinator: ObservableObject {
                 panes[pane] = state
                 notes[pane] = nil
                 persist(pane)
+                countdowns[pane] = ContextHandoffCountdown(start: deps.now(), seconds: Self.grace, summary: handoff.summary)
                 let gen = bump(pane)
                 deps.schedule(Self.grace) { [weak self] in self?.clear(pane, gen) }
             } catch {
@@ -307,7 +327,9 @@ final class ContextHandoffCoordinator: ObservableObject {
     }
 
     private func clear(_ pane: UUID, _ gen: Int) {
-        guard generation[pane] == gen, var state = panes[pane], state.phase == .pending, !typed.contains(pane),
+        guard generation[pane] == gen else { return }
+        countdowns[pane] = nil
+        guard var state = panes[pane], state.phase == .pending, !typed.contains(pane),
               let path = state.handoff, let text = try? String(contentsOfFile: path, encoding: .utf8) else { return }
         deps.store.removeSay(pane)
         deps.store.writeStart(pane, ContextHandoffDirective.freshStart(handoff: text, path: path, used: state.used))

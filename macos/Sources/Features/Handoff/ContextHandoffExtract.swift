@@ -23,7 +23,9 @@ enum ContextHandoffProblem: Error, Equatable {
     case missing(String)
 }
 
-/// Finds the `<lostty-handoff>` block at the end of an agent's reply.
+/// Reads the agent's handoff: the file the directive names, else (agents
+/// told before the file, or that couldn't write it) the
+/// `<lostty-handoff>` block at the end of its reply.
 enum ContextHandoffExtract {
     static let open = "<lostty-handoff>"
     static let close = "</lostty-handoff>"
@@ -32,10 +34,26 @@ enum ContextHandoffExtract {
     static let placeholder = "(done, with commits"
 
     /// The last block outside a code fence, if it has every required
-    /// section: Where we are, Active workflow, Next (missing = wait), and
-    /// with wait, Open threads.
+    /// section (see `check`).
     static func find(in reply: String) -> Result<ContextHandoff, ContextHandoffProblem> {
         guard let body = lastBlock(reply) else { return .failure(.none) }
+        return check(body)
+    }
+
+    /// A handoff file's text: the sections, with any tag lines dropped.
+    /// An empty file is none.
+    static func parse(file: String) -> Result<ContextHandoff, ContextHandoffProblem> {
+        let body = file.split(separator: "\n", omittingEmptySubsequences: false)
+            .filter { ![open, close].contains($0.trimmingCharacters(in: .whitespaces)) }
+            .joined(separator: "\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !body.isEmpty else { return .failure(.none) }
+        return check(body)
+    }
+
+    /// Every required section: Where we are, Active workflow, Next
+    /// (missing = wait), and with wait, Open threads.
+    private static func check(_ body: String) -> Result<ContextHandoff, ContextHandoffProblem> {
         let sections = sections(body)
         // The directive's own template, echoed back, is no handoff.
         if (sections["Where we are"] ?? "").hasPrefix(placeholder) { return .failure(.none) }

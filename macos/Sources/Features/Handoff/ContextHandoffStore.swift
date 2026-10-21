@@ -25,8 +25,9 @@ struct ContextHandoffPane: Codable, Equatable {
 }
 
 /// Lostty's handoff files under Application Support (spec §3, §4): each
-/// pane's state and the texts its hooks take (`+claude-state`, which reads
-/// `handoff/panes/<PANE>.say` and `.start`), and the saved handoffs.
+/// pane's state, the texts its hooks take (`+claude-state`, which reads
+/// `handoff/panes/<PANE>.say` and `.start`), the handoff file its agent
+/// writes (`.handoff.md`), and the saved handoffs.
 struct ContextHandoffStore: Sendable {
     static let standard = ContextHandoffStore(root: FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent("Library/Application Support/Lostty"))
@@ -52,6 +53,21 @@ struct ContextHandoffStore: Sendable {
     func writeStart(_ pane: UUID, _ text: String) { write(text, to: file(pane, "start")) }
     func removeSay(_ pane: UUID) { try? FileManager.default.removeItem(at: file(pane, "say")) }
 
+    /// Where the directive tells the pane's agent to write its handoff.
+    func handoffFile(_ pane: UUID) -> URL { file(pane, "handoff.md") }
+
+    /// The handoff file's text, removing it (a later handoff is a new
+    /// file, which Claude's Write tool makes without reading first). Nil
+    /// when there is none.
+    func takeHandoffFile(_ pane: UUID) -> String? {
+        let url = handoffFile(pane)
+        guard let text = try? String(contentsOf: url, encoding: .utf8) else { return nil }
+        try? FileManager.default.removeItem(at: url)
+        return text
+    }
+
+    func removeHandoffFile(_ pane: UUID) { try? FileManager.default.removeItem(at: handoffFile(pane)) }
+
     func saveState(_ pane: UUID, _ state: ContextHandoffPane) {
         guard let data = try? JSONEncoder().encode(state) else { return }
         try? FileManager.default.createDirectory(at: panes, withIntermediateDirectories: true)
@@ -70,9 +86,9 @@ struct ContextHandoffStore: Sendable {
         return result
     }
 
-    /// The pane's state and both hook texts.
+    /// The pane's state, both hook texts and any handoff file.
     func removeAll(_ pane: UUID) {
-        for ext in ["json", "say", "start"] { try? FileManager.default.removeItem(at: file(pane, ext)) }
+        for ext in ["json", "say", "start", "handoff.md"] { try? FileManager.default.removeItem(at: file(pane, ext)) }
     }
 
     /// Saves a handoff as `handoffs/<project>/<yyyy-MM-dd HHmm>.md` (with
