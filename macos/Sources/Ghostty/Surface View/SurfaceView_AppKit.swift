@@ -997,9 +997,6 @@ extension Ghostty {
             didSet { if oldValue, !canvasResizeHeld { sizeDidChange(contentSize) } }
         }
 
-        /// Lostty Canvas: whether the scroll gesture under way pans the canvas.
-        private var canvasScrollPans = true
-
         /// Lostty Canvas: the canvas when this pane is on a card.
         private var canvasScrollView: CanvasScrollView? {
             var view = superview
@@ -1238,14 +1235,15 @@ extension Ghostty {
         }
 
         override func scrollWheel(with event: NSEvent) {
-            // Lostty Canvas: scrolling over a pane on a card pans the canvas;
-            // ⌥-scrolling scrolls the pane. Decided as a gesture starts, so
-            // its momentum goes the same way.
+            // Lostty Canvas: scrolling over the focused pane on a card scrolls
+            // it, and over any other pane pans the canvas; ⌥ swaps the two.
+            // Decided as the scroll starts (CanvasScrollView.scrollingPane).
             if let canvas = canvasScrollView {
-                if event.phase.contains(.began) || (event.phase.isEmpty && event.momentumPhase.isEmpty) {
-                    canvasScrollPans = !event.modifierFlags.contains(.option)
+                if CanvasScrollView.startsScroll(event) {
+                    let focused = window?.firstResponder === self
+                    canvas.scrollingPane = focused != event.modifierFlags.contains(.option) ? self : nil
                 }
-                if canvasScrollPans {
+                if canvas.scrollingPane !== self {
                     canvas.scrollWheel(with: event)
                     return
                 }
