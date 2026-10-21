@@ -30,6 +30,10 @@ struct SplitView<L: View, R: View>: View {
     /// The current fractional width of the split view. 0.5 means L/R are equally sized, for example.
     @Binding var split: CGFloat
 
+    /// Lostty Canvas: told when a divider drag starts and ends (or is cancelled).
+    @Environment(\.splitDragChanged) private var splitDragChanged
+    @GestureState private var dragging = false
+
     /// The visible size of the splitter, in points. The invisible size is a transparent hitbox that can still
     /// be used for getting a resize handle. The total width/height of the splitter is the sum of both.
     private let splitterVisibleSize: CGFloat = 1
@@ -59,6 +63,7 @@ struct SplitView<L: View, R: View>: View {
                         split: $split)
                     .position(splitterPoint)
                     .gesture(dragGesture(geo.size, splitterPoint: splitterPoint))
+                    .onChange(of: dragging) { splitDragChanged?($0) }
                     .onTapGesture(count: 2) {
                         onEqualize()
                     }
@@ -89,6 +94,7 @@ struct SplitView<L: View, R: View>: View {
 
     private func dragGesture(_ size: CGSize, splitterPoint: CGPoint) -> some Gesture {
         return DragGesture()
+            .updating($dragging) { _, state, _ in state = true }
             .onChanged { gesture in
                 switch direction {
                 case .horizontal:
@@ -185,4 +191,17 @@ struct SplitView<L: View, R: View>: View {
 
 enum SplitViewDirection: Codable {
     case horizontal, vertical
+}
+
+/// Lostty Canvas: a card holds its panes' grids while one of its split
+/// dividers is dragged, and resizes them on release.
+private struct SplitDragChangedKey: EnvironmentKey {
+    static let defaultValue: ((Bool) -> Void)? = nil
+}
+
+extension EnvironmentValues {
+    var splitDragChanged: ((Bool) -> Void)? {
+        get { self[SplitDragChangedKey.self] }
+        set { self[SplitDragChangedKey.self] = newValue }
+    }
 }

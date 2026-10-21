@@ -140,7 +140,8 @@ struct TerminalCommandPaletteView: View {
 
     /// Commands for jumping to other terminal surfaces.
     private var jumpOptions: [CommandOption] {
-        TerminalController.all.flatMap { controller -> [CommandOption] in
+        let controllers: [BaseTerminalController] = TerminalController.all + CanvasController.allCards
+        return controllers.flatMap { controller -> [CommandOption] in
             guard let window = controller.window else { return [] }
 
             let color = (window as? TerminalWindow)?.tabColor

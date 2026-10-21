@@ -70,6 +70,8 @@ final class ExtensionSidebarModel: ObservableObject {
     @Published var chromeColor: NSColor?
     /// The bottom bar shows the apps in place of Claude's usage.
     @Published private(set) var showsApps = false
+    /// A new window's "what's it for?" question, over everything in it.
+    @Published var newWindowPrompt: NewWindowPrompt?
 
     /// Gives keyboard focus back to the window's focused pane. Set by the
     /// window's controller.
@@ -80,13 +82,14 @@ final class ExtensionSidebarModel: ObservableObject {
 
     /// The extensions this build offers, in sidebar order.
     let available: [LosttyExtension]
-    /// The axolotl in the terminal's corner (beta only).
+    /// The axolotl in the terminal's corner (beta only, and not on canvas
+    /// cards).
     let showsMascot: Bool
 
-    init(branches: BranchesModel? = nil, channel: LosttyChannel = .current) {
+    init(branches: BranchesModel? = nil, channel: LosttyChannel = .current, mascot: Bool = true) {
         self.branches = branches ?? BranchesModel()
         available = LosttyExtension.available(in: channel)
-        showsMascot = channel.showsMascot
+        showsMascot = mascot && channel.showsMascot
     }
 
     /// Clicking an icon opens its extension; clicking the open one closes it.

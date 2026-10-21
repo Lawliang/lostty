@@ -227,6 +227,15 @@ extension Ghostty {
         var surface: ghostty_surface_t? {
             surfaceModel?.unsafeCValue
         }
+
+        /// Lostty: frees the engine's surface (ending its shell) while this
+        /// view lives on. The engine may message a surface until it's freed,
+        /// through this view, so a view dropped first can be messaged dead;
+        /// a caller retiring a pane outside the split tree's own closing
+        /// calls this, then holds the view a moment longer.
+        func releaseSurface() {
+            surfaceModel = nil
+        }
         /// Current scrollbar state, cached here for persistence across rebuilds
         /// of the SwiftUI view hierarchy, for example when changing splits
         var scrollbar: Ghostty.Action.Scrollbar?
@@ -554,6 +563,17 @@ extension Ghostty {
         }
 
         func sizeDidChange(_ size: CGSize) {
+            // Lostty Canvas: mid-zoom or mid-drag, keep the size for when it
+            // settles.
+            if canvasZoomInFlight || canvasResizeHeld {
+                contentSize = size
+                return
+            }
+            if let zoom = canvasZoom, zoom != 1 {
+                contentSize = size
+                canvasSetSize(zoom: zoom)
+                return
+            }
             // Ghostty wants to know the actual framebuffer size... It is very important
             // here that we use "size" and NOT the view frame. If we're in the middle of
             // an animation (i.e. a fullscreen animation), the frame will not yet be updated.
@@ -919,6 +939,9 @@ extension Ghostty {
 
         override func viewDidChangeBackingProperties() {
             super.viewDidChangeBackingProperties()
+            // Lostty Canvas: mid-zoom the compositor scales the old pixels;
+            // canvasZoomDidSettle catches up.
+            guard !canvasZoomInFlight, !canvasResizeHeld else { return }
 
             // The Core Animation compositing engine uses the layer's contentsScale property
             // to determine whether to scale its contents during compositing. When the window
@@ -937,11 +960,19 @@ extension Ghostty {
                 // property changes. Otherwise it will apply a scale animation to the layer
                 // contents which looks pretty janky.
                 CATransaction.setDisableActions(true)
-                layer?.contentsScale = window.backingScaleFactor
+                // Lostty Canvas: on a zoomed canvas a point covers more (or
+                // fewer) pixels than the screen's scale.
+                let backing = convertToBacking(NSRect(x: 0, y: 0, width: 1, height: 1)).width
+                layer?.contentsScale = backing > 0 ? backing : window.backingScaleFactor
                 CATransaction.commit()
             }
 
             guard let surface = self.surface else { return }
+
+            if let zoom = canvasZoom, zoom != 1 {
+                canvasSetSize(zoom: zoom)
+                return
+            }
 
             // Detect our X/Y scale factor so we can update our surface
             let fbFrame = self.convertToBacking(self.frame)
@@ -952,6 +983,103 @@ extension Ghostty {
             // When our scale factor changes, so does our fb size so we send that too
             let scaledSize = self.convertToBacking(contentSize)
             setSurfaceSize(width: UInt32(scaledSize.width), height: UInt32(scaledSize.height))
+        }
+
+        /// Lostty Canvas: true while the canvas's zoom is changing (a pinch):
+        /// the pane keeps its pixels and grid until the zoom settles.
+        var canvasZoomInFlight = false
+
+        /// Lostty Canvas: true while its card's edge or a split divider in it
+        /// is dragged: the pane keeps its grid, its pixels pinned top-left,
+        /// and resizes once on release. (Each resize can leave a copy of the
+        /// shell's prompt in tmux's history.)
+        var canvasResizeHeld = false {
+            didSet { if oldValue, !canvasResizeHeld { sizeDidChange(contentSize) } }
+        }
+
+        /// Lostty Canvas: whether the scroll gesture under way pans the canvas.
+        private var canvasScrollPans = true
+
+        /// Lostty Canvas: the canvas when this pane is on a card.
+        private var canvasScrollView: CanvasScrollView? {
+            var view = superview
+            while let next = view {
+                if let canvas = next as? CanvasScrollView { return canvas }
+                view = next.superview
+            }
+            return nil
+        }
+
+        /// Lostty Canvas: the canvas's zoom when this pane is on a card.
+        private var canvasZoom: CGFloat? { canvasScrollView?.magnification }
+
+        /// Lostty Canvas: sizes the surface at a zoom other than 100% with
+        /// the grid it has at 100%, so zooming never resizes the terminal,
+        /// drawn at the zoom's pixels so the text stays crisp. Cell sizes
+        /// round differently at each scale, so the size moves by whole cells
+        /// to hold the grid, leaving a sliver of background at most. Where
+        /// the grid doesn't quite fit, it draws a little under the zoom's
+        /// scale (the compositor scales it the rest of the way); where the
+        /// font can't shrink enough (far out), at its 100% pixels. The engine
+        /// sizes its pixels from the layer's scale, and sends the shell only
+        /// the final grid (it coalesces resizes).
+        private func canvasSetSize(zoom: CGFloat) {
+            guard let surface, let window, contentSize.width > 0, contentSize.height > 0 else { return }
+            let base = window.backingScaleFactor
+            ghostty_surface_set_content_scale(surface, base, base)
+            ghostty_surface_set_size(surface, UInt32(contentSize.width * base), UInt32(contentSize.height * base))
+            var size = ghostty_surface_size(surface)
+            let grid = (columns: size.columns, rows: size.rows)
+
+            var drawn = base
+            for step in 0..<4 {
+                let scale = base * zoom * (1 - 0.03 * CGFloat(step))
+                guard scale > base * 0.999 || zoom < 1 else { break }
+                if let held = canvasHoldGrid(grid, at: scale) {
+                    size = held
+                    drawn = scale
+                    break
+                }
+            }
+            if drawn == base {
+                ghostty_surface_set_content_scale(surface, base, base)
+                ghostty_surface_set_size(surface, UInt32(contentSize.width * base), UInt32(contentSize.height * base))
+                size = ghostty_surface_size(surface)
+            }
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            layer?.contentsScale = drawn
+            CATransaction.commit()
+            DispatchQueue.main.async { self.surfaceSize = size }
+        }
+
+        /// Draws at `scale` with `grid` if it fits in the pane's pixels there.
+        private func canvasHoldGrid(
+            _ grid: (columns: UInt16, rows: UInt16), at scale: CGFloat
+        ) -> ghostty_surface_size_s? {
+            guard let surface else { return nil }
+            ghostty_surface_set_content_scale(surface, scale, scale)
+            let native = CGSize(width: (contentSize.width * scale).rounded(.down), height: (contentSize.height * scale).rounded(.down))
+            var width = native.width, height = native.height
+            for _ in 0..<3 {
+                ghostty_surface_set_size(surface, UInt32(max(1, width)), UInt32(max(1, height)))
+                let size = ghostty_surface_size(surface)
+                if size.columns == grid.columns, size.rows == grid.rows {
+                    return width <= native.width && height <= native.height ? size : nil
+                }
+                width += CGFloat(Int(grid.columns) - Int(size.columns)) * CGFloat(size.cell_width_px)
+                height += CGFloat(Int(grid.rows) - Int(size.rows)) * CGFloat(size.cell_height_px)
+            }
+            return nil
+        }
+
+        /// Lostty Canvas: the canvas's zoom settled. Its scaled clip view
+        /// already makes this pane's pixels per point the screen's × the
+        /// zoom; re-rasterize at that (crisp text) with the grid unchanged.
+        func canvasZoomDidSettle(_ zoom: CGFloat) {
+            canvasZoomInFlight = false
+            guard window != nil, frame.width > 0, frame.height > 0 else { return }
+            viewDidChangeBackingProperties()
         }
 
         override func mouseDown(with event: NSEvent) {
@@ -1088,7 +1216,7 @@ extension Ghostty {
 
             // Handle focus-follows-mouse
             if let window,
-               let controller = window.windowController as? BaseTerminalController,
+               let controller = terminalController,
                !controller.commandPaletteIsShowing,
                window.isKeyWindow &&
                     !self.focused &&
@@ -1110,6 +1238,18 @@ extension Ghostty {
         }
 
         override func scrollWheel(with event: NSEvent) {
+            // Lostty Canvas: scrolling over a pane on a card pans the canvas;
+            // ⌥-scrolling scrolls the pane. Decided as a gesture starts, so
+            // its momentum goes the same way.
+            if let canvas = canvasScrollView {
+                if event.phase.contains(.began) || (event.phase.isEmpty && event.momentumPhase.isEmpty) {
+                    canvasScrollPans = !event.modifierFlags.contains(.option)
+                }
+                if canvasScrollPans {
+                    canvas.scrollWheel(with: event)
+                    return
+                }
+            }
             guard let surfaceModel else { return }
 
             var x = event.scrollingDeltaX
@@ -1757,8 +1897,6 @@ extension Ghostty {
             content.title = title
             content.subtitle = self.title
             content.body = body
-            // Lostty: the usage bar's mute keeps notifications silent.
-            content.sound = LosttyMute.isMuted() ? nil : UNNotificationSound.default
             content.categoryIdentifier = Ghostty.userNotificationCategory
             content.userInfo = [
                 "surface": self.id.uuidString,

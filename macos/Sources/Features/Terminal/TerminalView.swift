@@ -82,6 +82,11 @@ struct TerminalView<ViewModel: TerminalViewModel>: View {
                     terminalContent
                 }
 
+                // Lostty: a new window's "what's it for?", over it all.
+                if let extensionSidebar {
+                    NewWindowPromptOverlay(sidebar: extensionSidebar)
+                }
+
                 if let surfaceView = lastFocusedSurface?.value {
                     TerminalCommandPaletteView(
                         surfaceView: surfaceView,

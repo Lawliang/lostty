@@ -31,6 +31,10 @@ struct ExtensionSidebarModelTests {
         #expect(try makeModel(channel: .stable).0.showsMascot == false)
     }
 
+    @Test func aCanvasCardHasNoMascot() {
+        #expect(ExtensionSidebarModel(channel: .beta, mascot: false).showsMascot == false)
+    }
+
     @Test func startsWithNothingOpen() throws {
         let (model, _) = try makeModel()
         #expect(model.active == nil)

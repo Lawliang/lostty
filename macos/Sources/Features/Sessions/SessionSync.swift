@@ -40,7 +40,7 @@ final class SessionSync {
         let next = Self.labels(sessions, pid: pid)
         if next != labels {
             labels = next
-            for controller in NSApp.windows.compactMap({ $0.windowController as? BaseTerminalController }) {
+            for controller in BaseTerminalController.everyController {
                 controller.applySessionLabel()
             }
         }

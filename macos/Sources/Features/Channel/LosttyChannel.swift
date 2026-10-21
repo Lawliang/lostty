@@ -28,6 +28,8 @@ enum LosttyChannel: String, Equatable {
     var showsMascot: Bool { isBeta }
     /// Branches in the sidebar.
     var hasBranches: Bool { isBeta }
+    /// The canvas: an infinite whiteboard window of terminal cards.
+    var hasCanvas: Bool { isBeta }
 
     /// The version as the About window shows it: "0.4", or "0.4 beta 2"
     /// for a released beta (`LOSTTY_BETA_NUMBER`).
