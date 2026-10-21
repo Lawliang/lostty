@@ -51,9 +51,18 @@ final class CanvasScrollView: NSScrollView {
 }
 
 /// The canvas itself: the cards are its subviews, framed in document
-/// points, y down. Draws nothing.
+/// points, y down. Draws nothing. Takes the keyboard when no card has it,
+/// so keys go nowhere.
 final class CanvasDocumentView: NSView {
+    /// A click between the cards (CanvasController.canvasClicked).
+    var clicked: (() -> Void)?
+
     override var isFlipped: Bool { true }
+    override var acceptsFirstResponder: Bool { true }
+
+    override func mouseDown(with event: NSEvent) {
+        clicked?()
+    }
 }
 
 /// The Lostty website's background: its paper color and dots, four times

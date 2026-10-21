@@ -1038,8 +1038,11 @@ class AppDelegate: NSObject,
             quickTerminalControllerState = .pendingRestore(state)
         }
 
-        // Lostty Canvas: the canvas's cards, their panes reattaching.
+        // Lostty Canvas: the canvas's cards, their panes reattaching. After
+        // Restart to Update it comes back from Lostty's own snapshot
+        // (WindowSnapshot), not twice.
         if ghostty.config.windowSaveState != "never", LosttyChannel.current.hasCanvas,
+           !LosttyRestart.restoresFromSnapshot,
            let state = CanvasRestorableState(coder: coder) {
             CanvasController.restore(ghostty, state: state)
         }
@@ -1152,8 +1155,13 @@ class AppDelegate: NSObject,
 
     @IBAction func newTab(_ sender: Any?) {
         // Lostty Canvas: on the canvas, New Tab makes a card beside the
-        // focused one, starting where its focused pane is.
-        if let canvas = CanvasController.key, let card = canvas.focusedCard {
+        // focused one, starting where its focused pane is; with none
+        // focused, a card as New Window does.
+        if let canvas = CanvasController.key {
+            guard let card = canvas.focusedCard else {
+                canvas.newCard()
+                return
+            }
             let config = card.focusedSurface?.surface.map {
                 Ghostty.SurfaceConfiguration(from: ghostty_surface_inherited_config($0, GHOSTTY_SURFACE_CONTEXT_TAB))
             }

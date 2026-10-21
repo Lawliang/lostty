@@ -5,7 +5,8 @@ import Foundation
 /// Every terminal window as Restart to Update found it: where each window
 /// was, which windows were tabs of one another and in what order, which tab
 /// was showing, and each tab's splits (each pane keeps its UUID, so its
-/// launcher reattaches to its session). Carried in the `RestartHandoff`;
+/// launcher reattaches to its session); and the canvas, its cards where
+/// they were. Carried in the `RestartHandoff`;
 /// the next Lostty rebuilds the windows from it instead of leaving them to
 /// macOS's window restoration (`LosttyRestart.restoresFromSnapshot`).
 struct WindowSnapshot: Codable, Equatable {
@@ -18,6 +19,16 @@ struct WindowSnapshot: Codable, Equatable {
         var miniaturized: Bool
         /// Each tab's `TerminalRestorableState`, as JSON, in tab order.
         var tabs: [Data]
+        /// Set when this window is the canvas (`tabs` is empty then); nil
+        /// from a build before the canvas was in the snapshot.
+        var canvas: Canvas? = nil
+    }
+
+    /// The canvas window: its cards, its view, shown or hidden.
+    struct Canvas: Codable, Equatable {
+        /// `CanvasRestorableState`, as JSON.
+        var state: Data
+        var fullscreen: Bool
     }
 
     /// Front to back; minimized windows last.
@@ -56,13 +67,21 @@ struct WindowSnapshot: Codable, Equatable {
 
 @MainActor
 extension WindowSnapshot {
-    /// The terminal windows open now; nil when there are none.
+    /// The terminal windows open now, and the canvas if it has cards (shown
+    /// or hidden); nil when there are none.
     static func capture() -> WindowSnapshot? {
+        let canvas = CanvasController.shared.flatMap { $0.cards.isEmpty ? nil : $0 }
         let controllers = TerminalController.all
-        let windows = controllers.compactMap(\.window)
+        let windows = controllers.compactMap(\.window) + [canvas?.window].compactMap { $0 }
         let arranged = arrange(windows, tabs: { $0.tabbedWindows ?? [] }, frontToBack: NSApp.orderedWindows)
         let encoder = JSONEncoder()
         let groups: [Group] = arranged.compactMap { windows in
+            if let canvas, let window = canvas.window, windows == [window] {
+                guard let state = try? encoder.encode(canvas.restorableState()) else { return nil }
+                return Group(
+                    frame: window.frame, selected: 0, miniaturized: window.isMiniaturized, tabs: [],
+                    canvas: Canvas(state: state, fullscreen: window.styleMask.contains(.fullScreen)))
+            }
             let tabs = windows.compactMap { window -> Data? in
                 guard let controller = window.windowController as? TerminalController,
                       !controller.surfaceTree.isEmpty else { return nil }
@@ -88,6 +107,18 @@ extension WindowSnapshot {
         var front: NSWindow?
         var opened = 0
         for group in groups.reversed() {
+            if let canvas = group.canvas {
+                guard let (window, cards) = restoreCanvas(
+                    canvas, ghostty, frame: group.frame, miniaturized: group.miniaturized, screens: screens)
+                else { continue }
+                opened += cards
+                if group.miniaturized {
+                    window.miniaturize(nil)
+                } else if window.isVisible {
+                    front = window
+                }
+                continue
+            }
             let tabs = group.tabs.compactMap { data -> (TerminalController, TerminalRestorableState)? in
                 guard let state = try? decoder.decode(TerminalRestorableState.self, from: data),
                       let controller = TerminalWindowRestoration.controller(ghostty, state: state) else { return nil }
@@ -120,6 +151,32 @@ extension WindowSnapshot {
         }
         front?.makeKeyAndOrderFront(nil)
         return opened
+    }
+
+    /// The canvas as it was, in front if it was showing (a hidden canvas
+    /// stays hidden, its terminals running); its window and how many cards.
+    private func restoreCanvas(
+        _ canvas: Canvas, _ ghostty: Ghostty.App, frame: CGRect, miniaturized: Bool, screens: [CGRect]
+    ) -> (NSWindow, Int)? {
+        guard LosttyChannel.current.hasCanvas,
+              let state = try? JSONDecoder().decode(CanvasRestorableState.self, from: canvas.state),
+              !state.saved.cards.isEmpty else { return nil }
+        let controller = CanvasController.shared ?? CanvasController(ghostty)
+        CanvasController.shared = controller
+        guard let window = controller.window else { return nil }
+        // Before it shows, so it never jumps. Full screen keeps the frame it
+        // had before (the window's autosaved one).
+        if !canvas.fullscreen, let frame = Self.placement(frame, screens: screens) {
+            window.setFrame(frame, display: false)
+        }
+        CanvasController.restore(ghostty, state: state)
+        // A minimized window saves as hidden; it goes back to the Dock.
+        if miniaturized, !window.isVisible { controller.showWindow(nil) }
+        if window.isVisible {
+            window.makeKeyAndOrderFront(nil)
+            if canvas.fullscreen { window.toggleFullScreen(nil) }
+        }
+        return (window, state.saved.cards.count)
     }
 }
 

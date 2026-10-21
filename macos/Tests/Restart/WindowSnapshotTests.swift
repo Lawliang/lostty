@@ -55,6 +55,30 @@ struct WindowSnapshotTests {
         #expect(RestartHandoff.peek(at: url) == nil)
     }
 
+    @Test func theHandoffCarriesTheCanvas() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("snapshot-\(UUID().uuidString)")
+        let url = folder.appendingPathComponent("restart.json")
+        let snapshot = WindowSnapshot(groups: [
+            .init(frame: CGRect(x: 0, y: 0, width: 1280, height: 820), selected: 0, miniaturized: false, tabs: [],
+                  canvas: .init(state: Data("{\"c\":1}".utf8), fullscreen: true)),
+            .init(frame: CGRect(x: 10, y: 20, width: 800, height: 600), selected: 0, miniaturized: false,
+                  tabs: [Data("{\"a\":1}".utf8)]),
+        ])
+        let handoff = RestartHandoff(
+            pid: 1, at: Date(timeIntervalSince1970: 2_000_000_000), claude: [:], stayAwakeOn: false,
+            stayAwakeUntil: nil, hookAgents: [], keepWindows: nil, windows: snapshot)
+        try handoff.save(to: url)
+        #expect(RestartHandoff.take(from: url)?.windows == snapshot)
+    }
+
+    @Test func anOlderBuildsWindowIsNotTheCanvas() throws {
+        let json = """
+        {"frame":[[0,0],[800,600]],"selected":0,"miniaturized":false,"tabs":[]}
+        """
+        let group = try JSONDecoder().decode(WindowSnapshot.Group.self, from: Data(json.utf8))
+        #expect(group.canvas == nil)
+    }
+
     @Test func anOlderBuildsHandoffHasNoSnapshot() throws {
         let json = """
         {"pid":1,"at":2000000000,"claude":{},"stayAwakeOn":false,"hookAgents":[]}

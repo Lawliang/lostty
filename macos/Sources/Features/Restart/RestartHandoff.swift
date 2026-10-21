@@ -22,8 +22,8 @@ struct RestartHandoff: Codable, Equatable {
     /// Each pane's conversation file for the turn observer, by pane UUID;
     /// nil from a build before the observer.
     var transcripts: [String: String]? = nil
-    /// Every terminal window, to rebuild as it was; nil from a build before
-    /// the snapshot, or with no windows open.
+    /// Every terminal window and the canvas, to rebuild as they were; nil
+    /// from a build before the snapshot, or with no windows open.
     var windows: WindowSnapshot? = nil
 
     /// Older than this, it's not a restart's: a crash's prompt applies.

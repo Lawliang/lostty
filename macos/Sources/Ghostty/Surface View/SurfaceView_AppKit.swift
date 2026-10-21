@@ -569,9 +569,9 @@ extension Ghostty {
                 contentSize = size
                 return
             }
-            if let zoom = canvasZoom, zoom != 1 {
+            if canvasZoom != nil {
                 contentSize = size
-                canvasSetSize(zoom: zoom)
+                canvasSetSize()
                 return
             }
             // Ghostty wants to know the actual framebuffer size... It is very important
@@ -758,6 +758,8 @@ extension Ghostty {
             // The clicked location in this window should be this view.
             let location = convert(event.locationInWindow, from: nil)
             guard hitTest(location) == self else { return event }
+            // Lostty Canvas: a card in front covering this pane takes the click.
+            guard isUncoveredByCards(at: event.locationInWindow) else { return event }
 
             // We always assume that we're resetting our mouse suppression
             // unless we see the specific scenario below to set it.
@@ -960,17 +962,14 @@ extension Ghostty {
                 // property changes. Otherwise it will apply a scale animation to the layer
                 // contents which looks pretty janky.
                 CATransaction.setDisableActions(true)
-                // Lostty Canvas: on a zoomed canvas a point covers more (or
-                // fewer) pixels than the screen's scale.
-                let backing = convertToBacking(NSRect(x: 0, y: 0, width: 1, height: 1)).width
-                layer?.contentsScale = backing > 0 ? backing : window.backingScaleFactor
+                layer?.contentsScale = window.backingScaleFactor
                 CATransaction.commit()
             }
 
             guard let surface = self.surface else { return }
 
-            if let zoom = canvasZoom, zoom != 1 {
-                canvasSetSize(zoom: zoom)
+            if canvasZoom != nil {
+                canvasSetSize()
                 return
             }
 
@@ -1010,69 +1009,19 @@ extension Ghostty {
         /// Lostty Canvas: the canvas's zoom when this pane is on a card.
         private var canvasZoom: CGFloat? { canvasScrollView?.magnification }
 
-        /// Lostty Canvas: sizes the surface at a zoom other than 100% with
-        /// the grid it has at 100%, so zooming never resizes the terminal,
-        /// drawn at the zoom's pixels so the text stays crisp. Cell sizes
-        /// round differently at each scale, so the size moves by whole cells
-        /// to hold the grid, leaving a sliver of background at most. Where
-        /// the grid doesn't quite fit, it draws a little under the zoom's
-        /// scale (the compositor scales it the rest of the way); where the
-        /// font can't shrink enough (far out), at its 100% pixels. The engine
-        /// sizes its pixels from the layer's scale, and sends the shell only
-        /// the final grid (it coalesces resizes).
-        private func canvasSetSize(zoom: CGFloat) {
+        /// Lostty Canvas: on a card the pane draws at its 100% pixels at
+        /// every zoom, and the canvas scales the picture: text, skin and
+        /// texture grow and shrink together, and zooming never resizes the
+        /// terminal. (Zoomed past 100% the text is softer.)
+        private func canvasSetSize() {
             guard let surface, let window, contentSize.width > 0, contentSize.height > 0 else { return }
             let base = window.backingScaleFactor
             ghostty_surface_set_content_scale(surface, base, base)
-            ghostty_surface_set_size(surface, UInt32(contentSize.width * base), UInt32(contentSize.height * base))
-            var size = ghostty_surface_size(surface)
-            let grid = (columns: size.columns, rows: size.rows)
-
-            var drawn = base
-            for step in 0..<4 {
-                let scale = base * zoom * (1 - 0.03 * CGFloat(step))
-                guard scale > base * 0.999 || zoom < 1 else { break }
-                if let held = canvasHoldGrid(grid, at: scale) {
-                    size = held
-                    drawn = scale
-                    break
-                }
-            }
-            if drawn == base {
-                ghostty_surface_set_content_scale(surface, base, base)
-                ghostty_surface_set_size(surface, UInt32(contentSize.width * base), UInt32(contentSize.height * base))
-                size = ghostty_surface_size(surface)
-            }
-            CATransaction.begin()
-            CATransaction.setDisableActions(true)
-            layer?.contentsScale = drawn
-            CATransaction.commit()
-            DispatchQueue.main.async { self.surfaceSize = size }
+            setSurfaceSize(width: UInt32(contentSize.width * base), height: UInt32(contentSize.height * base))
         }
 
-        /// Draws at `scale` with `grid` if it fits in the pane's pixels there.
-        private func canvasHoldGrid(
-            _ grid: (columns: UInt16, rows: UInt16), at scale: CGFloat
-        ) -> ghostty_surface_size_s? {
-            guard let surface else { return nil }
-            ghostty_surface_set_content_scale(surface, scale, scale)
-            let native = CGSize(width: (contentSize.width * scale).rounded(.down), height: (contentSize.height * scale).rounded(.down))
-            var width = native.width, height = native.height
-            for _ in 0..<3 {
-                ghostty_surface_set_size(surface, UInt32(max(1, width)), UInt32(max(1, height)))
-                let size = ghostty_surface_size(surface)
-                if size.columns == grid.columns, size.rows == grid.rows {
-                    return width <= native.width && height <= native.height ? size : nil
-                }
-                width += CGFloat(Int(grid.columns) - Int(size.columns)) * CGFloat(size.cell_width_px)
-                height += CGFloat(Int(grid.rows) - Int(size.rows)) * CGFloat(size.cell_height_px)
-            }
-            return nil
-        }
-
-        /// Lostty Canvas: the canvas's zoom settled. Its scaled clip view
-        /// already makes this pane's pixels per point the screen's × the
-        /// zoom; re-rasterize at that (crisp text) with the grid unchanged.
+        /// Lostty Canvas: the canvas's zoom settled: catch up on anything
+        /// held while it moved (still drawn at 100%, `canvasSetSize`).
         func canvasZoomDidSettle(_ zoom: CGFloat) {
             canvasZoomInFlight = false
             guard window != nil, frame.width > 0, frame.height > 0 else { return }

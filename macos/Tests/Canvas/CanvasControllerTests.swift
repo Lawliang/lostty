@@ -25,6 +25,16 @@ struct CanvasScrollTests {
 }
 
 @MainActor
+struct CardResizeCursorTests {
+    @Test func cornersShowAResizeCursorNotACrosshair() {
+        guard #available(macOS 15, *) else { return }
+        for corner: CanvasModel.Edges in [[.left, .top], [.right, .top], [.left, .bottom], [.right, .bottom]] {
+            #expect(CardEdgeHandle.cursor(for: corner) != .crosshair)
+        }
+    }
+}
+
+@MainActor
 struct CanvasMenuTests {
     private func windowMenu() -> (NSMenu, NSMenuItem) {
         let menu = NSMenu()
