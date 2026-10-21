@@ -152,6 +152,52 @@ struct CanvasZoomTests {
         #expect(rect == CGRect(x: 700, y: 600, width: 600, height: 400))
     }
 
+    @Test func aGlideStartsAndEndsExactlyWhereItShould() {
+        let from = CanvasView(center: CGPoint(x: 1000, y: 800), zoom: 0.5)
+        let to = CanvasView(center: CGPoint(x: 1400, y: 600), zoom: 1)
+        #expect(CanvasZoom.view(from: from, to: to, progress: 0) == from)
+        #expect(CanvasZoom.view(from: from, to: to, progress: 1) == to)
+    }
+
+    @Test func aGlideZoomsAtAnEvenRate() {
+        // Halfway from 50% to 200% in time is 100%: the same factor each step.
+        let from = CanvasView(center: .zero, zoom: 0.5), to = CanvasView(center: .zero, zoom: 2)
+        #expect(abs(CanvasZoom.view(from: from, to: to, progress: 0.5).zoom - 1) < 0.0001)
+    }
+
+    @Test func aGlideScalesAboutOnePointThatStaysPutOnScreen() {
+        // 50% → 100%: the document point at (600, 400) sits at the same
+        // screen spot at the start, the end and everywhere between.
+        let viewport = CGSize(width: 1200, height: 800)
+        let from = CanvasView(center: CGPoint(x: 1000, y: 800), zoom: 0.5)
+        let to = CanvasView(center: CGPoint(x: 800, y: 600), zoom: 1)
+        func onScreen(_ point: CGPoint, _ view: CanvasView) -> CGPoint {
+            let rect = CanvasZoom.rect(centeredOn: view.center, zoom: view.zoom, viewport: viewport)
+            return CGPoint(x: (point.x - rect.minX) * view.zoom, y: (point.y - rect.minY) * view.zoom)
+        }
+        let pivot = CGPoint(x: 600, y: 400)
+        let start = onScreen(pivot, from)
+        #expect(start == onScreen(pivot, to))
+        for progress in [0.25, 0.5, 0.75] {
+            let spot = onScreen(pivot, CanvasZoom.view(from: from, to: to, progress: progress))
+            #expect(abs(spot.x - start.x) < 0.001 && abs(spot.y - start.y) < 0.001)
+        }
+    }
+
+    @Test func aGlideWithNoZoomChangeIsAPlainPan() {
+        let from = CanvasView(center: CGPoint(x: 0, y: 0), zoom: 1)
+        let to = CanvasView(center: CGPoint(x: 400, y: 200), zoom: 1)
+        #expect(CanvasZoom.view(from: from, to: to, progress: 0.5) == CanvasView(center: CGPoint(x: 200, y: 100), zoom: 1))
+    }
+
+    @Test func aGlideEasesIntoPlace() {
+        #expect(CanvasZoom.eased(0) == 0)
+        #expect(CanvasZoom.eased(1) == 1)
+        // Most of the way early, the last stretch slow.
+        #expect(CanvasZoom.eased(0.5) > 0.8)
+        #expect(CanvasZoom.eased(0.25) < CanvasZoom.eased(0.5))
+    }
+
     @Test func aSettledZoomRendersAtTheScreensScaleTimesTheZoom() {
         // Pixels per point follow the zoom; a pane's points don't, so its grid never resizes.
         #expect(CanvasZoom.contentScale(backing: 2, zoom: 2) == 4)
