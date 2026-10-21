@@ -1758,7 +1758,11 @@ extension Ghostty {
                 guard let pwd = String(cString: v.pwd!, encoding: .utf8) else { return }
                 surfaceView.pwd = pwd
                 // Ghostty Skins: re-skin the pane for its new directory.
-                MainActor.assumeIsolated { SkinsRuntime.shared.pwdChanged(surfaceView, pwd: pwd) }
+                MainActor.assumeIsolated {
+                    SkinsRuntime.shared.pwdChanged(surfaceView, pwd: pwd)
+                    // Lostty: the last session keeps each pane's folder.
+                    LastSessionStore.shared.noteChange()
+                }
 
             default:
                 assertionFailure()

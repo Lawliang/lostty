@@ -105,7 +105,10 @@ final class ClaudeRuntime: ObservableObject {
         case .exit: hookTurns.remove(id)
         default: break
         }
+        if state == .exit { LastSessionStore.shared.agentGone(id) }
         guard state == .idle, let path = ClaudeMessage.transcript(value) else { return }
+        // The conversation to resume after the Mac restarts.
+        LastSessionStore.shared.conversation(id, transcript: path)
         if turnUnderWay { turnEnded(id, path) }
         if !permission, hookTurns.remove(id) != nil { handoffSignal(id, .stopped(transcript: path)) }
     }
@@ -114,6 +117,7 @@ final class ClaudeRuntime: ObservableObject {
     /// (claude included) is gone: a racing trace must not stay up.
     func commandFinished(_ id: UUID) {
         agentGone(id)
+        LastSessionStore.shared.agentGone(id)
         apply(.exit, to: id)
         hookTurns.remove(id)
         handoffSignal(id, .gone)
@@ -121,6 +125,7 @@ final class ClaudeRuntime: ObservableObject {
 
     func surfaceClosed(_ id: UUID) {
         agentGone(id)
+        LastSessionStore.shared.agentGone(id)
         phases[id] = nil
         unfocused.remove(id)
         seen.remove(id)
