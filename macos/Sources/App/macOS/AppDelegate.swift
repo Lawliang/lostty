@@ -886,7 +886,8 @@ class AppDelegate: NSObject,
             return true
         }
         if onCard { return }
-        _ = TerminalController.newWindow(ghostty, withBaseConfig: config)
+        // Lostty: from a terminal in a repo, asks what the window is for.
+        MainActor.assumeIsolated { NewWindowChoice.newWindow(ghostty, config: config) }
     }
 
     @objc private func ghosttyNewTab(_ notification: Notification) {
@@ -1141,7 +1142,12 @@ class AppDelegate: NSObject,
             canvas.newCard()
             return
         }
-        _ = TerminalController.newWindow(ghostty)
+        // Lostty: starts where the focused terminal is, as ⌘N from the
+        // keyboard does, and asks what the window is for when that's a repo.
+        let config = TerminalController.preferredParent?.focusedSurface?.surface.map {
+            Ghostty.SurfaceConfiguration(from: ghostty_surface_inherited_config($0, GHOSTTY_SURFACE_CONTEXT_WINDOW))
+        }
+        NewWindowChoice.newWindow(ghostty, config: config)
     }
 
     @IBAction func newTab(_ sender: Any?) {
