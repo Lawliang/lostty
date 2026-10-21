@@ -3,8 +3,8 @@ import AppKit
 import SwiftUI
 
 /// The canvas's scroll view: two-finger scrolling pans it, over a card too
-/// (⌥-scrolling over a pane scrolls the pane), in any direction (not
-/// locked to the swipe's main axis), pinching
+/// (but scrolls the focused pane over it; ⌥ swaps the two over a pane), in
+/// any direction (not locked to the swipe's main axis), pinching
 /// zooms it 25%–200% (its clip view scales, so clicks still land on the
 /// right cell), and it has no scrollers.
 final class CanvasScrollView: NSScrollView {
@@ -27,6 +27,27 @@ final class CanvasScrollView: NSScrollView {
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    /// The pane the scroll under way scrolls, or nil while it pans the
+    /// canvas. Decided where the scroll starts, so a pane the canvas pans
+    /// under the pointer doesn't take it over, nor does its momentum change.
+    weak var scrollingPane: NSView?
+
+    /// A scroll gesture's first event, or a mouse wheel's click.
+    static func startsScroll(_ event: NSEvent) -> Bool {
+        event.phase.contains(.began) || (event.phase.isEmpty && event.momentumPhase.isEmpty)
+    }
+
+    override func scrollWheel(with event: NSEvent) {
+        if Self.startsScroll(event) {
+            // Started over the canvas, or a pane handed it on: it pans.
+            scrollingPane = nil
+        } else if let pane = scrollingPane {
+            pane.scrollWheel(with: event)
+            return
+        }
+        super.scrollWheel(with: event)
+    }
 }
 
 /// The canvas itself: the cards are its subviews, framed in document
