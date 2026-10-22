@@ -55,6 +55,12 @@ struct CanvasModel: Equatable {
         cards.append(Card(id: id, frame: Self.clamped(frame)))
     }
 
+    /// A card at `index` back to front (in front of every card past the end).
+    mutating func insert(_ id: UUID, frame: CGRect, at index: Int) {
+        remove(id)
+        cards.insert(Card(id: id, frame: Self.clamped(frame)), at: min(max(index, 0), cards.count))
+    }
+
     mutating func remove(_ id: UUID) {
         cards.removeAll { $0.id == id }
     }
@@ -188,11 +194,11 @@ struct CanvasModel: Equatable {
     }
 
     /// The nearest card whose center lies within 45° of `direction` from
-    /// `id`'s center.
-    func neighbor(of id: UUID, _ direction: Direction) -> UUID? {
+    /// `id`'s center, of those in `among` (every card when nil).
+    func neighbor(of id: UUID, _ direction: Direction, among: Set<UUID>? = nil) -> UUID? {
         guard let from = card(id)?.frame else { return nil }
         var best: (id: UUID, distance: CGFloat)?
-        for card in cards where card.id != id {
+        for card in cards where card.id != id && among?.contains(card.id) != false {
             let dx = card.frame.midX - from.midX, dy = card.frame.midY - from.midY
             let (along, across): (CGFloat, CGFloat) = switch direction {
             case .left: (-dx, dy)
@@ -283,8 +289,8 @@ struct CanvasWaits: Equatable {
 }
 
 /// What the canvas keeps across Restart to Update and relaunches: whether
-/// it's shown, the view, and each card back to front. Generic over the
-/// split tree, so tests can save plain values.
+/// it's shown, the view, each terminal card back to front, and the
+/// tickets. Generic over the split tree, so tests can save plain values.
 struct CanvasSaved<Tree: Codable>: Codable {
     struct Card: Codable {
         var frame: CGRect
@@ -293,10 +299,25 @@ struct CanvasSaved<Tree: Codable>: Codable {
         var focused: String?
     }
 
+    struct Ticket: Codable, Equatable {
+        var id: UUID
+        var frame: CGRect
+        var ticket: CanvasTicket
+        /// Where it sat among every card, back to front.
+        var stack: Int
+    }
+
     var visible: Bool
     var center: CGPoint
     var zoom: CGFloat
     var cards: [Card]
+    /// Missing from a canvas saved before tickets.
+    var tickets: [Ticket]?
+    /// The highest ticket number handed out, closed tickets' too.
+    var lastTicketNumber: Int?
+
+    /// Whether there's anything to bring back.
+    var isEmpty: Bool { cards.isEmpty && (tickets ?? []).isEmpty }
 }
 
 extension CanvasSaved: Equatable where Tree: Equatable {}

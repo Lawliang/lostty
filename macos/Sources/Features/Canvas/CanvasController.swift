@@ -32,6 +32,12 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     private(set) var cards: [CardController] = []
     /// The card holding keyboard focus, or that last held it.
     private(set) weak var focusedCard: CardController?
+    /// The tickets' cards, by id. They share `model` with the terminal
+    /// cards, so they stack, block clicks and fit to view alike.
+    private(set) var tickets: [UUID: TicketCardView] = [:]
+    /// The highest ticket number handed out, so a closed ticket's isn't
+    /// handed out again.
+    var lastTicketNumber = 0
     /// The title bar's pill follows the focused card's pane. (Each card has
     /// its own bottom bar.)
     let sidebar = ExtensionSidebarModel()
@@ -51,6 +57,8 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     var waits = CanvasWaits()
     /// The view to show when the window first opens (a restored canvas's).
     var pendingView: (center: CGPoint, zoom: CGFloat)?
+    /// No cards of either kind.
+    var isEmpty: Bool { model.cards.isEmpty }
     /// Whether the view was set the first time the window showed.
     private(set) var placed = false
     private var eventMonitor: Any?
@@ -64,7 +72,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         shared = canvas
         canvas.showWindow(nil)
         NSApp.activate(ignoringOtherApps: true)
-        if freshCard, canvas.cards.isEmpty { canvas.newCard() }
+        if freshCard, canvas.isEmpty { canvas.newCard() }
         return canvas
     }
 
@@ -131,6 +139,12 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
 
     private func observe() {
         scrollView.document.clicked = { [weak self] in self?.canvasClicked() }
+        surface.addMenu.chose = { [weak self] item in
+            switch item {
+            case .terminal: self?.newCard()
+            case .ticket: self?.newTicket()
+            }
+        }
         NotificationCenter.default.addObserver(
             self, selector: #selector(canvasMoved), name: NSView.boundsDidChangeNotification, object: scrollView.contentView)
         // Focus follows the window's first responder: whichever card holds
@@ -145,8 +159,14 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         // canvas. (Scrolling over a pane, which pans the canvas, is the
         // pane's to pass on: a scroll-wheel monitor would turn off AppKit's
         // smooth, off-main-thread scrolling.)
-        eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.magnify]) { [weak self] event in
+        // A click on a ticket focuses it first, wherever it lands (its fields
+        // take the click themselves).
+        eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.magnify, .leftMouseDown, .rightMouseDown]) { [weak self] event in
             guard let self, event.window === window else { return event }
+            guard event.type == .magnify else {
+                ticketClicked(event)
+                return event
+            }
             stopGlide()
             scrollView.magnify(with: event)
             return nil
@@ -227,9 +247,20 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     /// focused card: no pane has the keyboard, and scrolling pans the canvas
     /// over every pane.
     private func canvasClicked() {
-        guard let previous = focusedCard else { return }
+        for view in tickets.values { view.isFocusedCard = false }
+        guard let previous = focusedCard else {
+            // Out of a ticket's field, too.
+            window?.makeFirstResponder(scrollView.document)
+            return
+        }
         focusedCard = nil
         window?.makeFirstResponder(scrollView.document)
+        letGo(of: previous)
+    }
+
+    /// `previous` is no longer the focused card: its panes, the title bar's
+    /// pill and its look follow.
+    private func letGo(of previous: CardController) {
         previous.syncFocusToSurfaceTree()
         sidebar.focusedSurfaceID = nil
         for view in views.values { view.isFocusedCard = false }
@@ -243,7 +274,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         focusedCard = card
         guard previous !== card else { return }
         previous?.syncFocusToSurfaceTree()
-        bringToFront(card)
+        bringToFront(card.id)
     }
 
     /// A card's pane took keyboard focus: the window's title, pill and the
@@ -253,23 +284,39 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         card.applyTitleToWindow()
         sidebar.focusedSurfaceID = card.focusedSurface?.id
         for (id, view) in views { view.isFocusedCard = id == card.id }
+        for view in tickets.values { view.isFocusedCard = false }
     }
 
-    private func bringToFront(_ card: CardController) {
-        model.bringToFront(card.id)
-        for (index, entry) in model.cards.enumerated() { views[entry.id]?.stackIndex = index }
-        // Reorders without taking views out of the window, so the focused
-        // pane keeps keyboard focus.
+    func bringToFront(_ id: UUID) {
+        model.bringToFront(id)
+        restack()
+    }
+
+    /// The cards' views in `model`'s order. Reorders without taking views
+    /// out of the window, so the focused pane keeps keyboard focus.
+    private func restack() {
+        for (index, entry) in model.cards.enumerated() { view(entry.id)?.stackIndex = index }
         scrollView.document.sortSubviews({ a, b, _ in
-            let left = (a as? CardView)?.stackIndex ?? 0, right = (b as? CardView)?.stackIndex ?? 0
+            let left = (a as? CanvasStacked)?.stackIndex ?? 0, right = (b as? CanvasStacked)?.stackIndex ?? 0
             return left < right ? .orderedAscending : left > right ? .orderedDescending : .orderedSame
         }, context: nil)
     }
 
+    /// The view of card `id`, of either kind.
+    private func view(_ id: UUID) -> (NSView & CanvasStacked)? {
+        if let card = views[id] { return card }
+        return tickets[id]
+    }
+
+    /// The front-most terminal card.
+    var frontCard: CardController? {
+        model.cards.reversed().lazy.compactMap { entry in self.cards.first { $0.id == entry.id } }.first
+    }
+
     /// Moving or resizing, live.
-    func setFrame(_ frame: CGRect, of card: CardController) {
-        model.setFrame(frame, of: card.id)
-        if let frame = model.card(card.id)?.frame { views[card.id]?.frame = frame }
+    func setFrame(_ frame: CGRect, of id: UUID) {
+        model.setFrame(frame, of: id)
+        if let frame = model.card(id)?.frame { view(id)?.frame = frame }
     }
 
     /// A drag or resize ended.
@@ -304,7 +351,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         }
         guard focusedCard === card else { return }
         focusedCard = nil
-        guard let next = model.cards.last.flatMap({ entry in cards.first { $0.id == entry.id } }) else { return }
+        guard let next = frontCard else { return }
         // A card closing while you work elsewhere never pulls the canvas forward.
         if window?.isKeyWindow == true {
             focus(next)
@@ -337,6 +384,81 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
             undo.disableUndoRegistration { _ = TerminalController.newWindow(ghostty, tree: tree) }
         } else {
             _ = TerminalController.newWindow(ghostty, tree: tree)
+        }
+    }
+
+    // MARK: Tickets
+
+    /// + → New Ticket: a draft in the middle of the view, its summary taking
+    /// the keyboard, at 100% (where its fields take clicks).
+    func newTicket() {
+        let frame = model.placement(size: TicketCardView.newSize, in: scrollView.documentVisibleRect)
+        let view = addTicket(CanvasTicket(), frame: frame)
+        view.ticket.edit()
+        ticketWillFocus(view.ticket.id)
+        if scrollView.magnification != 1 { zoom(toCard: view.ticket.id) }
+    }
+
+    /// A ticket's card: a new one in front, or a restored or undone one back
+    /// at `stack`.
+    @discardableResult
+    func addTicket(_ ticket: CanvasTicket, id: UUID = UUID(), frame: CGRect, stack: Int? = nil) -> TicketCardView {
+        if let stack {
+            model.insert(id, frame: frame, at: stack)
+        } else {
+            model.add(id, frame: frame)
+        }
+        let view = TicketCardView(ticket: TicketCard(id: id, ticket: ticket, canvas: self), canvas: self)
+        tickets[id] = view
+        scrollView.document.addSubview(view)
+        if let placed = model.card(id)?.frame { view.frame = placed }
+        restack()
+        saveSoon()
+        return view
+    }
+
+    /// A ticket was clicked or took the keyboard: it comes to the front,
+    /// looks focused, and no terminal card is.
+    func ticketWillFocus(_ id: UUID) {
+        bringToFront(id)
+        for (other, view) in tickets { view.isFocusedCard = other == id }
+        let previous = focusedCard
+        focusedCard = nil
+        // Otherwise a pane keeps the keyboard, and keys type into it.
+        if window?.firstResponder is Ghostty.SurfaceView { window?.makeFirstResponder(tickets[id]) }
+        if let previous { letGo(of: previous) }
+    }
+
+    /// A click in the canvas's view on a ticket, not on the + menu over it.
+    private func ticketClicked(_ event: NSEvent) {
+        guard !surface.addMenu.covers(event.locationInWindow) else { return }
+        let point = scrollView.document.convert(event.locationInWindow, from: nil)
+        guard scrollView.documentVisibleRect.contains(point), let id = model.card(at: point),
+              tickets[id] != nil else { return }
+        ticketWillFocus(id)
+    }
+
+    /// The key a newly created ticket gets.
+    func nextTicketKey() -> String {
+        let key = CanvasTicket.nextKey(
+            after: tickets.values.compactMap(\.ticket.ticket.key), lastNumber: lastTicketNumber)
+        lastTicketNumber = CanvasTicket.number(of: key) ?? lastTicketNumber
+        return key
+    }
+
+    /// The red button, Close Ticket, or Cancel on a draft. Undo brings back
+    /// a created ticket where it was.
+    func closeTicket(_ id: UUID) {
+        guard let view = tickets.removeValue(forKey: id),
+              let stack = model.cards.firstIndex(where: { $0.id == id }) else { return }
+        let frame = model.cards[stack].frame, ticket = view.ticket.ticket
+        model.remove(id)
+        view.removeFromSuperview()
+        saveSoon()
+        guard ticket.isCreated, let undo = (NSApp.delegate as? AppDelegate)?.undoManager else { return }
+        undo.setActionName("Close Ticket")
+        undo.registerUndo(withTarget: self, expiresAfter: ghostty.config.undoTimeout) { canvas in
+            canvas.addTicket(ticket, id: id, frame: frame, stack: stack)
         }
     }
 
@@ -374,7 +496,12 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     /// ⌃⌘1, double-clicking a header, the green button: glides to `card`
     /// centered at `zoom` (100%).
     func zoom(to card: CardController, zoom: CGFloat = 1) {
-        guard let frame = model.card(card.id)?.frame else { return }
+        self.zoom(toCard: card.id, zoom: zoom)
+    }
+
+    /// The same for card `id`, of either kind.
+    func zoom(toCard id: UUID, zoom: CGFloat = 1) {
+        guard let frame = model.card(id)?.frame else { return }
         glide(to: CanvasView(center: CGPoint(x: frame.midX, y: frame.midY), zoom: zoom))
     }
 

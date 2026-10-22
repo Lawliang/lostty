@@ -70,7 +70,7 @@ extension WindowSnapshot {
     /// The terminal windows open now, and the canvas if it has cards (shown
     /// or hidden); nil when there are none.
     static func capture() -> WindowSnapshot? {
-        let canvas = CanvasController.shared.flatMap { $0.cards.isEmpty ? nil : $0 }
+        let canvas = CanvasController.shared.flatMap { $0.isEmpty ? nil : $0 }
         let controllers = TerminalController.all
         let windows = controllers.compactMap(\.window) + [canvas?.window].compactMap { $0 }
         let arranged = arrange(windows, tabs: { $0.tabbedWindows ?? [] }, frontToBack: NSApp.orderedWindows)
@@ -160,7 +160,7 @@ extension WindowSnapshot {
     ) -> (NSWindow, Int)? {
         guard LosttyChannel.current.hasCanvas,
               let state = try? JSONDecoder().decode(CanvasRestorableState.self, from: canvas.state),
-              !state.saved.cards.isEmpty else { return nil }
+              !state.saved.isEmpty else { return nil }
         let controller = CanvasController.shared ?? CanvasController(ghostty)
         CanvasController.shared = controller
         guard let window = controller.window else { return nil }

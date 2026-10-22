@@ -63,7 +63,7 @@ final class CanvasMenu: NSObject, NSMenuItemValidation {
     @objc private func showCanvas(_ sender: Any?) {
         guard let ghostty else { return }
         let windows = CanvasImport.windows(first: keyTerminal)
-        if CanvasController.shared?.cards.isEmpty != false, !windows.isEmpty,
+        if CanvasController.shared?.isEmpty != false, !windows.isEmpty,
            CanvasImport.shouldMoveAll(windows.count, opening: true) {
             CanvasImport.move(ghostty, windows, focus: keyTerminal)
         } else {

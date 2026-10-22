@@ -62,7 +62,7 @@ final class CardHeaderView: NSView {
         guard let canvas, let start, let point = documentPoint(event),
               var frame = canvas.model.card(card.id)?.frame else { return }
         frame.origin = CGPoint(x: start.origin.x + point.x - start.point.x, y: start.origin.y + point.y - start.point.y)
-        canvas.setFrame(frame, of: card)
+        canvas.setFrame(frame, of: card.id)
     }
 
     override func mouseUp(with event: NSEvent) {

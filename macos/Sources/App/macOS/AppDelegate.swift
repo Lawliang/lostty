@@ -1051,7 +1051,7 @@ class AppDelegate: NSObject,
         }
 
         // Lostty Canvas: the canvas, shown or hidden.
-        if let canvas = CanvasController.shared, !canvas.cards.isEmpty {
+        if let canvas = CanvasController.shared, !canvas.isEmpty {
             canvas.restorableState().encode(with: coder)
         }
     }

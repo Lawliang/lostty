@@ -18,12 +18,16 @@ struct SessionHistoryTests {
         return Data(#"{"surfaceTree":{"version":1,"root":\#(node(panes[...]))}}"#.utf8)
     }
 
-    /// A canvas whose cards each hold one list of panes.
-    private func canvas(_ cards: [[String]], visible: Bool = false) -> WindowSnapshot.Group {
+    /// A canvas whose cards each hold one list of panes, and `tickets`
+    /// tickets.
+    private func canvas(_ cards: [[String]], visible: Bool = false, tickets: Int = 0) -> WindowSnapshot.Group {
         let saved = cards.map { panes in
             #"{"frame":[[0,0],[800,600]],"tree":\#(String(decoding: tab(panes), as: UTF8.self))}"#
         }
-        let state = #"{"saved":{"visible":\#(visible),"center":[0,0],"zoom":1,"cards":[\#(saved.joined(separator: ","))]}}"#
+        let ticket = #"{"id":"\#(UUID().uuidString)","frame":[[0,0],[380,360]],"stack":0,"#
+            + #""ticket":{"key":"LT-1","summary":"Fix login","kind":"task","priority":"medium","status":"toDo","assignee":"","details":""}}"#
+        let state = #"{"saved":{"visible":\#(visible),"center":[0,0],"zoom":1,"cards":[\#(saved.joined(separator: ","))],"#
+            + #""tickets":[\#(Array(repeating: ticket, count: tickets).joined(separator: ","))]}}"#
         return .init(frame: .zero, selected: 0, miniaturized: false, tabs: [],
                      canvas: .init(state: Data(state.utf8), fullscreen: false))
     }
@@ -119,6 +123,21 @@ struct SessionHistoryTests {
         let decoded = try JSONDecoder().decode(SavedCanvas.self, from: state).saved
         #expect(decoded.cards.count == 1)
         #expect(decoded.visible)
+    }
+
+    @Test func ticketsComeBackWithTheCardsReopened() throws {
+        let saved = session([canvas([["D"], ["E"]], tickets: 2)])
+        let reopened = try #require(saved.reopenable(openPanes: ["E"], openConversations: []))
+        let state = try #require(reopened.windows.groups.first?.canvas?.state)
+        let decoded = try JSONDecoder().decode(SavedCanvas.self, from: state).saved
+        #expect(decoded.tickets?.count == 2)
+    }
+
+    @Test func ticketsAloneAreNothingToReopen() {
+        // Restoring skips tickets already on the canvas, and which are isn't
+        // known here: with every card's panes open there's nothing to bring.
+        let saved = session([canvas([["B"]], tickets: 1)])
+        #expect(saved.reopenable(openPanes: ["B"], openConversations: []) == nil)
     }
 }
 

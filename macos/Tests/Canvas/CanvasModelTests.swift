@@ -138,6 +138,30 @@ struct CanvasModelTests {
         #expect(model.neighbor(of: b, .left) == a)
         #expect(model.neighbor(of: c, .up) == a)
     }
+
+    @Test func neighborsCanBeOnlySomeOfTheCards() {
+        let model = model([
+            (a, CGRect(x: 1000, y: 1000, width: 400, height: 300)),
+            (b, CGRect(x: 1600, y: 1000, width: 400, height: 300)),
+            (c, CGRect(x: 2200, y: 1000, width: 400, height: 300)),
+        ])
+        // A ticket (b) between two terminals doesn't stop ⌃⌥⌘→.
+        #expect(model.neighbor(of: a, .right, among: [a, c]) == c)
+    }
+
+    @Test func aCardGoesBackWhereItStoodInTheStack() {
+        var model = model([
+            (a, CGRect(x: 0, y: 0, width: 400, height: 300)),
+            (b, CGRect(x: 0, y: 0, width: 400, height: 300)),
+        ])
+        model.insert(c, frame: CGRect(x: 0, y: 0, width: 400, height: 300), at: 1)
+        #expect(model.cards.map(\.id) == [a, c, b])
+        // Past either end: the front, or the back.
+        model.insert(c, frame: CGRect(x: 0, y: 0, width: 400, height: 300), at: 9)
+        #expect(model.cards.map(\.id) == [a, b, c])
+        model.insert(c, frame: CGRect(x: 0, y: 0, width: 400, height: 300), at: -1)
+        #expect(model.cards.map(\.id) == [c, a, b])
+    }
 }
 
 struct CanvasZoomTests {
@@ -261,6 +285,32 @@ struct CanvasSavedTests {
         ])
         let data = try JSONEncoder().encode(saved)
         #expect(try JSONDecoder().decode(CanvasSaved<String>.self, from: data) == saved)
+    }
+
+    @Test func ticketsComeBackWithTheCanvas() throws {
+        let ticket = CanvasTicket(key: "LT-2", summary: "Fix login", kind: .bug, priority: .high, status: .inProgress,
+                                  assignee: "Sam", details: "Drops after 8s")
+        let saved = CanvasSaved<String>(
+            visible: true, center: .zero, zoom: 1, cards: [],
+            tickets: [.init(id: UUID(), frame: CGRect(x: 5, y: 6, width: 380, height: 360), ticket: ticket, stack: 0)],
+            lastTicketNumber: 4)
+        let data = try JSONEncoder().encode(saved)
+        let back = try JSONDecoder().decode(CanvasSaved<String>.self, from: data)
+        #expect(back == saved)
+        #expect(!back.isEmpty)
+    }
+
+    @Test func aCanvasSavedBeforeTicketsStillComesBack() throws {
+        let json = #"{"visible":false,"center":[0,0],"zoom":1,"cards":[{"frame":[[0,0],[720,500]],"tree":"only"}]}"#
+        let saved = try JSONDecoder().decode(CanvasSaved<String>.self, from: Data(json.utf8))
+        #expect(saved.cards.map(\.tree) == ["only"])
+        #expect(saved.tickets == nil)
+        #expect(saved.lastTicketNumber == nil)
+        #expect(!saved.isEmpty)
+    }
+
+    @Test func aCanvasWithNoCardsOrTicketsIsEmpty() {
+        #expect(CanvasSaved<String>(visible: true, center: .zero, zoom: 1, cards: [], tickets: []).isEmpty)
     }
 }
 #endif

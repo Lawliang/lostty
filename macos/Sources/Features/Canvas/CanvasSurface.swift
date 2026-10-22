@@ -185,9 +185,10 @@ final class CanvasGridView: NSView {
     }
 }
 
-/// The grid with the scroll view over it.
+/// The grid with the scroll view over it, and the + button over that.
 final class CanvasSurfaceView: NSView {
     let scrollView = CanvasScrollView(frame: .zero)
+    let addMenu = CanvasAddMenuView()
     private let grid = CanvasGridView(frame: .zero)
 
     init() {
@@ -195,6 +196,7 @@ final class CanvasSurfaceView: NSView {
         grid.scrollView = scrollView
         addSubview(grid)
         addSubview(scrollView)
+        addSubview(addMenu)
         NotificationCenter.default.addObserver(
             self, selector: #selector(canvasMoved), name: NSView.boundsDidChangeNotification, object: scrollView.contentView)
     }
@@ -206,6 +208,11 @@ final class CanvasSurfaceView: NSView {
         super.layout()
         grid.frame = bounds
         scrollView.frame = bounds
+        // Its button `margin` in from the bottom right (the view is unflipped).
+        let size = CanvasAddMenuView.size, room = CanvasAddMenuView.shadowRoom, margin = CanvasAddMenuView.margin
+        addMenu.frame = NSRect(
+            x: bounds.maxX - margin - size.width + room, y: bounds.minY + margin - room,
+            width: size.width, height: size.height)
     }
 
     @objc private func canvasMoved() {

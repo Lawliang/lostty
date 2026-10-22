@@ -24,9 +24,10 @@ extension CanvasController {
         card.focusSurface(surface)
     }
 
-    /// ⌃⌥⌘ + arrows: focus the nearest card that way, panning to show it.
+    /// ⌃⌥⌘ + arrows: focus the nearest terminal card that way, panning to
+    /// show it.
     func moveFocus(_ direction: CanvasModel.Direction) {
-        guard let from = focusedCard, let id = model.neighbor(of: from.id, direction),
+        guard let from = focusedCard, let id = model.neighbor(of: from.id, direction, among: Set(cards.map(\.id))),
               let card = cards.first(where: { $0.id == id })
         else { return }
         reveal(card)

@@ -10,7 +10,7 @@ import SwiftUI
 /// it), resize handles on its edges, and the Window Light round it. Puts
 /// its card's controller in the responder chain, so menu actions reach the
 /// card.
-final class CardView: NSView {
+final class CardView: NSView, CanvasStacked {
     /// A standard title bar's height.
     static let headerHeight = ClaudeUsageBar.height
     /// The header and bottom bar: a card's height past its panes'.
@@ -53,20 +53,13 @@ final class CardView: NSView {
         terminal = CardTerminalHost(rootView: CardTerminal(card: card))
         terminal.card = card
         super.init(frame: .zero)
-        wantsLayer = true
-        layer?.masksToBounds = false
-        layer?.shadowColor = NSColor.black.cgColor
-        layer?.shadowOffset = CGSize(width: 0, height: -6)
-        content.wantsLayer = true
-        content.layer?.cornerRadius = Self.cornerRadius
-        content.layer?.cornerCurve = .continuous
-        content.layer?.masksToBounds = true
+        Self.setUpWindowLook(self, content: content)
         addSubview(content)
         content.addSubview(terminal)
         content.addSubview(header)
         header.buttons.isActive = false
         for edges in CanvasModel.handleEdges {
-            let handle = CardEdgeHandle(edges: edges, card: card, canvas: canvas)
+            let handle = CardEdgeHandle(edges: edges, id: card.id, canvas: canvas) { [weak card] in card?.holdGrids($0) }
             handles.append(handle)
             addSubview(handle)
         }
@@ -87,15 +80,32 @@ final class CardView: NSView {
     override var isFlipped: Bool { true }
     override var wantsUpdateLayer: Bool { true }
 
+    override func updateLayer() {
+        Self.updateWindowLook(self, content: content, focused: isFocusedCard)
+    }
+
+    /// A card's rounded corners (its `content` clipped to them) and shadow,
+    /// a ticket's too.
+    static func setUpWindowLook(_ card: NSView, content: NSView) {
+        card.wantsLayer = true
+        card.layer?.masksToBounds = false
+        card.layer?.shadowColor = NSColor.black.cgColor
+        card.layer?.shadowOffset = CGSize(width: 0, height: -6)
+        content.wantsLayer = true
+        content.layer?.cornerRadius = cornerRadius
+        content.layer?.cornerCurve = .continuous
+        content.layer?.masksToBounds = true
+    }
+
     /// A Mac window's hairline edge, white on the active card, and its
     /// shadow: deeper on the active one.
-    override func updateLayer() {
-        let dark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-        let edge = isFocusedCard ? NSColor.white : dark ? NSColor(white: 1, alpha: 0.18) : NSColor(white: 0, alpha: 0.22)
+    static func updateWindowLook(_ card: NSView, content: NSView, focused: Bool) {
+        let dark = card.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        let edge = focused ? NSColor.white : dark ? NSColor(white: 1, alpha: 0.18) : NSColor(white: 0, alpha: 0.22)
         content.layer?.borderColor = edge.cgColor
         content.layer?.borderWidth = 0.5
-        layer?.shadowOpacity = isFocusedCard ? 0.45 : 0.25
-        layer?.shadowRadius = isFocusedCard ? 18 : 8
+        card.layer?.shadowOpacity = focused ? 0.45 : 0.25
+        card.layer?.shadowRadius = focused ? 18 : 8
     }
 
     override func layout() {
@@ -131,6 +141,12 @@ final class CardView: NSView {
             if let surface = view.surface { ghostty_surface_set_occlusion(surface, mode == .live) }
         }
     }
+}
+
+/// The canvas's views that stack: a terminal card's and a ticket's.
+protocol CanvasStacked: AnyObject {
+    /// Back-to-front position among the canvas's cards.
+    var stackIndex: Int { get set }
 }
 
 /// A card's contents, laid out top-down as the card is.
@@ -181,14 +197,17 @@ final class CardTerminalHost: NSHostingView<CardTerminal> {
 /// the card by dragging.
 final class CardEdgeHandle: NSView {
     let edges: CanvasModel.Edges
-    private let card: CardController
+    private let id: UUID
     private weak var canvas: CanvasController?
+    /// Told when a drag starts and ends (a terminal card holds its grids).
+    private let hold: (Bool) -> Void
     private var start: (point: CGPoint, frame: CGRect)?
 
-    init(edges: CanvasModel.Edges, card: CardController, canvas: CanvasController) {
+    init(edges: CanvasModel.Edges, id: UUID, canvas: CanvasController, hold: @escaping (Bool) -> Void = { _ in }) {
         self.edges = edges
-        self.card = card
+        self.id = id
         self.canvas = canvas
+        self.hold = hold
         super.init(frame: .zero)
     }
 
@@ -223,21 +242,21 @@ final class CardEdgeHandle: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
-        guard let frame = canvas?.model.card(card.id)?.frame, let point = documentPoint(event) else { return }
+        guard let frame = canvas?.model.card(id)?.frame, let point = documentPoint(event) else { return }
         start = (point, frame)
-        card.holdGrids(true)
+        hold(true)
     }
 
     override func mouseDragged(with event: NSEvent) {
         guard let canvas, let start, let point = documentPoint(event) else { return }
         let delta = CGSize(width: point.x - start.point.x, height: point.y - start.point.y)
-        canvas.setFrame(CanvasModel.resized(start.frame, edges: edges, by: delta), of: card)
+        canvas.setFrame(CanvasModel.resized(start.frame, edges: edges, by: delta), of: id)
     }
 
     override func mouseUp(with event: NSEvent) {
         guard start != nil else { return }
         start = nil
-        card.holdGrids(false)
+        hold(false)
         canvas?.cardFrameDidSettle()
     }
 
