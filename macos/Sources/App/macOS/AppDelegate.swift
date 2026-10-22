@@ -378,6 +378,8 @@ class AppDelegate: NSObject,
         RestartUI.installMenuItem(after: menuOpenConfig)
         // Lostty Beta: the canvas, in the Window menu.
         CanvasMenu.install(before: menuBringAllToFront)
+        // File → Reopen from History, under Close All Windows.
+        SessionHistoryMenu.install(after: menuCloseAllWindows)
         // Each turn's end, from the agent hooks: the usage breakdown, and in
         // the beta the mascot's turn observer, which also finds out which
         // summarizer it can use. Before the restart resume, which hands it

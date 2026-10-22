@@ -61,6 +61,22 @@ enum SessionRestore {
         return "Saved \(relative ? text.prefix(1).lowercased() + text.dropFirst() : text)."
     }
 
+    /// What reopening `session` from the history would bring back now: its
+    /// windows and cards whose panes aren't open, and the conversations not
+    /// running elsewhere. Nil when all of it is open.
+    static func reopenable(_ session: LastSession) -> LastSession? {
+        session.reopenable(
+            openPanes: Set(LastSessionStore.openPanes().map(\.uuidString)),
+            openConversations: LastSessionStore.shared.openConversations)
+    }
+
+    /// File → Reopen from History: brings `session` back while Lostty runs,
+    /// as Continue does at launch, leaving out what's open now.
+    static func reopen(_ session: LastSession, _ ghostty: Ghostty.App) {
+        guard let session = reopenable(session) else { return }
+        continueSession(session, ghostty)
+    }
+
     private static func continueSession(_ last: LastSession, _ ghostty: Ghostty.App) {
         last.windows.restore(ghostty)
         for (pane, conversation) in last.conversations {
