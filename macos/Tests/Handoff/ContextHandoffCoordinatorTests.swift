@@ -163,6 +163,47 @@ struct ContextHandoffCoordinatorTests {
         #expect(c.panes[pane]?.phase == .pending)
     }
 
+    @Test func theHandoffButtonCountsASkippedHandoffDownAgain() throws {
+        let c = make()
+        c.contextChanged(pane, used: 312_000, size: 1_000_000)
+        world.replies["/t1"] = handoff
+        c.signal(pane, .stopped(transcript: "/t1"))
+        c.skip(pane)
+        runPending()
+        #expect(c.canResume(pane))
+        c.resume(pane)
+        #expect(c.panes[pane]?.phase == .pending)
+        #expect(c.countdowns[pane]?.summary == "Quit item committed.")
+        #expect(!c.canResume(pane))
+        runPending()  // grace
+        #expect(world.typed.first?.1 == [.text("/clear"), .enter])
+        #expect(try String(contentsOf: startFile, encoding: .utf8).contains("Quit item committed."))
+    }
+
+    @Test func aSkippedHandoffGoesStaleOnceTheConversationMovesOn() {
+        let c = make()
+        c.contextChanged(pane, used: 312_000, size: 1_000_000)
+        world.replies["/t1"] = handoff
+        c.signal(pane, .stopped(transcript: "/t1"))
+        c.skip(pane)
+        c.signal(pane, .prompted)
+        #expect(!c.canResume(pane))
+        c.resume(pane)
+        #expect(c.panes[pane]?.phase == .armed)
+        #expect(c.countdowns[pane] == nil)
+    }
+
+    @Test func nothingToResumeWithoutASkipOrWhileTyping() {
+        let c = make()
+        c.contextChanged(pane, used: 312_000, size: 1_000_000)
+        #expect(!c.canResume(pane))
+        world.replies["/t1"] = handoff
+        c.signal(pane, .stopped(transcript: "/t1"))
+        c.skip(pane)
+        c.keyTyped(pane)
+        #expect(!c.canResume(pane))
+    }
+
     @Test func typingDuringTheGraceCancels() {
         let c = make()
         c.contextChanged(pane, used: 312_000, size: 1_000_000)

@@ -33,7 +33,7 @@ struct ClaudeUsageBar: View {
     @State private var hovered: Part?
     @State private var width: CGFloat = 0
 
-    private enum Part { case context, limit }
+    private enum Part { case context, handoff, limit }
 
     /// The context handoff is the beta's, like the mascot.
     private let handsOff = LosttyChannel.current.showsMascot
@@ -103,13 +103,13 @@ struct ClaudeUsageBar: View {
 
     /// The chips in a style: their text, padding and the space between.
     private func metersWidth(_ style: ClaudeUsageFit.Style) -> CGFloat {
-        let armed = pane.map { handoff.isArmed($0) } ?? false
+        let button = hasSession && armedPane != nil ? Self.handoffWidth : 0
         var texts: [String] = []
-        if hasSession { texts += [contextText(style) + (armed ? "  " : ""), limitText(style)] }
+        if hasSession { texts += [contextText(style), limitText(style)] }
         if let resources { texts.append(resourcesText(resources, style)) }
         guard !texts.isEmpty else { return 0 }
         return texts.map { ClaudeUsageFont.width($0) }.reduce(0, +)
-            + CGFloat(texts.count) * 16 + CGFloat(texts.count - 1) * 6
+            + CGFloat(texts.count) * 16 + CGFloat(texts.count - 1) * 6 + button
     }
 
     private func meters(_ style: ClaudeUsageFit.Style) -> some View {
@@ -122,11 +122,22 @@ struct ClaudeUsageBar: View {
     @ViewBuilder
     private func usageChips(_ style: ClaudeUsageFit.Style) -> some View {
         if handsOff {
-            Button { showingHandoff.toggle() } label: {
-                chip(contextLine(style), lit: hovered == .context || showingHandoff)
+            // The context and, while a handoff is armed, its button: one chip.
+            HStack(spacing: 0) {
+                Button { showingHandoff.toggle() } label: {
+                    contextLine(style)
+                        .padding(.leading, 8)
+                        .padding(.trailing, armedPane == nil ? 8 : 3)
+                        .padding(.vertical, 4)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .onHover { hover(.context, $0) }
+                if let armedPane { handoffButton(armedPane) }
             }
-            .buttonStyle(.plain)
-            .onHover { hover(.context, $0) }
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(ink.opacity(hovered == .context || showingHandoff ? 0.07 : 0)))
             .popover(isPresented: $showingHandoff, arrowEdge: .top) {
                 ContextHandoffDetails(settings: handoffSettings, context: pane.flatMap { usage.contexts[$0] },
                                       armed: pane.flatMap { handoff.line($0) })
@@ -145,6 +156,36 @@ struct ClaudeUsageBar: View {
                 ClaudeUsageDetails(usage: usage, accent: accent) { showingDetails = false }
             }
         }
+    }
+
+    /// What the handoff button adds to the context chip past its padding.
+    private static let handoffWidth: CGFloat = 16
+
+    /// The focused pane, while its handoff is armed.
+    private var armedPane: UUID? { pane.flatMap { handoff.isArmed($0) ? $0 : nil } }
+
+    /// ↻ after the context while a handoff is armed. After you Skip its
+    /// countdown, it counts the skipped handoff down again; otherwise it
+    /// shows what the handoff waits for.
+    private func handoffButton(_ pane: UUID) -> some View {
+        let resumable = handoff.canResume(pane)
+        return Button {
+            if handoff.canResume(pane) { handoff.resume(pane) } else { showingHandoff.toggle() }
+        } label: {
+            Image(systemName: "arrow.triangle.2.circlepath")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(accent)
+                .frame(width: 16, height: 16)
+                .background(
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .fill(ink.opacity(hovered == .handoff ? 0.12 : 0)))
+                .padding(.trailing, 5)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hover(.handoff, $0) }
+        .help(resumable ? "Hand off now" : "Will hand off at the next clean break")
+        .accessibilityLabel(resumable ? "Hand off now" : "Handoff waiting")
     }
 
     /// Moving straight from one part to the other may report the new one
@@ -233,7 +274,6 @@ struct ClaudeUsageBar: View {
     private func contextLine(_ style: ClaudeUsageFit.Style) -> some View {
         let context = pane.flatMap { usage.contexts[$0] }
         let percent = context?.percent ?? 0
-        let armed = pane.map { handoff.isArmed($0) } ?? false
 
         return HStack(alignment: .firstTextBaseline, spacing: 0) {
             if style.labels { Text("Context ").foregroundColor(ink.opacity(0.6)) }
@@ -251,12 +291,10 @@ struct ClaudeUsageBar: View {
                         }
                     }
             }
-            (Text((style.cells > 0 ? " " : "") + ClaudeUsageFormat.thousands(context?.used ?? 0))
+            Text((style.cells > 0 ? " " : "") + ClaudeUsageFormat.thousands(context?.used ?? 0))
                 .foregroundColor(number(percent, style))
-                + (armed ? Text(" ") + Text(Image(systemName: "arrow.triangle.2.circlepath")).foregroundColor(accent)
-                    : Text("")))
         }
-        .help(armed ? "Will hand off at the next clean break" : style.labels ? "" : "Context")
+        .help(style.labels ? "" : "Context")
     }
 
     /// Where the handoff limit falls on the context meter, 0...1, while

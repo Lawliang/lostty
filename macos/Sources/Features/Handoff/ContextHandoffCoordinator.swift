@@ -60,6 +60,9 @@ final class ContextHandoffCoordinator: ObservableObject {
     @Published private(set) var notes: [UUID: String] = [:]
     /// Panes counting down to their clear, for the card over the pane.
     @Published private(set) var countdowns: [UUID: ContextHandoffCountdown] = [:]
+    /// Handoffs you skipped, kept until the conversation moves on, so the
+    /// bar's handoff button can count one down again (`resume`).
+    @Published private(set) var skipped: [UUID: ContextHandoffPane] = [:]
 
     private let deps: Dependencies
     /// Each pane's latest conversation file, from its turn ends.
@@ -195,6 +198,7 @@ final class ContextHandoffCoordinator: ObservableObject {
     private func disarm(_ pane: UUID) {
         bump(pane)
         countdowns[pane] = nil
+        skipped[pane] = nil
         nudgeWaiting.remove(pane)
         panes[pane] = nil
         deps.store.removeAll(pane)
@@ -217,6 +221,8 @@ final class ContextHandoffCoordinator: ObservableObject {
         switch signal {
         case .stopped(let path): stopped(pane, path)
         case .prompted:
+            // The conversation moves on past a skipped handoff.
+            skipped[pane] = nil
             typed.remove(pane)
             working.insert(pane)
             interrupted(pane)
@@ -239,9 +245,28 @@ final class ContextHandoffCoordinator: ObservableObject {
     }
 
     /// The countdown card's Skip: no handoff this time. The agent hands off
-    /// again at its next clean break.
+    /// again at its next clean break, or the bar's handoff button brings
+    /// this one back until then.
     func skip(_ pane: UUID) {
+        if let state = panes[pane], state.phase == .pending { skipped[pane] = state }
         interrupted(pane)
+    }
+
+    /// Whether the bar's handoff button can count a skipped handoff down
+    /// again: nothing said or typed since, and it's still saved.
+    func canResume(_ pane: UUID) -> Bool {
+        guard let path = skipped[pane]?.handoff, panes[pane]?.phase == .armed else { return false }
+        return !working.contains(pane) && !typed.contains(pane) && FileManager.default.fileExists(atPath: path)
+    }
+
+    /// The bar's handoff button after a Skip: you changed your mind, so the
+    /// skipped handoff counts down again, as when the agent first wrote it.
+    func resume(_ pane: UUID) {
+        guard canResume(pane), var state = skipped.removeValue(forKey: pane), let current = panes[pane] else { return }
+        state.used = current.used
+        state.size = current.size
+        state.saidAt = current.saidAt
+        startCountdown(pane, state)
     }
 
     /// A key typed in a pane (the app forwards every terminal's).
@@ -297,16 +322,11 @@ final class ContextHandoffCoordinator: ObservableObject {
         case .success(let handoff):
             do {
                 let url = try deps.store.saveHandoff(handoff.text, project: deps.project(pane), at: deps.now())
-                state.phase = .pending
                 state.handoff = url.path
                 state.next = handoff.next
                 state.summary = handoff.summary
-                panes[pane] = state
-                notes[pane] = nil
-                persist(pane)
-                countdowns[pane] = ContextHandoffCountdown(start: deps.now(), seconds: Self.grace, summary: handoff.summary)
-                let gen = bump(pane)
-                deps.schedule(Self.grace) { [weak self] in self?.clear(pane, gen) }
+                skipped[pane] = nil
+                startCountdown(pane, state)
             } catch {
                 notes[pane] = "Couldn't save the handoff: \(error.localizedDescription)"
             }
@@ -324,6 +344,18 @@ final class ContextHandoffCoordinator: ObservableObject {
                 self.deps.type(pane, [.text(ContextHandoffDirective.nudge), .enter])
             }
         }
+    }
+
+    /// The card's countdown to the clear, for a handoff in `state`.
+    private func startCountdown(_ pane: UUID, _ state: ContextHandoffPane) {
+        var state = state
+        state.phase = .pending
+        panes[pane] = state
+        notes[pane] = nil
+        persist(pane)
+        countdowns[pane] = ContextHandoffCountdown(start: deps.now(), seconds: Self.grace, summary: state.summary ?? "")
+        let gen = bump(pane)
+        deps.schedule(Self.grace) { [weak self] in self?.clear(pane, gen) }
     }
 
     private func clear(_ pane: UUID, _ gen: Int) {
