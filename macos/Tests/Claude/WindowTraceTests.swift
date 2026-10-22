@@ -67,6 +67,16 @@ struct WindowTraceTests {
     }
 }
 
+struct CanvasZoomCompensationTests {
+    @Test func zoomedOutATraceKeepsItsWidthOnScreen() {
+        #expect(CanvasZoomCompensation.scale(zoom: 1) == 1)
+        #expect(CanvasZoomCompensation.scale(zoom: 0.5) == 2)
+        #expect(CanvasZoomCompensation.scale(zoom: 0.25) == 4)
+        #expect(CanvasZoomCompensation.scale(zoom: 2) == 1)
+        #expect(CanvasZoomCompensation.scale(zoom: 0) == 1)
+    }
+}
+
 struct ReadyOverlayTests {
     @Test func theLineMatchesOneTerminalRow() {
         #expect(ClaudeReadyOverlay.fontSize(cellHeight: 18) == 15)

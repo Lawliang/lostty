@@ -3,7 +3,8 @@ import AppKit
 import SwiftUI
 
 /// The Claude trace for one pane (spec §4). Lives in SurfaceWrapper's
-/// ZStack; draws nothing (and is not in the tree) while the pane is idle.
+/// ZStack; draws nothing while the pane is idle. On a zoomed-out canvas it
+/// keeps its size on screen (CanvasZoomCompensation).
 struct ClaudeTraceLayer: View {
     let surfaceID: UUID
     @ObservedObject private var runtime = ClaudeRuntime.shared
@@ -16,12 +17,40 @@ struct ClaudeTraceLayer: View {
         // itself works; while only subagents do, the pane keeps their
         // bottom glow.
         let windowLight = style == .window
-        if windowLight { PaneLightView(surfaceID: surfaceID) }
-        if !phase.isOff, !windowLight || phase.subagentsOnly,
-           let trace = ResolvedTrace.resolve(skin: skins.effectiveSkin(surfaceID), enabled: skins.config.trace) {
-            TraceOverlay(phase: phase, trace: trace, bottomOnly: windowLight, headGlow: style != .skinNoGlow)
-                .allowsHitTesting(false)
+        ZStack {
+            if windowLight { PaneLightView(surfaceID: surfaceID) }
+            if !phase.isOff, !windowLight || phase.subagentsOnly,
+               let trace = ResolvedTrace.resolve(skin: skins.effectiveSkin(surfaceID), enabled: skins.config.trace) {
+                TraceOverlay(phase: phase, trace: trace, bottomOnly: windowLight, headGlow: style != .skinNoGlow)
+            }
         }
+        .modifier(CanvasZoomCompensation())
+        .allowsHitTesting(false)
+    }
+}
+
+/// On a zoomed-out canvas, draws its content as big on screen as at 100%:
+/// laid out smaller by the zoom and scaled back up to fill, so a trace's
+/// lines and glows keep their width instead of thinning to nothing. Zoomed
+/// in, and in a window, it draws as is.
+struct CanvasZoomCompensation: ViewModifier {
+    @State private var zoom: CGFloat = 1
+
+    /// How much bigger than at 100% the content draws at `zoom`.
+    static func scale(zoom: CGFloat) -> CGFloat {
+        guard zoom > 0 else { return 1 }
+        return 1 / min(1, zoom)
+    }
+
+    func body(content: Content) -> some View {
+        GeometryReader { geo in
+            let scale = Self.scale(zoom: zoom)
+            content
+                .frame(width: geo.size.width / scale, height: geo.size.height / scale)
+                .scaleEffect(scale)
+                .frame(width: geo.size.width, height: geo.size.height)
+        }
+        .background(CanvasZoomProbe(zoom: $zoom))
     }
 }
 
@@ -128,6 +157,63 @@ struct TraceOverlay: View {
     ) {
         let breath = 0.25 + 0.35 * (0.5 + 0.5 * sin(2 * .pi * time / 2))
         ctx.stroke(outline, with: .color(colors.head.opacity(breath * intensity)), lineWidth: 2)
+    }
+}
+
+/// Reports the zoom of the canvas the view is on (1 off the canvas), as
+/// it changes.
+struct CanvasZoomProbe: NSViewRepresentable {
+    @Binding var zoom: CGFloat
+
+    func makeNSView(context: Context) -> Probe {
+        Probe { magnification in
+            DispatchQueue.main.async { if zoom != magnification { zoom = magnification } }
+        }
+    }
+
+    func updateNSView(_ nsView: Probe, context: Context) {}
+
+    final class Probe: NSView {
+        private let onChange: (CGFloat) -> Void
+        private var token: NSObjectProtocol?
+        /// The zoom last reported: panning posts the same notification.
+        private var reported: CGFloat?
+
+        init(onChange: @escaping (CGFloat) -> Void) {
+            self.onChange = onChange
+            super.init(frame: .zero)
+        }
+
+        required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+        /// Clicks go to the pane under it.
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if let token { NotificationCenter.default.removeObserver(token) }
+            token = nil
+            var view = superview
+            while let next = view, !(next is CanvasScrollView) { view = next.superview }
+            guard let canvas = view as? CanvasScrollView else { return report(1) }
+            // The clip view's bounds change as the canvas pans and zooms.
+            token = NotificationCenter.default.addObserver(
+                forName: NSView.boundsDidChangeNotification, object: canvas.contentView, queue: .main
+            ) { [weak self, weak canvas] _ in
+                if let canvas { self?.report(canvas.magnification) }
+            }
+            report(canvas.magnification)
+        }
+
+        private func report(_ zoom: CGFloat) {
+            guard zoom != reported else { return }
+            reported = zoom
+            onChange(zoom)
+        }
+
+        deinit {
+            if let token { NotificationCenter.default.removeObserver(token) }
+        }
     }
 }
 
