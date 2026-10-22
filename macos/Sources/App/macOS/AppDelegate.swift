@@ -909,11 +909,12 @@ class AppDelegate: NSObject,
     @objc private func ghosttyNewWindow(_ notification: Notification) {
         let configAny = notification.userInfo?[Ghostty.Notification.NewSurfaceConfigKey]
         let config = configAny as? Ghostty.SurfaceConfiguration
-        // Lostty Canvas: new_window from a card's pane makes a card.
+        // Lostty Canvas: new_window from a card's pane makes a card, which
+        // asks what it's for as a new window does.
         let onCard = MainActor.assumeIsolated {
             guard let surface = notification.object as? Ghostty.SurfaceView,
                   let canvas = CanvasController.shared, canvas.card(holding: surface) != nil else { return false }
-            canvas.newCard(baseConfig: config)
+            NewWindowChoice.ask(canvas.newCard(baseConfig: config), config: config)
             return true
         }
         if onCard { return }
@@ -925,11 +926,12 @@ class AppDelegate: NSObject,
         guard let surfaceView = notification.object as? Ghostty.SurfaceView else { return }
         guard let window = surfaceView.window else { return }
 
-        // Lostty Canvas: new_tab from a card's pane makes a card beside it.
+        // Lostty Canvas: new_tab from a card's pane makes a card beside it,
+        // which asks what it's for as a new window does.
         let onCard = MainActor.assumeIsolated {
             guard let canvas = CanvasController.shared, let card = canvas.card(holding: surfaceView) else { return false }
             let config = notification.userInfo?[Ghostty.Notification.NewSurfaceConfigKey] as? Ghostty.SurfaceConfiguration
-            canvas.newCard(beside: card, baseConfig: config)
+            NewWindowChoice.ask(canvas.newCard(beside: card, baseConfig: config), config: config)
             return true
         }
         if onCard { return }
@@ -1167,9 +1169,14 @@ class AppDelegate: NSObject,
     }
 
     @IBAction func newWindow(_ sender: Any?) {
-        // Lostty Canvas: on the canvas, New Window makes a card.
+        // Lostty Canvas: on the canvas, New Window makes a card, starting
+        // where the focused card's pane is and asking what it's for, as ⌘N
+        // from the keyboard does.
         if let canvas = CanvasController.key {
-            canvas.newCard()
+            let config = canvas.focusedCard?.focusedSurface?.surface.map {
+                Ghostty.SurfaceConfiguration(from: ghostty_surface_inherited_config($0, GHOSTTY_SURFACE_CONTEXT_WINDOW))
+            }
+            NewWindowChoice.ask(canvas.newCard(baseConfig: config), config: config)
             return
         }
         // Lostty: starts where the focused terminal is, as ⌘N from the
@@ -1192,7 +1199,7 @@ class AppDelegate: NSObject,
             let config = card.focusedSurface?.surface.map {
                 Ghostty.SurfaceConfiguration(from: ghostty_surface_inherited_config($0, GHOSTTY_SURFACE_CONTEXT_TAB))
             }
-            canvas.newCard(beside: card, baseConfig: config)
+            NewWindowChoice.ask(canvas.newCard(beside: card, baseConfig: config), config: config)
             return
         }
         _ = TerminalController.newTab(

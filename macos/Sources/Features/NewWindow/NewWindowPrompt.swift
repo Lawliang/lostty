@@ -2,8 +2,8 @@
 import AppKit
 import SwiftUI
 
-/// The question over a new window from a repo: what's it for? Its keys
-/// are the card's while it shows (1, 2, 3, Return to continue, Esc to go
+/// The question over a new window or canvas card from a repo: what's it
+/// for? Its keys are the question's while it shows (1, 2, 3, Return to continue, Esc to go
 /// back or continue), so typing never reaches the terminal under it; ⌘
 /// shortcuts still work.
 @MainActor
@@ -11,6 +11,8 @@ final class NewWindowPrompt: ObservableObject, Identifiable {
     enum Stage: Equatable { case choosing, naming, working }
 
     let repo: NewWindowRepo
+    /// "window" or "card".
+    let noun: String
     @Published private(set) var stage: Stage = .choosing
     @Published var branch = ""
     @Published private(set) var error: String?
@@ -18,16 +20,30 @@ final class NewWindowPrompt: ObservableObject, Identifiable {
     /// to keep it.
     private let finish: (String?) -> Void
     private weak var window: NSWindow?
+    /// Whether the question takes the window's keys now: a card's only
+    /// while it's the focused card.
+    private let takesKeys: () -> Bool
     nonisolated(unsafe) private var monitor: Any?
 
-    init(repo: NewWindowRepo, window: NSWindow, finish: @escaping (String?) -> Void) {
+    init(
+        repo: NewWindowRepo, window: NSWindow, noun: String = "window", takesKeys: @escaping () -> Bool = { true },
+        finish: @escaping (String?) -> Void
+    ) {
         self.repo = repo
+        self.noun = noun
         self.window = window
+        self.takesKeys = takesKeys
         self.finish = finish
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self, event.window === self.window else { return event }
-            return self.key(event) ? nil : event
+            guard let self else { return event }
+            return self.take(event) ? nil : event
         }
+    }
+
+    /// Whether the question took a key pressed in its window.
+    func take(_ event: NSEvent) -> Bool {
+        guard event.window === window, takesKeys() else { return false }
+        return key(event)
     }
 
     deinit {
@@ -140,12 +156,12 @@ private struct NewWindowPromptCard: View {
 
     private var choosing: some View {
         VStack(alignment: .leading, spacing: 14) {
-            header("What's this window for?",
-                   "In \(repo.name)\(repo.branch.map { " on \($0)" } ?? ""). Windows in one folder share its branch: "
-                    + "switching it in one switches it in all of them.")
+            header("What's this \(prompt.noun) for?",
+                   "In \(repo.name)\(repo.branch.map { " on \($0)" } ?? ""). \(prompt.noun.capitalized)s in one folder "
+                    + "share its branch: switching it in one switches it in all of them.")
             VStack(spacing: 4) {
                 row("1", "arrow.turn.down.right", repo.branch.map { "Continue on \($0)" } ?? "Continue here",
-                    "The same folder as your other windows.", prompt.continueHere)
+                    "The same folder as your other \(prompt.noun)s.", prompt.continueHere)
                 row("2", "arrow.triangle.branch", "New branch and worktree",
                     "Its own folder and branch. Other windows stay put.", prompt.startNaming)
                 row("3", "folder.badge.plus", "New project", "Start in your home folder.", prompt.newProject)

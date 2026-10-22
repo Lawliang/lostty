@@ -6,15 +6,33 @@ import AppKit
 /// share its branch (switching it in one switches it in all): continuing
 /// on this branch (the same folder, as before), a new branch in a worktree
 /// of its own, or a new project (starting at home). Outside a repo, ⌘N
-/// just opens the window.
+/// just opens the window. On the canvas, ⌘N and ⌘T ask the same over the
+/// new card.
 @MainActor
 enum NewWindowChoice {
     static func newWindow(_ ghostty: Ghostty.App, config: Ghostty.SurfaceConfiguration?) {
         let controller = TerminalController.newWindow(ghostty, withBaseConfig: config)
+        guard let window = controller.window as? TerminalWindow else { return }
+        ask(controller, sidebar: window.extensionSidebarModel, config: config, noun: "window")
+    }
+
+    /// A new card asks while it's the canvas's focused card: the canvas's
+    /// other cards share its window and its keys.
+    static func ask(_ card: CardController, config: Ghostty.SurfaceConfiguration?) {
+        ask(card, sidebar: card.sidebar, config: config, noun: "card") { [weak card] in
+            guard let card else { return false }
+            return card.canvas?.focusedCard === card
+        }
+    }
+
+    private static func ask(
+        _ controller: BaseTerminalController, sidebar: ExtensionSidebarModel, config: Ghostty.SurfaceConfiguration?,
+        noun: String, takesKeys: @escaping () -> Bool = { true }
+    ) {
         guard let pwd = config?.workingDirectory, let repo = NewWindowRepo.read(pwd: pwd),
-              let window = controller.window as? TerminalWindow else { return }
-        let sidebar = window.extensionSidebarModel
-        sidebar.newWindowPrompt = NewWindowPrompt(repo: repo, window: window) { [weak controller, weak sidebar] folder in
+              let window = controller.window else { return }
+        sidebar.newWindowPrompt = NewWindowPrompt(repo: repo, window: window, noun: noun, takesKeys: takesKeys) {
+            [weak controller, weak sidebar] folder in
             sidebar?.newWindowPrompt = nil
             guard let controller else { return }
             if let folder {
@@ -25,9 +43,9 @@ enum NewWindowChoice {
         }
     }
 
-    /// The window's terminal starts over in `folder`; the first one's shell
-    /// (and its tmux session) ends.
-    private static func restart(_ controller: TerminalController, in folder: String, config: Ghostty.SurfaceConfiguration?) {
+    /// The window's or card's terminal starts over in `folder`; the first
+    /// one's shell (and its tmux session) ends.
+    private static func restart(_ controller: BaseTerminalController, in folder: String, config: Ghostty.SurfaceConfiguration?) {
         guard let app = controller.ghostty.app else { return }
         var there = config ?? Ghostty.SurfaceConfiguration()
         there.workingDirectory = folder
