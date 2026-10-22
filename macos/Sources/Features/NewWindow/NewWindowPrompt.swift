@@ -162,8 +162,8 @@ private struct NewWindowPromptCard: View {
             VStack(spacing: 4) {
                 row("1", "arrow.turn.down.right", repo.branch.map { "Continue on \($0)" } ?? "Continue here",
                     "The same folder as your other \(prompt.noun)s.", prompt.continueHere)
-                row("2", "arrow.triangle.branch", "New branch and worktree",
-                    "Its own folder and branch. Other windows stay put.", prompt.startNaming)
+                row("2", "arrow.triangle.branch", "Same project but new branch/worktree",
+                    "Its own folder and branch. Other \(prompt.noun)s stay put.", prompt.startNaming)
                 row("3", "folder.badge.plus", "New project", "Start in your home folder.", prompt.newProject)
             }
         }
@@ -171,7 +171,7 @@ private struct NewWindowPromptCard: View {
 
     private var naming: some View {
         VStack(alignment: .leading, spacing: 14) {
-            header("New branch and worktree",
+            header("Same project but new branch/worktree",
                    "Starts from \(repo.branch ?? "here"), in \(repo.name)/\(NewWindowRepo.worktrees).")
             TextField("branch-name", text: $prompt.branch)
                 .textFieldStyle(.roundedBorder)
