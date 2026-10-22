@@ -112,20 +112,23 @@ final class CanvasAddMenuState: ObservableObject {
     @Published var isOpen = false
 }
 
-/// The + button in the website's magenta, turning to × while the pill of
-/// what it adds is open above it.
+/// The + button, after Apple Music's 2026 icon: a clear disc of Liquid
+/// Glass with a bright rim, light splitting into color at two opposite
+/// edges, and a monochrome glyph (black in light, white and glowing in
+/// dark). The light turns as the pointer comes near; a click sends ripples
+/// out, as the icon was shaped by ripples in oil. It turns to × while the
+/// pill of what it adds is open above it.
 struct CanvasAddButton: View {
     @ObservedObject var state: CanvasAddMenuState
     let choose: (CanvasAddMenuView.Item) -> Void
-
-    /// The website's `--btn-bg` (website/custom.html).
-    private static let magenta = Color(nsColor: NSColor(name: "LosttyCanvasAdd") { appearance in
-        appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-            ? NSColor(srgbRed: 0xE5 / 255, green: 0x19 / 255, blue: 0x9C / 255, alpha: 1)
-            : NSColor(srgbRed: 0xB3 / 255, green: 0x0F / 255, blue: 0x77 / 255, alpha: 1)
-    })
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var hovering = false
+    @State private var ripples = 0
 
     static let spring = Animation.spring(response: 0.28, dampingFraction: 0.8)
+
+    private var dark: Bool { scheme == .dark }
 
     var body: some View {
         VStack(spacing: CanvasAddMenuView.pillGap) {
@@ -134,17 +137,25 @@ struct CanvasAddButton: View {
             }
             Button {
                 withAnimation(Self.spring) { state.isOpen.toggle() }
+                if !reduceMotion { ripples += 1 }
             } label: {
                 Image(systemName: "plus")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundStyle(dark ? Color.white : Color.black)
+                    .shadow(color: .white.opacity(dark ? 0.55 : 0), radius: 5)
                     .rotationEffect(.degrees(state.isOpen ? 45 : 0))
                     .frame(width: CanvasAddMenuView.diameter, height: CanvasAddMenuView.diameter)
-                    .background(Self.magenta, in: Circle())
-                    .shadow(color: .black.opacity(0.3), radius: 8, y: 3)
+                    .modifier(CanvasAddGlass(dark: dark))
+                    .overlay {
+                        CanvasAddPrism(dark: dark, turn: .degrees(hovering && !reduceMotion ? 38 : 0))
+                            .opacity(hovering ? 1 : 0.85)
+                    }
+                    .overlay(CanvasAddRim(dark: dark, lit: hovering))
+                    .background(CanvasAddRipple(trigger: ripples, dark: dark))
                     .contentShape(Circle())
             }
             .buttonStyle(.plain)
+            .onHover { inside in withAnimation(.spring(response: 0.6, dampingFraction: 0.75)) { hovering = inside } }
             .help(state.isOpen ? "Close" : "Add to Canvas")
             .accessibilityLabel(state.isOpen ? "Close" : "Add to Canvas")
         }
@@ -162,6 +173,114 @@ struct CanvasAddButton: View {
         .background(.regularMaterial, in: Capsule())
         .overlay(Capsule().strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.5))
         .shadow(color: .black.opacity(0.25), radius: 10, y: 4)
+    }
+}
+
+/// The disc's body: Liquid Glass on macOS 26, which bends the cards
+/// behind it and casts its own shadow; before that, the thinnest
+/// material with one.
+private struct CanvasAddGlass: ViewModifier {
+    let dark: Bool
+
+    func body(content: Content) -> some View {
+        if #available(macOS 26, *) {
+            content.glassEffect(.regular.tint(dark ? .black.opacity(0.35) : .white.opacity(0.35)).interactive(),
+                                in: Circle())
+        } else {
+            content.background(
+                Circle().fill(.ultraThinMaterial)
+                    .shadow(color: .black.opacity(dark ? 0.5 : 0.18), radius: 10, y: 4))
+        }
+    }
+}
+
+/// The glass's edge: brightest at the top left, where the light falls.
+private struct CanvasAddRim: View {
+    let dark: Bool
+    let lit: Bool
+
+    var body: some View {
+        Circle().strokeBorder(
+            LinearGradient(
+                colors: [.white.opacity(lit ? 0.95 : 0.8), .white.opacity(dark ? 0.08 : 0.25),
+                         .white.opacity(dark ? 0.35 : 0.6)],
+                startPoint: .topLeading, endPoint: .bottomTrailing),
+            lineWidth: 0.8)
+    }
+}
+
+/// Light split by the glass's edge into color, as on Apple Music's icon: an
+/// arc at the top right and one at the bottom left, cyan into blue with a
+/// warm fringe. Brighter on dark glass, where it adds light.
+private struct CanvasAddPrism: View {
+    let dark: Bool
+    let turn: Angle
+
+    var body: some View {
+        ZStack {
+            // Trim runs clockwise from the right edge: 0.75 is the top.
+            arc(from: 0.77, to: 0.99, colors: [.clear, .white, .cyan, .blue, Self.indigo, .clear])
+            arc(from: 0.27, to: 0.49, colors: [.clear, Self.ember, .white, .cyan, .blue, .clear])
+        }
+        .rotationEffect(turn)
+        .blendMode(dark ? .plusLighter : .normal)
+        .allowsHitTesting(false)
+    }
+
+    private static let indigo = Color(red: 0.35, green: 0.25, blue: 0.95)
+    private static let ember = Color(red: 1, green: 0.45, blue: 0.2)
+
+    private func arc(from: CGFloat, to: CGFloat, colors: [Color]) -> some View {
+        let gradient = AngularGradient(colors: colors, center: .center,
+                                       startAngle: .degrees(from * 360), endAngle: .degrees(to * 360))
+        return ZStack {
+            // A soft bloom under a sharp line.
+            Circle().trim(from: from, to: to)
+                .stroke(gradient, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                .blur(radius: 2.5)
+                .opacity(dark ? 0.9 : 0.6)
+            Circle().trim(from: from, to: to)
+                .stroke(gradient, style: StrokeStyle(lineWidth: 2.2, lineCap: .round))
+        }
+        .padding(2)
+    }
+}
+
+/// Two rings that spread from the disc and fade on each click, like the
+/// ripples in oil Apple Music's icon was shaped by.
+private struct CanvasAddRipple: View {
+    let trigger: Int
+    let dark: Bool
+
+    private struct Ring {
+        var scale: CGFloat = 1
+        var opacity: Double = 0
+    }
+
+    var body: some View {
+        ZStack {
+            ring(delay: 0)
+            ring(delay: 0.14)
+        }
+        .allowsHitTesting(false)
+    }
+
+    private func ring(delay: TimeInterval) -> some View {
+        Circle()
+            .stroke(Color.primary.opacity(dark ? 0.5 : 0.35), lineWidth: 1.2)
+            .keyframeAnimator(initialValue: Ring(), trigger: trigger) { ring, value in
+                ring.scaleEffect(value.scale).opacity(value.opacity)
+            } keyframes: { _ in
+                KeyframeTrack(\.scale) {
+                    LinearKeyframe(1, duration: delay)
+                    CubicKeyframe(1.36, duration: 0.75)
+                }
+                KeyframeTrack(\.opacity) {
+                    LinearKeyframe(0, duration: delay)
+                    MoveKeyframe(1)
+                    LinearKeyframe(0, duration: 0.75)
+                }
+            }
     }
 }
 
