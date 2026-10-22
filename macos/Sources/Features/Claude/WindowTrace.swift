@@ -8,8 +8,6 @@ import SwiftUI
 /// Style is Window Light. A pane where only subagents work keeps its
 /// bottom glow.
 enum WindowTrace {
-    /// One lap, as the website's `ag-spin`.
-    static let lapSeconds: Double = 3.2
     /// Showing and going, as the website's opacity transition.
     static let fadeSeconds: Double = 0.5
 
@@ -23,6 +21,10 @@ enum WindowTrace {
         /// The head's color (the skin's trace color) and the tail's.
         var primary: RGB
         var secondary: RGB
+        /// When Claude started working, and the skin trace's speed: the
+        /// light runs as that pane's skin trace would.
+        var since: Date
+        var speed: Double
 
         var colors: TraceColors { TraceColors(primary: primary, secondary: secondary) }
     }
@@ -32,32 +34,61 @@ enum WindowTrace {
     /// skin. Not when its trace is off (`trace = "none"`, `[defaults]
     /// trace = false`).
     static func lighting(pane: UUID, phase: TracePhase, skin: Skin?, enabled: Bool) -> Lighting? {
-        guard case .racing(_, false) = phase,
+        guard case .racing(let since, false) = phase,
               let trace = ResolvedTrace.resolve(skin: skin, enabled: enabled) else { return nil }
-        if skin == nil { return Lighting(pane: pane, primary: websitePink, secondary: websiteCyan) }
-        return Lighting(pane: pane, primary: trace.color, secondary: trace.color2)
+        let primary = skin == nil ? websitePink : trace.color
+        let secondary = skin == nil ? websiteCyan : trace.color2
+        return Lighting(pane: pane, primary: primary, secondary: secondary, since: since, speed: trace.speed)
     }
 
-    /// The light's turn, in degrees clockwise from the top, `elapsed`
-    /// seconds after it lit.
-    static func angle(elapsed: Double) -> Double {
-        let laps = max(0, elapsed) / lapSeconds
-        return (laps - laps.rounded(.down)) * 360
+    /// Where the light's head is on the pane's inside edge `rect`, and
+    /// whether it's running clockwise: moved by the skin traces' own motion
+    /// (corner to corner along the person's route, a leg's time set by the
+    /// speed, easing into and out of each corner), so the two styles run
+    /// alike.
+    static func head(
+        _ journey: TraceOverlay.Journey, since: Date, in rect: CGRect, elapsed: Double, route: TraceRoute, speed: Double
+    ) -> (point: CGPoint, clockwise: Bool) {
+        if journey.since != since {
+            journey.since = since
+            journey.motion = TraceMotion()
+        }
+        let legSeconds = TraceFrame.legSeconds(speed: speed)
+        let elapsed = max(0, elapsed)
+        journey.motion.advance(to: elapsed, course: .route(route), legSeconds: legSeconds)
+        guard let leg = journey.motion.legs.last,
+              let end = journey.motion.path(in: rect, at: elapsed, legSeconds: legSeconds).runs.last?.to
+        else { return (CGPoint(x: rect.midX, y: rect.minY), true) }
+        return (end, leg.to == leg.from.clockwiseNext)
+    }
+
+    /// The gradient's turn, in degrees clockwise, that puts its tip on
+    /// `head` as seen from `center`, with the tail behind it.
+    static func turn(toward head: CGPoint, from center: CGPoint, clockwise: Bool) -> Double {
+        let bearing = atan2(head.y - center.y, head.x - center.x) * 180 / .pi
+        // The gradient starts at the top (-90°); its tip is a share of the way round.
+        let tip = clockwise ? stopLocations[4] : 1 - stopLocations[4]
+        let turn = (Double(bearing) + 90 - tip * 360).truncatingRemainder(dividingBy: 360)
+        return turn < 0 ? turn + 360 : turn
     }
 
     /// Where the website's conic gradient changes, as shares of a turn
-    /// from its start: dark, the tail coming in, the head, the white-hot
-    /// tip, and dark again just past it.
+    /// from its start: dark, the tail coming in, the head, its tip, and
+    /// dark again just past it.
     static let stopLocations: [Double] = [0, 0.64, 0.80, 0.93, 0.95, 0.96, 1]
 
-    /// The website's gradient: `transparent 0 64%, color-mix(accent2 70%)
-    /// 80%, accent 93%, #fff 95%, transparent 96%`.
-    static func stops(_ colors: TraceColors) -> [Gradient.Stop] {
+    /// The website's gradient, `transparent 0 64%, color-mix(accent2 70%)
+    /// 80%, accent 93%, #fff 95%, transparent 96%`, but with the tip in
+    /// the head's color rather than white. Running counterclockwise, it's
+    /// mirrored so the tail stays behind the head.
+    static func stops(_ colors: TraceColors, clockwise: Bool = true) -> [Gradient.Stop] {
         let shades: [Color] = [
             colors.tail.opacity(0), colors.tail.opacity(0), colors.tail.opacity(0.7), colors.head,
-            .white, .white.opacity(0), .white.opacity(0),
+            colors.head, colors.head.opacity(0), colors.head.opacity(0),
         ]
-        return zip(shades, stopLocations).map { Gradient.Stop(color: $0, location: $1) }
+        let stops = zip(shades, stopLocations).map { Gradient.Stop(color: $0, location: $1) }
+        guard !clockwise else { return stops }
+        return stops.reversed().map { Gradient.Stop(color: $0.color, location: 1 - $0.location) }
     }
 }
 
@@ -67,11 +98,12 @@ struct PaneLightView: View {
     @ObservedObject private var runtime = ClaudeRuntime.shared
     @ObservedObject private var skins = SkinsRuntime.shared.manager
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @AppStorage(TraceRoute.defaultsKey, store: .ghostty) private var route = TraceRoute.initial
     @State private var windowVisible = true
     /// The last lighting, kept while the light fades out.
     @State private var shown: WindowTrace.Lighting?
     @State private var lit = false
-    @State private var since = Date()
+    @State private var journey = TraceOverlay.Journey()
 
     private var lighting: WindowTrace.Lighting? {
         WindowTrace.lighting(
@@ -83,12 +115,18 @@ struct PaneLightView: View {
         GeometryReader { geo in
             if let shown {
                 TimelineView(.animation(paused: !lit || !windowVisible)) { timeline in
-                    let elapsed = timeline.date.timeIntervalSince(since)
+                    let elapsed = timeline.date.timeIntervalSince(shown.since)
                     if reduceMotion {
                         calm(size: geo.size, colors: shown.colors, elapsed: elapsed)
                     } else {
-                        WindowTraceRing(colors: shown.colors, angle: WindowTrace.angle(elapsed: elapsed),
-                                        cornerRadius: 0, size: geo.size)
+                        let rect = TraceOverlay.edgeRect(geo.size)
+                        let head = WindowTrace.head(journey, since: shown.since, in: rect, elapsed: elapsed,
+                                                    route: route, speed: shown.speed)
+                        WindowTraceRing(
+                            colors: shown.colors,
+                            angle: WindowTrace.turn(toward: head.point, from: CGPoint(x: rect.midX, y: rect.midY),
+                                                    clockwise: head.clockwise),
+                            clockwise: head.clockwise, cornerRadius: 0, size: geo.size)
                     }
                 }
             }
@@ -103,10 +141,7 @@ struct PaneLightView: View {
     }
 
     private func light(_ lighting: WindowTrace.Lighting?) {
-        if let lighting {
-            if !lit { since = Date() }
-            shown = lighting
-        }
+        if let lighting { shown = lighting }
         lit = lighting != nil
     }
 
@@ -126,6 +161,7 @@ struct PaneLightView: View {
 struct WindowTraceRing: View {
     let colors: TraceColors
     let angle: Double
+    var clockwise = true
     let cornerRadius: CGFloat
     let size: CGSize
 
@@ -133,7 +169,7 @@ struct WindowTraceRing: View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius)
         let side = (size.width * size.width + size.height * size.height).squareRoot()
         let sweep = AngularGradient(
-            gradient: Gradient(stops: WindowTrace.stops(colors)), center: .center,
+            gradient: Gradient(stops: WindowTrace.stops(colors, clockwise: clockwise)), center: .center,
             startAngle: .degrees(-90), endAngle: .degrees(270))
             .frame(width: side, height: side)
             .rotationEffect(.degrees(angle))
