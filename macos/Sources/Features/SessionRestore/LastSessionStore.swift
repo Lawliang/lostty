@@ -5,7 +5,8 @@ import AppKit
 /// after the windows, tabs, splits, canvas cards, a pane's folder or an
 /// agent's conversation change, and only when the snapshot did. Saved
 /// again on the way out (quit, restart, shutdown) and before the Mac
-/// sleeps. A few KB of JSON; nothing touches the terminals.
+/// sleeps. A few KB of JSON; nothing touches the terminals. Each save
+/// also goes into the `SessionHistory`.
 @MainActor
 final class LastSessionStore {
     static let shared = LastSessionStore()
@@ -17,6 +18,8 @@ final class LastSessionStore {
     static let shutdownPause: TimeInterval = 60
 
     private let url: URL
+    /// Every snapshot saved, for Reopen from History.
+    private let history: SessionHistory
     /// The agent panes' conversations, from each turn's end.
     private var conversations: [UUID: PaneConversation] = [:]
     private var last: LastSession?
@@ -25,8 +28,9 @@ final class LastSessionStore {
     private var paused = false
     private var observers: [NSObjectProtocol] = []
 
-    init(url: URL = LastSession.standardURL) {
+    init(url: URL = LastSession.standardURL, history: SessionHistory = .standard) {
         self.url = url
+        self.history = history
     }
 
     /// Once the windows are back (or Continue is answered): from here on
@@ -97,10 +101,20 @@ final class LastSessionStore {
         } catch {
             Ghostty.logger.warning("last session: couldn't save (\(error.localizedDescription))")
         }
+        do {
+            try history.record(session)
+        } catch {
+            Ghostty.logger.warning("session history: couldn't save (\(error.localizedDescription))")
+        }
+    }
+
+    /// The conversations running in open panes now.
+    var openConversations: Set<String> {
+        Set(conversations.values.map(\.id))
     }
 
     /// The panes a snapshot holds: every terminal window's and the canvas's.
-    private static func openPanes() -> [UUID] {
+    static func openPanes() -> [UUID] {
         let controllers: [BaseTerminalController] = TerminalController.all + (CanvasController.shared?.cards ?? [])
         return controllers.flatMap { $0.surfaceTree.map(\.id) }
     }
