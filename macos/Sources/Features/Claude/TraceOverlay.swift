@@ -12,19 +12,25 @@ struct ClaudeTraceLayer: View {
     @AppStorage(TraceStyle.defaultsKey, store: .ghostty) private var style = TraceStyle.initial
     /// The canvas's zoom on a card, 1 in a window.
     @State private var zoom: CGFloat = 1
+    /// The head's motion, kept across frames: the Window Light's and its
+    /// bottom glow's together, so the glow comes on as the light reaches
+    /// the bottom edge.
+    @State private var journey = TraceOverlay.Journey()
 
     var body: some View {
         let phase = runtime.phase(surfaceID)
         // In Window Light the website's light circles the pane while Claude
-        // itself works; while only subagents do, the pane keeps their
-        // bottom glow.
+        // works; while only subagents or shells do, it runs along the
+        // bottom edge over their bottom glow.
         let windowLight = style == .window
         ZStack {
-            if windowLight { PaneLightView(surfaceID: surfaceID).modifier(CanvasZoomCompensation(zoom: zoom)) }
+            if windowLight {
+                PaneLightView(surfaceID: surfaceID, journey: journey).modifier(CanvasZoomCompensation(zoom: zoom))
+            }
             if !phase.isOff, !windowLight || phase.subagentsOnly,
                let trace = ResolvedTrace.resolve(skin: skins.effectiveSkin(surfaceID), enabled: skins.config.trace) {
-                TraceOverlay(phase: phase, trace: trace, bottomOnly: windowLight, headGlow: style != .skinNoGlow,
-                             canvasZoom: zoom)
+                TraceOverlay(phase: phase, trace: trace, journey: journey, bottomOnly: windowLight,
+                             headGlow: style != .skinNoGlow, canvasZoom: zoom)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -62,6 +68,7 @@ struct TraceOverlay: View {
 
     let phase: TracePhase
     let trace: ResolvedTrace
+    let journey: Journey
     /// Only the subagents' bottom glow, without the racing head.
     var bottomOnly = false
     /// The glowing circle round the racing head.
@@ -71,7 +78,6 @@ struct TraceOverlay: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(TraceRoute.defaultsKey, store: .ghostty) private var route = TraceRoute.initial
     @State private var windowVisible = true
-    @State private var journey = Journey()
 
     /// The head's motion, kept across frames. A class so drawing can
     /// advance it without invalidating the view.
@@ -87,7 +93,7 @@ struct TraceOverlay: View {
 
     var body: some View {
         if canvasZoom < 1 {
-            ZoomedTraceView(drawing: drawing, zoom: canvasZoom)
+            ZoomedTraceView(drawing: drawing, journey: journey, zoom: canvasZoom)
         } else {
             TimelineView(.animation(paused: !windowVisible)) { timeline in
                 Canvas { ctx, size in
@@ -159,7 +165,14 @@ struct TraceDrawing {
         let time = date.timeIntervalSinceReferenceDate
         ctx.blendMode = .plusLighter
         if bottomOnly {
-            TraceOverlay.drawBottomGlow(in: &ctx, rect: rect, level: TraceFrame.intensity(elapsed: elapsed), colors: colors)
+            // Under the Window Light, which moves the head: lit once it
+            // reaches the bottom edge, as under a skin trace.
+            var level = TraceFrame.intensity(elapsed: elapsed)
+            if !reduceMotion {
+                journey.motion.advance(to: elapsed, course: course, legSeconds: TraceFrame.legSeconds(speed: trace.speed))
+                level *= journey.motion.bottomGlow(at: elapsed)
+            }
+            TraceOverlay.drawBottomGlow(in: &ctx, rect: rect, level: level, colors: colors)
             return
         }
         if reduceMotion {
@@ -197,19 +210,21 @@ struct TraceDrawing {
 /// keep their width.
 struct ZoomedTraceView: NSViewRepresentable {
     let drawing: TraceDrawing
+    let journey: TraceOverlay.Journey
     let zoom: CGFloat
 
     func makeNSView(context: Context) -> DrawingView { DrawingView() }
 
     func updateNSView(_ view: DrawingView, context: Context) {
         view.drawing = drawing
+        view.journey = journey
         view.zoom = zoom
     }
 
     final class DrawingView: NSView {
         var drawing: TraceDrawing?
         var zoom: CGFloat = 1
-        private let journey = TraceOverlay.Journey()
+        var journey = TraceOverlay.Journey()
         private var timer: Timer?
 
         override init(frame frameRect: NSRect) {

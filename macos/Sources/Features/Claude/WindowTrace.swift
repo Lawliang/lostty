@@ -5,8 +5,8 @@ import SwiftUI
 /// The website's trace (website/custom.html, "Claude's trace"): a light
 /// circling each pane's edge while Claude works in it, in that pane's
 /// colors. Shown instead of the skin traces when Lostty → Claude Trace
-/// Style is Window Light. A pane where only subagents work keeps its
-/// bottom glow.
+/// Style is Window Light. While only subagents or background shells work,
+/// it runs back and forth along the bottom edge, as the skin traces do.
 enum WindowTrace {
     /// Showing and going, as the website's opacity transition.
     static let fadeSeconds: Double = 0.5
@@ -25,29 +25,32 @@ enum WindowTrace {
         /// light runs as that pane's skin trace would.
         var since: Date
         var speed: Double
+        /// Only subagents or background shells work: the light keeps to
+        /// the bottom edge.
+        var subagents = false
 
         var colors: TraceColors { TraceColors(primary: primary, secondary: secondary) }
     }
 
-    /// A pane is lit while Claude itself works in it (not only its
-    /// subagents), in its skin's trace colors, or the website's with no
+    /// A pane is lit while Claude, its subagents or its background shells
+    /// work in it, in its skin's trace colors, or the website's with no
     /// skin. Not when its trace is off (`trace = "none"`, `[defaults]
     /// trace = false`).
     static func lighting(pane: UUID, phase: TracePhase, skin: Skin?, enabled: Bool) -> Lighting? {
-        guard case .racing(let since, false) = phase,
+        guard case .racing(let since, let subagents) = phase,
               let trace = ResolvedTrace.resolve(skin: skin, enabled: enabled) else { return nil }
         let primary = skin == nil ? websitePink : trace.color
         let secondary = skin == nil ? websiteCyan : trace.color2
-        return Lighting(pane: pane, primary: primary, secondary: secondary, since: since, speed: trace.speed)
+        return Lighting(
+            pane: pane, primary: primary, secondary: secondary, since: since, speed: trace.speed, subagents: subagents)
     }
 
     /// Where the light's head is on the pane's inside edge `rect`, and
     /// whether it's running clockwise: moved by the skin traces' own motion
-    /// (corner to corner along the person's route, a leg's time set by the
-    /// speed, easing into and out of each corner), so the two styles run
-    /// alike.
+    /// (corner to corner along the course, a leg's time set by the speed,
+    /// easing into and out of each corner), so the two styles run alike.
     static func head(
-        _ journey: TraceOverlay.Journey, since: Date, in rect: CGRect, elapsed: Double, route: TraceRoute, speed: Double
+        _ journey: TraceOverlay.Journey, since: Date, in rect: CGRect, elapsed: Double, course: TraceCourse, speed: Double
     ) -> (point: CGPoint, clockwise: Bool) {
         if journey.since != since {
             journey.since = since
@@ -55,7 +58,7 @@ enum WindowTrace {
         }
         let legSeconds = TraceFrame.legSeconds(speed: speed)
         let elapsed = max(0, elapsed)
-        journey.motion.advance(to: elapsed, course: .route(route), legSeconds: legSeconds)
+        journey.motion.advance(to: elapsed, course: course, legSeconds: legSeconds)
         guard let leg = journey.motion.legs.last,
               let end = journey.motion.path(in: rect, at: elapsed, legSeconds: legSeconds).runs.last?.to
         else { return (CGPoint(x: rect.midX, y: rect.minY), true) }
@@ -105,6 +108,8 @@ enum WindowTrace {
 /// The light round one pane. Draws nothing until Claude works there.
 struct PaneLightView: View {
     let surfaceID: UUID
+    /// The head's motion, shared with the bottom glow (ClaudeTraceLayer).
+    let journey: TraceOverlay.Journey
     @ObservedObject private var runtime = ClaudeRuntime.shared
     @ObservedObject private var skins = SkinsRuntime.shared.manager
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -113,7 +118,6 @@ struct PaneLightView: View {
     /// The last lighting, kept while the light fades out.
     @State private var shown: WindowTrace.Lighting?
     @State private var lit = false
-    @State private var journey = TraceOverlay.Journey()
 
     private var lighting: WindowTrace.Lighting? {
         WindowTrace.lighting(
@@ -130,8 +134,9 @@ struct PaneLightView: View {
                         calm(size: geo.size, colors: shown.colors, elapsed: elapsed)
                     } else {
                         let rect = TraceOverlay.edgeRect(geo.size)
-                        let head = WindowTrace.head(journey, since: shown.since, in: rect, elapsed: elapsed,
-                                                    route: route, speed: shown.speed)
+                        let head = WindowTrace.head(
+                            journey, since: shown.since, in: rect, elapsed: elapsed,
+                            course: shown.subagents ? .subagents : .route(route), speed: shown.speed)
                         WindowTraceRing(
                             colors: shown.colors,
                             angle: WindowTrace.turn(toward: head.point, from: CGPoint(x: rect.midX, y: rect.midY),

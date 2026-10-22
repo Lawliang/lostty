@@ -27,9 +27,11 @@ struct WindowTraceTests {
         #expect(lighting(.racing(since: since))?.pane == a)
     }
 
-    @Test func onlySubagentsWorkingLeavesItDark() {
-        // The pane keeps their bottom glow instead.
-        #expect(lighting(.racing(since: since, subagents: true)) == nil)
+    @Test func onlySubagentsWorkingKeepsItLitAlongTheBottom() {
+        let lit = lighting(.racing(since: since, subagents: true))
+        #expect(lit?.pane == a)
+        #expect(lit?.subagents == true)
+        #expect(lighting(.racing(since: since))?.subagents == false)
     }
 
     @Test func aPaneWithNoSkinGetsTheWebsitesPinkAndCyan() {
@@ -60,9 +62,9 @@ struct WindowTraceTests {
 
     private let rect = CGRect(x: 0, y: 0, width: 100, height: 50)
 
-    private func head(_ elapsed: Double, route: TraceRoute = .all, speed: Double = 1,
+    private func head(_ elapsed: Double, route: TraceRoute = .all, course: TraceCourse? = nil, speed: Double = 1,
                       journey: TraceOverlay.Journey = .init()) -> (point: CGPoint, clockwise: Bool) {
-        WindowTrace.head(journey, since: since, in: rect, elapsed: elapsed, route: route, speed: speed)
+        WindowTrace.head(journey, since: since, in: rect, elapsed: elapsed, course: course ?? .route(route), speed: speed)
     }
 
     @Test func theHeadEasesCornerToCornerAsTheSkinTraceDoes() {
@@ -94,6 +96,16 @@ struct WindowTraceTests {
         #expect(head(0.3, route: .right).clockwise)
         #expect(abs(head(0.3, route: .right).point.y - 25) < 1e-9)
         #expect(!head(0.9, route: .right).clockwise)
+    }
+
+    @Test func forSubagentsTheHeadRunsBackAndForthAlongTheBottom() {
+        // Right to left along the bottom edge, then back.
+        for elapsed in [0.3, 0.9] {
+            let point = head(elapsed, course: .subagents).point
+            #expect(abs(point.x - 50) < 1e-9 && point.y == 50)
+        }
+        #expect(head(0.3, course: .subagents).clockwise)
+        #expect(!head(0.9, course: .subagents).clockwise)
     }
 
     @Test func theGradientsTipPointsAtTheHead() {
