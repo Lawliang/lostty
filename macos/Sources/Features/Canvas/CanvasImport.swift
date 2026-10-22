@@ -50,8 +50,12 @@ enum CanvasImport {
     }
 
     /// Moves `controllers`' panes onto the canvas, closing their windows,
-    /// and focuses `focus`'s card (else the first); several are zoomed to fit.
-    static func move(_ ghostty: Ghostty.App, _ controllers: [TerminalController], focus: TerminalController? = nil) {
+    /// and focuses `focus`'s card (else the first); several are zoomed to
+    /// fit. `arrived` gets the new cards once they're on the canvas.
+    static func move(
+        _ ghostty: Ghostty.App, _ controllers: [TerminalController], focus: TerminalController? = nil,
+        arrived: @escaping ([CardController]) -> Void = { _ in }
+    ) {
         let moves = controllers.filter { !$0.surfaceTree.isEmpty }.map {
             (tree: $0.surfaceTree, focused: $0.focusedSurface, size: CanvasController.cardSize(for: $0.surfaceTree),
              isFocus: $0 === (focus ?? controllers.first))
@@ -66,14 +70,17 @@ enum CanvasImport {
         DispatchQueue.main.async {
             let frames = canvas.model.placements(sizes: moves.map(\.size), in: canvas.scrollView.documentVisibleRect)
             var focused: CardController?
+            var cards: [CardController] = []
             for (move, frame) in zip(moves, frames) {
                 let card = canvas.addCard(tree: move.tree, frame: frame, focused: move.focused)
+                cards.append(card)
                 if move.isFocus { focused = card }
             }
             // Focusing pans to the card; then the fit shows them all, at
             // no more than 100%.
             if let focused { canvas.focus(focused) }
             if moves.count > 1 { canvas.zoomToFit(atMost: 1) }
+            arrived(cards)
         }
     }
 }

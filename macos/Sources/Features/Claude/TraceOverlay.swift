@@ -7,7 +7,7 @@ import SwiftUI
 /// keeps its size on screen.
 struct ClaudeTraceLayer: View {
     let surfaceID: UUID
-    @ObservedObject private var runtime = ClaudeRuntime.shared
+    @StateObject private var claude: PaneClaude
     @ObservedObject private var skins = SkinsRuntime.shared.manager
     @AppStorage(TraceStyle.defaultsKey, store: .ghostty) private var style = TraceStyle.initial
     /// The canvas's zoom on a card, 1 in a window.
@@ -17,15 +17,20 @@ struct ClaudeTraceLayer: View {
     /// the bottom edge.
     @State private var journey = TraceOverlay.Journey()
 
+    init(surfaceID: UUID) {
+        self.surfaceID = surfaceID
+        _claude = StateObject(wrappedValue: PaneClaude(surfaceID))
+    }
+
     var body: some View {
-        let phase = runtime.phase(surfaceID)
+        let phase = claude.phase
         // In Window Light the website's light circles the pane while Claude
         // works; while only subagents or shells do, it runs along the
         // bottom edge over their bottom glow.
         let windowLight = style == .window
         ZStack {
             if windowLight {
-                PaneLightView(surfaceID: surfaceID, journey: journey).modifier(CanvasZoomCompensation(zoom: zoom))
+                PaneLightView(surfaceID: surfaceID, phase: phase, journey: journey).modifier(CanvasZoomCompensation(zoom: zoom))
             }
             if !phase.isOff, !windowLight || phase.subagentsOnly,
                let trace = ResolvedTrace.resolve(skin: skins.effectiveSkin(surfaceID), enabled: skins.config.trace) {
@@ -95,7 +100,7 @@ struct TraceOverlay: View {
         if canvasZoom < 1 {
             ZoomedTraceView(drawing: drawing, journey: journey, zoom: canvasZoom)
         } else {
-            TimelineView(.animation(paused: !windowVisible)) { timeline in
+            TimelineView(.animation(minimumInterval: TraceTiming.frameInterval, paused: !windowVisible)) { timeline in
                 Canvas { ctx, size in
                     drawing.draw(in: &ctx, size: size, at: timeline.date, journey: journey)
                 }
@@ -245,9 +250,9 @@ struct ZoomedTraceView: NSViewRepresentable {
             timer?.invalidate()
             timer = nil
             guard window != nil else { return }
-            // A frame each display refresh, as TimelineView(.animation),
-            // pinches and scrolls included.
-            let timer = Timer(timeInterval: 1.0 / 60, repeats: true) { [weak self] _ in self?.tick() }
+            // As often as the trace in a window draws, pinches and scrolls
+            // included.
+            let timer = Timer(timeInterval: TraceTiming.frameInterval, repeats: true) { [weak self] _ in self?.tick() }
             RunLoop.main.add(timer, forMode: .common)
             self.timer = timer
         }

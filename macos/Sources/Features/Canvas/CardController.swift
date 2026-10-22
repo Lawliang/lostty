@@ -12,10 +12,9 @@ final class CardController: BaseTerminalController {
     let id = UUID()
     private(set) weak var canvas: CanvasController?
     /// The card's own bottom bar (usage, or the apps), as a window has (no
-    /// mascot on the canvas, and no notifications: the canvas has one
-    /// stack for every card); also what its header's pill and its light
-    /// follow.
-    let sidebar = ExtensionSidebarModel(mascot: false, notifications: false)
+    /// notifications: the canvas has one stack for every card); also what
+    /// its header's pill and its light follow.
+    let sidebar = ExtensionSidebarModel(notifications: false)
     private var appearanceCancellables: Set<AnyCancellable> = []
 
     init(

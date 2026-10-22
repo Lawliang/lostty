@@ -15,17 +15,17 @@ import Security
 /// `resumeIfRestarted` puts back the rest.
 @MainActor
 enum LosttyRestart {
-    /// The mascot's conversations to hand over, by pane: none from a build
-    /// without the mascot.
-    static func transcripts(_ carried: [UUID: String], channel: LosttyChannel) -> [String: String]? {
-        guard channel.showsMascot else { return nil }
+    /// The turn observer's conversations to hand over, by pane: none while
+    /// it's off.
+    static func transcripts(_ carried: [UUID: String], observes: Bool) -> [String: String]? {
+        guard observes else { return nil }
         return Dictionary(uniqueKeysWithValues: carried.map { ($0.key.uuidString, $0.value) })
     }
 
-    /// The conversations to give back to the observer: none in a build
-    /// without the mascot, whatever the build before handed over.
-    static func restoredTranscripts(_ saved: [String: String]?, channel: LosttyChannel) -> [UUID: String] {
-        guard channel.showsMascot else { return [:] }
+    /// The conversations to give back to the observer: none while it's
+    /// off, whatever the build before handed over.
+    static func restoredTranscripts(_ saved: [String: String]?, observes: Bool) -> [UUID: String] {
+        guard observes else { return [:] }
         return Dictionary(uniqueKeysWithValues: (saved ?? [:]).compactMap { key, path in
             UUID(uuidString: key).map { ($0, path) }
         })
@@ -102,7 +102,7 @@ enum LosttyRestart {
             stayAwakeOn: stayAwake.isOn, stayAwakeUntil: stayAwake.until,
             hookAgents: agentsWithHooks { hooks.status(agent: $0) },
             keepWindows: UserDefaults.ghostty.object(forKey: keepWindowsKey) as? Bool,
-            transcripts: LosttyRestart.transcripts(TurnObserver.shared.carry(), channel: .current),
+            transcripts: LosttyRestart.transcripts(TurnObserver.shared.carry(), observes: LosttyChannel.current.observesTurns),
             windows: windows)
         do {
             try handoff.save(to: RestartHandoff.standardURL)
@@ -147,7 +147,7 @@ enum LosttyRestart {
         ClaudeRuntime.shared.restore(Dictionary(uniqueKeysWithValues: handoff.claude.compactMap { key, carry in
             UUID(uuidString: key).map { ($0, carry) }
         }))
-        TurnObserver.shared.restore(LosttyRestart.restoredTranscripts(handoff.transcripts, channel: .current))
+        TurnObserver.shared.restore(LosttyRestart.restoredTranscripts(handoff.transcripts, observes: LosttyChannel.current.observesTurns))
         // Before StayAwakeStore.start(), which would otherwise restore the
         // power settings it left applied.
         if handoff.stayAwakeOn { StayAwakeStore.shared.resume(until: handoff.stayAwakeUntil) }

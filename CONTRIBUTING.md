@@ -155,13 +155,13 @@ The `GHOSTTY_LOG` environment variable picks where logs go: `stderr`,
 Lostty comes in two builds of the same `main`:
 
 - **Lostty**, stable: the finished build people download.
-- **Lostty Beta**: the same, plus features that aren't finished yet. Today that's the mascot (and its turn summaries) and Branches.
+- **Lostty Beta**: the same, plus features that aren't finished yet. Today that's the context handoff, Branches and the canvas.
 
 Both are `/Applications/Lostty.app` with the same settings, terminals and phone pairing, so a Mac has one or the other. The beta says "Lostty Beta" and has a BETA band on its icon. Each follows its own update feed; to switch, download the other one.
 
 - `macos/install.sh` builds the beta; `macos/install.sh --stable` builds stable. `macos/setup.sh` installs stable.
 - Debug builds from Xcode are the beta.
-- To keep a feature in the beta, check `LosttyChannel.current` (add a named check like `showsMascot`) and make sure stable does none of its work.
+- To keep a feature in the beta, check `LosttyChannel.current` (add a named check like `handsOff`) and make sure stable does none of its work.
 - `macos/make-beta-icon.swift` remakes the beta icon after the icon changes.
 
 ### Release

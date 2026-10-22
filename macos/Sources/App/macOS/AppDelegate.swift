@@ -380,15 +380,15 @@ class AppDelegate: NSObject,
         CanvasMenu.install(before: menuBringAllToFront)
         // File → Reopen from History, under Close All Windows.
         SessionHistoryMenu.install(after: menuCloseAllWindows)
-        // Each turn's end, from the agent hooks: the usage breakdown, and in
-        // the beta the mascot's turn observer, which also finds out which
+        // Each turn's end, from the agent hooks: the usage breakdown, and
+        // while it's on the turn observer, which also finds out which
         // summarizer it can use. Before the restart resume, which hands it
         // each pane's conversation.
         ClaudeRuntime.shared.turnEnded = TurnEnd.handler(
-            channel: .current,
+            observes: LosttyChannel.current.observesTurns,
             observe: { pane, path in TurnObserver.shared.turnEnded(pane: pane, path: path) },
             report: { UsageLedger.shared.reported($0) })
-        if LosttyChannel.current.showsMascot { TurnObserver.shared.start() }
+        if LosttyChannel.current.observesTurns { TurnObserver.shared.start() }
         // The context handoff (beta): before the restart resume's hook
         // reinstall, which brings in the handoff's hook events.
         ContextHandoffWiring.start()

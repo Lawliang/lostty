@@ -17,10 +17,6 @@ enum ContextHandoffWiring {
         return last.isEmpty || last == "/" ? "Terminal" : last
     }
 
-    static func showsRow(channel: LosttyChannel, isClaude: Bool) -> Bool {
-        channel.showsMascot && isClaude
-    }
-
     static func surface(_ pane: UUID) -> Ghostty.SurfaceView? {
         (NSApp.delegate as? AppDelegate)?.findSurface(forUUID: pane)
     }
@@ -40,7 +36,7 @@ enum ContextHandoffWiring {
     }
 
     static func start() {
-        guard LosttyChannel.current.showsMascot, watchers.isEmpty else { return }
+        guard LosttyChannel.current.handsOff, watchers.isEmpty else { return }
         let coordinator = ContextHandoffCoordinator.shared
         coordinator.restore()
         ClaudeRuntime.shared.handoffSignal = { pane, signal in coordinator.signal(pane, signal) }

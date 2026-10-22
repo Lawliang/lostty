@@ -99,6 +99,8 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         window.setFrameAutosaveName("LosttyCanvas")
         installTitleAccessory()
         observe()
+        // A window dragged onto the title bar moves onto the canvas.
+        CanvasDrop.shared.start()
     }
 
     @available(*, unavailable)

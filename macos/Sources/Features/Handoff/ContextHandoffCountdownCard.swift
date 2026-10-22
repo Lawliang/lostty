@@ -35,7 +35,8 @@ struct ContextHandoffCountdownCard: View {
             let colors = ContextHandoffCardColors(skin: skins.effectiveSkin(surfaceID))
             ZStack {
                 Color.black.opacity(0.35).allowsHitTesting(false)
-                TimelineView(.animation) { timeline in
+                // 30 a second is smooth for a bar emptying over seconds.
+                TimelineView(.animation(minimumInterval: 1.0 / 30)) { timeline in
                     card(countdown, colors: colors, now: timeline.date)
                 }
             }

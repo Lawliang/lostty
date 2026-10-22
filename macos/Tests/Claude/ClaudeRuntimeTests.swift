@@ -1,4 +1,5 @@
 #if os(macOS)
+import Combine
 import Foundation
 import Testing
 @testable import Lostty
@@ -516,6 +517,26 @@ struct ClaudeRuntimeTests {
         let runtime = makeRuntime()
         runtime.userVarChanged(pane, name: ClaudeConstants.userVarName, value: payload("fresh"))
         #expect(runtime.phases[pane] == nil)
+    }
+
+    @Test func aPaneHearsOnlyItsOwnClaude() {
+        let runtime = makeRuntime()
+        let other = UUID()
+        let claude = PaneClaude(pane, runtime: runtime)
+        var changes = 0
+        let watch = claude.objectWillChange.sink { changes += 1 }
+        defer { watch.cancel() }
+
+        runtime.apply(.busy, to: other)
+        runtime.userVarChanged(other, name: ClaudeConstants.userVarName, value: action("Editing Foo.swift"))
+        #expect(changes == 0)
+        #expect(claude.phase == .off)
+
+        runtime.focusChanged(pane, focused: false)
+        runtime.apply(.busy, to: pane)
+        #expect(claude.phase == runtime.phase(pane) && !claude.phase.isOff)
+        runtime.apply(.idle, to: pane)
+        #expect(claude.awaiting)
     }
 }
 #endif

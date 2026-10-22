@@ -178,8 +178,9 @@ struct CanvasAddButton: View {
     }
 }
 
-/// Glass in `shape` with its rim and prism, lit while the pointer is over it.
-private struct CanvasAddLitGlass<S: InsettableShape>: ViewModifier {
+/// Glass in `shape` with its rim and prism, lit while the pointer is over
+/// it. The drop band over the canvas's title bar (CanvasDrop) is it too.
+struct CanvasAddLitGlass<S: InsettableShape>: ViewModifier {
     let shape: S
     let dark: Bool
     let lit: Bool

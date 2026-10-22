@@ -108,9 +108,9 @@ enum WindowTrace {
 /// The light round one pane. Draws nothing until Claude works there.
 struct PaneLightView: View {
     let surfaceID: UUID
+    let phase: TracePhase
     /// The head's motion, shared with the bottom glow (ClaudeTraceLayer).
     let journey: TraceOverlay.Journey
-    @ObservedObject private var runtime = ClaudeRuntime.shared
     @ObservedObject private var skins = SkinsRuntime.shared.manager
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(TraceRoute.defaultsKey, store: .ghostty) private var route = TraceRoute.initial
@@ -121,14 +121,14 @@ struct PaneLightView: View {
 
     private var lighting: WindowTrace.Lighting? {
         WindowTrace.lighting(
-            pane: surfaceID, phase: runtime.phase(surfaceID),
+            pane: surfaceID, phase: phase,
             skin: skins.effectiveSkin(surfaceID), enabled: skins.config.trace)
     }
 
     var body: some View {
         GeometryReader { geo in
             if let shown {
-                TimelineView(.animation(paused: !lit || !windowVisible)) { timeline in
+                TimelineView(.animation(minimumInterval: TraceTiming.frameInterval, paused: !lit || !windowVisible)) { timeline in
                     let elapsed = timeline.date.timeIntervalSince(shown.since)
                     if reduceMotion {
                         calm(size: geo.size, colors: shown.colors, elapsed: elapsed)

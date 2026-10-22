@@ -23,9 +23,12 @@ enum LosttyChannel: String, Equatable {
     var isBeta: Bool { self == .beta }
     /// What the app calls itself where the build shows: the About window.
     var appName: String { isBeta ? "Lostty Beta" : "Lostty" }
-    /// The axolotl in each terminal's corner and the turn observer behind
-    /// its bubble.
-    var showsMascot: Bool { isBeta }
+    /// The context handoff: a long conversation hands off to a fresh one.
+    var handsOff: Bool { isBeta }
+    /// The turn observer, which summarizes each agent turn. Off in every
+    /// build since its one view, the axolotl's bubble, went; on again once
+    /// it has a new home.
+    var observesTurns: Bool { false }
     /// Branches in the sidebar.
     var hasBranches: Bool { isBeta }
     /// The canvas: an infinite whiteboard window of terminal cards.

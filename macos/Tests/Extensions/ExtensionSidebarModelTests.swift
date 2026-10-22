@@ -26,18 +26,9 @@ struct ExtensionSidebarModelTests {
         #expect(model.active == .skins)
     }
 
-    @Test func theMascotIsInTheBetaOnly() throws {
-        #expect(try makeModel(channel: .beta).0.showsMascot)
-        #expect(try makeModel(channel: .stable).0.showsMascot == false)
-    }
-
-    @Test func aCanvasCardHasNoMascot() {
-        #expect(ExtensionSidebarModel(channel: .beta, mascot: false).showsMascot == false)
-    }
-
     @Test func aWindowShowsNotificationsButACanvasCardLeavesThemToTheCanvas() {
         #expect(ExtensionSidebarModel(channel: .beta).showsNotifications)
-        #expect(ExtensionSidebarModel(channel: .beta, mascot: false, notifications: false).showsNotifications == false)
+        #expect(ExtensionSidebarModel(channel: .beta, notifications: false).showsNotifications == false)
     }
 
     @Test func startsWithNothingOpen() throws {

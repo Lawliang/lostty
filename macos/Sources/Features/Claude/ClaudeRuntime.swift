@@ -286,4 +286,23 @@ extension ClaudeRuntime {
         }
     }
 }
+
+/// One pane's share of `ClaudeRuntime`, for the views over that pane: they
+/// update when its Claude changes, not each time any pane's does (a tool
+/// call anywhere changes `actions`, and every pane has these views).
+@MainActor
+final class PaneClaude: ObservableObject {
+    @Published private(set) var phase: TracePhase = .off
+    @Published private(set) var awaiting = false
+    private var watchers: Set<AnyCancellable> = []
+
+    init(_ id: UUID, runtime: ClaudeRuntime = .shared) {
+        runtime.$phases.map { $0[id] ?? .off }.removeDuplicates()
+            .sink { [weak self] in self?.phase = $0 }
+            .store(in: &watchers)
+        runtime.$awaiting.map { $0.contains(id) }.removeDuplicates()
+            .sink { [weak self] in self?.awaiting = $0 }
+            .store(in: &watchers)
+    }
+}
 #endif

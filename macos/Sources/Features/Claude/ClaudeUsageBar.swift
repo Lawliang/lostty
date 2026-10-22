@@ -35,8 +35,8 @@ struct ClaudeUsageBar: View {
 
     private enum Part { case context, handoff, limit }
 
-    /// The context handoff is the beta's, like the mascot.
-    private let handsOff = LosttyChannel.current.showsMascot
+    /// The context handoff is the beta's.
+    private let handsOff = LosttyChannel.current.handsOff
 
     private var pane: UUID? { model.focusedSurfaceID }
     private var chrome: NSColor { model.chromeColor ?? .windowBackgroundColor }
@@ -407,10 +407,22 @@ enum ClaudeUsageFont {
         name.map { .custom($0, size: size) } ?? .system(size: size, design: .monospaced)
     }
 
+    /// Widths measured so far: the bar measures every style's text each
+    /// time any pane's usage changes, and the texts mostly repeat.
+    private static let widths: NSCache<NSString, NSNumber> = {
+        let cache = NSCache<NSString, NSNumber>()
+        cache.countLimit = 512
+        return cache
+    }()
+
     /// How wide `text` is in the font, for fitting the bar.
     static func width(_ text: String, size: CGFloat = 12) -> CGFloat {
+        let key = "\(size) \(text)" as NSString
+        if let width = widths.object(forKey: key) { return CGFloat(width.doubleValue) }
         let font = name.flatMap { NSFont(name: $0, size: size) } ?? .monospacedSystemFont(ofSize: size, weight: .regular)
-        return ceil((text as NSString).size(withAttributes: [.font: font]).width)
+        let width = ceil((text as NSString).size(withAttributes: [.font: font]).width)
+        widths.setObject(NSNumber(value: Double(width)), forKey: key)
+        return width
     }
 }
 
@@ -493,7 +505,7 @@ private struct ClaudeUsageDetails: View {
 }
 
 /// The focused window's context handoff: where it hands off, each limit
-/// to pick from (the same setting as Settings → Mascot), and the switch.
+/// to pick from (the same setting as Settings → Handoff), and the switch.
 private struct ContextHandoffDetails: View {
     @ObservedObject var settings: ContextHandoffPreferences
     let context: ClaudeUsageReport.Context?

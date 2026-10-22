@@ -10,21 +10,26 @@ struct SettingsView: View {
     @ObservedObject var updates: UpdatePreferences
     /// A build made on this Mac updates with install.sh, not the updater.
     var hasUpdateFeed = UpdateFeed.current != nil
-    /// The Mascot section is for the beta, the only build with the mascot.
-    var showsMascot = LosttyChannel.current.showsMascot
+    /// Turn summaries, while the observer is on.
+    var observesTurns = LosttyChannel.current.observesTurns
+    /// The Handoff section is for the beta, the only build with the handoff.
+    var handsOff = LosttyChannel.current.handsOff
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Form {
                 TerminalFontSection(font: font)
-                if showsMascot {
-                    Section("Mascot") {
+                if observesTurns {
+                    Section("Turn summaries") {
                         Toggle("Summarize turns in the background", isOn: $observer.background)
-                        Text("After each turn, Claude Haiku (or Codex, or Apple Intelligence) updates what the "
-                             + "mascot tells you when you tap it, using your own subscription. "
-                             + "Off, it summarizes only when you tap.")
+                        Text("After each turn, Claude Haiku (or Codex, or Apple Intelligence) updates the "
+                             + "turn's summary, using your own subscription. Off, it summarizes only when asked.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                    }
+                }
+                if handsOff {
+                    Section("Handoff") {
                         Toggle("Hand off long conversations", isOn: $handoff.enabled)
                         Picker("Hand off after", selection: $handoff.limit) {
                             ForEach(ContextHandoffPreferences.limits, id: \.self) { limit in

@@ -5,20 +5,20 @@ import Testing
 
 @MainActor
 struct TurnEndTests {
-    @Test func theBetaTellsTheObserverAndTheUsageBreakdown() {
+    @Test func anObserverThatIsOnHearsTheTurnAndTheUsageBreakdownCountsIt() {
         var observed: [String] = []
         var reported: [String] = []
-        let handler = TurnEnd.handler(channel: .beta, observe: { _, path in observed.append(path) },
+        let handler = TurnEnd.handler(observes: true, observe: { _, path in observed.append(path) },
                                       report: { reported.append($0) })
         handler(UUID(), "/t.jsonl")
         #expect(observed == ["/t.jsonl"])
         #expect(reported == ["/t.jsonl"])
     }
 
-    @Test func stableStillCountsUsageButNeverSummarizes() {
+    @Test func anObserverThatIsOffNeverSummarizesButUsageStillCounts() {
         var observed: [String] = []
         var reported: [String] = []
-        let handler = TurnEnd.handler(channel: .stable, observe: { _, path in observed.append(path) },
+        let handler = TurnEnd.handler(observes: false, observe: { _, path in observed.append(path) },
                                       report: { reported.append($0) })
         handler(UUID(), "/t.jsonl")
         #expect(observed.isEmpty)

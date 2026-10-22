@@ -82,20 +82,15 @@ final class ExtensionSidebarModel: ObservableObject {
 
     /// The extensions this build offers, in sidebar order.
     let available: [LosttyExtension]
-    /// The axolotl in the terminal's corner (beta only, and not on canvas
-    /// cards).
-    let showsMascot: Bool
     /// The notification bubbles at the terminal's top right (not on canvas
     /// cards: the canvas shows one stack for all of them).
     let showsNotifications: Bool
 
     init(
-        branches: BranchesModel? = nil, channel: LosttyChannel = .current, mascot: Bool = true,
-        notifications: Bool = true
+        branches: BranchesModel? = nil, channel: LosttyChannel = .current, notifications: Bool = true
     ) {
         self.branches = branches ?? BranchesModel()
         available = LosttyExtension.available(in: channel)
-        showsMascot = mascot && channel.showsMascot
         showsNotifications = notifications
     }
 

@@ -142,6 +142,7 @@
 				Features/AppleScript/ScriptTab.swift,
 				Features/AppleScript/ScriptTerminal.swift,
 				Features/AppleScript/ScriptWindow.swift,
+				Features/Canvas/CanvasAbsorb.metal,
 				Features/ClipboardConfirmation/ClipboardConfirmation.xib,
 				Features/ClipboardConfirmation/ClipboardConfirmationController.swift,
 				Features/ClipboardConfirmation/ClipboardConfirmationView.swift,
