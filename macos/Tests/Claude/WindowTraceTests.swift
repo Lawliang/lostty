@@ -110,13 +110,16 @@ struct WindowTraceTests {
         }
     }
 
-    @Test func gradientMatchesTheWebsiteWithTheTipInTheHeadsColor() {
+    @Test func gradientMatchesTheWebsiteWithTheTipALighterHead() {
         #expect(WindowTrace.stopLocations == [0, 0.64, 0.80, 0.93, 0.95, 0.96, 1])
         let colors = TraceColors(primary: WindowTrace.websitePink, secondary: WindowTrace.websiteCyan)
         let stops = WindowTrace.stops(colors)
         #expect(stops.map { Double($0.location) } == WindowTrace.stopLocations)
         #expect(stops[3].color == TraceColors.color(WindowTrace.websitePink))
-        #expect(stops[4].color == TraceColors.color(WindowTrace.websitePink))
+        // The tip: the head's pink lightened a little, not white.
+        let tip = TraceColors.color(WindowTrace.websitePink.mixed(with: .white, amount: 0.35))
+        #expect(stops[4].color == tip)
+        #expect(stops[4].color != stops[3].color)
         #expect(!stops.contains { $0.color == .white })
     }
 
@@ -126,7 +129,8 @@ struct WindowTraceTests {
         let locations = stops.map { Double($0.location) }
         #expect(locations == locations.sorted())
         #expect(zip(locations, [0, 0.04, 0.05, 0.07, 0.2, 0.36, 1]).allSatisfy { abs($0 - $1) < 1e-9 })
-        #expect(stops[2].color == TraceColors.color(WindowTrace.websitePink))
+        #expect(stops[2].color == WindowTrace.tip(colors))
+        #expect(stops[3].color == TraceColors.color(WindowTrace.websitePink))
     }
 }
 

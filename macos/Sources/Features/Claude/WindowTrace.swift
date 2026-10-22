@@ -77,14 +77,24 @@ enum WindowTrace {
     /// dark again just past it.
     static let stopLocations: [Double] = [0, 0.64, 0.80, 0.93, 0.95, 0.96, 1]
 
+    /// How far the tip is lightened toward white: a little brighter than
+    /// the head, still its color.
+    static let tipLightening = 0.35
+
+    /// The tip's color.
+    static func tip(_ colors: TraceColors) -> Color {
+        TraceColors.color(colors.primary.mixed(with: .white, amount: tipLightening))
+    }
+
     /// The website's gradient, `transparent 0 64%, color-mix(accent2 70%)
-    /// 80%, accent 93%, #fff 95%, transparent 96%`, but with the tip in
-    /// the head's color rather than white. Running counterclockwise, it's
-    /// mirrored so the tail stays behind the head.
+    /// 80%, accent 93%, #fff 95%, transparent 96%`, but with the tip the
+    /// head's color lightened rather than white. Running counterclockwise,
+    /// it's mirrored so the tail stays behind the head.
     static func stops(_ colors: TraceColors, clockwise: Bool = true) -> [Gradient.Stop] {
+        let tip = tip(colors)
         let shades: [Color] = [
             colors.tail.opacity(0), colors.tail.opacity(0), colors.tail.opacity(0.7), colors.head,
-            colors.head, colors.head.opacity(0), colors.head.opacity(0),
+            tip, tip.opacity(0), tip.opacity(0),
         ]
         let stops = zip(shades, stopLocations).map { Gradient.Stop(color: $0, location: $1) }
         guard !clockwise else { return stops }
