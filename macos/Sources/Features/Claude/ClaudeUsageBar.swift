@@ -6,16 +6,18 @@ import SwiftUI
 
 /// The strip along the bottom of the window, as tall as the title bar and
 /// the same color as it and the sidebar, in the terminal's font. At the
-/// left, `✳ Opus 5.5`; centered, `Context ▓▓░░░░░░░░ 50K   Session ▓░░░░░░░░░ 2%`,
-/// the focused pane's context and the tracked plan limit. Clicking the
-/// limit lists every limit, and picking one tracks it here. In the beta, a
-/// line on the context meter marks where the conversation hands off, and
-/// clicking the context shows and sets that limit. Both are hidden without
-/// a Claude session in the focused pane. At the far right, the apps
-/// button; while it's on, the window's apps
-/// (`ExtensionAppsRow`) take the bar's place of the model and usage. A
-/// narrow window drops the model first, then shortens the meters
-/// (`ClaudeUsageFit`), so every window still shows how it's doing.
+/// left, `Context ▓▓░░░░░░░░ 50K   Session ▓░░░░░░░░░ 2%   CPU 12%  Mem 340M`:
+/// the focused pane's context, the tracked plan limit, and what the pane's
+/// processes use (`PaneResourceMonitor`). Clicking the limit lists every
+/// limit, and picking one tracks it here. In the beta, a line on the
+/// context meter marks where the conversation hands off, and clicking the
+/// context shows and sets that limit. Context and limit are hidden without
+/// a Claude session in the focused pane; CPU and memory show for any pane
+/// on Lostty's tmux. At the right, `✳ Opus 5.5`, then the apps button;
+/// while it's on, the window's apps (`ExtensionAppsRow`) take the bar's
+/// place of the meters and model. A narrow window drops the model first,
+/// then shortens the meters (`ClaudeUsageFit`), so every window still
+/// shows how it's doing.
 struct ClaudeUsageBar: View {
     /// A standard title bar's height.
     static let height: CGFloat = NSWindow.frameRect(forContentRect: .zero, styleMask: [.titled]).height
@@ -25,6 +27,7 @@ struct ClaudeUsageBar: View {
     @ObservedObject private var skins = SkinsRuntime.shared.manager
     @ObservedObject private var handoff = ContextHandoffCoordinator.shared
     @ObservedObject private var handoffSettings = ContextHandoffPreferences.shared
+    @ObservedObject private var monitor = PaneResourceMonitor.shared
     @State private var showingDetails = false
     @State private var showingHandoff = false
     @State private var hovered: Part?
@@ -42,6 +45,7 @@ struct ClaudeUsageBar: View {
         pane.flatMap { skins.effectiveSkin($0) }.map { Color(rgb: $0.accent) } ?? ink.opacity(0.8)
     }
     private var hasSession: Bool { pane.map { usage.sessions.contains($0) } ?? false }
+    private var resources: PaneResources? { pane.flatMap { monitor.resources[$0] } }
 
     var body: some View {
         let fit = self.fit
@@ -52,22 +56,28 @@ struct ClaudeUsageBar: View {
                     .padding(.leading, 12)
                     .padding(.trailing, 44)
                     .transition(.opacity)
-            } else if hasSession {
-                usageButton(fit.style)
-                    // Equal on both sides so it stays centered, clear of
-                    // the apps button on the right.
-                    .padding(.horizontal, ClaudeUsageFit.trailing + ClaudeUsageFit.gap)
-                    .transition(.opacity)
             }
             HStack(spacing: 0) {
-                if hasSession, !model.showsApps, fit.showsModel { modelLabel.transition(.opacity) }
+                if !model.showsApps { meters(fit.style).transition(.opacity) }
                 Spacer(minLength: 0)
+                if hasSession, !model.showsApps, fit.showsModel {
+                    modelLabel
+                        .padding(.trailing, ClaudeUsageFit.gap)
+                        .transition(.opacity)
+                }
                 appsButton
             }
-            .padding(.leading, 12)
+            .padding(.leading, ClaudeUsageFit.leading)
             .padding(.trailing, 8)
         }
         .animation(.easeOut(duration: 0.15), value: model.showsApps)
+        // Sampled while the bar shows this pane.
+        .task(id: pane) {
+            guard let pane else { return }
+            monitor.watch(pane)
+            while !Task.isCancelled { try? await Task.sleep(nanoseconds: 3_600_000_000_000) }
+            monitor.unwatch(pane)
+        }
         .font(ClaudeUsageFont.font(size: 12))
         .lineLimit(1)
         // Never wider than the window: a narrow one truncates the text.
@@ -91,38 +101,48 @@ struct ClaudeUsageBar: View {
             meters: ClaudeUsageFit.styles.map(metersWidth))
     }
 
-    /// Both chips in a style: their text, padding and the space between.
+    /// The chips in a style: their text, padding and the space between.
     private func metersWidth(_ style: ClaudeUsageFit.Style) -> CGFloat {
         let armed = pane.map { handoff.isArmed($0) } ?? false
-        return ClaudeUsageFont.width(contextText(style)) + ClaudeUsageFont.width(limitText(style))
-            + 2 * 16 + 6 + (armed ? ClaudeUsageFont.width("  ") : 0)
+        var texts: [String] = []
+        if hasSession { texts += [contextText(style) + (armed ? "  " : ""), limitText(style)] }
+        if let resources { texts.append(resourcesText(resources, style)) }
+        guard !texts.isEmpty else { return 0 }
+        return texts.map { ClaudeUsageFont.width($0) }.reduce(0, +)
+            + CGFloat(texts.count) * 16 + CGFloat(texts.count - 1) * 6
     }
 
-    private func usageButton(_ style: ClaudeUsageFit.Style) -> some View {
+    private func meters(_ style: ClaudeUsageFit.Style) -> some View {
         HStack(spacing: 6) {
-            if handsOff {
-                Button { showingHandoff.toggle() } label: {
-                    chip(contextLine(style), lit: hovered == .context || showingHandoff)
-                }
-                .buttonStyle(.plain)
-                .onHover { hover(.context, $0) }
-                .popover(isPresented: $showingHandoff, arrowEdge: .top) {
-                    ContextHandoffDetails(settings: handoffSettings, context: pane.flatMap { usage.contexts[$0] },
-                                          armed: pane.flatMap { handoff.line($0) })
-                }
-            } else {
-                chip(contextLine(style), lit: false)
-            }
-            Button { showingDetails.toggle() } label: {
-                // Ticks so a limit that resets while nothing reports drops to 0%.
-                chip(TimelineView(.everyMinute) { _ in limitLine(style) }, lit: hovered == .limit || showingDetails)
+            if hasSession { usageChips(style) }
+            if let resources { chip(resourcesLine(resources, style), lit: false) }
+        }
+    }
+
+    @ViewBuilder
+    private func usageChips(_ style: ClaudeUsageFit.Style) -> some View {
+        if handsOff {
+            Button { showingHandoff.toggle() } label: {
+                chip(contextLine(style), lit: hovered == .context || showingHandoff)
             }
             .buttonStyle(.plain)
-            .onHover { hover(.limit, $0) }
-            .popover(isPresented: $showingDetails, arrowEdge: .top) {
-                TimelineView(.everyMinute) { _ in
-                    ClaudeUsageDetails(usage: usage, accent: accent) { showingDetails = false }
-                }
+            .onHover { hover(.context, $0) }
+            .popover(isPresented: $showingHandoff, arrowEdge: .top) {
+                ContextHandoffDetails(settings: handoffSettings, context: pane.flatMap { usage.contexts[$0] },
+                                      armed: pane.flatMap { handoff.line($0) })
+            }
+        } else {
+            chip(contextLine(style), lit: false)
+        }
+        Button { showingDetails.toggle() } label: {
+            // Ticks so a limit that resets while nothing reports drops to 0%.
+            chip(TimelineView(.everyMinute) { _ in limitLine(style) }, lit: hovered == .limit || showingDetails)
+        }
+        .buttonStyle(.plain)
+        .onHover { hover(.limit, $0) }
+        .popover(isPresented: $showingDetails, arrowEdge: .top) {
+            TimelineView(.everyMinute) { _ in
+                ClaudeUsageDetails(usage: usage, accent: accent) { showingDetails = false }
             }
         }
     }
@@ -185,6 +205,26 @@ struct ClaudeUsageBar: View {
             + (style.cells > 0 ? " " : "") + ClaudeUsageFormat.percent(limit)
     }
 
+    /// `CPU 12%  Mem 340M`, as `resourcesLine` draws it in `style`.
+    private func resourcesText(_ resources: PaneResources, _ style: ClaudeUsageFit.Style) -> String {
+        let cpu = ClaudeUsageFormat.percent(resources.cpu), memory = PaneResourceMath.memory(resources.memory)
+        return style.labels ? "CPU \(cpu)  Mem \(memory)" : "\(cpu) \(memory)"
+    }
+
+    private func resourcesLine(_ resources: PaneResources, _ style: ClaudeUsageFit.Style) -> some View {
+        let cpu = ClaudeUsageFormat.percent(resources.cpu), memory = PaneResourceMath.memory(resources.memory)
+        let label = ink.opacity(0.6), value = ink.opacity(0.9)
+        return Group {
+            if style.labels {
+                Text("CPU ").foregroundColor(label) + Text(cpu).foregroundColor(value)
+                    + Text("  Mem ").foregroundColor(label) + Text(memory).foregroundColor(value)
+            } else {
+                Text(cpu + " " + memory).foregroundColor(value)
+            }
+        }
+        .help("CPU and memory used by what runs in this pane")
+    }
+
     /// The number alone takes the meter's color, so it still shows how full.
     private func number(_ percent: Double, _ style: ClaudeUsageFit.Style) -> Color {
         style.cells > 0 ? ink.opacity(0.9) : ClaudeUsageBlocks.fill(for: percent, accent: accent)
@@ -238,11 +278,11 @@ struct ClaudeUsageBar: View {
     }
 }
 
-/// How the bar fits its width. The meters stay centered and take the
-/// roomiest style that fits clear of the edges; the model, the least
-/// needed, shows at the left only beside the roomiest. The narrowest
-/// window keeps both meters as `▓▓░░░ 50K  ▓░░░░ 2%`, or just the numbers
-/// in the meters' colors.
+/// How the bar fits its width. The meters sit at the left and take the
+/// roomiest style that fits clear of the apps button; the model, the least
+/// needed, shows between them only beside the roomiest. The narrowest
+/// window keeps the meters as `▓▓░░░ 50K  ▓░░░░ 2%  12% 340M`, or just the
+/// numbers in the meters' colors.
 enum ClaudeUsageFit {
     struct Style: Equatable {
         let labels: Bool
@@ -258,20 +298,22 @@ enum ClaudeUsageFit {
     ]
     /// Space kept between the meters and what's beside them.
     static let gap: CGFloat = 12
-    /// The model's inset from the left edge.
-    static let leading: CGFloat = 12
+    /// The meters' inset from the left edge; their chips pad the text to 12.
+    static let leading: CGFloat = 4
     /// The apps button and its inset from the right edge.
     static let trailing: CGFloat = 36
 
     /// The style for a bar `width` wide, given the model's width (nil with
     /// none) and the meters' in each of `styles`, and whether the model shows.
     static func fit(width: CGFloat, model: CGFloat?, meters: [CGFloat]) -> (style: Style, showsModel: Bool) {
-        // Centered, so each side needs room for the wider of its neighbors.
-        func fits(_ meters: CGFloat, beside side: CGFloat) -> Bool { meters + 2 * (side + gap) <= width }
-        if let model, let roomiest = meters.first, fits(roomiest, beside: max(leading + model, trailing)) {
+        // The meters, a gap, the model and its gap when shown, the apps button.
+        func fits(_ meters: CGFloat, beside model: CGFloat) -> Bool {
+            leading + meters + gap + model + trailing <= width
+        }
+        if let model, let roomiest = meters.first, fits(roomiest, beside: model + gap) {
             return (styles[0], true)
         }
-        let index = meters.firstIndex { fits($0, beside: trailing) } ?? styles.count - 1
+        let index = meters.firstIndex { fits($0, beside: 0) } ?? styles.count - 1
         return (styles[index], false)
     }
 }

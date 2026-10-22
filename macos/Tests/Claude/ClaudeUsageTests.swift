@@ -144,18 +144,18 @@ struct ClaudeUsageTests {
     }
 
     @Test func aWideBarShowsTheModelBesideTheFullMeters() {
-        // 300 + 2 × (12 + 80 + 12) = 508.
-        #expect(fit(508) == (ClaudeUsageFit.styles[0], true))
+        // 4 + 300 + 12 + 80 + 12 + 36 = 444.
+        #expect(fit(444) == (ClaudeUsageFit.styles[0], true))
         #expect(fit(2000) == (ClaudeUsageFit.styles[0], true))
     }
 
     @Test func theModelGoesFirstThenTheMetersShorten() {
-        // Without the model the full meters need 300 + 2 × (36 + 12) = 396.
-        #expect(fit(507) == (ClaudeUsageFit.styles[0], false))
-        #expect(fit(396) == (ClaudeUsageFit.styles[0], false))
-        #expect(fit(395) == (ClaudeUsageFit.styles[1], false))
-        #expect(fit(246) == (ClaudeUsageFit.styles[2], false))
-        #expect(fit(156) == (ClaudeUsageFit.styles[3], false))
+        // Without the model the full meters need 4 + 300 + 12 + 36 = 352.
+        #expect(fit(443) == (ClaudeUsageFit.styles[0], false))
+        #expect(fit(352) == (ClaudeUsageFit.styles[0], false))
+        #expect(fit(351) == (ClaudeUsageFit.styles[1], false))
+        #expect(fit(202) == (ClaudeUsageFit.styles[2], false))
+        #expect(fit(112) == (ClaudeUsageFit.styles[3], false))
     }
 
     @Test func theNarrowestBarStillShowsTheNumbers() {
@@ -164,7 +164,7 @@ struct ClaudeUsageTests {
     }
 
     @Test func noModelMeansTheFullMetersNeedOnlyClearTheAppsButton() {
-        #expect(fit(396, model: nil) == (ClaudeUsageFit.styles[0], false))
+        #expect(fit(352, model: nil) == (ClaudeUsageFit.styles[0], false))
     }
 }
 #endif
