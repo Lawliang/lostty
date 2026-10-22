@@ -35,9 +35,10 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     /// The tickets' cards, by id. They share `model` with the terminal
     /// cards, so they stack, block clicks and fit to view alike.
     private(set) var tickets: [UUID: TicketCardView] = [:]
-    /// The highest ticket number handed out, so a closed ticket's isn't
-    /// handed out again.
-    var lastTicketNumber = 0
+    /// The highest ticket number handed out, app-wide, so a closed ticket's
+    /// isn't handed out again, even once the canvas is emptied (and so not
+    /// saved).
+    static let lastTicketNumberKey = "LosttyCanvasLastTicketNumber"
     /// The title bar's pill follows the focused card's pane. (Each card has
     /// its own bottom bar.)
     let sidebar = ExtensionSidebarModel()
@@ -400,15 +401,19 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     }
 
     /// A ticket's card: a new one in front, or a restored or undone one back
-    /// at `stack`.
+    /// at `stack`, its form open again with `draft`.
     @discardableResult
-    func addTicket(_ ticket: CanvasTicket, id: UUID = UUID(), frame: CGRect, stack: Int? = nil) -> TicketCardView {
+    func addTicket(
+        _ ticket: CanvasTicket, id: UUID = UUID(), frame: CGRect, stack: Int? = nil, draft: CanvasTicket? = nil
+    ) -> TicketCardView {
         if let stack {
             model.insert(id, frame: frame, at: stack)
         } else {
             model.add(id, frame: frame)
         }
-        let view = TicketCardView(ticket: TicketCard(id: id, ticket: ticket, canvas: self), canvas: self)
+        let card = TicketCard(id: id, ticket: ticket, canvas: self)
+        card.draft = draft
+        let view = TicketCardView(ticket: card, canvas: self)
         tickets[id] = view
         scrollView.document.addSubview(view)
         if let placed = model.card(id)?.frame { view.frame = placed }
@@ -439,26 +444,49 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     }
 
     /// The key a newly created ticket gets.
-    func nextTicketKey() -> String {
+    func nextTicketKey(defaults: UserDefaults = .standard) -> String {
         let key = CanvasTicket.nextKey(
-            after: tickets.values.compactMap(\.ticket.ticket.key), lastNumber: lastTicketNumber)
-        lastTicketNumber = CanvasTicket.number(of: key) ?? lastTicketNumber
+            after: tickets.values.compactMap(\.ticket.ticket.key),
+            lastNumber: defaults.integer(forKey: Self.lastTicketNumberKey))
+        if let number = CanvasTicket.number(of: key) { defaults.set(number, forKey: Self.lastTicketNumberKey) }
         return key
     }
 
-    /// The red button, Close Ticket, or Cancel on a draft. Undo brings back
-    /// a created ticket where it was.
+    /// The red button, ⌘W, Close Ticket, or Cancel on a new ticket. A new
+    /// ticket with something typed in it asks first; Undo brings back a
+    /// created one where it was.
     func closeTicket(_ id: UUID) {
+        guard let card = tickets[id]?.ticket else { return }
+        guard !card.ticket.isCreated, (card.draft ?? card.ticket).hasTyping, let window else {
+            removeTicket(id)
+            return
+        }
+        guard window.attachedSheet == nil else { return }
+        let alert = NSAlert()
+        alert.messageText = "Discard this ticket?"
+        alert.informativeText = "It hasn't been created, so what you've typed will be lost."
+        alert.addButton(withTitle: "Discard")
+        alert.addButton(withTitle: "Keep Editing")
+        alert.alertStyle = .warning
+        alert.beginSheetModal(for: window) { [weak self] response in
+            guard response == .alertFirstButtonReturn else { return }
+            // So focus isn't lost under Stage Manager, as for closing a window.
+            alert.window.orderOut(nil)
+            self?.removeTicket(id)
+        }
+    }
+
+    private func removeTicket(_ id: UUID) {
         guard let view = tickets.removeValue(forKey: id),
               let stack = model.cards.firstIndex(where: { $0.id == id }) else { return }
-        let frame = model.cards[stack].frame, ticket = view.ticket.ticket
+        let frame = model.cards[stack].frame, ticket = view.ticket.ticket, draft = view.ticket.draft
         model.remove(id)
         view.removeFromSuperview()
         saveSoon()
         guard ticket.isCreated, let undo = (NSApp.delegate as? AppDelegate)?.undoManager else { return }
         undo.setActionName("Close Ticket")
         undo.registerUndo(withTarget: self, expiresAfter: ghostty.config.undoTimeout) { canvas in
-            canvas.addTicket(ticket, id: id, frame: frame, stack: stack)
+            canvas.addTicket(ticket, id: id, frame: frame, stack: stack, draft: draft)
         }
     }
 

@@ -37,5 +37,27 @@ struct CanvasTicketTests {
         #expect(!CanvasTicket(summary: "Fix login").isCreated)
         #expect(CanvasTicket(key: "LT-1", summary: "Fix login").isCreated)
     }
+
+    @Test func onlyTypingAsksBeforeADraftIsThrownAway() {
+        // Picking a type or priority alone isn't worth asking about.
+        #expect(!CanvasTicket(kind: .bug, priority: .high).hasTyping)
+        #expect(!CanvasTicket(summary: " ", details: "\n").hasTyping)
+        #expect(CanvasTicket(assignee: "Sam").hasTyping)
+        #expect(CanvasTicket(details: "Drops after 8s").hasTyping)
+    }
+
+    @Test func aTicketComesBackAsItWas() throws {
+        let ticket = CanvasTicket(key: "LT-3", summary: "Fix login", kind: .story, priority: .lowest, status: .done,
+                                  assignee: "Sam", details: "Drops after 8s")
+        #expect(try JSONDecoder().decode(CanvasTicket.self, from: JSONEncoder().encode(ticket)) == ticket)
+    }
+
+    @Test func whatANewerBuildSavedComesBackWithDefaults() throws {
+        // A status, type and priority this build doesn't know, a field it
+        // doesn't have, and the rest missing.
+        let json = #"{"key":"LT-9","summary":"Later","kind":"epic","priority":"urgent","status":"inReview","sprint":4}"#
+        let ticket = try JSONDecoder().decode(CanvasTicket.self, from: Data(json.utf8))
+        #expect(ticket == CanvasTicket(key: "LT-9", summary: "Later"))
+    }
 }
 #endif

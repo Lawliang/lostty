@@ -303,6 +303,9 @@ struct CanvasSaved<Tree: Codable>: Codable {
         var id: UUID
         var frame: CGRect
         var ticket: CanvasTicket
+        /// The form's contents while it's open: a new ticket's, or unsaved
+        /// edits. It opens again with them.
+        var draft: CanvasTicket?
         /// Where it sat among every card, back to front.
         var stack: Int
     }
@@ -313,11 +316,46 @@ struct CanvasSaved<Tree: Codable>: Codable {
     var cards: [Card]
     /// Missing from a canvas saved before tickets.
     var tickets: [Ticket]?
-    /// The highest ticket number handed out, closed tickets' too.
-    var lastTicketNumber: Int?
 
     /// Whether there's anything to bring back.
     var isEmpty: Bool { cards.isEmpty && (tickets ?? []).isEmpty }
+
+    init(visible: Bool, center: CGPoint, zoom: CGFloat, cards: [Card], tickets: [Ticket]? = nil) {
+        self.visible = visible
+        self.center = center
+        self.zoom = zoom
+        self.cards = cards
+        self.tickets = tickets
+    }
+
+    /// A ticket that can't be read is left out, never the canvas with it.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        visible = try c.decode(Bool.self, forKey: .visible)
+        center = try c.decode(CGPoint.self, forKey: .center)
+        zoom = try c.decode(CGFloat.self, forKey: .zoom)
+        cards = try c.decode([Card].self, forKey: .cards)
+        guard var list = try? c.nestedUnkeyedContainer(forKey: .tickets) else {
+            tickets = nil
+            return
+        }
+        var read: [Ticket] = []
+        while !list.isAtEnd {
+            let index = list.currentIndex
+            if let ticket = try? list.decode(Ticket.self) {
+                read.append(ticket)
+            } else {
+                _ = try? list.decode(Unread.self)
+                // Never stuck on one that can't be stepped past.
+                if list.currentIndex == index { break }
+            }
+        }
+        tickets = read
+    }
+
+    /// Steps past a ticket that couldn't be read: having no fields, it
+    /// reads any value.
+    private struct Unread: Decodable {}
 }
 
 extension CanvasSaved: Equatable where Tree: Equatable {}

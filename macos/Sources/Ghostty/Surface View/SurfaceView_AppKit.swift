@@ -1191,6 +1191,7 @@ extension Ghostty {
                 if CanvasScrollView.startsScroll(event) {
                     let focused = window?.firstResponder === self
                     canvas.scrollingPane = focused != event.modifierFlags.contains(.option) ? self : nil
+                    canvas.scrollingTicket = nil
                 }
                 if canvas.scrollingPane !== self {
                     canvas.scrollWheel(with: event)

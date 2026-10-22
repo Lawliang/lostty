@@ -13,14 +13,13 @@ extension CanvasController {
             guard let card = cards.first(where: { $0.id == entry.id }), !card.surfaceTree.isEmpty else { return nil }
             return .init(frame: entry.frame, tree: card.surfaceTree, focused: card.focusedSurface?.id.uuidString)
         }
-        // Created tickets only: a draft is thrown away.
+        // Drafts too: a form open comes back open, with what's typed in it.
         let tickets = model.cards.enumerated().compactMap { stack, entry -> CanvasSaved<SplitTree<Ghostty.SurfaceView>>.Ticket? in
-            guard let ticket = self.tickets[entry.id]?.ticket.ticket, ticket.isCreated else { return nil }
-            return .init(id: entry.id, frame: entry.frame, ticket: ticket, stack: stack)
+            guard let card = self.tickets[entry.id]?.ticket else { return nil }
+            return .init(id: entry.id, frame: entry.frame, ticket: card.ticket, draft: card.draft, stack: stack)
         }
         return CanvasRestorableState(saved: .init(
-            visible: window?.isVisible ?? false, center: view.0, zoom: view.1, cards: saved,
-            tickets: tickets, lastTicketNumber: lastTicketNumber))
+            visible: window?.isVisible ?? false, center: view.0, zoom: view.1, cards: saved, tickets: tickets))
     }
 
     /// Rebuilds the canvas at launch; shown only if it was.
@@ -36,9 +35,8 @@ extension CanvasController {
         // canvas (reopened from history) isn't brought back twice.
         let tickets = (state.saved.tickets ?? []).filter { canvas.tickets[$0.id] == nil }
         for ticket in tickets.sorted(by: { $0.stack < $1.stack }) {
-            canvas.addTicket(ticket.ticket, id: ticket.id, frame: ticket.frame, stack: ticket.stack)
+            canvas.addTicket(ticket.ticket, id: ticket.id, frame: ticket.frame, stack: ticket.stack, draft: ticket.draft)
         }
-        canvas.lastTicketNumber = max(canvas.lastTicketNumber, state.saved.lastTicketNumber ?? 0)
         canvas.pendingView = (state.saved.center, state.saved.zoom)
         // The front card was the focused one: it takes keyboard focus when
         // the canvas is next key, not now (that would pull it forward).

@@ -290,10 +290,16 @@ struct CanvasSavedTests {
     @Test func ticketsComeBackWithTheCanvas() throws {
         let ticket = CanvasTicket(key: "LT-2", summary: "Fix login", kind: .bug, priority: .high, status: .inProgress,
                                   assignee: "Sam", details: "Drops after 8s")
+        var edited = ticket
+        edited.summary = "Fix login timeout"
         let saved = CanvasSaved<String>(
             visible: true, center: .zero, zoom: 1, cards: [],
-            tickets: [.init(id: UUID(), frame: CGRect(x: 5, y: 6, width: 380, height: 360), ticket: ticket, stack: 0)],
-            lastTicketNumber: 4)
+            tickets: [
+                .init(id: UUID(), frame: CGRect(x: 5, y: 6, width: 380, height: 360), ticket: ticket, draft: edited, stack: 0),
+                // Never created: only its draft.
+                .init(id: UUID(), frame: CGRect(x: 9, y: 9, width: 380, height: 360), ticket: CanvasTicket(),
+                      draft: CanvasTicket(summary: "Half typed"), stack: 1),
+            ])
         let data = try JSONEncoder().encode(saved)
         let back = try JSONDecoder().decode(CanvasSaved<String>.self, from: data)
         #expect(back == saved)
@@ -305,8 +311,18 @@ struct CanvasSavedTests {
         let saved = try JSONDecoder().decode(CanvasSaved<String>.self, from: Data(json.utf8))
         #expect(saved.cards.map(\.tree) == ["only"])
         #expect(saved.tickets == nil)
-        #expect(saved.lastTicketNumber == nil)
         #expect(!saved.isEmpty)
+    }
+
+    @Test func aTicketThatCantBeReadIsLeftOutNotTheCanvas() throws {
+        let good = #"{"id":"\#(UUID().uuidString)","frame":[[0,0],[380,360]],"stack":1,"ticket":{"key":"LT-1","summary":"Kept"}}"#
+        let tickets = [#"{"id":"not a uuid","frame":[[0,0],[380,360]],"stack":0,"ticket":{}}"#, good, #""a string""#, good]
+        let json = #"{"visible":true,"center":[0,0],"zoom":1,"cards":[{"frame":[[0,0],[720,500]],"tree":"pane"}],"#
+            + #""tickets":[\#(tickets.joined(separator: ","))]}"#
+        let saved = try JSONDecoder().decode(CanvasSaved<String>.self, from: Data(json.utf8))
+        #expect(saved.cards.map(\.tree) == ["pane"])
+        // The bad ticket and the string are skipped; the rest are kept.
+        #expect(saved.tickets?.map(\.ticket.summary) == ["Kept", "Kept"])
     }
 
     @Test func aCanvasWithNoCardsOrTicketsIsEmpty() {

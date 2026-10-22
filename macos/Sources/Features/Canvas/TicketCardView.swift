@@ -19,6 +19,7 @@ final class TicketCard: ObservableObject {
 
     func edit() {
         draft = ticket
+        canvas?.saveSoon()
     }
 
     /// Create or Save: a new ticket gets the next key.
@@ -120,18 +121,48 @@ final class TicketCardView: NSView, CanvasStacked {
     override func mouseDown(with event: NSEvent) {
         canvas?.zoom(toCard: ticket.id)
     }
+
+    /// A scroll its text doesn't take pans the canvas.
+    override func scrollWheel(with event: NSEvent) {
+        enclosingScrollView?.scrollWheel(with: event)
+    }
+
+    /// ⌘W (Close) and ⇧⌘W (Close Window) in a ticket close it, as the
+    /// red button does, not the canvas.
+    @IBAction func close(_ sender: Any?) {
+        ticket.close()
+    }
+
+    @IBAction func closeWindow(_ sender: Any?) {
+        ticket.close()
+    }
 }
 
 /// Hosts a ticket's details or form. While the canvas is zoomed SwiftUI
 /// misplaces clicks, as on a terminal card (CardTerminalHost), so then
-/// every click goes to the ticket's card, which zooms to 100%.
+/// every click goes to the ticket's card, which zooms to 100%. Scrolling
+/// over the focused ticket scrolls its text, and over any other pans the
+/// canvas, as over a pane; ⌥ swaps the two. A scroll that pans goes to the
+/// ticket's card, which hands it on up to the canvas.
 final class TicketDetailsHost: NSHostingView<TicketCardContent> {
     override func hitTest(_ point: NSPoint) -> NSView? {
-        guard (enclosingScrollView?.magnification ?? 1) != 1 else { return super.hitTest(point) }
         guard frame.contains(point) else { return nil }
+        if let event = NSApp.currentEvent, event.type == .scrollWheel, let canvas = enclosingScrollView as? CanvasScrollView {
+            // Decided as the scroll starts (CanvasScrollView.scrollingTicket).
+            if CanvasScrollView.startsScroll(event) {
+                let focused = enclosingTicket?.isFocusedCard ?? false
+                canvas.scrollingTicket = focused != event.modifierFlags.contains(.option) ? self : nil
+            }
+            if canvas.scrollingTicket !== self { return enclosingTicket }
+        }
+        guard (enclosingScrollView?.magnification ?? 1) != 1 else { return super.hitTest(point) }
+        return enclosingTicket
+    }
+
+    private var enclosingTicket: TicketCardView? {
         var view = superview
         while let next = view, !(next is TicketCardView) { view = next.superview }
-        return view
+        return view as? TicketCardView
     }
 }
 
