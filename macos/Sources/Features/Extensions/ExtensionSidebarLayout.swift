@@ -39,7 +39,9 @@ struct ExtensionSidebarLayout<Content: View>: View {
                     }
                 }
                 // Above an open app, so it never hides a notification.
-                .overlay(alignment: .topTrailing) { NotificationStackView() }
+                .overlay(alignment: .topTrailing) {
+                    if model.showsNotifications { NotificationStackView() }
+                }
             ClaudeUsageBar(model: model)
         }
         .overlay {

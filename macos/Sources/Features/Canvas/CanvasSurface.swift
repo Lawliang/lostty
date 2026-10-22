@@ -190,11 +190,13 @@ final class CanvasGridView: NSView {
     }
 }
 
-/// The grid with the scroll view over it, and the + button over that.
+/// The grid with the scroll view over it, and over that the + button and
+/// the notification stack, pinned to the window's corners at every zoom.
 final class CanvasSurfaceView: NSView {
     let scrollView = CanvasScrollView(frame: .zero)
     let addMenu = CanvasAddMenuView()
     private let grid = CanvasGridView(frame: .zero)
+    private let notifications = CanvasNotificationsView(rootView: NotificationStackView())
 
     init() {
         super.init(frame: .zero)
@@ -202,6 +204,14 @@ final class CanvasSurfaceView: NSView {
         addSubview(grid)
         addSubview(scrollView)
         addSubview(addMenu)
+        // As big as its bubbles, at the top right.
+        notifications.sizingOptions = [.intrinsicContentSize]
+        notifications.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(notifications)
+        NSLayoutConstraint.activate([
+            notifications.topAnchor.constraint(equalTo: topAnchor),
+            notifications.trailingAnchor.constraint(equalTo: trailingAnchor),
+        ])
         NotificationCenter.default.addObserver(
             self, selector: #selector(canvasMoved), name: NSView.boundsDidChangeNotification, object: scrollView.contentView)
     }
@@ -222,6 +232,14 @@ final class CanvasSurfaceView: NSView {
 
     @objc private func canvasMoved() {
         grid.update()
+    }
+}
+
+/// The canvas's one notification stack, for every card: with no bubbles up,
+/// clicks go on to the cards under its corner.
+final class CanvasNotificationsView: NSHostingView<NotificationStackView> {
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        LosttyNotifications.shared.items.isEmpty ? nil : super.hitTest(point)
     }
 }
 

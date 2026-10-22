@@ -35,6 +35,11 @@ struct ExtensionSidebarModelTests {
         #expect(ExtensionSidebarModel(channel: .beta, mascot: false).showsMascot == false)
     }
 
+    @Test func aWindowShowsNotificationsButACanvasCardLeavesThemToTheCanvas() {
+        #expect(ExtensionSidebarModel(channel: .beta).showsNotifications)
+        #expect(ExtensionSidebarModel(channel: .beta, mascot: false, notifications: false).showsNotifications == false)
+    }
+
     @Test func startsWithNothingOpen() throws {
         let (model, _) = try makeModel()
         #expect(model.active == nil)
