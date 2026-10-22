@@ -186,6 +186,22 @@ final class CardTerminalHost: NSHostingView<CardTerminal> {
         return enclosingCardView
     }
 
+    /// Zoomed, SwiftUI's own accessibility hit test loops until the stack
+    /// runs out, and Lostty crashes, when an accessibility app (Rectangle
+    /// asks on every click) asks what's under a point off the panes, the
+    /// bottom bar's. So zoomed, a pane answers for itself and the rest of
+    /// the card is this one element, as clicks there go to the card.
+    override func accessibilityHitTest(_ point: NSPoint) -> Any? {
+        guard let card, let window, (enclosingScrollView?.magnification ?? 1) != 1 else {
+            return super.accessibilityHitTest(point)
+        }
+        let inWindow = window.convertPoint(fromScreen: point)
+        for pane in card.surfaceTree where !pane.isHiddenOrHasHiddenAncestor {
+            if pane.bounds.contains(pane.convert(inWindow, from: nil)) { return pane }
+        }
+        return self
+    }
+
     private var enclosingCardView: CardView? {
         var view = superview
         while let next = view, !(next is CardView) { view = next.superview }
