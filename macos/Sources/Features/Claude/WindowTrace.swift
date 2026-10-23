@@ -85,36 +85,60 @@ enum WindowTrace {
     static let tipLightening = 0.35
 
     /// The tip's color.
-    static func tip(_ colors: TraceColors) -> Color {
-        TraceColors.color(colors.primary.mixed(with: .white, amount: tipLightening))
+    static func tip(_ colors: TraceColors) -> RGB {
+        colors.primary.mixed(with: .white, amount: tipLightening)
+    }
+
+    /// One color of the gradient: an sRGB color at an opacity, at a share
+    /// of the turn.
+    struct Shade: Equatable {
+        var rgb: RGB
+        var alpha: Double
+        var location: Double
+
+        var cgColor: CGColor {
+            CGColor(srgbRed: CGFloat(rgb.r) / 255, green: CGFloat(rgb.g) / 255, blue: CGFloat(rgb.b) / 255,
+                    alpha: CGFloat(alpha))
+        }
     }
 
     /// The website's gradient, `transparent 0 64%, color-mix(accent2 70%)
     /// 80%, accent 93%, #fff 95%, transparent 96%`, but with the tip the
     /// head's color lightened rather than white. Running counterclockwise,
     /// it's mirrored so the tail stays behind the head.
-    static func stops(_ colors: TraceColors, clockwise: Bool = true) -> [Gradient.Stop] {
-        let tip = tip(colors)
-        let shades: [Color] = [
-            colors.tail.opacity(0), colors.tail.opacity(0), colors.tail.opacity(0.7), colors.head,
-            tip, tip.opacity(0), tip.opacity(0),
-        ]
-        let stops = zip(shades, stopLocations).map { Gradient.Stop(color: $0, location: $1) }
-        guard !clockwise else { return stops }
-        return stops.reversed().map { Gradient.Stop(color: $0.color, location: 1 - $0.location) }
+    static func shades(_ colors: TraceColors, clockwise: Bool = true) -> [Shade] {
+        let tail = colors.secondary, head = colors.primary, lit = tip(colors)
+        let tints: [(RGB, Double)] = [(tail, 0), (tail, 0), (tail, 0.7), (head, 1), (lit, 1), (lit, 0), (lit, 0)]
+        let shades = zip(tints, stopLocations).map { Shade(rgb: $0.0, alpha: $0.1, location: $1) }
+        guard !clockwise else { return shades }
+        return shades.reversed().map { Shade(rgb: $0.rgb, alpha: $0.alpha, location: 1 - $0.location) }
+    }
+
+    /// Where a conic gradient's `endPoint` goes, in its square layer's unit
+    /// space, for the gradient turned `turn` degrees clockwise from
+    /// starting at the top. In a flipped view a conic gradient starts
+    /// toward `endPoint` and sweeps clockwise, as SwiftUI's
+    /// AngularGradient does; it measures angles in unit space, so the
+    /// layer must be square.
+    static func endPoint(turn: Double) -> CGPoint {
+        let start = (turn - 90) * .pi / 180
+        return CGPoint(x: 0.5 + 0.5 * cos(start), y: 0.5 + 0.5 * sin(start))
     }
 }
 
 /// The light round one pane. Draws nothing until Claude works there.
+/// Core Animation draws it (WindowLightView): a frame only turns two
+/// gradients, where a SwiftUI timeline had the whole window laid out.
 struct PaneLightView: View {
     let surfaceID: UUID
     let phase: TracePhase
     /// The head's motion, shared with the bottom glow (ClaudeTraceLayer).
     let journey: TraceOverlay.Journey
+    /// The canvas's zoom on a card, 1 in a window.
+    var zoom: CGFloat = 1
     @ObservedObject private var skins = SkinsRuntime.shared.manager
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(TraceRoute.defaultsKey, store: .ghostty) private var route = TraceRoute.initial
-    @State private var windowVisible = true
     /// The last lighting, kept while the light fades out.
     @State private var shown: WindowTrace.Lighting?
     @State private var lit = false
@@ -126,78 +150,267 @@ struct PaneLightView: View {
     }
 
     var body: some View {
-        GeometryReader { geo in
-            if let shown {
-                TimelineView(.animation(minimumInterval: TraceTiming.frameInterval, paused: !lit || !windowVisible)) { timeline in
-                    let elapsed = timeline.date.timeIntervalSince(shown.since)
-                    if reduceMotion {
-                        calm(size: geo.size, colors: shown.colors, elapsed: elapsed)
-                    } else {
-                        let rect = TraceOverlay.edgeRect(geo.size)
-                        let head = WindowTrace.head(
-                            journey, since: shown.since, in: rect, elapsed: elapsed,
-                            course: shown.subagents ? .subagents : .route(route), speed: shown.speed)
-                        WindowTraceRing(
-                            colors: shown.colors,
-                            angle: WindowTrace.turn(toward: head.point, from: CGPoint(x: rect.midX, y: rect.midY),
-                                                    clockwise: head.clockwise),
-                            clockwise: head.clockwise, cornerRadius: 0, size: geo.size)
-                    }
-                }
-            }
-        }
-        .opacity(lit ? 1 : 0)
-        .animation(.easeInOut(duration: WindowTrace.fadeSeconds), value: lit)
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
-        .background(OcclusionProbe(visible: $windowVisible))
-        .onAppear { light(lighting) }
-        .onChange(of: lighting) { light($0) }
+        WindowLightLayer(
+            setup: WindowLightView.Setup(
+                lighting: shown, running: lit, route: route, reduceMotion: reduceMotion, zoom: zoom),
+            journey: journey)
+            .opacity(lit ? 1 : 0)
+            .animation(.easeInOut(duration: WindowTrace.fadeSeconds), value: lit)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+            .onAppear { light(lighting) }
+            .onChange(of: lighting) { light($0) }
     }
 
     private func light(_ lighting: WindowTrace.Lighting?) {
         if let lighting { shown = lighting }
         lit = lighting != nil
     }
+}
 
-    /// Reduce Motion: no circling; the whole edge breathes with a 2s period.
-    private func calm(size: CGSize, colors: TraceColors, elapsed: Double) -> some View {
-        let breath = 0.25 + 0.35 * (0.5 + 0.5 * sin(2 * .pi * elapsed / 2))
-        return Rectangle().strokeBorder(colors.head, lineWidth: 2)
-            .opacity(breath)
-            .frame(width: size.width, height: size.height)
+private struct WindowLightLayer: NSViewRepresentable {
+    let setup: WindowLightView.Setup
+    let journey: TraceOverlay.Journey
+
+    func makeNSView(context: Context) -> WindowLightView { WindowLightView() }
+
+    func updateNSView(_ view: WindowLightView, context: Context) {
+        view.update(setup, journey: journey)
     }
 }
 
-/// One frame of the light: the website's conic gradient turned `angle`
-/// round the pane's center, seen through a thin line along the edge and,
-/// softer, a glow just inside it (the website's glow spills outside the
-/// box; a pane can't draw there).
-struct WindowTraceRing: View {
-    let colors: TraceColors
-    let angle: Double
-    var clockwise = true
-    let cornerRadius: CGFloat
-    let size: CGSize
-
-    var body: some View {
-        let shape = RoundedRectangle(cornerRadius: cornerRadius)
-        let side = (size.width * size.width + size.height * size.height).squareRoot()
-        let sweep = AngularGradient(
-            gradient: Gradient(stops: WindowTrace.stops(colors, clockwise: clockwise)), center: .center,
-            startAngle: .degrees(-90), endAngle: .degrees(270))
-            .frame(width: side, height: side)
-            .rotationEffect(.degrees(angle))
-            .frame(width: size.width, height: size.height)
-        ZStack {
-            sweep
-                .mask(shape.strokeBorder(lineWidth: 12).blur(radius: 9))
-                .opacity(0.55)
-            sweep
-                .mask(shape.strokeBorder(lineWidth: 2))
-        }
-        .frame(width: size.width, height: size.height)
+/// The Window Light in Core Animation layers: the website's conic gradient
+/// turned round the pane's center, seen through a thin line along the
+/// edge and, softer, a blurred band just inside it (the website's glow
+/// spills outside the box; a pane can't draw there). Each display frame
+/// it points the gradients at the head (`WindowTrace.head`) and nothing
+/// else redraws; the GPU does the rest. Stops while its window is covered
+/// or minimized, and while the light fades out.
+final class WindowLightView: NSView {
+    struct Setup: Equatable {
+        var lighting: WindowTrace.Lighting?
+        /// Lit and moving; off, it holds its last frame while it fades.
+        var running = false
+        var route = TraceRoute.initial
+        var reduceMotion = false
+        var zoom: CGFloat = 1
     }
+
+    private var setup = Setup()
+    private var journey = TraceOverlay.Journey()
+    /// Each gradient is a square (conic gradients measure angles in unit
+    /// space) inside a pane-sized box that its mask cuts.
+    private let glowBox = CALayer()
+    private let glow = CAGradientLayer()
+    private let glowMask = CALayer()
+    private let lineBox = CALayer()
+    private let line = CAGradientLayer()
+    private let lineMask = CAShapeLayer()
+    /// Reduce Motion: no circling; the whole edge breathes.
+    private let calm = CAShapeLayer()
+    /// Which way the gradient's colors run now; nil to set them afresh.
+    private var clockwise: Bool?
+    /// The glow mask as drawn: its size, and the zoom's line scale as y.
+    private var maskDrawn: CGRect?
+    private var clock: AnyObject?
+    private var occlusion: NSObjectProtocol?
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        layerContentsRedrawPolicy = .never
+        for gradient in [glow, line] {
+            gradient.type = .conic
+            gradient.startPoint = CGPoint(x: 0.5, y: 0.5)
+        }
+        glowBox.opacity = 0.55
+        glowBox.mask = glowMask
+        glowBox.addSublayer(glow)
+        // While a resize or a pinch goes on, the old mask stretches.
+        glowMask.contentsGravity = .resize
+        lineMask.fillColor = nil
+        lineMask.strokeColor = CGColor(gray: 0, alpha: 1)
+        lineBox.mask = lineMask
+        lineBox.addSublayer(line)
+        calm.fillColor = nil
+        calm.isHidden = true
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    override var isFlipped: Bool { true }
+
+    /// Clicks go to the pane under it.
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    func update(_ setup: Setup, journey: TraceOverlay.Journey) {
+        self.journey = journey
+        guard setup != self.setup else { return }
+        let old = self.setup
+        self.setup = setup
+        if setup.lighting != old.lighting { clockwise = nil }
+        if setup.zoom != old.zoom { needsLayout = true }
+        if setup.reduceMotion != old.reduceMotion || setup.lighting?.primary != old.lighting?.primary
+            || setup.running != old.running {
+            breathe()
+        }
+        turn()
+        updateClock()
+    }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        needsLayout = true
+    }
+
+    override func layout() {
+        super.layout()
+        if let layer, glowBox.superlayer !== layer {
+            for sublayer in [glowBox, lineBox, calm] { layer.addSublayer(sublayer) }
+        }
+        let scale = CanvasZoomCompensation.scale(zoom: setup.zoom)
+        let side = max(bounds.width, bounds.height)
+        let square = CGRect(x: bounds.midX - side / 2, y: bounds.midY - side / 2, width: side, height: side)
+        // The line is 2 points wide inside the edge, as SwiftUI's strokeBorder.
+        let edge = CGPath(rect: bounds.insetBy(dx: scale, dy: scale), transform: nil)
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        for box in [glowBox, lineBox, calm, glowMask, lineMask] { box.frame = bounds }
+        glow.frame = square
+        line.frame = square
+        lineMask.path = edge
+        lineMask.lineWidth = 2 * scale
+        calm.path = edge
+        calm.lineWidth = 2 * scale
+        CATransaction.commit()
+        if glowMask.contents == nil {
+            drawGlowMask()
+        } else {
+            NSObject.cancelPreviousPerformRequests(withTarget: self, selector: #selector(drawGlowMask), object: nil)
+            perform(#selector(drawGlowMask), with: nil, afterDelay: 0.15)
+        }
+        turn()
+    }
+
+    override func viewDidChangeBackingProperties() {
+        super.viewDidChangeBackingProperties()
+        maskDrawn = nil
+        needsLayout = true
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if let occlusion { NotificationCenter.default.removeObserver(occlusion) }
+        occlusion = nil
+        if let window {
+            occlusion = NotificationCenter.default.addObserver(
+                forName: NSWindow.didChangeOcclusionStateNotification, object: window, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated { self?.updateClock() }
+            }
+        }
+        updateClock()
+    }
+
+    /// The glow's band: a 12-point line along the edge blurred by 9, as an
+    /// image. Drawn once for a size; while the size keeps changing (a
+    /// resize, a pinch), the last one stretches and this waits for a pause.
+    @objc private func drawGlowMask() {
+        let scale = CanvasZoomCompensation.scale(zoom: setup.zoom)
+        let key = CGRect(x: 0, y: scale, width: bounds.width, height: bounds.height)
+        guard key != maskDrawn, bounds.width > 0, bounds.height > 0 else { return }
+        let renderer = ImageRenderer(content: Rectangle()
+            .strokeBorder(lineWidth: 12 * scale)
+            .blur(radius: 9 * scale)
+            .frame(width: bounds.width, height: bounds.height))
+        renderer.scale = window?.backingScaleFactor ?? 2
+        guard let image = renderer.cgImage else { return }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        glowMask.contents = image
+        CATransaction.commit()
+        maskDrawn = key
+    }
+
+    /// Points the gradients at the head, as it is now.
+    private func turn() {
+        guard let lighting = setup.lighting, !setup.reduceMotion, bounds.width > 0 else { return }
+        // Moved in the size it's drawn at on a zoomed-out canvas.
+        let scale = CanvasZoomCompensation.scale(zoom: setup.zoom)
+        let rect = TraceOverlay.edgeRect(CGSize(width: bounds.width / scale, height: bounds.height / scale))
+        let head = WindowTrace.head(
+            journey, since: lighting.since, in: rect, elapsed: Date().timeIntervalSince(lighting.since),
+            course: lighting.subagents ? .subagents : .route(setup.route), speed: lighting.speed)
+        let turn = WindowTrace.turn(toward: head.point, from: CGPoint(x: rect.midX, y: rect.midY),
+                                    clockwise: head.clockwise)
+        let end = WindowTrace.endPoint(turn: turn)
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        if clockwise != head.clockwise {
+            clockwise = head.clockwise
+            let shades = WindowTrace.shades(lighting.colors, clockwise: head.clockwise)
+            for gradient in [glow, line] {
+                gradient.colors = shades.map(\.cgColor)
+                gradient.locations = shades.map { NSNumber(value: $0.location) }
+            }
+        }
+        glow.endPoint = end
+        line.endPoint = end
+        CATransaction.commit()
+    }
+
+    /// Reduce Motion: the edge in the head's color, breathing with a 2 s
+    /// period, which Core Animation plays by itself.
+    private func breathe() {
+        let calmNow = setup.reduceMotion && setup.lighting != nil
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        glowBox.isHidden = calmNow
+        lineBox.isHidden = calmNow
+        calm.isHidden = !calmNow
+        calm.removeAnimation(forKey: "breath")
+        if calmNow, let lighting = setup.lighting {
+            calm.strokeColor = WindowTrace.Shade(rgb: lighting.primary, alpha: 1, location: 0).cgColor
+            calm.opacity = 0.25
+            if setup.running {
+                let breath = CABasicAnimation(keyPath: "opacity")
+                breath.fromValue = 0.25
+                breath.toValue = 0.6
+                breath.duration = 1
+                breath.autoreverses = true
+                breath.repeatCount = .infinity
+                breath.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                calm.add(breath, forKey: "breath")
+            }
+        }
+        CATransaction.commit()
+    }
+
+    /// A frame each display refresh while lit, moving and on screen.
+    private func updateClock() {
+        let visible = window?.occlusionState.contains(.visible) == true
+        let wanted = setup.running && setup.lighting != nil && !setup.reduceMotion && visible
+        if wanted, clock == nil {
+            if #available(macOS 14, *) {
+                let link = displayLink(target: self, selector: #selector(tick))
+                let rate = Float(1 / TraceTiming.frameInterval)
+                link.preferredFrameRateRange = CAFrameRateRange(minimum: rate / 2, maximum: rate, preferred: rate)
+                link.add(to: .main, forMode: .common)
+                clock = link
+            } else {
+                let timer = Timer(timeInterval: TraceTiming.frameInterval, target: self, selector: #selector(tick),
+                                  userInfo: nil, repeats: true)
+                RunLoop.main.add(timer, forMode: .common)
+                clock = timer
+            }
+        } else if !wanted, let clock {
+            if #available(macOS 14, *), let link = clock as? CADisplayLink { link.invalidate() }
+            (clock as? Timer)?.invalidate()
+            self.clock = nil
+        }
+    }
+
+    @objc private func tick() { turn() }
 }
 
 #endif

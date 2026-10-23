@@ -30,7 +30,7 @@ struct ClaudeTraceLayer: View {
         let windowLight = style == .window
         ZStack {
             if windowLight {
-                PaneLightView(surfaceID: surfaceID, phase: phase, journey: journey).modifier(CanvasZoomCompensation(zoom: zoom))
+                PaneLightView(surfaceID: surfaceID, phase: phase, journey: journey, zoom: zoom)
             }
             if !phase.isOff, !windowLight || phase.subagentsOnly,
                let trace = ResolvedTrace.resolve(skin: skins.effectiveSkin(surfaceID), enabled: skins.config.trace) {
@@ -44,27 +44,14 @@ struct ClaudeTraceLayer: View {
     }
 }
 
-/// On a zoomed-out canvas, draws its content as big on screen as at 100%:
-/// laid out smaller by the zoom and scaled back up to fill, so the Window
-/// Light's line and glow keep their width instead of thinning to nothing.
-/// Zoomed in, and in a window, it draws as is.
-struct CanvasZoomCompensation: ViewModifier {
-    let zoom: CGFloat
-
-    /// How much bigger than at 100% the content draws at `zoom`.
+/// On a zoomed-out canvas, the Window Light draws as big on screen as at
+/// 100%: its lines and glow widened by the zoom, so they keep their width
+/// instead of thinning to nothing. Zoomed in, and in a window, as is.
+enum CanvasZoomCompensation {
+    /// How much bigger than at 100% the light draws at `zoom`.
     static func scale(zoom: CGFloat) -> CGFloat {
         guard zoom > 0 else { return 1 }
         return 1 / min(1, zoom)
-    }
-
-    func body(content: Content) -> some View {
-        GeometryReader { geo in
-            let scale = Self.scale(zoom: zoom)
-            content
-                .frame(width: geo.size.width / scale, height: geo.size.height / scale)
-                .scaleEffect(scale)
-                .frame(width: geo.size.width, height: geo.size.height)
-        }
     }
 }
 

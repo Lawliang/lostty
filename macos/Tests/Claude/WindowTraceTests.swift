@@ -125,24 +125,34 @@ struct WindowTraceTests {
     @Test func gradientMatchesTheWebsiteWithTheTipALighterHead() {
         #expect(WindowTrace.stopLocations == [0, 0.64, 0.80, 0.93, 0.95, 0.96, 1])
         let colors = TraceColors(primary: WindowTrace.websitePink, secondary: WindowTrace.websiteCyan)
-        let stops = WindowTrace.stops(colors)
-        #expect(stops.map { Double($0.location) } == WindowTrace.stopLocations)
-        #expect(stops[3].color == TraceColors.color(WindowTrace.websitePink))
+        let shades = WindowTrace.shades(colors)
+        #expect(shades.map(\.location) == WindowTrace.stopLocations)
+        #expect(shades[3] == WindowTrace.Shade(rgb: WindowTrace.websitePink, alpha: 1, location: 0.93))
         // The tip: the head's pink lightened a little, not white.
-        let tip = TraceColors.color(WindowTrace.websitePink.mixed(with: .white, amount: 0.35))
-        #expect(stops[4].color == tip)
-        #expect(stops[4].color != stops[3].color)
-        #expect(!stops.contains { $0.color == .white })
+        let tip = WindowTrace.websitePink.mixed(with: .white, amount: 0.35)
+        #expect(shades[4].rgb == tip)
+        #expect(shades[4].rgb != shades[3].rgb)
+        #expect(!shades.contains { $0.rgb == .white })
+        #expect(shades.map(\.alpha) == [0, 0, 0.7, 1, 1, 0, 0])
     }
 
     @Test func runningCounterclockwiseTheGradientIsMirrored() {
         let colors = TraceColors(primary: WindowTrace.websitePink, secondary: WindowTrace.websiteCyan)
-        let stops = WindowTrace.stops(colors, clockwise: false)
-        let locations = stops.map { Double($0.location) }
+        let shades = WindowTrace.shades(colors, clockwise: false)
+        let locations = shades.map(\.location)
         #expect(locations == locations.sorted())
         #expect(zip(locations, [0, 0.04, 0.05, 0.07, 0.2, 0.36, 1]).allSatisfy { abs($0 - $1) < 1e-9 })
-        #expect(stops[2].color == WindowTrace.tip(colors))
-        #expect(stops[3].color == TraceColors.color(WindowTrace.websitePink))
+        #expect(shades[2].rgb == WindowTrace.tip(colors))
+        #expect(shades[3].rgb == WindowTrace.websitePink)
+    }
+
+    @Test func theGradientStartsAtTheTopAndTurnsClockwise() {
+        // Unit space in a flipped view: y runs down.
+        func near(_ a: CGPoint, _ b: CGPoint) -> Bool { abs(a.x - b.x) < 1e-9 && abs(a.y - b.y) < 1e-9 }
+        #expect(near(WindowTrace.endPoint(turn: 0), CGPoint(x: 0.5, y: 0)))
+        #expect(near(WindowTrace.endPoint(turn: 90), CGPoint(x: 1, y: 0.5)))
+        #expect(near(WindowTrace.endPoint(turn: 180), CGPoint(x: 0.5, y: 1)))
+        #expect(near(WindowTrace.endPoint(turn: 270), CGPoint(x: 0, y: 0.5)))
     }
 }
 
