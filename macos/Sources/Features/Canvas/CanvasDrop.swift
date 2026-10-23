@@ -2,25 +2,29 @@
 import AppKit
 import SwiftUI
 
-/// A terminal window dragged by its title bar onto the top of the canvas
-/// moves onto the canvas. While the pointer is over the canvas's title bar
-/// or the band under it (`dropZone`), lit glass fills them and the dragged
-/// window goes see-through;
-/// letting go warps the window in (CanvasAbsorb) and makes it a card, tabs
-/// and all. The window server moves the window, so the drag is followed by
-/// watching the pointer and the mouse button until it's let go.
+/// A terminal window dragged by its title bar and held over the canvas for
+/// `holdSeconds` moves onto the canvas. While it's over the canvas, the
+/// canvas lights up with a ring counting down and "Merging…" over it, and
+/// the dragged window goes see-through; once the ring runs out the window
+/// warps in (CanvasAbsorb) and becomes a card, tabs and all. Dragging it
+/// off the canvas or letting go first leaves it a window. The window
+/// server moves the window, so the drag is followed by watching the
+/// pointer and the mouse button.
 @MainActor
 final class CanvasDrop: NSObject {
     static let shared = CanvasDrop()
 
-    /// How see-through the dragged window is over the drop.
+    /// How see-through the dragged window is over the canvas.
     static let hoverAlpha: CGFloat = 0.7
+    /// How long a window is held over the canvas before it merges in.
+    static let holdSeconds: TimeInterval = 2
 
     private var watching = false
     private weak var dragging: TerminalController?
     private var timer: Timer?
     private var well: NSPanel?
-    private var over = false
+    /// When the dragged window came over the canvas; nil while it isn't.
+    private var heldSince: Date?
 
     /// Starts noticing terminal windows being dragged. Once, with the canvas.
     func start() {
@@ -35,20 +39,10 @@ final class CanvasDrop: NSObject {
         dragStarted(controller)
     }
 
-    /// The canvas's title bar, from its window's frame and the height of
-    /// what's under the title bar, in screen coordinates.
-    nonisolated static func titleBar(frame: CGRect, contentHeight: CGFloat) -> CGRect {
-        let height = max(28, frame.height - contentHeight)
-        return CGRect(x: frame.minX, y: frame.maxY - height, width: frame.width, height: height)
-    }
-
-    /// Where letting go adds the window to the canvas: the title bar and a
-    /// band of the canvas under it, a fifth of the canvas tall (80 to 160
-    /// points), so the title bar needn't be hit exactly.
-    nonisolated static func dropZone(frame: CGRect, contentHeight: CGFloat) -> CGRect {
-        let titleBar = titleBar(frame: frame, contentHeight: contentHeight)
-        let below = min(contentHeight, 160, max(80, contentHeight / 5))
-        return CGRect(x: titleBar.minX, y: titleBar.minY - below, width: titleBar.width, height: titleBar.height + below)
+    /// Whether a window held over the canvas since `since` merges in at `now`.
+    nonisolated static func merges(heldSince since: Date?, now: Date) -> Bool {
+        guard let since else { return false }
+        return now.timeIntervalSince(since) >= holdSeconds
     }
 
     private func dragStarted(_ controller: TerminalController) {
@@ -69,18 +63,16 @@ final class CanvasDrop: NSObject {
               let canvasController = CanvasController.shared, let canvas = canvasController.window else {
             return stop()
         }
+        // Let go: it stays a window.
+        guard NSEvent.pressedMouseButtons & 1 != 0 else { return stop() }
         let point = NSEvent.mouseLocation
-        let zone = Self.dropZone(frame: canvas.frame, contentHeight: canvas.contentLayoutRect.height)
-        // Over the drop zone, and nothing but the dragged window (and the
-        // glass) in front of the canvas there.
+        // Over the canvas, and nothing but the dragged window in front of
+        // it there.
         let under = NSWindow.windowNumber(at: point, belowWindowWithWindowNumber: window.windowNumber)
-        let inside = zone.contains(point) && [canvas.windowNumber, well?.windowNumber].contains(under)
-        guard NSEvent.pressedMouseButtons & 1 == 0 else {
-            hover(inside, zone: zone, canvas: canvas, dragged: window)
-            return
-        }
+        let inside = canvas.frame.contains(point) && under == canvas.windowNumber
+        hover(inside, canvas: canvas, dragged: window)
+        guard Self.merges(heldSince: heldSince, now: Date()) else { return }
         stop()
-        guard inside else { return }
         let controllers = (window.tabbedWindows ?? [window]).compactMap { $0.windowController as? TerminalController }
         let ghostty = controller.ghostty
         CanvasAbsorb.run(window, into: point) {
@@ -92,72 +84,89 @@ final class CanvasDrop: NSObject {
         }
     }
 
-    private func hover(_ inside: Bool, zone: CGRect, canvas: NSWindow, dragged: NSWindow) {
-        guard inside != over else { return }
-        over = inside
+    private func hover(_ inside: Bool, canvas: NSWindow, dragged: NSWindow) {
+        guard inside != (heldSince != nil) else { return }
+        heldSince = inside ? Date() : nil
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.18
             dragged.animator().alphaValue = inside ? Self.hoverAlpha : 1
         }
         if inside {
-            showWell(over: zone, canvas: canvas)
+            showWell(over: canvas)
         } else {
             hideWell()
         }
     }
 
-    private func showWell(over zone: CGRect, canvas: NSWindow) {
-        let band = zone.insetBy(dx: 8, dy: 4)
-        let well = self.well ?? CanvasAbsorb.overlay(frame: band)
-        well.setFrame(band, display: false)
-        well.level = canvas.level
-        well.contentView = NSHostingView(rootView: CanvasDropWell())
-        if well.parent == nil { canvas.addChildWindow(well, ordered: .above) }
-        well.orderFront(nil)
+    /// Over the dragged window too, so the countdown shows through it.
+    private func showWell(over canvas: NSWindow) {
+        let well = self.well ?? CanvasAbsorb.overlay(frame: canvas.frame)
+        well.setFrame(canvas.frame, display: false)
+        well.contentView = NSHostingView(rootView: CanvasMergeOverlay(seconds: Self.holdSeconds))
+        well.orderFrontRegardless()
         self.well = well
     }
 
     private func hideWell() {
-        guard let well else { return }
-        well.parent?.removeChildWindow(well)
-        well.orderOut(nil)
-        self.well = nil
+        well?.orderOut(nil)
+        well = nil
     }
 
     private func stop() {
         timer?.invalidate()
         timer = nil
-        if over, let window = dragging?.window { window.alphaValue = 1 }
-        over = false
+        if heldSince != nil, let window = dragging?.window { window.alphaValue = 1 }
+        heldSince = nil
         dragging = nil
         hideWell()
     }
 }
 
-/// The glass over the drop zone while a window can be let go there: the
-/// + button's lit glass, its light slowly turning, with what letting go
-/// does.
-private struct CanvasDropWell: View {
+/// Over the canvas while a window is held there: the canvas's edge lit,
+/// and in its middle the + button's lit glass with a ring running down the
+/// seconds until the window merges in.
+private struct CanvasMergeOverlay: View {
+    let seconds: TimeInterval
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var shown = false
+    @State private var left = 1.0
 
     var body: some View {
         let dark = scheme == .dark
-        HStack(spacing: 6) {
-            Image(systemName: "square.on.square.dashed")
-            Text("Release to Add to Canvas")
+        let ink = dark ? Color.white : Color.black
+        ZStack {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.cyan.opacity(dark ? 0.08 : 0.06))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(Color.cyan.opacity(0.7), lineWidth: 2)
+                        .shadow(color: .cyan.opacity(0.6), radius: 8)
+                }
+            HStack(spacing: 10) {
+                ZStack {
+                    Circle().stroke(ink.opacity(0.18), lineWidth: 3)
+                    Circle()
+                        .trim(from: 0, to: left)
+                        .stroke(ink, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                }
+                .frame(width: 20, height: 20)
+                Text("Merging…")
+            }
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(ink)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 11)
+            .modifier(CanvasAddLitGlass(shape: Capsule(), dark: dark, lit: shown, interactive: false,
+                                        reduceMotion: reduceMotion))
+            .scaleEffect(shown || reduceMotion ? 1 : 0.94)
         }
-        .font(.system(size: 12, weight: .semibold))
-        .foregroundStyle(dark ? Color.white : Color.black)
-        .shadow(color: .white.opacity(dark ? 0.45 : 0), radius: 4)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .modifier(CanvasAddLitGlass(shape: RoundedRectangle(cornerRadius: 16, style: .continuous), dark: dark,
-                                    lit: shown, interactive: false,
-                                    reduceMotion: reduceMotion))
-        .scaleEffect(shown || reduceMotion ? 1 : 0.94)
         .opacity(shown ? 1 : 0)
-        .onAppear { withAnimation(CanvasAddButton.light) { shown = true } }
+        .onAppear {
+            withAnimation(CanvasAddButton.light) { shown = true }
+            withAnimation(.linear(duration: seconds)) { left = 0 }
+        }
         .accessibilityElement(children: .combine)
     }
 }

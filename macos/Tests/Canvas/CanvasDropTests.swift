@@ -5,21 +5,11 @@ import Testing
 
 @MainActor
 struct CanvasDropTests {
-    @Test func theTitleBarIsTheStripAboveTheContent() {
-        let frame = CGRect(x: 100, y: 200, width: 800, height: 600)
-        #expect(CanvasDrop.titleBar(frame: frame, contentHeight: 570) == CGRect(x: 100, y: 770, width: 800, height: 30))
-        // A window with no title bar still has a strip to drop on.
-        #expect(CanvasDrop.titleBar(frame: frame, contentHeight: 600).height == 28)
-    }
-
-    @Test func theDropZoneIsTheTitleBarAndABandUnderIt() {
-        let frame = CGRect(x: 100, y: 200, width: 800, height: 600)
-        // A fifth of the canvas under the title bar.
-        #expect(CanvasDrop.dropZone(frame: frame, contentHeight: 570) == CGRect(x: 100, y: 656, width: 800, height: 144))
-        // At least 80 points, at most 160.
-        #expect(CanvasDrop.dropZone(frame: frame, contentHeight: 300) == CGRect(x: 100, y: 420, width: 800, height: 380))
-        let tall = CGRect(x: 0, y: 0, width: 800, height: 1400)
-        #expect(CanvasDrop.dropZone(frame: tall, contentHeight: 1370) == CGRect(x: 0, y: 1210, width: 800, height: 190))
+    @Test func aWindowHeldOverTheCanvasForTwoSecondsMergesIn() {
+        let since = Date(timeIntervalSinceReferenceDate: 100)
+        #expect(!CanvasDrop.merges(heldSince: nil, now: since.addingTimeInterval(5)))
+        #expect(!CanvasDrop.merges(heldSince: since, now: since.addingTimeInterval(1.9)))
+        #expect(CanvasDrop.merges(heldSince: since, now: since.addingTimeInterval(2)))
     }
 
     @Test func theWarpPlaysRoundTheWindowAndThePointYDown() {
