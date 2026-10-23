@@ -197,7 +197,7 @@ private struct CanvasMergeOverlay: View {
             .padding(.horizontal, 18)
             .padding(.vertical, 11)
             .modifier(CanvasAddLitGlass(shape: Capsule(), dark: dark, lit: shown, interactive: false,
-                                        reduceMotion: reduceMotion))
+                                        reduceMotion: reduceMotion, prism: false))
             .scaleEffect(shown || reduceMotion ? 1 : 0.94)
         }
         .opacity(shown ? 1 : 0)

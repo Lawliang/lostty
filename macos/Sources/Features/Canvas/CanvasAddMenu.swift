@@ -179,20 +179,23 @@ struct CanvasAddButton: View {
 }
 
 /// Glass in `shape` with its rim and prism, lit while the pointer is over
-/// it. The drop band over the canvas's title bar (CanvasDrop) is it too.
+/// it. The merge countdown (CanvasDrop) is it too, without the prism.
 struct CanvasAddLitGlass<S: InsettableShape>: ViewModifier {
     let shape: S
     let dark: Bool
     let lit: Bool
     let interactive: Bool
     let reduceMotion: Bool
+    var prism = true
 
     func body(content: Content) -> some View {
         content
             .modifier(CanvasAddGlass(shape: shape, dark: dark, interactive: interactive))
             .overlay {
-                CanvasAddPrism(shape: shape, dark: dark, turn: .degrees(lit && !reduceMotion ? 38 : 0))
-                    .opacity(lit ? 1 : 0.85)
+                if prism {
+                    CanvasAddPrism(shape: shape, dark: dark, turn: .degrees(lit && !reduceMotion ? 38 : 0))
+                        .opacity(lit ? 1 : 0.85)
+                }
             }
             .overlay(CanvasAddRim(shape: shape, dark: dark, lit: lit))
     }
