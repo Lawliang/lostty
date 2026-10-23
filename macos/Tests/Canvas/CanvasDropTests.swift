@@ -12,6 +12,10 @@ struct CanvasDropTests {
         #expect(CanvasDrop.held(since: since, now: since.addingTimeInterval(3)))
     }
 
+    @Test func theLabelsDotsComeInOneByOneThenStartOver() {
+        #expect([0, 0.31, 0.61, 0.91, 1.21, 1.51].map(CanvasDrop.dots(after:)) == [0, 1, 2, 3, 0, 1])
+    }
+
     @Test func anyOverlapWithTheCanvasCounts() {
         let canvas = CGRect(x: 100, y: 100, width: 800, height: 600)
         #expect(CanvasDrop.overlap(CGRect(x: 890, y: 650, width: 400, height: 300), canvas)

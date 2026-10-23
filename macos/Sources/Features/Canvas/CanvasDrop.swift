@@ -50,6 +50,14 @@ final class CanvasDrop: NSObject {
         return overlap.isEmpty ? nil : overlap
     }
 
+    /// How many of the label's three dots show `elapsed` seconds into a
+    /// countdown: one more every `dotSeconds`, then none again.
+    nonisolated static func dots(after elapsed: TimeInterval) -> Int {
+        Int(max(0, elapsed) / dotSeconds) % 4
+    }
+
+    static let dotSeconds: TimeInterval = 0.3
+
     /// Whether a hold since `since` (a window overlapping the canvas, or a
     /// card dragged off it) has lasted `holdSeconds` at `now`.
     nonisolated static func held(since: Date?, now: Date) -> Bool {
@@ -105,7 +113,7 @@ final class CanvasDrop: NSObject {
             dragged.animator().alphaValue = inside ? Self.hoverAlpha : 1
         }
         hideWells()
-        if inside { wells = [canvas, dragged].map { Self.countdown(over: $0.frame, on: $0, label: "Merging…") } }
+        if inside { wells = [canvas, dragged].map { Self.countdown(over: $0.frame, on: $0, label: "Merging") } }
     }
 
     private func hideWells() {
@@ -142,7 +150,8 @@ final class CanvasDrop: NSObject {
 
 /// Over the canvas, and over the dragged window or card, while a merge or
 /// an unmerge counts down: the edge lit, and in the middle the + button's
-/// lit glass with a ring running down the seconds, and `label`.
+/// lit glass with a ring running down the seconds, and `label` with its
+/// dots coming in one by one, over and over.
 private struct CanvasMergeOverlay: View {
     let seconds: TimeInterval
     let label: String
@@ -150,6 +159,7 @@ private struct CanvasMergeOverlay: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var shown = false
     @State private var left = 1.0
+    @State private var start = Date()
 
     var body: some View {
         let dark = scheme == .dark
@@ -171,7 +181,16 @@ private struct CanvasMergeOverlay: View {
                         .rotationEffect(.degrees(-90))
                 }
                 .frame(width: 20, height: 20)
-                Text(label)
+                TimelineView(.periodic(from: start, by: CanvasDrop.dotSeconds)) { timeline in
+                    let dots = reduceMotion ? 3 : CanvasDrop.dots(after: timeline.date.timeIntervalSince(start))
+                    // Every dot keeps its place, so the label never shifts.
+                    HStack(spacing: 0) {
+                        Text(label)
+                        ForEach(0..<3, id: \.self) { dot in
+                            Text(".").opacity(dot < dots ? 1 : 0)
+                        }
+                    }
+                }
             }
             .font(.system(size: 13, weight: .semibold))
             .foregroundStyle(ink)

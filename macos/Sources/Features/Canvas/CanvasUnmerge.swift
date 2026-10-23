@@ -46,10 +46,10 @@ final class CanvasUnmerge {
         self.card = card
         self.canvas = canvas
         since = Date()
-        wells = [CanvasDrop.countdown(over: window.frame, on: window, label: "Unmerging…")]
+        wells = [CanvasDrop.countdown(over: window.frame, on: window, label: "Unmerging")]
         if let view = canvas.views[card.id] {
             let shown = window.convertToScreen(view.convert(view.bounds, to: nil)).intersection(window.frame)
-            if !shown.isEmpty { wells.append(CanvasDrop.countdown(over: shown, on: window, label: "Unmerging…")) }
+            if !shown.isEmpty { wells.append(CanvasDrop.countdown(over: shown, on: window, label: "Unmerging")) }
         }
         // The pointer may hold still off the canvas, sending no drags.
         let timer = Timer(timeInterval: 1.0 / 30, repeats: true) { _ in
