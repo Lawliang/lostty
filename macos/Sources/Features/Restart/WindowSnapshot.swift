@@ -22,6 +22,16 @@ struct WindowSnapshot: Codable, Equatable {
         /// Set when this window is the canvas (`tabs` is empty then); nil
         /// from a build before the canvas was in the snapshot.
         var canvas: Canvas? = nil
+        /// Whether the showing tab was in full screen. Nil from a build that
+        /// didn't say, and put every window in full screen: a tab's saved
+        /// state names the full-screen style even when it isn't in it.
+        var fullscreen: Bool? = nil
+
+        /// The full-screen mode the showing tab goes back into, from its
+        /// saved state's `saved`: none unless it was in full screen.
+        func fullscreenMode(_ saved: FullscreenMode?) -> FullscreenMode? {
+            fullscreen == true ? saved : nil
+        }
     }
 
     /// The canvas window: its cards, its view, shown or hidden.
@@ -93,7 +103,8 @@ extension WindowSnapshot {
                 frame: first.frame,
                 selected: windows.firstIndex(of: showing) ?? 0,
                 miniaturized: windows.contains(where: \.isMiniaturized),
-                tabs: tabs)
+                tabs: tabs,
+                fullscreen: (showing.windowController as? TerminalController)?.fullscreenStyle?.isFullscreen == true)
         }
         return groups.isEmpty ? nil : WindowSnapshot(groups: groups)
     }
@@ -140,7 +151,7 @@ extension WindowSnapshot {
 
             let showing = tabs[min(max(group.selected, 0), tabs.count - 1)]
             showing.0.window?.makeKeyAndOrderFront(nil)
-            if let mode = showing.1.effectiveFullscreenMode {
+            if let mode = group.fullscreenMode(showing.1.effectiveFullscreenMode) {
                 showing.0.toggleFullscreen(mode: mode)
             }
             if group.miniaturized {

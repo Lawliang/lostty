@@ -43,7 +43,7 @@ struct WindowSnapshotTests {
         let url = folder.appendingPathComponent("restart.json")
         let snapshot = WindowSnapshot(groups: [
             .init(frame: CGRect(x: 10, y: 20, width: 800, height: 600), selected: 1, miniaturized: false,
-                  tabs: [Data("{\"a\":1}".utf8), Data("{\"b\":2}".utf8)]),
+                  tabs: [Data("{\"a\":1}".utf8), Data("{\"b\":2}".utf8)], fullscreen: true),
         ])
         let handoff = RestartHandoff(
             pid: 1, at: Date(timeIntervalSince1970: 2_000_000_000), claude: [:], stayAwakeOn: false,
@@ -77,6 +77,22 @@ struct WindowSnapshotTests {
         """
         let group = try JSONDecoder().decode(WindowSnapshot.Group.self, from: Data(json.utf8))
         #expect(group.canvas == nil)
+    }
+
+    @Test func aWindowGoesBackIntoFullScreenOnlyIfItWasIn() throws {
+        let frame = CGRect(x: 0, y: 0, width: 800, height: 600)
+        let was = WindowSnapshot.Group(frame: frame, selected: 0, miniaturized: false, tabs: [], fullscreen: true)
+        let wasNot = WindowSnapshot.Group(frame: frame, selected: 0, miniaturized: false, tabs: [], fullscreen: false)
+        #expect(was.fullscreenMode(.native) == .native)
+        #expect(was.fullscreenMode(.nonNative) == .nonNative)
+        // Every tab's saved state names the native style, in full screen or not.
+        #expect(wasNot.fullscreenMode(.native) == nil)
+        // An older build didn't say.
+        let json = """
+        {"frame":[[0,0],[800,600]],"selected":0,"miniaturized":false,"tabs":[]}
+        """
+        let older = try JSONDecoder().decode(WindowSnapshot.Group.self, from: Data(json.utf8))
+        #expect(older.fullscreenMode(.native) == nil)
     }
 
     @Test func anOlderBuildsHandoffHasNoSnapshot() throws {
