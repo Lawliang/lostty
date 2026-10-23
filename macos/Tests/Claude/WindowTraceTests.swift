@@ -156,6 +156,27 @@ struct WindowTraceTests {
         #expect(shades[3].rgb == WindowTrace.websitePink)
     }
 
+    @Test func theFramesAheadAreTheFramesAsTheyCome() {
+        let rect = CGRect(x: 1.5, y: 1.5, width: 400, height: 200)
+        let step = 1.0 / 30
+        for subagents in [false, true] {
+            let lit = lighting(.racing(since: since, subagents: subagents))!
+            let journey = TraceOverlay.Journey()
+            // Under way, as when the next frames are handed on.
+            _ = WindowTrace.frame(journey, lighting: lit, route: .all, in: rect, elapsed: 3.3)
+            let before = journey.motion
+            let ahead = WindowTrace.frames(journey, lighting: lit, route: .all, in: rect, from: 3.3, duration: 10, step: step)
+            #expect(journey.motion == before)
+            #expect(ahead.count == 301)
+            #expect(ahead.contains { $0.bottom > 0 } == subagents)
+            #expect(ahead.contains { $0.clockwise } && (!subagents || ahead.contains { !$0.clockwise }))
+            for (i, frame) in ahead.enumerated() {
+                let now = WindowTrace.frame(journey, lighting: lit, route: .all, in: rect, elapsed: 3.3 + Double(i) * step)
+                #expect(frame == now)
+            }
+        }
+    }
+
     @Test func theGradientStartsAtTheTopAndTurnsClockwise() {
         // Unit space in a flipped view: y runs down.
         func near(_ a: CGPoint, _ b: CGPoint) -> Bool { abs(a.x - b.x) < 1e-9 && abs(a.y - b.y) < 1e-9 }

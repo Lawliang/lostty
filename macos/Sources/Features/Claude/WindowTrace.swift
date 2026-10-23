@@ -120,6 +120,45 @@ enum WindowTrace {
         return shades.reversed().map { Shade(rgb: $0.rgb, alpha: $0.alpha, location: 1 - $0.location) }
     }
 
+    /// One frame of the light: where its gradient points (`endPoint`),
+    /// which way it runs, and how strongly the subagents' bottom glow shows.
+    struct Frame: Equatable {
+        var endPoint: CGPoint
+        var clockwise: Bool
+        var bottom: Double
+    }
+
+    /// The light at `elapsed` in a pane whose inside edge is `rect`, moving
+    /// `journey` there.
+    static func frame(
+        _ journey: TraceOverlay.Journey, lighting: Lighting, route: TraceRoute, in rect: CGRect, elapsed: Double
+    ) -> Frame {
+        let elapsed = max(0, elapsed)
+        let course: TraceCourse = lighting.subagents ? .subagents : .route(route)
+        let head = head(journey, since: lighting.since, in: rect, elapsed: elapsed, course: course, speed: lighting.speed)
+        let turn = turn(toward: head.point, from: CGPoint(x: rect.midX, y: rect.midY), clockwise: head.clockwise)
+        // Lit once the head reaches the bottom edge, as under a skin trace.
+        let bottom = lighting.subagents
+            ? TraceFrame.intensity(elapsed: elapsed) * journey.motion.bottomGlow(at: elapsed) : 0
+        return Frame(endPoint: endPoint(turn: turn), clockwise: head.clockwise, bottom: bottom)
+    }
+
+    /// The light's frames every `step` seconds over `duration` from
+    /// `elapsed`, as `frame` finds them one at a time; worked out ahead on
+    /// a copy of the journey, for Core Animation to play.
+    static func frames(
+        _ journey: TraceOverlay.Journey, lighting: Lighting, route: TraceRoute, in rect: CGRect,
+        from elapsed: Double, duration: Double, step: Double
+    ) -> [Frame] {
+        let ahead = TraceOverlay.Journey()
+        ahead.since = journey.since
+        ahead.motion = journey.motion
+        let count = Int((duration / step).rounded()) + 1
+        return (0..<count).map {
+            frame(ahead, lighting: lighting, route: route, in: rect, elapsed: elapsed + Double($0) * step)
+        }
+    }
+
     /// Where a conic gradient's `endPoint` goes, in its square layer's unit
     /// space, for the gradient turned `turn` degrees clockwise from
     /// starting at the top. In a flipped view a conic gradient starts
@@ -189,10 +228,10 @@ private struct WindowLightLayer: NSViewRepresentable {
 /// turned round the pane's center, seen through a thin line along the
 /// edge and, softer, a blurred band just inside it (the website's glow
 /// spills outside the box; a pane can't draw there); while only subagents
-/// work, over their bottom glow. Each display frame
-/// it points the gradients at the head (`WindowTrace.head`) and nothing
-/// else redraws; the GPU does the rest. Stops while its window is covered
-/// or minimized, and while the light fades out.
+/// work, over their bottom glow. Core Animation plays the motion: every
+/// few seconds it's handed the frames ahead (`WindowTrace.frames`), and
+/// between those Lostty does nothing. Holds still while its window is
+/// covered or minimized, and while the light fades out.
 final class WindowLightView: NSView {
     struct Setup: Equatable {
         var lighting: WindowTrace.Lighting?
@@ -219,12 +258,16 @@ final class WindowLightView: NSView {
     /// image; a frame only sets how strongly it shows.
     private let bottom = CALayer()
     private var bottomDrawn: BottomGlow?
-    /// Which way the gradient's colors run now; nil to set them afresh.
-    private var clockwise: Bool?
     /// The glow mask as drawn: its size, and the zoom's line scale as y.
     private var maskDrawn: CGRect?
-    private var clock: AnyObject?
+    /// Hands Core Animation the next frames before the last run out.
+    private var handOn: Timer?
     private var occlusion: NSObjectProtocol?
+    /// How far ahead Core Animation is given the motion, how often it's
+    /// handed on, and how far apart the frames are (it blends between).
+    private static let ahead: TimeInterval = 10
+    private static let handOnEvery: TimeInterval = 8
+    private static let step: TimeInterval = 1.0 / 30
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -261,19 +304,18 @@ final class WindowLightView: NSView {
         guard setup != self.setup else { return }
         let old = self.setup
         self.setup = setup
-        if setup.lighting != old.lighting { clockwise = nil }
         if setup.zoom != old.zoom { needsLayout = true }
-        if setup.reduceMotion != old.reduceMotion || setup.lighting?.primary != old.lighting?.primary
-            || setup.lighting?.subagents != old.lighting?.subagents || setup.running != old.running {
-            breathe()
-        }
         // New colors draw now; a new size or zoom waits for layout's pause.
         if setup.lighting?.glow != old.lighting?.glow || setup.lighting?.glow2 != old.lighting?.glow2
             || setup.lighting?.subagents != old.lighting?.subagents {
             drawBottomGlow()
         }
-        turn()
-        updateClock()
+        play()
+        // After play, whose hold would put back the moving light's glow.
+        if setup.reduceMotion != old.reduceMotion || setup.lighting?.primary != old.lighting?.primary
+            || setup.lighting?.subagents != old.lighting?.subagents || setup.running != old.running {
+            breathe()
+        }
     }
 
     override func setFrameSize(_ newSize: NSSize) {
@@ -307,7 +349,7 @@ final class WindowLightView: NSView {
             NSObject.cancelPreviousPerformRequests(withTarget: self, selector: #selector(drawImages), object: nil)
             perform(#selector(drawImages), with: nil, afterDelay: 0.15)
         }
-        turn()
+        play()
     }
 
     override func viewDidChangeBackingProperties() {
@@ -325,10 +367,10 @@ final class WindowLightView: NSView {
             occlusion = NotificationCenter.default.addObserver(
                 forName: NSWindow.didChangeOcclusionStateNotification, object: window, queue: .main
             ) { [weak self] _ in
-                MainActor.assumeIsolated { self?.updateClock() }
+                MainActor.assumeIsolated { self?.play() }
             }
         }
-        updateClock()
+        play()
     }
 
     /// The images, drawn once for a size: while the size keeps changing (a
@@ -386,36 +428,91 @@ final class WindowLightView: NSView {
         bottomDrawn = key
     }
 
-    /// Points the gradients at the head, as it is now.
-    private func turn() {
-        guard let lighting = setup.lighting, !setup.reduceMotion, bounds.width > 0 else { return }
+    /// Hands Core Animation the light's next frames while it's lit,
+    /// moving and on screen, and again every few seconds; otherwise holds
+    /// it where it is.
+    private func play() {
+        let visible = window?.occlusionState.contains(.visible) == true
+        guard let lighting = setup.lighting, setup.running, !setup.reduceMotion, visible, bounds.width > 0 else {
+            hold()
+            return
+        }
         // Moved in the size it's drawn at on a zoomed-out canvas.
         let scale = CanvasZoomCompensation.scale(zoom: setup.zoom)
         let rect = TraceOverlay.edgeRect(CGSize(width: bounds.width / scale, height: bounds.height / scale))
-        let elapsed = max(0, Date().timeIntervalSince(lighting.since))
-        let head = WindowTrace.head(
-            journey, since: lighting.since, in: rect, elapsed: elapsed,
-            course: lighting.subagents ? .subagents : .route(setup.route), speed: lighting.speed)
-        // Lit once the head reaches the bottom edge, as under a skin trace.
-        let level = lighting.subagents
-            ? TraceFrame.intensity(elapsed: elapsed) * journey.motion.bottomGlow(at: elapsed) : 0
-        let turn = WindowTrace.turn(toward: head.point, from: CGPoint(x: rect.midX, y: rect.midY),
-                                    clockwise: head.clockwise)
-        let end = WindowTrace.endPoint(turn: turn)
+        let elapsed = Date().timeIntervalSince(lighting.since)
+        // The journey goes on to now; the frames ahead come from a copy.
+        let now = WindowTrace.frame(journey, lighting: lighting, route: setup.route, in: rect, elapsed: elapsed)
+        let frames = WindowTrace.frames(
+            journey, lighting: lighting, route: setup.route, in: rect, from: elapsed, duration: Self.ahead,
+            step: Self.step)
+        let clockwise = Colors(WindowTrace.shades(lighting.colors, clockwise: true))
+        let counter = Colors(WindowTrace.shades(lighting.colors, clockwise: false))
+        let times = frames.indices.map { NSNumber(value: Double($0) / Double(frames.count - 1)) }
+        func animation(_ keyPath: String, _ values: [Any]) -> CAKeyframeAnimation {
+            let animation = CAKeyframeAnimation(keyPath: keyPath)
+            animation.values = values
+            animation.keyTimes = times
+            animation.duration = Self.ahead
+            animation.fillMode = .forwards
+            animation.isRemovedOnCompletion = false
+            let rate = Float(1 / TraceTiming.frameInterval)
+            animation.preferredFrameRateRange = CAFrameRateRange(minimum: rate / 2, maximum: rate, preferred: rate)
+            return animation
+        }
+        let turn = animation("endPoint", frames.map { NSValue(point: $0.endPoint) })
+        // A turn back flips the colors between two frames.
+        let colors = animation("colors", frames.map { ($0.clockwise ? clockwise : counter).colors })
+        let locations = animation("locations", frames.map { ($0.clockwise ? clockwise : counter).locations })
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        if clockwise != head.clockwise {
-            clockwise = head.clockwise
-            let shades = WindowTrace.shades(lighting.colors, clockwise: head.clockwise)
-            for gradient in [glow, line] {
-                gradient.colors = shades.map(\.cgColor)
-                gradient.locations = shades.map { NSNumber(value: $0.location) }
-            }
+        for gradient in [glow, line] {
+            let shown = now.clockwise ? clockwise : counter
+            gradient.endPoint = now.endPoint
+            gradient.colors = shown.colors
+            gradient.locations = shown.locations
+            gradient.add(turn, forKey: "turn")
+            gradient.add(colors, forKey: "colors")
+            gradient.add(locations, forKey: "locations")
         }
-        glow.endPoint = end
-        line.endPoint = end
-        bottom.opacity = Float(level)
+        bottom.opacity = Float(now.bottom)
+        bottom.add(animation("opacity", frames.map { NSNumber(value: $0.bottom) }), forKey: "bottom")
         CATransaction.commit()
+        guard handOn == nil else { return }
+        handOn = Timer.scheduledTimer(withTimeInterval: Self.handOnEvery, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.play() }
+        }
+    }
+
+    /// Stops handing on and keeps the light as it shows now.
+    private func hold() {
+        handOn?.invalidate()
+        handOn = nil
+        guard glow.animation(forKey: "turn") != nil else { return }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        for gradient in [glow, line] {
+            if let shown = gradient.presentation() {
+                gradient.endPoint = shown.endPoint
+                gradient.colors = shown.colors
+                gradient.locations = shown.locations
+            }
+            for key in ["turn", "colors", "locations"] { gradient.removeAnimation(forKey: key) }
+        }
+        if let shown = bottom.presentation() { bottom.opacity = shown.opacity }
+        bottom.removeAnimation(forKey: "bottom")
+        CATransaction.commit()
+    }
+
+    /// A way round of the gradient's colors, as Core Animation takes them.
+    private struct Colors {
+        let colors: [CGColor]
+        let locations: [NSNumber]
+
+        init(_ shades: [WindowTrace.Shade]) {
+            colors = shades.map(\.cgColor)
+            locations = shades.map { NSNumber(value: $0.location) }
+        }
     }
 
     /// Reduce Motion: the edge in the head's color, breathing with a 2 s
@@ -446,32 +543,6 @@ final class WindowLightView: NSView {
         }
         CATransaction.commit()
     }
-
-    /// A frame each display refresh while lit, moving and on screen.
-    private func updateClock() {
-        let visible = window?.occlusionState.contains(.visible) == true
-        let wanted = setup.running && setup.lighting != nil && !setup.reduceMotion && visible
-        if wanted, clock == nil {
-            if #available(macOS 14, *) {
-                let link = displayLink(target: self, selector: #selector(tick))
-                let rate = Float(1 / TraceTiming.frameInterval)
-                link.preferredFrameRateRange = CAFrameRateRange(minimum: rate / 2, maximum: rate, preferred: rate)
-                link.add(to: .main, forMode: .common)
-                clock = link
-            } else {
-                let timer = Timer(timeInterval: TraceTiming.frameInterval, target: self, selector: #selector(tick),
-                                  userInfo: nil, repeats: true)
-                RunLoop.main.add(timer, forMode: .common)
-                clock = timer
-            }
-        } else if !wanted, let clock {
-            if #available(macOS 14, *), let link = clock as? CADisplayLink { link.invalidate() }
-            (clock as? Timer)?.invalidate()
-            self.clock = nil
-        }
-    }
-
-    @objc private func tick() { turn() }
 }
 
 #endif
