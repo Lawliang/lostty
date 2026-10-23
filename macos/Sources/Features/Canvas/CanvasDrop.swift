@@ -50,8 +50,9 @@ final class CanvasDrop: NSObject {
         return overlap.isEmpty ? nil : overlap
     }
 
-    /// Whether a window held overlapping the canvas since `since` merges in at `now`.
-    nonisolated static func merges(heldSince since: Date?, now: Date) -> Bool {
+    /// Whether a hold since `since` (a window overlapping the canvas, or a
+    /// card dragged off it) has lasted `holdSeconds` at `now`.
+    nonisolated static func held(since: Date?, now: Date) -> Bool {
         guard let since else { return false }
         return now.timeIntervalSince(since) >= holdSeconds
     }
@@ -80,7 +81,7 @@ final class CanvasDrop: NSObject {
         let overlap = Self.overlap(window.frame, canvas.frame)
         if overlap == nil { arrived = true }
         hover(overlap != nil && arrived, canvas: canvas, dragged: window)
-        guard let overlap, Self.merges(heldSince: heldSince, now: Date()) else { return }
+        guard let overlap, Self.held(since: heldSince, now: Date()) else { return }
         stop()
         let controllers = (window.tabbedWindows ?? [window]).compactMap { $0.windowController as? TerminalController }
         let ghostty = controller.ghostty
@@ -104,24 +105,29 @@ final class CanvasDrop: NSObject {
             dragged.animator().alphaValue = inside ? Self.hoverAlpha : 1
         }
         hideWells()
-        if inside { wells = [canvas, dragged].map(showWell) }
+        if inside { wells = [canvas, dragged].map { Self.countdown(over: $0.frame, on: $0, label: "Merging…") } }
     }
 
-    /// The countdown over `window`, moving with it.
-    private func showWell(over window: NSWindow) -> NSPanel {
-        let well = CanvasAbsorb.overlay(frame: window.frame)
+    private func hideWells() {
+        Self.hide(wells)
+        wells = []
+    }
+
+    /// The countdown to a merge or an unmerge over `frame` (in screen
+    /// coordinates) on `window`, moving with it.
+    static func countdown(over frame: CGRect, on window: NSWindow, label: String) -> NSPanel {
+        let well = CanvasAbsorb.overlay(frame: frame)
         well.level = window.level
-        well.contentView = NSHostingView(rootView: CanvasMergeOverlay(seconds: Self.holdSeconds))
+        well.contentView = NSHostingView(rootView: CanvasMergeOverlay(seconds: holdSeconds, label: label))
         window.addChildWindow(well, ordered: .above)
         return well
     }
 
-    private func hideWells() {
+    static func hide(_ wells: [NSPanel]) {
         for well in wells {
             well.parent?.removeChildWindow(well)
             well.orderOut(nil)
         }
-        wells = []
     }
 
     private func stop() {
@@ -134,11 +140,12 @@ final class CanvasDrop: NSObject {
     }
 }
 
-/// Over the canvas, and over the dragged window, while the window is held
-/// overlapping the canvas: the edge lit, and in the middle the + button's
-/// lit glass with a ring running down the seconds until it merges in.
+/// Over the canvas, and over the dragged window or card, while a merge or
+/// an unmerge counts down: the edge lit, and in the middle the + button's
+/// lit glass with a ring running down the seconds, and `label`.
 private struct CanvasMergeOverlay: View {
     let seconds: TimeInterval
+    let label: String
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var shown = false
@@ -164,7 +171,7 @@ private struct CanvasMergeOverlay: View {
                         .rotationEffect(.degrees(-90))
                 }
                 .frame(width: 20, height: 20)
-                Text("Merging…")
+                Text(label)
             }
             .font(.system(size: 13, weight: .semibold))
             .foregroundStyle(ink)

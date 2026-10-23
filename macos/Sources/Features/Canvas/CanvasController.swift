@@ -374,10 +374,13 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
 
     /// Move to Window: the card's panes become a normal window; nothing restarts.
     /// The card's undo history goes with it: undoing a split it made would
-    /// pull the window's panes back into a second card.
-    func moveToWindow(_ card: CardController) {
+    /// pull the window's panes back into a second card. Dragged off the
+    /// canvas (CanvasUnmerge), the window's title bar comes under `point`.
+    func moveToWindow(_ card: CardController, under point: NSPoint? = nil) {
         let tree = card.surfaceTree
         guard !tree.isEmpty else { return }
+        let width = tree.root?.viewBounds().width ?? 0
+        let position = point.map { NSPoint(x: $0.x - width / 2, y: $0.y + 14) }
         let undo = (NSApp.delegate as? AppDelegate)?.undoManager
         undo?.removeAllActions(withTarget: card)
         moving.insert(card.id)
@@ -385,9 +388,9 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         moving.remove(card.id)
         // No "Undo New Window" either: undoing it would close the moved panes.
         if let undo {
-            undo.disableUndoRegistration { _ = TerminalController.newWindow(ghostty, tree: tree) }
+            undo.disableUndoRegistration { _ = TerminalController.newWindow(ghostty, tree: tree, position: position) }
         } else {
-            _ = TerminalController.newWindow(ghostty, tree: tree)
+            _ = TerminalController.newWindow(ghostty, tree: tree, position: position)
         }
     }
 

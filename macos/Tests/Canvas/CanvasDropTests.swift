@@ -7,9 +7,9 @@ import Testing
 struct CanvasDropTests {
     @Test func aWindowHeldOverlappingTheCanvasForThreeSecondsMergesIn() {
         let since = Date(timeIntervalSinceReferenceDate: 100)
-        #expect(!CanvasDrop.merges(heldSince: nil, now: since.addingTimeInterval(5)))
-        #expect(!CanvasDrop.merges(heldSince: since, now: since.addingTimeInterval(2.9)))
-        #expect(CanvasDrop.merges(heldSince: since, now: since.addingTimeInterval(3)))
+        #expect(!CanvasDrop.held(since: nil, now: since.addingTimeInterval(5)))
+        #expect(!CanvasDrop.held(since: since, now: since.addingTimeInterval(2.9)))
+        #expect(CanvasDrop.held(since: since, now: since.addingTimeInterval(3)))
     }
 
     @Test func anyOverlapWithTheCanvasCounts() {

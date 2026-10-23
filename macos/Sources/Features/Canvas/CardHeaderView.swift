@@ -4,7 +4,8 @@ import SwiftUI
 
 /// A card's title bar, drawn as a Mac window's: close, minimize and zoom
 /// buttons, the title, and the project pill and agent state. Dragging it
-/// moves the card; double-clicking zooms to the card at 100%; its menu
+/// moves the card, and off the canvas makes it a window again
+/// (CanvasUnmerge); double-clicking zooms to the card at 100%; its menu
 /// moves the card to a window or closes it.
 final class CardHeaderView: NSView {
     private let card: CardController
@@ -59,8 +60,10 @@ final class CardHeaderView: NSView {
     }
 
     override func mouseDragged(with event: NSEvent) {
-        guard let canvas, let start, let point = documentPoint(event),
-              var frame = canvas.model.card(card.id)?.frame else { return }
+        guard let canvas, let start else { return }
+        // Off the canvas, the card holds still while it counts down.
+        guard !CanvasUnmerge.shared.dragged(card, on: canvas) else { return }
+        guard let point = documentPoint(event), var frame = canvas.model.card(card.id)?.frame else { return }
         frame.origin = CGPoint(x: start.origin.x + point.x - start.point.x, y: start.origin.y + point.y - start.point.y)
         canvas.setFrame(frame, of: card.id)
     }
@@ -68,6 +71,7 @@ final class CardHeaderView: NSView {
     override func mouseUp(with event: NSEvent) {
         guard start != nil else { return }
         start = nil
+        CanvasUnmerge.shared.cancel()
         canvas?.cardFrameDidSettle()
     }
 
