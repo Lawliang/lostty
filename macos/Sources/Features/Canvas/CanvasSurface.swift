@@ -70,8 +70,8 @@ final class CanvasDocumentView: NSView {
     }
 }
 
-/// The Lostty website's background: its paper color and dots, four times
-/// as dense, the same on screen at every zoom and moving as the canvas
+/// The Lostty website's background: its paper color and dots, as dense
+/// as there, the same on screen at every zoom and moving as the canvas
 /// pans. The dots are one picture, a gap bigger than the view each way;
 /// panning only moves it (no drawing), and it's redrawn only when the gap
 /// (the zoom), the view's size or the appearance changes.
