@@ -5,11 +5,20 @@ import Testing
 
 @MainActor
 struct CanvasDropTests {
-    @Test func aWindowHeldOverTheCanvasForTwoSecondsMergesIn() {
+    @Test func aWindowHeldOverlappingTheCanvasForThreeSecondsMergesIn() {
         let since = Date(timeIntervalSinceReferenceDate: 100)
         #expect(!CanvasDrop.merges(heldSince: nil, now: since.addingTimeInterval(5)))
-        #expect(!CanvasDrop.merges(heldSince: since, now: since.addingTimeInterval(1.9)))
-        #expect(CanvasDrop.merges(heldSince: since, now: since.addingTimeInterval(2)))
+        #expect(!CanvasDrop.merges(heldSince: since, now: since.addingTimeInterval(2.9)))
+        #expect(CanvasDrop.merges(heldSince: since, now: since.addingTimeInterval(3)))
+    }
+
+    @Test func anyOverlapWithTheCanvasCounts() {
+        let canvas = CGRect(x: 100, y: 100, width: 800, height: 600)
+        #expect(CanvasDrop.overlap(CGRect(x: 890, y: 650, width: 400, height: 300), canvas)
+            == CGRect(x: 890, y: 650, width: 10, height: 50))
+        // Touching its edge isn't overlapping it.
+        #expect(CanvasDrop.overlap(CGRect(x: 900, y: 100, width: 400, height: 300), canvas) == nil)
+        #expect(CanvasDrop.overlap(CGRect(x: 0, y: 900, width: 400, height: 300), canvas) == nil)
     }
 
     @Test func theWarpPlaysRoundTheWindowAndThePointYDown() {

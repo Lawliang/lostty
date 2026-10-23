@@ -2,32 +2,32 @@
 import AppKit
 import SwiftUI
 
-/// A terminal window dragged by its title bar and held over the canvas for
-/// `holdSeconds` moves onto the canvas; a window whose drag starts over the
-/// canvas must leave it first, so nudging one there leaves it be. While
-/// it's over the canvas, the
-/// canvas lights up with a ring counting down and "Merging…" over it, and
-/// the dragged window goes see-through; once the ring runs out the window
-/// warps in (CanvasAbsorb) and becomes a card, tabs and all. Dragging it
-/// off the canvas or letting go first leaves it a window. The window
-/// server moves the window, so the drag is followed by watching the
-/// pointer and the mouse button.
+/// A terminal window dragged by its title bar and held overlapping the
+/// canvas for `holdSeconds` moves onto the canvas; a window whose drag
+/// starts overlapping it must leave it first, so nudging one there leaves
+/// it be. While it overlaps the canvas, the canvas lights up with a ring
+/// counting down and "Merging…" over it, and the dragged window goes
+/// see-through, the same ring over it too; once the ring runs out the window warps in (CanvasAbsorb)
+/// and becomes a card, tabs and all. Dragging it off the canvas or letting
+/// go first leaves it a window. The window server moves the window, so the
+/// drag is followed by watching the window and the mouse button.
 @MainActor
 final class CanvasDrop: NSObject {
     static let shared = CanvasDrop()
 
     /// How see-through the dragged window is over the canvas.
     static let hoverAlpha: CGFloat = 0.7
-    /// How long a window is held over the canvas before it merges in.
-    static let holdSeconds: TimeInterval = 2
+    /// How long a window is held overlapping the canvas before it merges in.
+    static let holdSeconds: TimeInterval = 3
 
     private var watching = false
     private weak var dragging: TerminalController?
     private var timer: Timer?
-    private var well: NSPanel?
-    /// When the dragged window came over the canvas; nil while it isn't.
+    /// The countdown over the canvas and over the dragged window.
+    private var wells: [NSPanel] = []
+    /// When the dragged window came to overlap the canvas; nil while it doesn't.
     private var heldSince: Date?
-    /// Whether the drag has been off the canvas, so coming over it counts.
+    /// Whether the drag has been off the canvas, so coming onto it counts.
     private var arrived = false
 
     /// Starts noticing terminal windows being dragged. Once, with the canvas.
@@ -43,7 +43,14 @@ final class CanvasDrop: NSObject {
         dragStarted(controller)
     }
 
-    /// Whether a window held over the canvas since `since` merges in at `now`.
+    /// Where the dragged window `window` overlaps the canvas `canvas`, in
+    /// screen coordinates; nil where it doesn't.
+    nonisolated static func overlap(_ window: CGRect, _ canvas: CGRect) -> CGRect? {
+        let overlap = window.intersection(canvas)
+        return overlap.isEmpty ? nil : overlap
+    }
+
+    /// Whether a window held overlapping the canvas since `since` merges in at `now`.
     nonisolated static func merges(heldSince since: Date?, now: Date) -> Bool {
         guard let since else { return false }
         return now.timeIntervalSince(since) >= holdSeconds
@@ -70,18 +77,17 @@ final class CanvasDrop: NSObject {
         }
         // Let go: it stays a window.
         guard NSEvent.pressedMouseButtons & 1 != 0 else { return stop() }
-        let point = NSEvent.mouseLocation
-        // Over the canvas, and nothing but the dragged window in front of
-        // it there.
-        let under = NSWindow.windowNumber(at: point, belowWindowWithWindowNumber: window.windowNumber)
-        let over = canvas.frame.contains(point) && under == canvas.windowNumber
-        if !over { arrived = true }
-        hover(over && arrived, canvas: canvas, dragged: window)
-        guard Self.merges(heldSince: heldSince, now: Date()) else { return }
+        let overlap = Self.overlap(window.frame, canvas.frame)
+        if overlap == nil { arrived = true }
+        hover(overlap != nil && arrived, canvas: canvas, dragged: window)
+        guard let overlap, Self.merges(heldSince: heldSince, now: Date()) else { return }
         stop()
         let controllers = (window.tabbedWindows ?? [window]).compactMap { $0.windowController as? TerminalController }
         let ghostty = controller.ghostty
-        CanvasAbsorb.run(window, into: point) {
+        // Into the pointer if it's over the canvas, else the overlap's middle.
+        let point = NSEvent.mouseLocation
+        let target = canvas.frame.contains(point) ? point : NSPoint(x: overlap.midX, y: overlap.midY)
+        CanvasAbsorb.run(window, into: target) {
             CanvasImport.move(ghostty, controllers, focus: controller) { cards in
                 for card in cards {
                     if let view = canvasController.views[card.id] { CanvasAbsorb.emerge(view) }
@@ -97,25 +103,25 @@ final class CanvasDrop: NSObject {
             context.duration = 0.18
             dragged.animator().alphaValue = inside ? Self.hoverAlpha : 1
         }
-        if inside {
-            showWell(over: canvas)
-        } else {
-            hideWell()
-        }
+        hideWells()
+        if inside { wells = [canvas, dragged].map(showWell) }
     }
 
-    /// Over the dragged window too, so the countdown shows through it.
-    private func showWell(over canvas: NSWindow) {
-        let well = self.well ?? CanvasAbsorb.overlay(frame: canvas.frame)
-        well.setFrame(canvas.frame, display: false)
+    /// The countdown over `window`, moving with it.
+    private func showWell(over window: NSWindow) -> NSPanel {
+        let well = CanvasAbsorb.overlay(frame: window.frame)
+        well.level = window.level
         well.contentView = NSHostingView(rootView: CanvasMergeOverlay(seconds: Self.holdSeconds))
-        well.orderFrontRegardless()
-        self.well = well
+        window.addChildWindow(well, ordered: .above)
+        return well
     }
 
-    private func hideWell() {
-        well?.orderOut(nil)
-        well = nil
+    private func hideWells() {
+        for well in wells {
+            well.parent?.removeChildWindow(well)
+            well.orderOut(nil)
+        }
+        wells = []
     }
 
     private func stop() {
@@ -124,13 +130,13 @@ final class CanvasDrop: NSObject {
         if heldSince != nil, let window = dragging?.window { window.alphaValue = 1 }
         heldSince = nil
         dragging = nil
-        hideWell()
+        hideWells()
     }
 }
 
-/// Over the canvas while a window is held there: the canvas's edge lit,
-/// and in its middle the + button's lit glass with a ring running down the
-/// seconds until the window merges in.
+/// Over the canvas, and over the dragged window, while the window is held
+/// overlapping the canvas: the edge lit, and in the middle the + button's
+/// lit glass with a ring running down the seconds until it merges in.
 private struct CanvasMergeOverlay: View {
     let seconds: TimeInterval
     @Environment(\.colorScheme) private var scheme
