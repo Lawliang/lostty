@@ -93,8 +93,9 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         window.minSize = NSSize(width: 480, height: 320)
         super.init(window: window)
         window.delegate = self
-        let surface = surface
-        window.contentView = NSHostingView(rootView: CanvasSurface(view: surface))
+        // Plain AppKit, not in an NSHostingView: AppKit then hit tests the
+        // cards for an accessibility app, and each answers as it's zoomed.
+        window.contentView = surface
         if !window.setFrameUsingName("LosttyCanvas") { window.center() }
         window.setFrameAutosaveName("LosttyCanvas")
         installTitleAccessory()

@@ -283,7 +283,13 @@ final class CardEdgeHandle: NSView {
 }
 
 /// A hosting view that never takes clicks, so they reach the view under it.
+/// Zoomed, it's one accessibility element, as SwiftUI's own accessibility
+/// hit test loops until Lostty crashes (CardTerminalHost).
 final class PassthroughHostingView<Content: View>: NSHostingView<Content> {
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func accessibilityHitTest(_ point: NSPoint) -> Any? {
+        (enclosingScrollView?.magnification ?? 1) != 1 ? self : super.accessibilityHitTest(point)
+    }
 }
 #endif

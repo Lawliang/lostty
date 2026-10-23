@@ -159,6 +159,12 @@ final class TicketDetailsHost: NSHostingView<TicketCardContent> {
         return enclosingTicket
     }
 
+    /// Zoomed, the details are one element, as SwiftUI's own accessibility
+    /// hit test loops until Lostty crashes (CardTerminalHost).
+    override func accessibilityHitTest(_ point: NSPoint) -> Any? {
+        (enclosingScrollView?.magnification ?? 1) != 1 ? self : super.accessibilityHitTest(point)
+    }
+
     private var enclosingTicket: TicketCardView? {
         var view = superview
         while let next = view, !(next is TicketCardView) { view = next.superview }

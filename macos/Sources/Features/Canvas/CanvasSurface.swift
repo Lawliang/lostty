@@ -242,13 +242,4 @@ final class CanvasNotificationsView: NSHostingView<NotificationStackView> {
         LosttyNotifications.shared.items.isEmpty ? nil : super.hitTest(point)
     }
 }
-
-/// The canvas as the window's SwiftUI content. SwiftUI never re-evaluates
-/// for a pan or zoom.
-struct CanvasSurface: NSViewRepresentable {
-    let view: CanvasSurfaceView
-
-    func makeNSView(context: Context) -> CanvasSurfaceView { view }
-    func updateNSView(_ nsView: CanvasSurfaceView, context: Context) {}
-}
 #endif
