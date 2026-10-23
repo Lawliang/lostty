@@ -232,6 +232,12 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         for surface in card.surfaceTree { surface.canvasZoomDidSettle(settledZoom) }
     }
 
+    /// Whether a click at `point` (in the window) is on the + menu or a
+    /// notification, over the cards.
+    func floats(at point: NSPoint) -> Bool {
+        surface.floats(at: point)
+    }
+
     func card(holding surface: Ghostty.SurfaceView) -> CardController? {
         cards.first { $0.surfaceTree.contains(surface) }
     }

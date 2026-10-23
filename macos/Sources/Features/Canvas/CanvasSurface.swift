@@ -233,6 +233,12 @@ final class CanvasSurfaceView: NSView {
     @objc private func canvasMoved() {
         grid.update()
     }
+
+    /// Whether a click at `point` (in the window) is on what floats over
+    /// the cards: the + menu, or a notification.
+    func floats(at point: NSPoint) -> Bool {
+        addMenu.covers(point) || notifications.hitTest(convert(point, from: nil)) != nil
+    }
 }
 
 /// The canvas's one notification stack, for every card: with no bubbles up,

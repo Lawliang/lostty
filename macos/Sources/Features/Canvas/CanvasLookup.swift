@@ -21,11 +21,12 @@ extension Ghostty.SurfaceView {
     }
 
     /// Whether a click at `point` (in its window) is on this pane, not on a
-    /// card in front of the pane's own. Always true off the canvas, where
-    /// panes never overlap.
+    /// card in front of the pane's own, nor on the + menu or a notification
+    /// over the cards. Always true off the canvas, where panes never overlap.
     nonisolated func isUncoveredByCards(at point: NSPoint) -> Bool {
         CanvasController.onMain {
             guard let canvas = CanvasController.shared, let card = canvas.card(holding: self) else { return true }
+            guard !canvas.floats(at: point) else { return false }
             return canvas.model.card(at: canvas.scrollView.document.convert(point, from: nil)) == card.id
         }
     }

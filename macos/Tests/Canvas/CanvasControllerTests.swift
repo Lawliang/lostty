@@ -3,6 +3,20 @@ import AppKit
 import Testing
 @testable import Lostty
 
+@MainActor
+struct CanvasFloatsTests {
+    /// A pane under the + button doesn't take its clicks (isUncoveredByCards).
+    @Test func theAddButtonFloatsOverTheCards() {
+        let surface = CanvasSurfaceView()
+        surface.frame = CGRect(x: 0, y: 0, width: 800, height: 600)
+        surface.needsLayout = true
+        surface.layoutSubtreeIfNeeded()
+        // The button's middle: 20 points in from the bottom right, 44 across.
+        #expect(surface.floats(at: NSPoint(x: 758, y: 42)))
+        #expect(!surface.floats(at: NSPoint(x: 400, y: 300)))
+    }
+}
+
 struct CardFocusTests {
     @Test func onlyTheActiveCardsFocusedPaneHasFocus() {
         #expect(CardController.paneIsFocused(windowIsKey: true, cardIsFocused: true, paletteShowing: false, isFocusedPane: true))
