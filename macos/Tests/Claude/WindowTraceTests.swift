@@ -156,6 +156,50 @@ struct WindowTraceTests {
         #expect(shades[3].rgb == WindowTrace.websitePink)
     }
 
+    @Test func aShorterTailMovesItsStopsTowardTheHead() {
+        let colors = TraceColors(primary: WindowTrace.websitePink, secondary: WindowTrace.websiteCyan)
+        let none = WindowTrace.shades(colors, tail: 0).map(\.location)
+        #expect(none == [0, 0.93, 0.93, 0.93, 0.95, 0.96, 1])
+        let half = WindowTrace.shades(colors, tail: 0.5).map(\.location)
+        #expect(zip(half, [0, 0.785, 0.865, 0.93, 0.95, 0.96, 1]).allSatisfy { abs($0 - $1) < 1e-9 })
+        let mirrored = WindowTrace.shades(colors, clockwise: false, tail: 0).map(\.location)
+        #expect(zip(mirrored, [0, 0.04, 0.05, 0.07, 0.07, 0.07, 1]).allSatisfy { abs($0 - $1) < 1e-9 })
+    }
+
+    private func frame(_ elapsed: Double, subagents: Bool = true, journey: TraceOverlay.Journey) -> WindowTrace.Frame {
+        let lit = lighting(.racing(since: since, subagents: subagents))!
+        return WindowTrace.frame(journey, lighting: lit, route: .all, in: rect, elapsed: elapsed)
+    }
+
+    @Test func alongTheBottomTheTailShrinksIntoEachCornerWhereTheHeadTurnsBack() {
+        // A leg takes 0.6s: right to left, then back.
+        let journey = TraceOverlay.Journey()
+        #expect(frame(0.1, journey: journey).tail == 1)
+        #expect(frame(0.3, journey: journey).tail == 1)
+        #expect(frame(0.59, journey: journey).tail < 0.2)
+        #expect(frame(0.61, journey: journey).tail < 0.2)
+        #expect(frame(0.9, journey: journey).tail == 1)
+        // Round a route's corners the tail keeps its length.
+        let route = TraceOverlay.Journey()
+        for elapsed in [0.59, 0.61, 1.19] { #expect(frame(elapsed, subagents: false, journey: route).tail == 1) }
+    }
+
+    @Test func alongTheBottomTheLightShowsOnlyThere() {
+        let journey = TraceOverlay.Journey()
+        // Fading the sides out as the head reaches the bottom edge.
+        #expect(abs(frame(0.2, journey: journey).sides - 0.5) < 1e-9)
+        #expect(frame(0.5, journey: journey).sides == 0)
+        #expect(frame(5, journey: journey).sides == 0)
+        let route = TraceOverlay.Journey()
+        for elapsed in [0.2, 1.5, 2.1] { #expect(frame(elapsed, subagents: false, journey: route).sides == 1) }
+    }
+
+    @Test func theBottomGlowIsSofterThanUnderASkinTrace() {
+        let journey = TraceOverlay.Journey()
+        let bottom = frame(3, journey: journey).bottom
+        #expect(abs(bottom - 0.5 * TraceFrame.intensity(elapsed: 3)) < 1e-9)
+    }
+
     @Test func theFramesAheadAreTheFramesAsTheyCome() {
         let rect = CGRect(x: 1.5, y: 1.5, width: 400, height: 200)
         let step = 1.0 / 30
