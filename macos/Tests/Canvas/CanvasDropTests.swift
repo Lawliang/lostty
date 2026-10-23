@@ -12,6 +12,16 @@ struct CanvasDropTests {
         #expect(CanvasDrop.titleBar(frame: frame, contentHeight: 600).height == 28)
     }
 
+    @Test func theDropZoneIsTheTitleBarAndABandUnderIt() {
+        let frame = CGRect(x: 100, y: 200, width: 800, height: 600)
+        // A fifth of the canvas under the title bar.
+        #expect(CanvasDrop.dropZone(frame: frame, contentHeight: 570) == CGRect(x: 100, y: 656, width: 800, height: 144))
+        // At least 80 points, at most 160.
+        #expect(CanvasDrop.dropZone(frame: frame, contentHeight: 300) == CGRect(x: 100, y: 420, width: 800, height: 380))
+        let tall = CGRect(x: 0, y: 0, width: 800, height: 1400)
+        #expect(CanvasDrop.dropZone(frame: tall, contentHeight: 1370) == CGRect(x: 0, y: 1210, width: 800, height: 190))
+    }
+
     @Test func theWarpPlaysRoundTheWindowAndThePointYDown() {
         let screen = CGRect(x: 0, y: 0, width: 2000, height: 1200)
         let geometry = CanvasAbsorb.Geometry(

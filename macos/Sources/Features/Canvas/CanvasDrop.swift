@@ -2,9 +2,10 @@
 import AppKit
 import SwiftUI
 
-/// A terminal window dragged by its title bar onto the canvas's title bar
+/// A terminal window dragged by its title bar onto the top of the canvas
 /// moves onto the canvas. While the pointer is over the canvas's title bar
-/// a band of lit glass shows there and the dragged window goes see-through;
+/// or the band under it (`dropZone`), lit glass fills them and the dragged
+/// window goes see-through;
 /// letting go warps the window in (CanvasAbsorb) and makes it a card, tabs
 /// and all. The window server moves the window, so the drag is followed by
 /// watching the pointer and the mouse button until it's let go.
@@ -13,7 +14,7 @@ final class CanvasDrop: NSObject {
     static let shared = CanvasDrop()
 
     /// How see-through the dragged window is over the drop.
-    static let hoverAlpha: CGFloat = 0.82
+    static let hoverAlpha: CGFloat = 0.7
 
     private var watching = false
     private weak var dragging: TerminalController?
@@ -41,6 +42,15 @@ final class CanvasDrop: NSObject {
         return CGRect(x: frame.minX, y: frame.maxY - height, width: frame.width, height: height)
     }
 
+    /// Where letting go adds the window to the canvas: the title bar and a
+    /// band of the canvas under it, a fifth of the canvas tall (80 to 160
+    /// points), so the title bar needn't be hit exactly.
+    nonisolated static func dropZone(frame: CGRect, contentHeight: CGFloat) -> CGRect {
+        let titleBar = titleBar(frame: frame, contentHeight: contentHeight)
+        let below = min(contentHeight, 160, max(80, contentHeight / 5))
+        return CGRect(x: titleBar.minX, y: titleBar.minY - below, width: titleBar.width, height: titleBar.height + below)
+    }
+
     private func dragStarted(_ controller: TerminalController) {
         // Only a drag (the button down), with the canvas showing.
         guard timer == nil, NSEvent.pressedMouseButtons & 1 != 0, LosttyChannel.current.hasCanvas,
@@ -60,13 +70,13 @@ final class CanvasDrop: NSObject {
             return stop()
         }
         let point = NSEvent.mouseLocation
-        let titleBar = Self.titleBar(frame: canvas.frame, contentHeight: canvas.contentLayoutRect.height)
-        // Over the title bar, and nothing but the dragged window (and the
-        // band) in front of the canvas there.
+        let zone = Self.dropZone(frame: canvas.frame, contentHeight: canvas.contentLayoutRect.height)
+        // Over the drop zone, and nothing but the dragged window (and the
+        // glass) in front of the canvas there.
         let under = NSWindow.windowNumber(at: point, belowWindowWithWindowNumber: window.windowNumber)
-        let inside = titleBar.contains(point) && [canvas.windowNumber, well?.windowNumber].contains(under)
+        let inside = zone.contains(point) && [canvas.windowNumber, well?.windowNumber].contains(under)
         guard NSEvent.pressedMouseButtons & 1 == 0 else {
-            hover(inside, titleBar: titleBar, canvas: canvas, dragged: window)
+            hover(inside, zone: zone, canvas: canvas, dragged: window)
             return
         }
         stop()
@@ -82,7 +92,7 @@ final class CanvasDrop: NSObject {
         }
     }
 
-    private func hover(_ inside: Bool, titleBar: CGRect, canvas: NSWindow, dragged: NSWindow) {
+    private func hover(_ inside: Bool, zone: CGRect, canvas: NSWindow, dragged: NSWindow) {
         guard inside != over else { return }
         over = inside
         NSAnimationContext.runAnimationGroup { context in
@@ -90,14 +100,14 @@ final class CanvasDrop: NSObject {
             dragged.animator().alphaValue = inside ? Self.hoverAlpha : 1
         }
         if inside {
-            showWell(over: titleBar, canvas: canvas)
+            showWell(over: zone, canvas: canvas)
         } else {
             hideWell()
         }
     }
 
-    private func showWell(over titleBar: CGRect, canvas: NSWindow) {
-        let band = titleBar.insetBy(dx: 6, dy: 3)
+    private func showWell(over zone: CGRect, canvas: NSWindow) {
+        let band = zone.insetBy(dx: 8, dy: 4)
         let well = self.well ?? CanvasAbsorb.overlay(frame: band)
         well.setFrame(band, display: false)
         well.level = canvas.level
@@ -124,9 +134,9 @@ final class CanvasDrop: NSObject {
     }
 }
 
-/// The band over the canvas's title bar while a window can be let go
-/// there: the + button's lit glass, its light slowly turning, with what
-/// letting go does.
+/// The glass over the drop zone while a window can be let go there: the
+/// + button's lit glass, its light slowly turning, with what letting go
+/// does.
 private struct CanvasDropWell: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -142,7 +152,8 @@ private struct CanvasDropWell: View {
         .foregroundStyle(dark ? Color.white : Color.black)
         .shadow(color: .white.opacity(dark ? 0.45 : 0), radius: 4)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .modifier(CanvasAddLitGlass(shape: Capsule(), dark: dark, lit: shown, interactive: false,
+        .modifier(CanvasAddLitGlass(shape: RoundedRectangle(cornerRadius: 16, style: .continuous), dark: dark,
+                                    lit: shown, interactive: false,
                                     reduceMotion: reduceMotion))
         .scaleEffect(shown || reduceMotion ? 1 : 0.94)
         .opacity(shown ? 1 : 0)
