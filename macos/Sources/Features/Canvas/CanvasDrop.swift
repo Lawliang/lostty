@@ -3,7 +3,9 @@ import AppKit
 import SwiftUI
 
 /// A terminal window dragged by its title bar and held over the canvas for
-/// `holdSeconds` moves onto the canvas. While it's over the canvas, the
+/// `holdSeconds` moves onto the canvas; a window whose drag starts over the
+/// canvas must leave it first, so nudging one there leaves it be. While
+/// it's over the canvas, the
 /// canvas lights up with a ring counting down and "Merging…" over it, and
 /// the dragged window goes see-through; once the ring runs out the window
 /// warps in (CanvasAbsorb) and becomes a card, tabs and all. Dragging it
@@ -25,6 +27,8 @@ final class CanvasDrop: NSObject {
     private var well: NSPanel?
     /// When the dragged window came over the canvas; nil while it isn't.
     private var heldSince: Date?
+    /// Whether the drag has been off the canvas, so coming over it counts.
+    private var arrived = false
 
     /// Starts noticing terminal windows being dragged. Once, with the canvas.
     func start() {
@@ -51,6 +55,7 @@ final class CanvasDrop: NSObject {
               let canvas = CanvasController.shared?.window, canvas.isVisible, !canvas.isMiniaturized,
               controller.window?.styleMask.contains(.fullScreen) == false else { return }
         dragging = controller
+        arrived = false
         let timer = Timer(timeInterval: 1.0 / 60, repeats: true) { _ in
             MainActor.assumeIsolated { CanvasDrop.shared.tick() }
         }
@@ -69,8 +74,9 @@ final class CanvasDrop: NSObject {
         // Over the canvas, and nothing but the dragged window in front of
         // it there.
         let under = NSWindow.windowNumber(at: point, belowWindowWithWindowNumber: window.windowNumber)
-        let inside = canvas.frame.contains(point) && under == canvas.windowNumber
-        hover(inside, canvas: canvas, dragged: window)
+        let over = canvas.frame.contains(point) && under == canvas.windowNumber
+        if !over { arrived = true }
+        hover(over && arrived, canvas: canvas, dragged: window)
         guard Self.merges(heldSince: heldSince, now: Date()) else { return }
         stop()
         let controllers = (window.tabbedWindows ?? [window]).compactMap { $0.windowController as? TerminalController }
