@@ -26,15 +26,15 @@ struct ClaudeTraceLayer: View {
         let phase = claude.phase
         // In Window Light the website's light circles the pane while Claude
         // works; while only subagents or shells do, it runs along the
-        // bottom edge over their bottom glow.
+        // bottom edge over their bottom glow, which it draws too.
         let windowLight = style == .window
         ZStack {
             if windowLight {
                 PaneLightView(surfaceID: surfaceID, phase: phase, journey: journey, zoom: zoom)
             }
-            if !phase.isOff, !windowLight || phase.subagentsOnly,
+            if !phase.isOff, !windowLight,
                let trace = ResolvedTrace.resolve(skin: skins.effectiveSkin(surfaceID), enabled: skins.config.trace) {
-                TraceOverlay(phase: phase, trace: trace, journey: journey, bottomOnly: windowLight,
+                TraceOverlay(phase: phase, trace: trace, journey: journey,
                              headGlow: style != .skinNoGlow, canvasZoom: zoom)
             }
         }
@@ -61,8 +61,6 @@ struct TraceOverlay: View {
     let phase: TracePhase
     let trace: ResolvedTrace
     let journey: Journey
-    /// Only the subagents' bottom glow, without the racing head.
-    var bottomOnly = false
     /// The glowing circle round the racing head.
     var headGlow = true
     /// The canvas's zoom on a card, 1 in a window.
@@ -79,7 +77,7 @@ struct TraceOverlay: View {
     }
 
     private var drawing: TraceDrawing {
-        TraceDrawing(phase: phase, trace: trace, route: route, bottomOnly: bottomOnly, headGlow: headGlow,
+        TraceDrawing(phase: phase, trace: trace, route: route, headGlow: headGlow,
                      reduceMotion: reduceMotion)
     }
 
@@ -143,7 +141,6 @@ struct TraceDrawing {
     let phase: TracePhase
     let trace: ResolvedTrace
     let route: TraceRoute
-    let bottomOnly: Bool
     let headGlow: Bool
     let reduceMotion: Bool
 
@@ -156,17 +153,6 @@ struct TraceDrawing {
         let colors = TraceColors(trace)
         let time = date.timeIntervalSinceReferenceDate
         ctx.blendMode = .plusLighter
-        if bottomOnly {
-            // Under the Window Light, which moves the head: lit once it
-            // reaches the bottom edge, as under a skin trace.
-            var level = TraceFrame.intensity(elapsed: elapsed)
-            if !reduceMotion {
-                journey.motion.advance(to: elapsed, course: course, legSeconds: TraceFrame.legSeconds(speed: trace.speed))
-                level *= journey.motion.bottomGlow(at: elapsed)
-            }
-            TraceOverlay.drawBottomGlow(in: &ctx, rect: rect, level: level, colors: colors)
-            return
-        }
         if reduceMotion {
             let intensity = TraceFrame.intensity(elapsed: elapsed)
             if subagents { TraceOverlay.drawBottomGlow(in: &ctx, rect: rect, level: intensity, colors: colors) }

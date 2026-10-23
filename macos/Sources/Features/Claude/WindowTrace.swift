@@ -26,10 +26,15 @@ enum WindowTrace {
         var since: Date
         var speed: Double
         /// Only subagents or background shells work: the light keeps to
-        /// the bottom edge.
+        /// the bottom edge, over their bottom glow.
         var subagents = false
+        /// The bottom glow's colors: the skin trace's, as under a skin
+        /// trace (with no skin, the trace's own, not the website's).
+        var glow: RGB
+        var glow2: RGB
 
         var colors: TraceColors { TraceColors(primary: primary, secondary: secondary) }
+        var glowColors: TraceColors { TraceColors(primary: glow, secondary: glow2) }
     }
 
     /// A pane is lit while Claude, its subagents or its background shells
@@ -42,7 +47,8 @@ enum WindowTrace {
         let primary = skin == nil ? websitePink : trace.color
         let secondary = skin == nil ? websiteCyan : trace.color2
         return Lighting(
-            pane: pane, primary: primary, secondary: secondary, since: since, speed: trace.speed, subagents: subagents)
+            pane: pane, primary: primary, secondary: secondary, since: since, speed: trace.speed, subagents: subagents,
+            glow: trace.color, glow2: trace.color2)
     }
 
     /// Where the light's head is on the pane's inside edge `rect`, and
@@ -182,7 +188,8 @@ private struct WindowLightLayer: NSViewRepresentable {
 /// The Window Light in Core Animation layers: the website's conic gradient
 /// turned round the pane's center, seen through a thin line along the
 /// edge and, softer, a blurred band just inside it (the website's glow
-/// spills outside the box; a pane can't draw there). Each display frame
+/// spills outside the box; a pane can't draw there); while only subagents
+/// work, over their bottom glow. Each display frame
 /// it points the gradients at the head (`WindowTrace.head`) and nothing
 /// else redraws; the GPU does the rest. Stops while its window is covered
 /// or minimized, and while the light fades out.
@@ -208,6 +215,10 @@ final class WindowLightView: NSView {
     private let lineMask = CAShapeLayer()
     /// Reduce Motion: no circling; the whole edge breathes.
     private let calm = CAShapeLayer()
+    /// The subagents' bottom glow (TraceOverlay.drawBottomGlow) as an
+    /// image; a frame only sets how strongly it shows.
+    private let bottom = CALayer()
+    private var bottomDrawn: BottomGlow?
     /// Which way the gradient's colors run now; nil to set them afresh.
     private var clockwise: Bool?
     /// The glow mask as drawn: its size, and the zoom's line scale as y.
@@ -234,6 +245,8 @@ final class WindowLightView: NSView {
         lineBox.addSublayer(line)
         calm.fillColor = nil
         calm.isHidden = true
+        bottom.contentsGravity = .resize
+        bottom.opacity = 0
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
@@ -251,8 +264,13 @@ final class WindowLightView: NSView {
         if setup.lighting != old.lighting { clockwise = nil }
         if setup.zoom != old.zoom { needsLayout = true }
         if setup.reduceMotion != old.reduceMotion || setup.lighting?.primary != old.lighting?.primary
-            || setup.running != old.running {
+            || setup.lighting?.subagents != old.lighting?.subagents || setup.running != old.running {
             breathe()
+        }
+        // New colors draw now; a new size or zoom waits for layout's pause.
+        if setup.lighting?.glow != old.lighting?.glow || setup.lighting?.glow2 != old.lighting?.glow2
+            || setup.lighting?.subagents != old.lighting?.subagents {
+            drawBottomGlow()
         }
         turn()
         updateClock()
@@ -266,7 +284,7 @@ final class WindowLightView: NSView {
     override func layout() {
         super.layout()
         if let layer, glowBox.superlayer !== layer {
-            for sublayer in [glowBox, lineBox, calm] { layer.addSublayer(sublayer) }
+            for sublayer in [glowBox, lineBox, calm, bottom] { layer.addSublayer(sublayer) }
         }
         let scale = CanvasZoomCompensation.scale(zoom: setup.zoom)
         let side = max(bounds.width, bounds.height)
@@ -275,7 +293,7 @@ final class WindowLightView: NSView {
         let edge = CGPath(rect: bounds.insetBy(dx: scale, dy: scale), transform: nil)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        for box in [glowBox, lineBox, calm, glowMask, lineMask] { box.frame = bounds }
+        for box in [glowBox, lineBox, calm, glowMask, lineMask, bottom] { box.frame = bounds }
         glow.frame = square
         line.frame = square
         lineMask.path = edge
@@ -284,10 +302,10 @@ final class WindowLightView: NSView {
         calm.lineWidth = 2 * scale
         CATransaction.commit()
         if glowMask.contents == nil {
-            drawGlowMask()
+            drawImages()
         } else {
-            NSObject.cancelPreviousPerformRequests(withTarget: self, selector: #selector(drawGlowMask), object: nil)
-            perform(#selector(drawGlowMask), with: nil, afterDelay: 0.15)
+            NSObject.cancelPreviousPerformRequests(withTarget: self, selector: #selector(drawImages), object: nil)
+            perform(#selector(drawImages), with: nil, afterDelay: 0.15)
         }
         turn()
     }
@@ -295,6 +313,7 @@ final class WindowLightView: NSView {
     override func viewDidChangeBackingProperties() {
         super.viewDidChangeBackingProperties()
         maskDrawn = nil
+        bottomDrawn = nil
         needsLayout = true
     }
 
@@ -312,10 +331,15 @@ final class WindowLightView: NSView {
         updateClock()
     }
 
-    /// The glow's band: a 12-point line along the edge blurred by 9, as an
-    /// image. Drawn once for a size; while the size keeps changing (a
-    /// resize, a pinch), the last one stretches and this waits for a pause.
-    @objc private func drawGlowMask() {
+    /// The images, drawn once for a size: while the size keeps changing (a
+    /// resize, a pinch), the last ones stretch and this waits for a pause.
+    @objc private func drawImages() {
+        drawGlowMask()
+        drawBottomGlow()
+    }
+
+    /// The glow's band: a 12-point line along the edge blurred by 9.
+    private func drawGlowMask() {
         let scale = CanvasZoomCompensation.scale(zoom: setup.zoom)
         let key = CGRect(x: 0, y: scale, width: bounds.width, height: bounds.height)
         guard key != maskDrawn, bounds.width > 0, bounds.height > 0 else { return }
@@ -332,15 +356,49 @@ final class WindowLightView: NSView {
         maskDrawn = key
     }
 
+    /// What the bottom glow image shows.
+    private struct BottomGlow: Equatable {
+        var size: CGSize
+        var scale: CGFloat
+        var glow: RGB
+        var glow2: RGB
+    }
+
+    /// The subagents' bottom glow at full strength, drawn as the skin
+    /// traces draw it, at the size it's drawn at on a zoomed-out canvas.
+    private func drawBottomGlow() {
+        guard let lighting = setup.lighting, lighting.subagents, bounds.width > 0, bounds.height > 0 else { return }
+        let scale = CanvasZoomCompensation.scale(zoom: setup.zoom)
+        let size = CGSize(width: bounds.width / scale, height: bounds.height / scale)
+        let key = BottomGlow(size: size, scale: scale, glow: lighting.glow, glow2: lighting.glow2)
+        guard key != bottomDrawn else { return }
+        let colors = lighting.glowColors
+        let renderer = ImageRenderer(content: Canvas { ctx, size in
+            ctx.blendMode = .plusLighter
+            TraceOverlay.drawBottomGlow(in: &ctx, rect: TraceOverlay.edgeRect(size), level: 1, colors: colors)
+        }.frame(width: size.width, height: size.height))
+        renderer.scale = (window?.backingScaleFactor ?? 2) * scale
+        guard let image = renderer.cgImage else { return }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        bottom.contents = image
+        CATransaction.commit()
+        bottomDrawn = key
+    }
+
     /// Points the gradients at the head, as it is now.
     private func turn() {
         guard let lighting = setup.lighting, !setup.reduceMotion, bounds.width > 0 else { return }
         // Moved in the size it's drawn at on a zoomed-out canvas.
         let scale = CanvasZoomCompensation.scale(zoom: setup.zoom)
         let rect = TraceOverlay.edgeRect(CGSize(width: bounds.width / scale, height: bounds.height / scale))
+        let elapsed = max(0, Date().timeIntervalSince(lighting.since))
         let head = WindowTrace.head(
-            journey, since: lighting.since, in: rect, elapsed: Date().timeIntervalSince(lighting.since),
+            journey, since: lighting.since, in: rect, elapsed: elapsed,
             course: lighting.subagents ? .subagents : .route(setup.route), speed: lighting.speed)
+        // Lit once the head reaches the bottom edge, as under a skin trace.
+        let level = lighting.subagents
+            ? TraceFrame.intensity(elapsed: elapsed) * journey.motion.bottomGlow(at: elapsed) : 0
         let turn = WindowTrace.turn(toward: head.point, from: CGPoint(x: rect.midX, y: rect.midY),
                                     clockwise: head.clockwise)
         let end = WindowTrace.endPoint(turn: turn)
@@ -356,6 +414,7 @@ final class WindowLightView: NSView {
         }
         glow.endPoint = end
         line.endPoint = end
+        bottom.opacity = Float(level)
         CATransaction.commit()
     }
 
@@ -369,6 +428,8 @@ final class WindowLightView: NSView {
         lineBox.isHidden = calmNow
         calm.isHidden = !calmNow
         calm.removeAnimation(forKey: "breath")
+        // Still, the bottom glow is simply on while only subagents work.
+        if setup.reduceMotion { bottom.opacity = setup.lighting?.subagents == true ? 1 : 0 }
         if calmNow, let lighting = setup.lighting {
             calm.strokeColor = WindowTrace.Shade(rgb: lighting.primary, alpha: 1, location: 0).cgColor
             calm.opacity = 0.25

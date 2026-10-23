@@ -40,6 +40,16 @@ struct WindowTraceTests {
         #expect(lit?.secondary == RGB(hex: "#28e7ff")!)
     }
 
+    @Test func theBottomGlowKeepsTheTracesOwnColors() {
+        // With no skin, the trace's pink and cyan, not the website's.
+        let lit = lighting(.racing(since: since, subagents: true))
+        #expect(lit?.glow == ResolvedTrace.unskinnedColor)
+        #expect(lit?.glow2 == ResolvedTrace.unskinnedColor2)
+        let skinned = lighting(.racing(since: since, subagents: true), skin: skin("#46a2ff", "#ffd23d"))
+        #expect(skinned?.glow == RGB(hex: "#46a2ff")!)
+        #expect(skinned?.glow2 == RGB(hex: "#ffd23d")!)
+    }
+
     @Test func aSkinnedPaneUsesItsTraceColors() {
         let lit = lighting(.racing(since: since), skin: skin("#46a2ff", "#ffd23d"))
         #expect(lit?.primary == RGB(hex: "#46a2ff")!)
