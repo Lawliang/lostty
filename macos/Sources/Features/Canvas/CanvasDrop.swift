@@ -4,8 +4,8 @@ import SwiftUI
 
 /// A terminal window dragged by its title bar and held overlapping the
 /// canvas for `holdSeconds` moves onto the canvas; a window whose drag
-/// starts overlapping it must leave it first, so nudging one there leaves
-/// it be. While it overlaps the canvas, the canvas lights up with a ring
+/// starts overlapping it must come onto it first (Arrival), so nudging one
+/// there leaves it be. While it overlaps the canvas, the canvas lights up with a ring
 /// counting down and "Merging…" over it, and the dragged window goes
 /// see-through, the same ring over it too; once the ring runs out the window warps in (CanvasAbsorb)
 /// and becomes a card, tabs and all. Dragging it off the canvas or letting
@@ -27,8 +27,23 @@ final class CanvasDrop: NSObject {
     private var wells: [NSPanel] = []
     /// When the dragged window came to overlap the canvas; nil while it doesn't.
     private var heldSince: Date?
-    /// Whether the drag has been off the canvas, so coming onto it counts.
-    private var arrived = false
+    /// Whether the drag has come onto the canvas, so overlapping it counts.
+    private var arrival = Arrival()
+
+    /// Whether a window's drag has brought it onto the canvas from outside:
+    /// the window has been clear of the canvas, or the pointer, on its title
+    /// bar, has come onto the canvas from off it. The second is for a window
+    /// that can't easily get clear, as one just dragged off as a card
+    /// (CanvasUnmerge), which opens half over the canvas.
+    struct Arrival {
+        private(set) var arrived = false
+        private var pointerWasOff = false
+
+        mutating func update(overlapping: Bool, pointerOn: Bool) {
+            if !overlapping || (pointerOn && pointerWasOff) { arrived = true }
+            if !pointerOn { pointerWasOff = true }
+        }
+    }
 
     /// Starts noticing terminal windows being dragged. Once, with the canvas.
     func start() {
@@ -71,7 +86,7 @@ final class CanvasDrop: NSObject {
               let canvas = CanvasController.shared?.window, canvas.isVisible, !canvas.isMiniaturized,
               controller.window?.styleMask.contains(.fullScreen) == false else { return }
         dragging = controller
-        arrived = false
+        arrival = Arrival()
         let timer = Timer(timeInterval: 1.0 / 60, repeats: true) { _ in
             MainActor.assumeIsolated { CanvasDrop.shared.tick() }
         }
@@ -87,8 +102,8 @@ final class CanvasDrop: NSObject {
         // Let go: it stays a window.
         guard NSEvent.pressedMouseButtons & 1 != 0 else { return stop() }
         let overlap = Self.overlap(window.frame, canvas.frame)
-        if overlap == nil { arrived = true }
-        hover(overlap != nil && arrived, canvas: canvas, dragged: window)
+        arrival.update(overlapping: overlap != nil, pointerOn: canvas.frame.contains(NSEvent.mouseLocation))
+        hover(overlap != nil && arrival.arrived, canvas: canvas, dragged: window)
         guard let overlap, Self.held(since: heldSince, now: Date()) else { return }
         stop()
         let controllers = (window.tabbedWindows ?? [window]).compactMap { $0.windowController as? TerminalController }

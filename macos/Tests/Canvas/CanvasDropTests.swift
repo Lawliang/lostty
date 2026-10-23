@@ -16,6 +16,24 @@ struct CanvasDropTests {
         #expect([0, 0.31, 0.61, 0.91, 1.21, 1.51].map(CanvasDrop.dots(after:)) == [0, 1, 2, 3, 0, 1])
     }
 
+    @Test func aWindowStartingOverTheCanvasMustComeOntoItFirst() {
+        // Its title bar over the canvas: only clearing the canvas counts.
+        var nudged = CanvasDrop.Arrival()
+        nudged.update(overlapping: true, pointerOn: true)
+        #expect(!nudged.arrived)
+        nudged.update(overlapping: false, pointerOn: false)
+        #expect(nudged.arrived)
+    }
+
+    @Test func aWindowHalfOverTheCanvasArrivesWhenItsTitleBarComesOntoIt() {
+        // As a card just dragged off opens: its title bar off the canvas.
+        var unmerged = CanvasDrop.Arrival()
+        unmerged.update(overlapping: true, pointerOn: false)
+        #expect(!unmerged.arrived)
+        unmerged.update(overlapping: true, pointerOn: true)
+        #expect(unmerged.arrived)
+    }
+
     @Test func anyOverlapWithTheCanvasCounts() {
         let canvas = CGRect(x: 100, y: 100, width: 800, height: 600)
         #expect(CanvasDrop.overlap(CGRect(x: 890, y: 650, width: 400, height: 300), canvas)
