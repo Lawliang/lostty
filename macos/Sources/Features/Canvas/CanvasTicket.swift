@@ -47,6 +47,19 @@ struct CanvasTicket: Codable, Equatable {
         !summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    /// This ticket with whatever differs between `new` and `old` as it is
+    /// in `old`: Undo of a change, leaving what changed since.
+    func reverting(_ new: CanvasTicket, to old: CanvasTicket) -> CanvasTicket {
+        var ticket = self
+        if new.summary != old.summary { ticket.summary = old.summary }
+        if new.kind != old.kind { ticket.kind = old.kind }
+        if new.priority != old.priority { ticket.priority = old.priority }
+        if new.status != old.status { ticket.status = old.status }
+        if new.assignee != old.assignee { ticket.assignee = old.assignee }
+        if new.details != old.details { ticket.details = old.details }
+        return ticket
+    }
+
     /// The number in `key` (3 for LT-3); nil for any other key.
     static func number(of key: String) -> Int? {
         guard key.hasPrefix(prefix + "-") else { return nil }
@@ -128,6 +141,21 @@ extension CanvasTicket.Status {
         case .inProgress: "In Progress"
         case .done: "Done"
         }
+    }
+
+    /// The tickets panel's section of tickets with this status.
+    var sectionTitle: String {
+        switch self {
+        case .toDo: "Up Next"
+        case .inProgress: "In Progress"
+        case .done: "Completed"
+        }
+    }
+
+    /// The status after this one: Done goes back to To Do.
+    var next: Self {
+        let all = Self.allCases
+        return all[(all.firstIndex(of: self)! + 1) % all.count]
     }
 }
 #endif

@@ -32,7 +32,7 @@ final class CanvasScrollView: NSScrollView {
     /// canvas. Decided where the scroll starts, so a pane the canvas pans
     /// under the pointer doesn't take it over, nor does its momentum change.
     weak var scrollingPane: NSView?
-    /// The ticket whose text the scroll under way scrolls (TicketDetailsHost),
+    /// The tickets panel whose list the scroll under way scrolls (TicketBoardHost),
     /// or nil. Decided where the scroll starts, as `scrollingPane` is; the
     /// canvas never hands a scroll on to it.
     weak var scrollingTicket: NSView?

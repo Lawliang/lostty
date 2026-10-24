@@ -327,6 +327,29 @@ struct CanvasSavedTests {
 
     @Test func aCanvasWithNoCardsOrTicketsIsEmpty() {
         #expect(CanvasSaved<String>(visible: true, center: .zero, zoom: 1, cards: [], tickets: []).isEmpty)
+        #expect(CanvasSaved<String>(visible: true, center: .zero, zoom: 1, cards: [], board: .init(tickets: [])).isEmpty)
+    }
+
+    @Test func theTicketsPanelComesBackWithTheCanvas() throws {
+        let ticket = CanvasTicket(key: "LT-2", summary: "Fix login", kind: .bug, priority: .high, status: .inProgress)
+        let saved = CanvasSaved<String>(
+            visible: true, center: .zero, zoom: 1, cards: [],
+            board: .init(tickets: [ticket], frame: CGRect(x: 5, y: 6, width: 900, height: 580), stack: 0,
+                         draft: CanvasTicket(summary: "Half typed")))
+        let back = try JSONDecoder().decode(CanvasSaved<String>.self, from: JSONEncoder().encode(saved))
+        #expect(back == saved)
+        #expect(!back.isEmpty)
+        // Its tickets alone are worth bringing back, the panel closed.
+        #expect(!CanvasSaved<String>(visible: true, center: .zero, zoom: 1, cards: [], board: .init(tickets: [ticket])).isEmpty)
+    }
+
+    @Test func aTicketInThePanelThatCantBeReadIsLeftOut() throws {
+        let json = #"{"visible":true,"center":[0,0],"zoom":1,"cards":[],"#
+            + #""board":{"tickets":[{"key":"LT-1","summary":"Kept"},"a string",{"summary":4}],"frame":"bad"}}"#
+        let saved = try JSONDecoder().decode(CanvasSaved<String>.self, from: Data(json.utf8))
+        #expect(saved.board?.tickets.map(\.summary) == ["Kept"])
+        // A frame that can't be read: the panel stays closed.
+        #expect(saved.board?.frame == nil)
     }
 }
 #endif

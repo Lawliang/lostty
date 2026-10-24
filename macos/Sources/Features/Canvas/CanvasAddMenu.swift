@@ -13,7 +13,7 @@ final class CanvasAddMenuView: NSView {
         var title: String {
             switch self {
             case .terminal: "New Terminal"
-            case .ticket: "New Ticket"
+            case .ticket: "Tickets"
             }
         }
 

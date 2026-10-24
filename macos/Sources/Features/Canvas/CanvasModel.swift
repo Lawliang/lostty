@@ -289,7 +289,8 @@ struct CanvasWaits: Equatable {
 
 /// What the canvas keeps across Restart to Update and relaunches: whether
 /// it's shown, the view, each terminal card back to front, and the
-/// tickets. Generic over the split tree, so tests can save plain values.
+/// tickets with their panel. Generic over the split tree, so tests can
+/// save plain values.
 struct CanvasSaved<Tree: Codable>: Codable {
     struct Card: Codable {
         var frame: CGRect
@@ -298,6 +299,8 @@ struct CanvasSaved<Tree: Codable>: Codable {
         var focused: String?
     }
 
+    /// A ticket as its own card, as saved before the tickets panel: read so
+    /// its ticket joins the panel, never written.
     struct Ticket: Codable, Equatable {
         var id: UUID
         var frame: CGRect
@@ -309,53 +312,92 @@ struct CanvasSaved<Tree: Codable>: Codable {
         var stack: Int
     }
 
+    /// The tickets, and their panel while it's open.
+    struct Board: Codable, Equatable {
+        var tickets: [CanvasTicket]
+        /// The panel's frame and place among every card, back to front;
+        /// nil while it's closed.
+        var frame: CGRect?
+        var stack: Int?
+        /// The new ticket's sheet, open with what's typed in it.
+        var draft: CanvasTicket?
+
+        init(tickets: [CanvasTicket], frame: CGRect? = nil, stack: Int? = nil, draft: CanvasTicket? = nil) {
+            self.tickets = tickets
+            self.frame = frame
+            self.stack = stack
+            self.draft = draft
+        }
+
+        /// A ticket that can't be read is left out, never the rest.
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            tickets = c.decodeEach(CanvasTicket.self, forKey: .tickets) ?? []
+            frame = try? c.decodeIfPresent(CGRect.self, forKey: .frame)
+            stack = try? c.decodeIfPresent(Int.self, forKey: .stack)
+            draft = try? c.decodeIfPresent(CanvasTicket.self, forKey: .draft)
+        }
+    }
+
     var visible: Bool
     var center: CGPoint
     var zoom: CGFloat
     var cards: [Card]
-    /// Missing from a canvas saved before tickets.
+    /// Tickets saved as cards, before the panel; missing from a canvas
+    /// saved before tickets, or since the panel.
     var tickets: [Ticket]?
+    /// Missing from a canvas saved before the panel.
+    var board: Board?
 
     /// Whether there's anything to bring back.
-    var isEmpty: Bool { cards.isEmpty && (tickets ?? []).isEmpty }
+    var isEmpty: Bool {
+        cards.isEmpty && (tickets ?? []).isEmpty && (board?.tickets ?? []).isEmpty && board?.draft == nil
+    }
 
-    init(visible: Bool, center: CGPoint, zoom: CGFloat, cards: [Card], tickets: [Ticket]? = nil) {
+    init(visible: Bool, center: CGPoint, zoom: CGFloat, cards: [Card], tickets: [Ticket]? = nil, board: Board? = nil) {
         self.visible = visible
         self.center = center
         self.zoom = zoom
         self.cards = cards
         self.tickets = tickets
+        self.board = board
     }
 
-    /// A ticket that can't be read is left out, never the canvas with it.
+    /// Tickets that can't be read are left out, never the canvas with them.
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         visible = try c.decode(Bool.self, forKey: .visible)
         center = try c.decode(CGPoint.self, forKey: .center)
         zoom = try c.decode(CGFloat.self, forKey: .zoom)
         cards = try c.decode([Card].self, forKey: .cards)
-        guard var list = try? c.nestedUnkeyedContainer(forKey: .tickets) else {
-            tickets = nil
-            return
-        }
-        var read: [Ticket] = []
+        tickets = c.decodeEach(Ticket.self, forKey: .tickets)
+        board = try? c.decodeIfPresent(Board.self, forKey: .board)
+    }
+}
+
+extension KeyedDecodingContainer {
+    /// The list under `key` without the elements that can't be read; nil
+    /// when there's no list.
+    func decodeEach<T: Decodable>(_ type: T.Type, forKey key: Key) -> [T]? {
+        guard var list = try? nestedUnkeyedContainer(forKey: key) else { return nil }
+        var read: [T] = []
         while !list.isAtEnd {
             let index = list.currentIndex
-            if let ticket = try? list.decode(Ticket.self) {
-                read.append(ticket)
+            if let element = try? list.decode(T.self) {
+                read.append(element)
             } else {
                 _ = try? list.decode(Unread.self)
                 // Never stuck on one that can't be stepped past.
                 if list.currentIndex == index { break }
             }
         }
-        tickets = read
+        return read
     }
-
-    /// Steps past a ticket that couldn't be read: having no fields, it
-    /// reads any value.
-    private struct Unread: Decodable {}
 }
+
+/// Steps past a list element that couldn't be read: having no fields, it
+/// reads any value.
+private struct Unread: Decodable {}
 
 extension CanvasSaved: Equatable where Tree: Equatable {}
 extension CanvasSaved.Card: Equatable where Tree: Equatable {}
