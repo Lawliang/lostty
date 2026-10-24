@@ -27,7 +27,10 @@ pub const Options = struct {
 /// (protocol.refine), and marks Claude asking permission. An `idle` also names the conversation
 /// file, for the Mac's turn observer. `tool` (PreToolUse) sends what the tool
 /// call is about to do, for Lostty Mobile's session list, and denies a
-/// SendMessage to an agent outside the pane's zone. It never fails,
+/// SendMessage to an agent outside the pane's zone. `subagent`
+/// (SubagentStart) names the subagent and its transcript, and a SubagentStop
+/// says `subagent_done` for it before anything else, for the pane's list of
+/// subagents. It never fails,
 /// and prints only what the Mac app keeps for the pane (speak.Kind): the
 /// queued texts on `busy`, the handoff's directive on `done` (a zone
 /// move's note waits for the next prompt) and, after ListAgents, which
@@ -46,6 +49,8 @@ pub fn run(gpa: Allocator) !u8 {
     var state = protocol.stateFromArgs(args.items) orelse return 0;
     const pane = std.posix.getenv(protocol.surface_env) orelse return 0;
     var detail: protocol.Detail = .{};
+    // A subagent finishing is said first, then whatever its stop means.
+    var stopped: ?[]u8 = null;
     switch (state) {
         // A prompt: give Claude what's queued for it, then say busy. A
         // zone's note comes with the zone's other agents as they are now.
@@ -75,8 +80,15 @@ pub fn run(gpa: Allocator) !u8 {
             if (!cleared) return 0;
             state = if (handoff != null) .fresh else .cleared;
         },
+        // A subagent starting, for the pane's list (Claude's own internal
+        // agents aren't listed).
+        .subagent => detail.agent = protocol.subagent(alloc, hookInput(alloc) orelse return 0) orelse return 0,
         .idle, .resumed => if (hookInput(alloc)) |input| {
-            state = protocol.refine(alloc, state, input) orelse return 0;
+            if (state == .resumed) if (protocol.subagent(alloc, input)) |agent| {
+                const tmux = std.posix.getenv("TMUX") != null;
+                stopped = protocol.encodeSequence(alloc, .subagent_done, .{ .agent = agent }, tmux) catch null;
+            };
+            state = protocol.refine(alloc, state, input) orelse return say(alloc, stopped);
             detail.permission = state == .idle and protocol.isPermissionPrompt(alloc, input);
             if (state == .idle) detail.transcript = protocol.transcriptPath(alloc, input);
         },
@@ -89,10 +101,17 @@ pub fn run(gpa: Allocator) !u8 {
     }
 
     const tmux = std.posix.getenv("TMUX") != null;
-    const seq = protocol.encodeSequence(alloc, state, detail, tmux) catch return 0;
+    const seq = protocol.encodeSequence(alloc, state, detail, tmux) catch return say(alloc, stopped);
+    const both = if (stopped) |first| std.mem.concat(alloc, u8, &.{ first, seq }) catch seq else seq;
+    return say(alloc, both);
+}
+
+/// Writes `seq` to the pane's terminal; always 0, as a hook never fails.
+fn say(alloc: Allocator, seq: ?[]const u8) u8 {
+    const bytes = seq orelse return 0;
     const tty = openTerminal(alloc) orelse return 0;
     defer tty.close();
-    tty.writeAll(seq) catch {};
+    tty.writeAll(bytes) catch {};
     return 0;
 }
 

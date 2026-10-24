@@ -34,6 +34,7 @@ pub const Agent = enum { claude, codex };
 const claude_events = [_]Event{
     .{ .name = "UserPromptSubmit", .state = "busy" },
     .{ .name = "Stop", .state = "idle" },
+    .{ .name = "SubagentStart", .state = "subagent" },
     .{ .name = "SubagentStop", .state = "resumed" },
     .{ .name = "Notification", .state = "idle" },
     .{ .name = "SessionEnd", .state = "exit" },

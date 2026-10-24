@@ -14,7 +14,18 @@ pub const surface_env = "LOSTTY_SURFACE";
 /// change of state. `done` (PostToolUse) and `start` (SessionStart) only
 /// speak the context handoff's queued text; after a /clear, `start` sends
 /// `fresh` (the fresh window took the handoff) or `cleared` (none waited).
-pub const State = enum { busy, idle, exit, agents, resumed, tool, done, start, fresh, cleared };
+/// `subagent` (SubagentStart) and `subagent_done` (SubagentStop) name a
+/// subagent and its transcript, for the pane's list of them (`+agent-watch`
+/// shows one); they change no state.
+pub const State = enum { busy, idle, exit, agents, resumed, tool, done, start, fresh, cleared, subagent, subagent_done };
+
+/// A subagent Claude started: its id, its type ("Explore"), and its own
+/// transcript.
+pub const Subagent = struct {
+    id: []const u8,
+    type: []const u8,
+    transcript: []const u8,
+};
 
 /// What a message says beyond its state.
 pub const Detail = struct {
@@ -28,6 +39,8 @@ pub const Detail = struct {
     /// `tool`: the agent a SendMessage was for, kept inside the pane's
     /// zone (zone.zig), for the canvas's notice.
     denied: ?[]const u8 = null,
+    /// `subagent` and `subagent_done`: which subagent.
+    agent: ?Subagent = null,
 };
 
 /// The longest action sent, in characters.
@@ -104,6 +117,37 @@ pub fn transcriptPath(alloc: Allocator, input: []const u8) ?[]const u8 {
     const path = textField(root, "transcript_path") orelse return null;
     if (path.len > transcript_max) return null;
     return alloc.dupe(u8, path) catch null;
+}
+
+/// The subagent a SubagentStart or SubagentStop hook fires for. Its
+/// transcript is SubagentStop's `agent_transcript_path`; SubagentStart
+/// names only the parent's, and the subagent's sits in a `subagents`
+/// folder beside it (`<session>.jsonl` → `<session>/subagents/agent-<id>.jsonl`).
+/// Null for Claude Code's own internal agents (prompt suggestions, /btw),
+/// whose type is empty, and for anything else.
+pub fn subagent(alloc: Allocator, input: []const u8) ?Subagent {
+    const parsed = std.json.parseFromSlice(std.json.Value, alloc, input, .{}) catch return null;
+    defer parsed.deinit();
+    const root = parsed.value;
+    if (root != .object) return null;
+    const event = stringField(root, "hook_event_name") orelse return null;
+    const id = textField(root, "agent_id") orelse return null;
+    const kind = textField(root, "agent_type") orelse return null;
+    if (std.mem.indexOfAny(u8, id, "/\\") != null or std.mem.indexOf(u8, id, "..") != null) return null;
+    const transcript = if (std.mem.eql(u8, event, "SubagentStop"))
+        alloc.dupe(u8, textField(root, "agent_transcript_path") orelse return null) catch return null
+    else if (std.mem.eql(u8, event, "SubagentStart")) path: {
+        const parent = textField(root, "transcript_path") orelse return null;
+        if (!std.mem.endsWith(u8, parent, ".jsonl")) return null;
+        const file = if (std.mem.startsWith(u8, id, "agent-")) id else std.fmt.allocPrint(alloc, "agent-{s}", .{id}) catch return null;
+        break :path std.fmt.allocPrint(alloc, "{s}/subagents/{s}.jsonl", .{ parent[0 .. parent.len - ".jsonl".len], file }) catch return null;
+    } else return null;
+    if (transcript.len > transcript_max) return null;
+    return .{
+        .id = alloc.dupe(u8, id) catch return null,
+        .type = alloc.dupe(u8, kind) catch return null,
+        .transcript = transcript,
+    };
 }
 
 /// What a PreToolUse hook's tool call does, as a person reads it at a
@@ -307,6 +351,7 @@ pub fn encodeSequence(alloc: Allocator, state: State, detail: Detail, tmux: bool
         .permission = if (detail.permission) true else null,
         .transcript = detail.transcript,
         .denied = detail.denied,
+        .agent = detail.agent,
     }, .{ .emit_null_optional_fields = false });
     defer alloc.free(json);
     return encodeUserVar(alloc, user_var_name, json, tmux);
@@ -609,4 +654,62 @@ test "claude protocol: encodeSequence carries a message kept inside the zone" {
     try t.expectEqualStrings(
         \\{"v":1,"state":"tool","action":"SendMessage","denied":"lostty-a9"}
     , try decodeSequence(alloc, kept));
+}
+
+test "claude protocol: a started subagent's transcript sits beside its parent's" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const started = subagent(a,
+        \\{"hook_event_name":"SubagentStart","transcript_path":"/h/.claude/projects/p/s1.jsonl","agent_id":"a765","agent_type":"Explore"}
+    ).?;
+    try std.testing.expectEqualStrings("a765", started.id);
+    try std.testing.expectEqualStrings("Explore", started.type);
+    try std.testing.expectEqualStrings("/h/.claude/projects/p/s1/subagents/agent-a765.jsonl", started.transcript);
+    // An id that already reads "agent-…" isn't doubled.
+    try std.testing.expectEqualStrings("/p/s1/subagents/agent-abc.jsonl", subagent(a,
+        \\{"hook_event_name":"SubagentStart","transcript_path":"/p/s1.jsonl","agent_id":"agent-abc","agent_type":"Plan"}
+    ).?.transcript);
+}
+
+test "claude protocol: a stopped subagent names its own transcript" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const stopped = subagent(a,
+        \\{"hook_event_name":"SubagentStop","transcript_path":"/p/s1.jsonl","agent_id":"def456","agent_type":"Explore","agent_transcript_path":"/p/s1/subagents/agent-def456.jsonl"}
+    ).?;
+    try std.testing.expectEqualStrings("def456", stopped.id);
+    try std.testing.expectEqualStrings("/p/s1/subagents/agent-def456.jsonl", stopped.transcript);
+}
+
+test "claude protocol: internal agents and odd ids aren't subagents" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    for ([_][]const u8{
+        \\{"hook_event_name":"SubagentStop","agent_id":"x1","agent_type":"","agent_transcript_path":"/p/x.jsonl"}
+        ,
+        \\{"hook_event_name":"SubagentStart","transcript_path":"/p/s1.jsonl","agent_id":"../../etc","agent_type":"Explore"}
+        ,
+        \\{"hook_event_name":"SubagentStart","transcript_path":"/p/s1.txt","agent_id":"a1","agent_type":"Explore"}
+        ,
+        \\{"hook_event_name":"Stop","transcript_path":"/p/s1.jsonl","agent_id":"a1","agent_type":"Explore"}
+        ,
+        "nope",
+    }) |input| try std.testing.expect(subagent(a, input) == null);
+}
+
+test "claude protocol: a subagent message carries the agent" {
+    const a = std.testing.allocator;
+    const seq = try encodeSequence(a, .subagent, .{ .agent = .{ .id = "a1", .type = "Explore", .transcript = "/p/agent-a1.jsonl" } }, false);
+    defer a.free(seq);
+    const prefix = "\x1b]1337;SetUserVar=LOSTTY_CLAUDE=";
+    const b64 = seq[prefix.len .. seq.len - 1];
+    var json: [256]u8 = undefined;
+    const n = try std.base64.standard.Decoder.calcSizeForSlice(b64);
+    try std.base64.standard.Decoder.decode(json[0..n], b64);
+    try std.testing.expectEqualStrings(
+        \\{"v":1,"state":"subagent","agent":{"id":"a1","type":"Explore","transcript":"/p/agent-a1.jsonl"}}
+    , json[0..n]);
 }

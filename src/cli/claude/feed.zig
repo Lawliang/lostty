@@ -28,9 +28,9 @@ pub fn header(alloc: Allocator, out: *std.ArrayList(u8), meta: ?[]const u8) Allo
     const kind = text(root, "agentType") orelse "Subagent";
     const description = text(root, "description");
     if (description) |d| try out.print(alloc, "\x1b]2;{s}\x07", .{try protocol.clean(alloc, d)});
-    try out.print(alloc, bold ++ "{s}" ++ reset, .{kind});
-    if (description) |d| try out.print(alloc, " · {s}", .{d});
-    if (text(root, "model")) |model| try out.print(alloc, dim ++ " · {s}" ++ reset, .{model});
+    try out.print(alloc, bold ++ "{s}" ++ reset, .{try printable(alloc, kind)});
+    if (description) |d| try out.print(alloc, " · {s}", .{try printable(alloc, d)});
+    if (text(root, "model")) |model| try out.print(alloc, dim ++ " · {s}" ++ reset, .{try printable(alloc, model)});
     try out.appendSlice(alloc, "\n\n");
 }
 
@@ -68,11 +68,17 @@ pub fn render(alloc: Allocator, out: *std.ArrayList(u8), line: []const u8) Alloc
             const block_type = text(block, "type") orelse continue;
             if (std.mem.eql(u8, block_type, "tool_use")) {
                 const name = text(block, "name") orelse continue;
+                // Its report, handed back through a tool (Claude Code 2.1.271+).
+                if (std.mem.eql(u8, name, "SubagentHandback")) {
+                    if (text(field(block, "input") orelse continue, "message")) |report|
+                        try out.print(alloc, "\n{s}\n\n", .{try printable(alloc, report)});
+                    continue;
+                }
                 const action = protocol.toolAction(alloc, name, field(block, "input") orelse .null) orelse name;
                 try out.print(alloc, cyan ++ "▸" ++ reset ++ " {s}\n", .{action});
             } else if (std.mem.eql(u8, block_type, "text")) {
                 const t = text(block, "text") orelse continue;
-                try out.print(alloc, "\n{s}\n\n", .{std.mem.trim(u8, t, " \t\r\n")});
+                try out.print(alloc, "\n{s}\n\n", .{try printable(alloc, t)});
             }
         }
         const stop = text(message, "stop_reason") orelse return;
@@ -156,7 +162,7 @@ const Waiter = struct {
 fn words(alloc: Allocator, out: *std.ArrayList(u8), t: []const u8, brief: bool) Allocator.Error!void {
     const trimmed = std.mem.trim(u8, t, " \t\r\n");
     if (trimmed.len == 0) return;
-    if (!brief) return out.print(alloc, "\n" ++ bold ++ "↳ From Claude:" ++ reset ++ " {s}\n\n", .{trimmed});
+    if (!brief) return out.print(alloc, "\n" ++ bold ++ "↳ From Claude:" ++ reset ++ " {s}\n\n", .{try printable(alloc, trimmed)});
     var lines = std.mem.splitScalar(u8, trimmed, '\n');
     var shown: usize = 0;
     try out.appendSlice(alloc, dim);
@@ -165,9 +171,21 @@ fn words(alloc: Allocator, out: *std.ArrayList(u8), t: []const u8, brief: bool) 
             try out.appendSlice(alloc, "…\n");
             break;
         }
-        try out.print(alloc, "{s}\n", .{std.mem.trimEnd(u8, l, "\r")});
+        try out.print(alloc, "{s}\n", .{try printable(alloc, l)});
     }
     try out.appendSlice(alloc, reset ++ "\n");
+}
+
+/// `t` trimmed, with control characters but newlines and tabs dropped: the
+/// transcript holds whatever the subagent read, and an escape sequence in
+/// it must not reach the terminal.
+fn printable(alloc: Allocator, t: []const u8) Allocator.Error![]const u8 {
+    var out: std.ArrayList(u8) = .empty;
+    for (std.mem.trim(u8, t, " \t\r\n")) |c| {
+        if ((c < ' ' and c != '\n' and c != '\t') or c == 0x7f) continue;
+        try out.append(alloc, c);
+    }
+    return out.toOwnedSlice(alloc);
 }
 
 /// A tool result's text: a string, or its first text block.
@@ -281,4 +299,22 @@ test "agent feed: the header names the agent, its task and model" {
     out.clearRetainingCapacity();
     try header(alloc, &out, null);
     try std.testing.expectEqualStrings(bold ++ "Subagent" ++ reset ++ "\n\n", out.items);
+}
+
+test "agent feed: a report handed back through a tool shows as its words" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+    try std.testing.expectEqualStrings("\nAll three found.\n\n", try rendered(alloc,
+        \\{"parentUuid":"u1","type":"assistant","message":{"content":[{"type":"tool_use","name":"SubagentHandback","input":{"message":"All three found."}}]}}
+    ));
+}
+
+test "agent feed: escape sequences in what it read don't reach the terminal" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+    try std.testing.expectEqualStrings("\nok ]2;evilbye\n\tdone\n\n", try rendered(alloc,
+        \\{"parentUuid":"u1","type":"assistant","message":{"content":[{"type":"text","text":"ok \u001b]2;evil\u0007bye\n\tdone"}]}}
+    ));
 }

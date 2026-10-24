@@ -115,6 +115,7 @@ pub const Action = enum {
 
     // Lostty: a feature's agent reports on its zone board ticket.
     ticket,
+
     // Lostty: follow a Claude Code subagent's transcript, one step a line.
     @"agent-watch",
 
