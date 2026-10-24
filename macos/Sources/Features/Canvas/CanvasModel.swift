@@ -361,6 +361,46 @@ extension CanvasModel {
         return adopt(resized, checking: id)
     }
 
+    /// Changes zone `id`'s name, color, folder, brief or key prefix. False,
+    /// and nothing changes, when `change` moves it or gives it another
+    /// project: only `moveZone` and `setZoneFrame` do that, under the rules.
+    @discardableResult
+    mutating func updateZone(_ id: UUID, _ change: (inout CanvasZone) -> Void) -> Bool {
+        guard let index = zones.firstIndex(where: { $0.id == id }) else { return false }
+        var zone = zones[index]
+        change(&zone)
+        guard zone.frame == zones[index].frame, zone.parent == zones[index].parent else { return false }
+        zones[index] = zone
+        return true
+    }
+
+    /// Where a terminal made in zone `id` starts: a domain's subfolder of
+    /// its project's folder, else the project's folder. nil when its
+    /// project has none.
+    func startFolder(ofZone id: UUID) -> String? {
+        guard let zone = zone(id) else { return nil }
+        let project = zone.parent.flatMap { self.zone($0) } ?? zone
+        guard let base = project.folder.flatMap(Self.nonEmpty) else { return nil }
+        let root = (base as NSString).expandingTildeInPath
+        guard zone.parent != nil, let sub = zone.folder.flatMap(Self.nonEmpty) else { return root }
+        return ((root as NSString).appendingPathComponent(sub) as NSString).standardizingPath
+    }
+
+    /// `path` relative to `folder`, as a domain stores its subfolder: ""
+    /// for the folder itself, nil outside it.
+    static func subfolder(_ path: String, of folder: String) -> String? {
+        let root = ((folder as NSString).expandingTildeInPath as NSString).standardizingPath
+        let inner = ((path as NSString).expandingTildeInPath as NSString).standardizingPath
+        if inner == root { return "" }
+        let prefix = root.hasSuffix("/") ? root : root + "/"
+        return inner.hasPrefix(prefix) ? String(inner.dropFirst(prefix.count)) : nil
+    }
+
+    private static func nonEmpty(_ text: String) -> String? {
+        let trimmed = text.trimmingCharacters(in: .whitespaces)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
     /// Removes zone `id` and its domains; the cards in them stay.
     mutating func removeZone(_ id: UUID) {
         zones.removeAll { $0.id == id || $0.parent == id }

@@ -242,5 +242,74 @@ struct CanvasZoneTests {
         #expect(!shrank)
         #expect(model.zone(project)?.frame == wider)
     }
+
+    private func projectWithDomain(folder: String?, subfolder: String?) -> CanvasModel {
+        var model = CanvasModel()
+        var top = zone(project, CGRect(x: 0, y: 0, width: 2000, height: 1000))
+        top.folder = folder
+        var inner = zone(domain, CGRect(x: 100, y: 100, width: 800, height: 600), in: project)
+        inner.folder = subfolder
+        model.addZone(top)
+        model.addZone(inner)
+        return model
+    }
+
+    @Test func aDomainStartsInItsSubfolderOfTheProjectFolder() {
+        let model = projectWithDomain(folder: "/Users/me/textberry", subfolder: "apps/onboarding")
+        #expect(model.startFolder(ofZone: domain) == "/Users/me/textberry/apps/onboarding")
+        #expect(model.startFolder(ofZone: project) == "/Users/me/textberry")
+    }
+
+    @Test func aDomainWithoutASubfolderStartsInTheProjectFolder() {
+        #expect(projectWithDomain(folder: "/Users/me/textberry", subfolder: nil).startFolder(ofZone: domain)
+            == "/Users/me/textberry")
+        #expect(projectWithDomain(folder: "/Users/me/textberry", subfolder: " ").startFolder(ofZone: domain)
+            == "/Users/me/textberry")
+    }
+
+    @Test func noProjectFolderMeansNoStartFolder() {
+        let model = projectWithDomain(folder: nil, subfolder: "apps/onboarding")
+        #expect(model.startFolder(ofZone: domain) == nil)
+        #expect(model.startFolder(ofZone: project) == nil)
+        #expect(model.startFolder(ofZone: UUID()) == nil)
+    }
+
+    @Test func aTildeInTheProjectFolderIsHome() {
+        let model = projectWithDomain(folder: "~/textberry", subfolder: "web")
+        let home = NSHomeDirectory()
+        #expect(model.startFolder(ofZone: project) == home + "/textberry")
+        #expect(model.startFolder(ofZone: domain) == home + "/textberry/web")
+    }
+
+    @Test func aSubfolderIsStoredRelativeToItsProjectFolder() {
+        #expect(CanvasModel.subfolder("/Users/me/textberry/apps/web", of: "/Users/me/textberry") == "apps/web")
+        #expect(CanvasModel.subfolder("/Users/me/textberry", of: "/Users/me/textberry/") == "")
+        #expect(CanvasModel.subfolder(NSHomeDirectory() + "/tb/web", of: "~/tb") == "web")
+        #expect(CanvasModel.subfolder("/Users/me/textberry-old", of: "/Users/me/textberry") == nil)
+        #expect(CanvasModel.subfolder("/Users/me/other", of: "/Users/me/textberry") == nil)
+    }
+
+    @Test func updatingAZoneChangesWhatItSaysNotWhereItIs() {
+        var model = projectWithDomain(folder: nil, subfolder: nil)
+        let renamed = model.updateZone(domain) { zone in
+            zone.name = "Onboarding"
+            zone.color = .teal
+            zone.brief = "Signup and first run."
+        }
+        #expect(renamed)
+        #expect(model.zone(domain)?.name == "Onboarding")
+        #expect(model.zone(domain)?.color == .teal)
+        #expect(model.zone(domain)?.brief == "Signup and first run.")
+
+        let before = model
+        let moved = model.updateZone(domain) { zone in
+            zone.name = "Moved"
+            zone.frame = CGRect(x: 1500, y: 100, width: 800, height: 600)
+        }
+        let orphaned = model.updateZone(domain) { $0.parent = nil }
+        #expect(!moved)
+        #expect(!orphaned)
+        #expect(model == before)
+    }
 }
 #endif

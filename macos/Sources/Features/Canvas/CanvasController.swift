@@ -226,23 +226,39 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
 
     // MARK: Cards
 
-    /// A new card with one fresh terminal, in the middle of the view.
+    /// A new card with one fresh terminal, in the middle of the view; in a
+    /// zone, starting in its folder. `config` is what it started with.
     @discardableResult
-    func newCard(baseConfig: Ghostty.SurfaceConfiguration? = nil) -> CardController {
-        let card = CardController(ghostty, canvas: self, baseConfig: baseConfig)
-        add(card, frame: model.placement(in: scrollView.documentVisibleRect))
-        focus(card)
-        return card
+    func newCard(baseConfig: Ghostty.SurfaceConfiguration? = nil)
+        -> (card: CardController, config: Ghostty.SurfaceConfiguration?) {
+        newCard(at: model.placement(in: scrollView.documentVisibleRect), baseConfig: baseConfig)
     }
 
     /// ⌘T on a card: a new card beside it, as big, starting where its
-    /// focused pane is (`baseConfig`), shown and focused.
+    /// focused pane is (`baseConfig`), or in its zone's folder.
     @discardableResult
-    func newCard(beside other: CardController, baseConfig: Ghostty.SurfaceConfiguration?) -> CardController {
-        let card = CardController(ghostty, canvas: self, baseConfig: baseConfig)
-        add(card, frame: model.placement(beside: other.id) ?? model.placement(in: scrollView.documentVisibleRect))
+    func newCard(beside other: CardController, baseConfig: Ghostty.SurfaceConfiguration?)
+        -> (card: CardController, config: Ghostty.SurfaceConfiguration?) {
+        let frame = model.placement(beside: other.id) ?? model.placement(in: scrollView.documentVisibleRect)
+        return newCard(at: frame, baseConfig: baseConfig)
+    }
+
+    private func newCard(at frame: CGRect, baseConfig: Ghostty.SurfaceConfiguration?)
+        -> (card: CardController, config: Ghostty.SurfaceConfiguration?) {
+        var config = baseConfig
+        if let zone = model.zone(for: frame), let folder = model.startFolder(ofZone: zone), Self.isFolder(folder) {
+            config = config ?? Ghostty.SurfaceConfiguration()
+            config?.workingDirectory = folder
+        }
+        let card = CardController(ghostty, canvas: self, baseConfig: config)
+        add(card, frame: frame)
         focus(card)
-        return card
+        return (card, config)
+    }
+
+    private static func isFolder(_ path: String) -> Bool {
+        var isDirectory: ObjCBool = false
+        return FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory) && isDirectory.boolValue
     }
 
     /// A card holding `tree`: panes moved in from a window, or restored.
