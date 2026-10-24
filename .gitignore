@@ -34,3 +34,7 @@ macos/LosttyRemote/.swiftpm/
 # LLVM coverage output: a coverage-instrumented Lostty writes one into
 # whatever directory its Claude hooks run in.
 *.profraw
+
+# pstack run state: orchestrate folders and decision trails stay local.
+/orchestrate/
+/.audit/

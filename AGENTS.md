@@ -78,6 +78,37 @@ GitHub team workflow. In this repo these rules win over them:
 - **Flaky tests:** `BranchesModelTests` and `NotesFolderTests` can fail
   when the Mac is busy. Run a failure once more before you treat it as a
   regression.
+- **One workflow.** During a `/pstack:poteto-mode` run, its playbook is
+  the only workflow: don't mix in superpowers, agent-skills, mattpocock
+  or claude-codex-loop skills.
+- **Handoffs.** When Lostty asks for a handoff mid-run, follow "Pause
+  safely" and write it into Lostty's handoff note, with **Active
+  workflow** naming the playbook and the next step. The fresh window
+  resumes with "Session pickup".
+- **Upstream code.** no-comments, unslop and the comment rule apply only
+  to code Lostty writes. Never remove or reformat upstream Ghostty
+  comments or code.
+- **Git.** Commit often on your own branch: `wip:` and repro-first
+  commits are fine. Rebase, amend or move only your own branch, before
+  anything has merged it. Never main, UI-improvements, or a branch
+  another worktree has checked out or merged from. Never `reset --hard`
+  such a branch, and never reset from `origin`: pass work between
+  subagents with local merges. Merge into main or UI-improvements only
+  when the user says, after Other Terminals, as a merge commit, not a
+  squash.
+- **Worktree cleanup** runs only when the user asks, and shows the list
+  first. It never deletes simulators, caches (DerivedData, DeviceSupport,
+  brew, pnpm), `~/Library/Caches/LosttyBench`, the orca workspace, or a
+  worktree that `+peers` shows with a terminal in it.
+- **Runtime forensics** patches only a Debug Lostty you launched, never
+  `/Applications/Lostty.app`.
+- **Skill and rule edits** (automate-me, reflect, correct, skill fixes):
+  show the user the text and wait for an OK, then commit locally. correct
+  deletes dead code only in its own diff.
+- **Outside services.** Reading MCP servers is fine. Writing anything
+  (messages, tickets, comments, GitHub, Stripe) needs the user's OK.
+- **Installs and fan-out.** Ask before installing tools (bun, Tailscale,
+  TLA+, …), and before a run uses 10 or more agents.
 
 ## Issue and PR Guidelines
 
