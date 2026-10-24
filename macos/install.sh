@@ -5,6 +5,10 @@
 #   macos/install.sh --previous  back to the build this one replaced
 set -eu
 cd "$(dirname "$0")/.."
+# Each install is recorded, for `lostty +peers` and the next install: the
+# worktree and commit it was built from, and how many files were
+# uncommitted. The build it replaced keeps its record beside it.
+RECORD="${XDG_CONFIG_HOME:-$HOME/.config}/lostty/installed-build"
 
 # --previous: back to the build this one replaced, then restart into it
 # (or open it, when the current one isn't running).
@@ -15,6 +19,11 @@ if [ "${1:-}" = "--previous" ]; then
   mv /Applications/Lostty.app "/Applications/Lostty (swap).app"
   mv "$PREV" /Applications/Lostty.app
   mv "/Applications/Lostty (swap).app" "$PREV"
+  if [ -f "$RECORD.previous" ]; then
+    if [ -f "$RECORD" ]; then mv "$RECORD" "$RECORD.swap"; fi
+    mv "$RECORD.previous" "$RECORD"
+    if [ -f "$RECORD.swap" ]; then mv "$RECORD.swap" "$RECORD.previous"; fi
+  fi
   if pgrep -xf /Applications/Lostty.app/Contents/MacOS/lostty >/dev/null; then
     # The raw event: compiling "restart to update" needs a dictionary that
     # has it, and the running Lostty may be older.
@@ -35,6 +44,23 @@ if [ "$CHANNEL" = beta ]; then
     ASSETCATALOG_COMPILER_APPICON_NAME=LosttyMacBetaIcon
 else
   set --
+fi
+# A build made in another worktree can have work this one doesn't: commits
+# this branch lacks, or changes never committed. Installing over it drops
+# that work from the app, so say so (`lostty +peers` shows who has it).
+ROOT=$(git rev-parse --show-toplevel)
+UNCOMMITTED=$({ git diff --name-only HEAD; git ls-files --others --exclude-standard; } | sort -u | wc -l | tr -d ' ')
+WARNING=""
+if [ -f "$RECORD" ]; then
+  OLD_TREE=$(sed -n 's/^worktree=//p' "$RECORD")
+  OLD_COMMIT=$(sed -n 's/^commit=//p' "$RECORD")
+  OLD_UNCOMMITTED=$(sed -n 's/^uncommitted=//p' "$RECORD")
+  if [ "$OLD_TREE" != "$ROOT" ]; then
+    if [ "${OLD_UNCOMMITTED:-0}" != 0 ] || ! git merge-base --is-ancestor "$OLD_COMMIT" HEAD 2>/dev/null; then
+      WARNING="Warning: the build this replaces was made in $(basename "$OLD_TREE") and has work this worktree doesn't (${OLD_UNCOMMITTED:-0} files uncommitted there). Check with its terminal (lostty +peers); install.sh --previous puts it back."
+      echo "$WARNING" >&2
+    fi
+  fi
 fi
 export PATH="$(brew --prefix zig@0.15)/bin:$PATH"
 # The engine takes its version from git and stops on any tag but its own
@@ -100,7 +126,18 @@ mv "/Applications/Lostty (installing).app" /Applications/Lostty.app
 # until LaunchServices re-reads the bundle.
 touch /Applications/Lostty.app
 /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f /Applications/Lostty.app
+mkdir -p "$(dirname "$RECORD")"
+if [ -f "$RECORD" ]; then mv "$RECORD" "$RECORD.previous"; fi
+cat > "$RECORD" <<RECORD
+worktree=$ROOT
+branch=$(git branch --show-current)
+commit=$(git rev-parse HEAD)
+uncommitted=$UNCOMMITTED
+channel=$CHANNEL
+at=$(date '+%Y-%m-%d %H:%M')
+RECORD
 if [ "$CHANNEL" = beta ]; then echo "Installed /Applications/Lostty.app (Lostty Beta)"
 else echo "Installed /Applications/Lostty.app (stable)"; fi
 echo "Switch with Lostty's menu bar → Restart to Update (keeps your terminals)."
 echo "Don't Quit Lostty to update: Quit ends every terminal session."
+if [ -n "$WARNING" ]; then echo "$WARNING" >&2; fi
