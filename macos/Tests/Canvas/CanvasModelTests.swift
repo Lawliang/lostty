@@ -33,6 +33,74 @@ struct CanvasModelTests {
         #expect(frames.map(\.origin) == [CGPoint(x: 51_000, y: 49_000), CGPoint(x: 51_400, y: 49_000)])
     }
 
+    @Test func aMarqueeSelectsEveryCardItTouches() {
+        var model = CanvasModel()
+        model.add(a, frame: CGRect(x: 0, y: 0, width: 400, height: 300))
+        model.add(b, frame: CGRect(x: 500, y: 0, width: 400, height: 300))
+        model.add(c, frame: CGRect(x: 0, y: 400, width: 400, height: 300))
+        // Over a's corner and the gap to b: a only, not wholly inside it.
+        #expect(model.cards(touching: CGRect(x: 350, y: 250, width: 100, height: 100)) == [a])
+        #expect(model.cards(touching: CGRect(x: 350, y: 250, width: 200, height: 200)) == [a, b, c])
+        #expect(model.cards(touching: CGRect(x: 420, y: 320, width: 50, height: 50)).isEmpty)
+    }
+
+    @Test func tidyUpLinesTheSelectionUpInARowLeftToRight() {
+        var model = CanvasModel()
+        model.add(a, frame: CGRect(x: 900, y: 120, width: 400, height: 300))
+        model.add(b, frame: CGRect(x: 100, y: 200, width: 360, height: 200))
+        model.add(c, frame: CGRect(x: 500, y: 600, width: 320, height: 250))
+        let frames = model.tidied([a, b])
+        // From b's left edge, along a's top (the higher), 14 apart; c stays.
+        #expect(frames == [
+            b: CGRect(x: 100, y: 120, width: 360, height: 200),
+            a: CGRect(x: 474, y: 120, width: 400, height: 300),
+        ])
+        #expect(model.tidied([]).isEmpty)
+    }
+
+    @Test func tidyUpIntoAGridFillsAcrossBeforeDown() {
+        var model = CanvasModel()
+        let ids = (0..<6).map { _ in UUID() }
+        // Reading order: down the canvas, then across.
+        for (index, id) in ids.enumerated() {
+            model.add(id, frame: CGRect(x: 1000 - CGFloat(index) * 10, y: 100 + CGFloat(index) * 50, width: 400, height: 200))
+        }
+        let frames = model.tidied(Set(ids), into: .grid)
+        // Six make three across and two down, from the leftmost edge (950) and the highest top (100).
+        #expect(ids.map { frames[$0]?.origin } == [
+            CGPoint(x: 950, y: 100), CGPoint(x: 1364, y: 100), CGPoint(x: 1778, y: 100),
+            CGPoint(x: 950, y: 314), CGPoint(x: 1364, y: 314), CGPoint(x: 1778, y: 314),
+        ])
+        #expect(CanvasModel.Tidy.grid.across(5) == 3)
+        #expect(CanvasModel.Tidy.grid.across(4) == 2)
+    }
+
+    @Test func tidyUpIntoAColumnStacksTopToBottom() {
+        var model = CanvasModel()
+        model.add(a, frame: CGRect(x: 500, y: 400, width: 400, height: 300))
+        model.add(b, frame: CGRect(x: 100, y: 200, width: 360, height: 200))
+        #expect(model.tidied([a, b], into: .column) == [
+            b: CGRect(x: 100, y: 200, width: 360, height: 200),
+            a: CGRect(x: 100, y: 414, width: 400, height: 300),
+        ])
+    }
+
+    @Test func theLayoutButtonCyclesRowGridColumn() {
+        #expect(CanvasModel.Tidy.row.next == .grid)
+        #expect(CanvasModel.Tidy.grid.next == .column)
+        #expect(CanvasModel.Tidy.column.next == .row)
+    }
+
+    @Test func zoomToSelectionShowsOnlyTheSelectedCards() {
+        var model = CanvasModel()
+        model.add(a, frame: CGRect(x: 0, y: 0, width: 400, height: 300))
+        model.add(b, frame: CGRect(x: 1000, y: 1000, width: 400, height: 300))
+        let margin = CanvasModel.fitMargin
+        #expect(model.fitRect(of: [b]) == CGRect(x: 1000, y: 1000, width: 400, height: 300).insetBy(dx: -margin, dy: -margin))
+        #expect(model.fitRect(of: []) == nil)
+        #expect(model.fitRect == CGRect(x: 0, y: 0, width: 1400, height: 1300).insetBy(dx: -margin, dy: -margin))
+    }
+
     @Test func oneWindowMovingInGoesWhereANewCardWould() {
         let size = CGSize(width: 400, height: 300)
         #expect(CanvasModel().placements(sizes: [size], in: visible) == [CanvasModel().placement(size: size, in: visible)])

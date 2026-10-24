@@ -45,11 +45,20 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     /// its own bottom bar.)
     let sidebar = ExtensionSidebarModel()
 
-    private let surface = CanvasSurfaceView()
+    let surface = CanvasSurfaceView()
     var scrollView: CanvasScrollView { surface.scrollView }
     private(set) var views: [UUID: CardView] = [:]
     /// Closed cards with where they were, newest last, for Undo.
     private var retired: [(card: CardController, frame: CGRect)] = []
+    /// The selected cards, of either kind: a marquee's, ⇧-clicks' or ⌘A's.
+    var selection: Set<UUID> = [] {
+        didSet { if selection != oldValue { selectionDidChange() } }
+    }
+    /// What a marquee under way adds to: the selection it started with
+    /// under ⇧, else nothing.
+    var marqueeBase: Set<UUID>?
+    /// The layout Tidy Up uses, chosen on the selection's bar.
+    var tidyLayout = CanvasModel.Tidy.row
     /// Cards whose panes are moving to a window: gone for good, not for Undo.
     private var moving: Set<UUID> = []
     /// The zoom the terminals last rendered at.
@@ -145,7 +154,15 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     }
 
     private func observe() {
-        scrollView.document.clicked = { [weak self] in self?.canvasClicked() }
+        let document = scrollView.document
+        document.clicked = { [weak self] adding in
+            self?.canvasClicked()
+            self?.marqueeBegan(adding: adding)
+        }
+        document.dragged = { [weak self] rect in self?.marqueeMoved(to: rect) }
+        document.dragEnded = { [weak self] in self?.marqueeEnded() }
+        document.selectedAll = { [weak self] in self?.selectAllCards() }
+        document.deselected = { [weak self] in self?.selection = [] }
         surface.addMenu.chose = { [weak self] item in
             switch item {
             case .terminal: self?.newCard()
@@ -167,10 +184,12 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         // pane's to pass on: a scroll-wheel monitor would turn off AppKit's
         // smooth, off-main-thread scrolling.)
         // A click on the tickets panel focuses it first, wherever it lands
-        // (its rows and fields take the click themselves).
+        // (its rows and fields take the click themselves). A click on a card
+        // changes the selection first.
         eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.magnify, .leftMouseDown, .rightMouseDown]) { [weak self] event in
             guard let self, event.window === window else { return event }
             guard event.type == .magnify else {
+                if event.type == .leftMouseDown, selectionClicked(event) { return nil }
                 ticketClicked(event)
                 return event
             }
@@ -316,7 +335,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     }
 
     /// The view of card `id`, of either kind.
-    private func view(_ id: UUID) -> (NSView & CanvasStacked)? {
+    func view(_ id: UUID) -> (NSView & CanvasStacked)? {
         if let card = views[id] { return card }
         return id == tickets.id ? ticketsView : nil
     }
@@ -330,6 +349,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     func setFrame(_ frame: CGRect, of id: UUID) {
         model.setFrame(frame, of: id)
         if let frame = model.card(id)?.frame { view(id)?.frame = frame }
+        if selection.contains(id) { updateSelectionOutline() }
     }
 
     /// A drag or resize ended.
@@ -356,6 +376,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     private func retire(_ card: CardController) {
         guard let frame = model.card(card.id)?.frame else { return }
         model.remove(card.id)
+        selection.remove(card.id)
         cards.removeAll { $0 === card }
         views.removeValue(forKey: card.id)?.removeFromSuperview()
         if !moving.contains(card.id) {
@@ -446,6 +467,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         }
         ticketsView = nil
         model.remove(tickets.id)
+        selection.remove(tickets.id)
         view.removeFromSuperview()
         saveSoon()
     }
@@ -464,9 +486,27 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         if let previous { letGo(of: previous) }
     }
 
-    /// A click in the canvas's view on the panel, not on the + menu over it.
+    /// A click on a card: with ⇧ on its title bar it goes in or out of the
+    /// selection, and the click goes no further; otherwise a click on a card
+    /// not selected lets go of the selection.
+    private func selectionClicked(_ event: NSEvent) -> Bool {
+        let adding = event.modifierFlags.contains(.shift)
+        guard adding || !selection.isEmpty, !surface.floats(at: event.locationInWindow) else { return false }
+        let point = scrollView.document.convert(event.locationInWindow, from: nil)
+        guard scrollView.documentVisibleRect.contains(point), let id = model.card(at: point),
+              let frame = model.card(id)?.frame else { return false }
+        guard adding else {
+            if !selection.contains(id) { selection = [] }
+            return false
+        }
+        guard point.y < frame.minY + CardView.headerHeight else { return false }
+        toggleSelection(id)
+        return true
+    }
+
+    /// A click in the canvas's view on the panel, not on what floats over it.
     private func ticketClicked(_ event: NSEvent) {
-        guard !surface.addMenu.covers(event.locationInWindow) else { return }
+        guard !surface.floats(at: event.locationInWindow) else { return }
         let point = scrollView.document.convert(event.locationInWindow, from: nil)
         guard scrollView.documentVisibleRect.contains(point), let id = model.card(at: point), id == tickets.id else { return }
         ticketWillFocus(id)
@@ -491,6 +531,8 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         updateVisibility()
         saveSoon()
         guard scrollView.magnification != settledZoom else { return }
+        // As thick on screen as the zoom changes.
+        for id in selection { view(id)?.updateRing() }
         // While the zoom moves the panes keep their pixels (the compositor
         // scales them) and their grid; they re-render once it settles.
         for card in cards {
@@ -508,6 +550,11 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     /// ⌃⌘0: every card in view, zoomed no closer than `atMost`.
     func zoomToFit(atMost cap: CGFloat = CanvasZoom.maximum) {
         guard let rect = model.fitRect else { return }
+        zoomToFit(rect, atMost: cap)
+    }
+
+    /// `rect` in view, zoomed no closer than `atMost`.
+    func zoomToFit(_ rect: CGRect, atMost cap: CGFloat = CanvasZoom.maximum) {
         scrollView.magnify(toFit: rect)
         if scrollView.magnification > cap {
             scrollView.magnification = cap
