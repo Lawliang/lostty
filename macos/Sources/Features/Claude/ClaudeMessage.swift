@@ -90,6 +90,28 @@ enum ClaudeMessage {
         object(value)?["state"] as? String == "cleared"
     }
 
+    /// A subagent starting (`subagent`) or finishing (`subagent_done`),
+    /// from the SubagentStart and SubagentStop hooks; nil for anything
+    /// else. Not a ClaudeState: it changes no phase.
+    static func subagent(_ value: String) -> SubagentEvent? {
+        guard let object = object(value), let state = object["state"] as? String,
+              let agent = object["agent"] as? [String: Any],
+              let id = agent["id"] as? String, !id.isEmpty,
+              let type = agent["type"] as? String, !type.isEmpty,
+              let transcript = agent["transcript"] as? String, !transcript.isEmpty else { return nil }
+        let subagent = PaneSubagent(id: id, type: type, transcript: transcript)
+        switch state {
+        case "subagent": return .started(subagent)
+        case "subagent_done": return .stopped(subagent)
+        default: return nil
+        }
+    }
+
+    enum SubagentEvent: Equatable {
+        case started(PaneSubagent)
+        case stopped(PaneSubagent)
+    }
+
     private static func object(_ value: String) -> [String: Any]? {
         guard let data = value.data(using: .utf8),
               let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
