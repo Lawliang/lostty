@@ -3,23 +3,30 @@ import AppKit
 import SwiftUI
 
 /// A card's title bar, drawn as a Mac window's: close, minimize and zoom
-/// buttons, the title, and the project pill and agent state. Dragging it
-/// moves the card (and the rest of the selection with a selected card),
-/// and a lone card off the canvas makes it a window again
-/// (CanvasUnmerge); double-clicking zooms to the card at 100%; its menu
-/// moves the card to a window or closes it.
+/// buttons, the title and a pencil that renames the card, and the project
+/// pill and agent state. Dragging it moves the card (and the rest of the
+/// selection with a selected card), and a lone card off the canvas makes it
+/// a window again (CanvasUnmerge); double-clicking zooms to the card at
+/// 100%; its menu moves the card to a window or closes it.
 final class CardHeaderView: NSView {
     private let card: CardController
     private weak var canvas: CanvasController?
     private let content: PassthroughHostingView<CardHeaderContent>
     let buttons: CardWindowButtons
+    private let rename: CardRenameButton
     /// Where a drag started, and where the cards it moves were then.
     private var start: (point: CGPoint, origins: [UUID: CGPoint])?
 
     init(card: CardController, canvas: CanvasController) {
         self.card = card
         self.canvas = canvas
-        content = PassthroughHostingView(rootView: CardHeaderContent(card: card))
+        let rename = CardRenameButton { [weak card, weak canvas] in
+            guard let card else { return }
+            canvas?.focus(card)
+            card.promptTabTitle()
+        }
+        self.rename = rename
+        content = PassthroughHostingView(rootView: CardHeaderContent(card: card) { rename.frame = $0 })
         buttons = CardWindowButtons { [weak card, weak canvas] button in
             guard let card, let canvas else { return }
             switch button {
@@ -32,6 +39,7 @@ final class CardHeaderView: NSView {
         wantsLayer = true
         addSubview(content)
         addSubview(buttons)
+        addSubview(rename)
     }
 
     @available(*, unavailable)
@@ -234,7 +242,8 @@ final class CardWindowButtons: NSView {
 }
 
 /// What a card's title bar shows, laid out as a Lostty window's: after the
-/// buttons, the focused pane's folder icon and the card's title; at the
+/// buttons, the focused pane's folder icon, the card's title and room for
+/// its rename pencil (`pencilMoved` places it); at the
 /// right, the focused pane's project pill (its repo and branch, hidden
 /// outside a repo).
 struct CardHeaderContent: View {
@@ -243,10 +252,12 @@ struct CardHeaderContent: View {
 
     @ObservedObject var card: CardController
     @ObservedObject private var sidebar: ExtensionSidebarModel
+    let pencilMoved: (CGRect) -> Void
 
-    init(card: CardController) {
+    init(card: CardController, pencilMoved: @escaping (CGRect) -> Void) {
         self.card = card
         sidebar = card.sidebar
+        self.pencilMoved = pencilMoved
     }
 
     private var focusedPane: Ghostty.SurfaceView? {
@@ -261,12 +272,65 @@ struct CardHeaderContent: View {
                 .foregroundStyle(.primary.opacity(0.8))
                 .lineLimit(1)
                 .truncationMode(.middle)
+            Color.clear
+                .frame(width: CardRenameButton.size, height: CardRenameButton.size)
+                .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.space)) } action: { pencilMoved($0) }
             Spacer(minLength: 8)
             ProjectPill(model: card.sidebar)
         }
         .padding(.leading, Self.titleInset)
         .padding(.trailing, 8)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .coordinateSpace(name: Self.space)
+    }
+
+    private static let space = "CardHeaderContent"
+}
+
+/// The pencil after a card's title: asks for a new title for the card.
+/// AppKit, as the window buttons are, so it takes clicks at any zoom.
+final class CardRenameButton: NSView {
+    static let size: CGFloat = 14
+
+    private let action: () -> Void
+    private var hovering = false {
+        didSet { if hovering != oldValue { needsDisplay = true } }
+    }
+
+    init(action: @escaping () -> Void) {
+        self.action = action
+        super.init(frame: .zero)
+        toolTip = "Rename"
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    override var isFlipped: Bool { true }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let config = NSImage.SymbolConfiguration(pointSize: 10, weight: .medium)
+            .applying(.init(paletteColors: [NSColor.labelColor.withAlphaComponent(hovering ? 0.8 : 0.4)]))
+        guard let image = NSImage(systemSymbolName: "pencil", accessibilityDescription: "Rename")?
+            .withSymbolConfiguration(config) else { return }
+        image.draw(in: NSRect(x: bounds.midX - image.size.width / 2, y: bounds.midY - image.size.height / 2,
+                              width: image.size.width, height: image.size.height),
+                   from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        for area in trackingAreas { removeTrackingArea(area) }
+        addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeInKeyWindow], owner: self))
+    }
+
+    override func mouseEntered(with event: NSEvent) { hovering = true }
+    override func mouseExited(with event: NSEvent) { hovering = false }
+
+    override func mouseDown(with event: NSEvent) {}
+
+    override func mouseUp(with event: NSEvent) {
+        if bounds.contains(convert(event.locationInWindow, from: nil)) { action() }
     }
 }
 

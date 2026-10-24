@@ -506,14 +506,14 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
 
     /// The selected card under a click at `point` (in the window) while two
     /// or more are selected, on its panes or title bar, not its resize
-    /// handles or window buttons, nor anything over the cards.
+    /// handles, window buttons or rename pencil, nor anything over the cards.
     func groupCard(at point: NSPoint) -> UUID? {
         guard selection.count > 1, !surface.floats(at: point) else { return nil }
         let inDocument = scrollView.document.convert(point, from: nil)
         guard scrollView.documentVisibleRect.contains(inDocument), let id = model.card(at: inDocument),
               selection.contains(id) else { return nil }
         let hit = surface.hitTest(point)
-        return hit is CardEdgeHandle || hit is CardWindowButtons ? nil : id
+        return hit is CardEdgeHandle || hit is CardWindowButtons || hit is CardRenameButton ? nil : id
     }
 
     /// A press on a group of selected cards: a drag moves them all; let go
