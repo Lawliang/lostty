@@ -45,6 +45,8 @@ struct CanvasModel: Equatable {
 
     /// Back to front: the last is drawn on top.
     private(set) var cards: [Card] = []
+    /// Behind every card; apart from `cards` so a hit test finds cards only.
+    private(set) var zones: [CanvasZone] = []
 
     func card(_ id: UUID) -> Card? {
         cards.first { $0.id == id }
@@ -274,6 +276,144 @@ struct CanvasModel: Equatable {
             if best.map({ distance < $0.distance }) ?? true { best = (card.id, distance) }
         }
         return best?.id
+    }
+}
+
+/// An area of the canvas behind the cards, holding those whose centres it
+/// covers: a project, or a domain inside one. Two levels only.
+struct CanvasZone: Equatable, Identifiable, Codable {
+    /// Each new zone takes the next of these, in order.
+    enum Color: String, CaseIterable, Codable {
+        case blue, green, orange, purple, pink, teal, yellow, red
+    }
+
+    let id: UUID
+    var frame: CGRect
+    var name = ""
+    var color: Color = .blue
+    /// nil for a project; a domain's project.
+    var parent: UUID?
+    /// A project's folder; a domain's subfolder of it.
+    var folder: String?
+    var brief = ""
+    /// A project's ticket key prefix.
+    var keyPrefix: String?
+}
+
+extension CanvasModel {
+    /// The room left round the cards in a zone made from them.
+    static let zoneMargin: CGFloat = 40
+
+    func zone(_ id: UUID) -> CanvasZone? {
+        zones.first { $0.id == id }
+    }
+
+    /// The zone a card at `cardFrame` is in: the domain holding its
+    /// centre, else the project, else none.
+    func zone(for cardFrame: CGRect) -> UUID? {
+        let centre = CGPoint(x: cardFrame.midX, y: cardFrame.midY)
+        let holding = zones.filter { $0.frame.contains(centre) }
+        return (holding.first { $0.parent != nil } ?? holding.first)?.id
+    }
+
+    /// The cards in zone `id`; a project's include its domains'.
+    func members(of id: UUID) -> Set<UUID> {
+        let within = Set([id] + zones.filter { $0.parent == id }.map(\.id))
+        return Set(cards.filter { zone(for: $0.frame).map(within.contains) == true }.map(\.id))
+    }
+
+    /// Adds `zone`, unless it breaks the rules or its id is taken.
+    @discardableResult
+    mutating func addZone(_ zone: CanvasZone) -> Bool {
+        guard self.zone(zone.id) == nil else { return false }
+        return adopt(zones + [zone], checking: zone.id)
+    }
+
+    /// Moves zone `id` by `delta` with everything in it: a project's
+    /// domains, and the cards it held before the move. The cards moved;
+    /// nil, and nothing moves, when its new frame breaks the rules.
+    @discardableResult
+    mutating func moveZone(_ id: UUID, by delta: CGSize) -> Set<UUID>? {
+        let held = members(of: id)
+        var moved = zones
+        for index in moved.indices where moved[index].id == id || moved[index].parent == id {
+            moved[index].frame = moved[index].frame.offsetBy(dx: delta.width, dy: delta.height)
+        }
+        guard adopt(moved, checking: id) else { return nil }
+        for index in cards.indices where held.contains(cards[index].id) {
+            cards[index].frame = Self.clamped(cards[index].frame.offsetBy(dx: delta.width, dy: delta.height))
+        }
+        return held
+    }
+
+    /// Resizes zone `id` alone: its cards and domains stay put. False, and
+    /// nothing changes, when `frame` breaks the rules.
+    @discardableResult
+    mutating func setZoneFrame(_ frame: CGRect, of id: UUID) -> Bool {
+        var resized = zones
+        guard let index = resized.firstIndex(where: { $0.id == id }) else { return false }
+        resized[index].frame = frame
+        return adopt(resized, checking: id)
+    }
+
+    /// Removes zone `id` and its domains; the cards in them stay.
+    mutating func removeZone(_ id: UUID) {
+        zones.removeAll { $0.id == id || $0.parent == id }
+    }
+
+    /// Zone from Selection: a frame round cards `ids` with `zoneMargin` to
+    /// spare, kept in the document. When every card's centre is in one
+    /// project, a domain of it, kept inside it. nil without cards, or when
+    /// the zone would break the rules.
+    func zoneAround(_ ids: Set<UUID>) -> (frame: CGRect, parent: UUID?)? {
+        let chosen = cards.filter { ids.contains($0.id) }
+        guard !chosen.isEmpty else { return nil }
+        let projects = Set(chosen.map { card in
+            zone(for: card.frame).flatMap { self.zone($0) }.map { $0.parent ?? $0.id }
+        })
+        let parent = projects.count == 1 ? projects.first ?? nil : nil
+        let bounds = parent.flatMap { zone($0)?.frame } ?? CGRect(x: 0, y: 0, width: Self.size, height: Self.size)
+        let frame = chosen.reduce(CGRect.null) { $0.union($1.frame) }
+            .insetBy(dx: -Self.zoneMargin, dy: -Self.zoneMargin)
+            .intersection(bounds)
+        guard Self.allows(CanvasZone(id: UUID(), frame: frame, parent: parent), among: zones) else { return nil }
+        return (frame, parent)
+    }
+
+    /// The color a new zone takes: the first in order that no other
+    /// project uses, for a project; that neither `parent` nor its domains
+    /// use, for a domain. Round again once all are taken.
+    func nextColor(parent: UUID?) -> CanvasZone.Color {
+        let group = zones.filter { parent == nil ? $0.parent == nil : $0.id == parent || $0.parent == parent }
+        let used = Set(group.map(\.color))
+        let all = CanvasZone.Color.allCases
+        return all.first { !used.contains($0) } ?? all[group.count % all.count]
+    }
+
+    /// `zones` becomes `candidate` when zone `id` keeps the rules there.
+    private mutating func adopt(_ candidate: [CanvasZone], checking id: UUID) -> Bool {
+        guard let zone = candidate.first(where: { $0.id == id }), Self.allows(zone, among: candidate) else { return false }
+        zones = candidate
+        return true
+    }
+
+    /// The one rule every zone change keeps: `zone` inside the document and
+    /// at least a card's minimum size. A project overlaps no other project
+    /// (sharing an edge is fine) and holds all its domains. A domain's
+    /// parent is a project that holds it, and it overlaps no sibling.
+    private static func allows(_ zone: CanvasZone, among zones: [CanvasZone]) -> Bool {
+        let frame = zone.frame
+        guard CGRect(x: 0, y: 0, width: size, height: size).contains(frame),
+              frame.width >= minimumCardSize.width, frame.height >= minimumCardSize.height else { return false }
+        let others = zones.filter { $0.id != zone.id }
+        guard let parent = zone.parent else {
+            return !others.contains { other in
+                other.parent == nil ? overlap(other.frame, frame) : other.parent == zone.id && !frame.contains(other.frame)
+            }
+        }
+        guard let project = others.first(where: { $0.id == parent }), project.parent == nil,
+              project.frame.contains(frame) else { return false }
+        return !others.contains { $0.parent == parent && overlap($0.frame, frame) }
     }
 }
 
