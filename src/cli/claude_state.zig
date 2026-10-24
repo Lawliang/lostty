@@ -20,8 +20,8 @@ pub const Options = struct {
 /// the pane it runs in whether Claude is working: `+claude-state busy`,
 /// `idle`, `exit`, `agents` or `resumed`. For `idle` and `resumed` it reads
 /// the hook input on stdin, which can turn a Stop into `agents` (subagents
-/// still working) or mean nothing should be sent (protocol.refine), and
-/// marks Claude asking permission. An `idle` also names the conversation
+/// or background shells still working) or mean nothing should be sent
+/// (protocol.refine), and marks Claude asking permission. An `idle` also names the conversation
 /// file, for the Mac's turn observer. `tool` (PreToolUse) sends what the tool
 /// call is about to do, for Lostty Mobile's session list. It never fails,
 /// and prints only the context handoff's queued text (`busy`, `done`,

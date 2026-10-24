@@ -12,8 +12,7 @@ enum SessionsUI {
             let found = await Task.detached(priority: .utility) {
                 TmuxOwnership.orphans(TmuxClient().sessions(), isAlive: ProcessLiveness.isAlive)
             }.value
-            let openPanes = Set(NSApp.windows
-                .compactMap { $0.windowController as? BaseTerminalController }
+            let openPanes = Set(BaseTerminalController.everyController
                 .flatMap { $0.surfaceTree.filter(\.inTmuxSession).map(\.id) })
             let orphans = TmuxOwnership.reopenable(found, openPanes: openPanes)
             guard !orphans.isEmpty else { return }

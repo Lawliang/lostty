@@ -14,8 +14,17 @@ struct LosttyChannelTests {
     }
 
     @Test func theUnfinishedFeaturesAreOnlyInTheBeta() {
-        #expect(LosttyChannel.beta.isBeta && LosttyChannel.beta.showsMascot && LosttyChannel.beta.hasBranches)
-        #expect(!LosttyChannel.stable.isBeta && !LosttyChannel.stable.showsMascot && !LosttyChannel.stable.hasBranches)
+        #expect(LosttyChannel.beta.isBeta && LosttyChannel.beta.handsOff && LosttyChannel.beta.hasBranches)
+        #expect(!LosttyChannel.stable.isBeta && !LosttyChannel.stable.handsOff && !LosttyChannel.stable.hasBranches)
+    }
+
+    @Test func theTurnObserverIsOffEverywhereUntilItHasANewHome() {
+        #expect(!LosttyChannel.beta.observesTurns && !LosttyChannel.stable.observesTurns)
+    }
+
+    @Test func theCanvasIsOnlyInTheBeta() {
+        #expect(LosttyChannel.beta.hasCanvas)
+        #expect(!LosttyChannel.stable.hasCanvas)
     }
 
     @Test func theBetaIsNamedLosttyBeta() {

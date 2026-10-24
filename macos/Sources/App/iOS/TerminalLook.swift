@@ -33,8 +33,12 @@ enum TerminalLook {
     static let overlayDir = FileManager.default.temporaryDirectory.appendingPathComponent("terminal-look")
 
     /// `tile`: the skin's texture as a file, drawn as the Mac draws it.
-    static func configText(skin: SessionSkin?, fontSize: Float32, tile: URL? = nil) -> String {
+    /// `fontFamily`: nil keeps Ghostty's built-in JetBrains Mono.
+    static func configText(skin: SessionSkin?, fontSize: Float32, fontFamily: String? = nil, tile: URL? = nil) -> String {
         var lines = [String(format: "font-size = %.2f", fontSize)]
+        if let fontFamily {
+            lines.append("font-family = \"\(fontFamily)\"")
+        }
         if let skin {
             lines.append("background = #\(skin.background.hexString)")
             // No text color of its own: light text, or dark on a light skin
@@ -86,7 +90,7 @@ enum TerminalLook {
         do {
             try FileManager.default.createDirectory(at: overlayDir, withIntermediateDirectories: true)
             let tile = skin.flatMap { TextureTile.file(for: $0, displayScale: surfaceScale) }
-            let text = configText(skin: skin, fontSize: fontSize, tile: tile) + extra.map { $0 + "\n" }.joined()
+            let text = configText(skin: skin, fontSize: fontSize, fontFamily: TerminalFontChoice.chosen.family, tile: tile) + extra.map { $0 + "\n" }.joined()
             try text.write(to: url, atomically: true, encoding: .utf8)
             ghostty_config_load_file(cfg, url.path)
             try? FileManager.default.removeItem(at: url)
@@ -124,6 +128,38 @@ enum TerminalTextSize: String, CaseIterable, Identifiable {
         case .smaller: 0.85
         case .standard: 1
         case .larger: 1.2
+        }
+    }
+}
+
+/// Every terminal's font; picked in Settings.
+enum TerminalFontChoice: String, CaseIterable, Identifiable {
+    case standard, hyperlegible, geist, menlo
+
+    static let key = "LosttyTerminalFont"
+
+    static var chosen: TerminalFontChoice {
+        UserDefaults.standard.string(forKey: key).flatMap(Self.init(rawValue:)) ?? .standard
+    }
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .standard: "JetBrains Mono"
+        case .hyperlegible: "Atkinson Hyperlegible"
+        case .geist: "Geist Mono"
+        case .menlo: "Menlo"
+        }
+    }
+
+    /// The `font-family` to set; nil for Ghostty's built-in font.
+    var family: String? {
+        switch self {
+        case .standard: nil
+        case .hyperlegible: BundledTerminalFonts.atkinson
+        case .geist: BundledTerminalFonts.geist
+        case .menlo: "Menlo"
         }
     }
 }

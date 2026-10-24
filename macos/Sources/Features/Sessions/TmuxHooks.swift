@@ -3,8 +3,9 @@ import LosttyRemote
 
 /// The tmux hooks that signal `lostty-changed`, so the phone's list and the
 /// Mac's watcher hear about sessions coming, going, being renamed, and
-/// clients attaching or leaving. tmux.conf has the same lines; the Mac sets
-/// them again for a server started without them.
+/// clients attaching or leaving, and the settings a running server must
+/// pick up. tmux.conf has the same lines; the Mac sets them again for a
+/// server started without them.
 enum TmuxHooks {
     static let events = ["session-created", "session-closed", "session-renamed", "client-attached", "client-detached"]
     static let command = "wait-for -S \(TmuxRemote.changedChannel)"
@@ -14,9 +15,15 @@ enum TmuxHooks {
     /// Lostty stops an empty one at launch (`TmuxClient.stopServerIfEmpty`).
     static let keepServer = "set -s exit-empty off"
 
+    /// A prompt redrawn on a pane's first line ("erase from here down" from
+    /// the top-left) counts to tmux as clearing the screen, and
+    /// scroll-on-clear saved a copy of the prompt to the history each time:
+    /// Powerlevel10k's redraws at startup and after every resize.
+    static let noScrollOnClear = "set -g scroll-on-clear off"
+
     /// As written in tmux.conf.
     static var confLines: [String] {
-        events.map { "set-hook -g \($0) '\(command)'" } + [keepServer]
+        events.map { "set-hook -g \($0) '\(command)'" } + [keepServer, noScrollOnClear]
     }
 
     /// One `tmux` call setting all of them.
@@ -24,7 +31,7 @@ enum TmuxHooks {
         let hooks = events.enumerated().flatMap { index, event in
             (index == 0 ? [] : [";"]) + ["set-hook", "-g", event, command]
         }
-        return hooks + [";", "set-option", "-s", "exit-empty", "off"]
+        return hooks + [";", "set-option", "-s", "exit-empty", "off", ";", "set-option", "-g", "scroll-on-clear", "off"]
     }
 
     /// Wakes everything waiting on the channel. `-f /dev/null`: signalling

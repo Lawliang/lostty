@@ -103,23 +103,46 @@ class TerminalWindowRestoration: NSObject, NSWindowRestoration {
             return
         }
 
+        // Lostty: after Restart to Update the windows come back from its own
+        // snapshot (WindowSnapshot), not twice; after the Mac restarts, from
+        // the last session if you Continue (SessionRestore).
+        if LosttyRestart.restoresFromSnapshot || SessionRestore.offers {
+            completionHandler(nil, nil)
+            return
+        }
+
         // Decode the state. If we can't decode the state, then we can't restore.
         guard let state = TerminalRestorableState(coder: state) else {
             completionHandler(nil, TerminalRestoreError.stateDecodeFailed)
             return
         }
 
+        guard let c = controller(appDelegate.ghostty, state: state), let window = c.window else {
+            completionHandler(nil, TerminalRestoreError.windowDidNotLoad)
+            return
+        }
+
+        completionHandler(window, nil)
+        guard let mode = state.effectiveFullscreenMode, mode != .native else {
+            // We let AppKit handle native fullscreen
+            return
+        }
+        // Give the window to AppKit first, then adjust its frame and style
+        // to minimise any visible frame changes.
+        c.toggleFullscreen(mode: mode)
+    }
+
+    /// A controller for `state`'s window, not shown yet: its splits, tab
+    /// color, title and focus. Shared with Lostty's restart snapshot.
+    static func controller(_ ghostty: Ghostty.App, state: TerminalRestorableState) -> TerminalController? {
         // The window creation has to go through our terminalManager so that it
         // can be found for events from libghostty. This uses the low-level
         // createWindow so that AppKit can place the window wherever it should
         // be.
         let c = TerminalController.init(
-            appDelegate.ghostty,
+            ghostty,
             withSurfaceTree: state.surfaceTree)
-        guard let window = c.window else {
-            completionHandler(nil, TerminalRestoreError.windowDidNotLoad)
-            return
-        }
+        guard let window = c.window else { return nil }
 
         // Restore our tab color
         (window as? TerminalWindow)?.tabColor = state.tabColor
@@ -142,14 +165,7 @@ class TerminalWindowRestoration: NSObject, NSWindowRestoration {
             }
         }
 
-        completionHandler(window, nil)
-        guard let mode = state.effectiveFullscreenMode, mode != .native else {
-            // We let AppKit handle native fullscreen
-            return
-        }
-        // Give the window to AppKit first, then adjust its frame and style
-        // to minimise any visible frame changes.
-        c.toggleFullscreen(mode: mode)
+        return c
     }
 
     /// This restores the focus state of the surfaceview within the given window. When restoring,

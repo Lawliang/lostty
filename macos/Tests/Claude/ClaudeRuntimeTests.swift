@@ -1,4 +1,5 @@
 #if os(macOS)
+import Combine
 import Foundation
 import Testing
 @testable import Lostty
@@ -415,6 +416,31 @@ struct ClaudeRuntimeTests {
         #expect(ended.turns.isEmpty)
     }
 
+    @Test func stateMessagesTellTheGuardAPaneRunsAnAgent() {
+        let rt = makeRuntime()
+        var seen: [(UUID, HookAgent?)] = []
+        var gone: [UUID] = []
+        rt.agentSeen = { seen.append(($0, $1)) }
+        rt.agentGone = { gone.append($0) }
+        let name = ClaudeConstants.userVarName
+        rt.userVarChanged(pane, name: name, value: payload("busy"))
+        rt.userVarChanged(pane, name: name, value: action("Editing Foo.swift"))
+        rt.userVarChanged(pane, name: name, value: #"{"v":1,"state":"idle","transcript":"/Users/me/.codex/sessions/x.jsonl"}"#)
+        rt.userVarChanged(pane, name: name, value: payload("exit"))
+        #expect(seen.map(\.0) == [pane, pane, pane])
+        #expect(seen.map(\.1) == [nil, .claude, .codex])
+        #expect(gone == [pane])
+    }
+
+    @Test func theAgentKindFromAMessage() {
+        #expect(ClaudeMessage.agentKind(payload("busy")) == nil)
+        #expect(ClaudeMessage.agentKind(payload("agents")) == .claude)
+        #expect(ClaudeMessage.agentKind(action("Running ls")) == .claude)
+        #expect(ClaudeMessage.agentKind(#"{"v":1,"state":"idle","transcript":"/Users/me/.claude/projects/p/s.jsonl"}"#) == .claude)
+        #expect(ClaudeMessage.agentKind(#"{"v":1,"state":"idle","transcript":"/Users/me/.codex/sessions/s.jsonl"}"#) == .codex)
+        #expect(ClaudeMessage.agentKind(payload("idle")) == nil)
+    }
+
     @Test func handoffSignals() {
         let runtime = makeRuntime()
         var signals: [ContextHandoffSignal] = []
@@ -491,6 +517,26 @@ struct ClaudeRuntimeTests {
         let runtime = makeRuntime()
         runtime.userVarChanged(pane, name: ClaudeConstants.userVarName, value: payload("fresh"))
         #expect(runtime.phases[pane] == nil)
+    }
+
+    @Test func aPaneHearsOnlyItsOwnClaude() {
+        let runtime = makeRuntime()
+        let other = UUID()
+        let claude = PaneClaude(pane, runtime: runtime)
+        var changes = 0
+        let watch = claude.objectWillChange.sink { changes += 1 }
+        defer { watch.cancel() }
+
+        runtime.apply(.busy, to: other)
+        runtime.userVarChanged(other, name: ClaudeConstants.userVarName, value: action("Editing Foo.swift"))
+        #expect(changes == 0)
+        #expect(claude.phase == .off)
+
+        runtime.focusChanged(pane, focused: false)
+        runtime.apply(.busy, to: pane)
+        #expect(claude.phase == runtime.phase(pane) && !claude.phase.isOff)
+        runtime.apply(.idle, to: pane)
+        #expect(claude.awaiting)
     }
 }
 #endif

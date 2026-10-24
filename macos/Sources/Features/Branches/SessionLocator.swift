@@ -25,7 +25,8 @@ enum SessionLocator {
     static func panes() -> [BranchSession] {
         let claude = ClaudeRuntime.shared
         let usage = ClaudeUsageRuntime.shared
-        return TerminalController.all.flatMap { controller in
+        let controllers: [BaseTerminalController] = TerminalController.all + CanvasController.allCards
+        return controllers.flatMap { controller in
             controller.surfaceTree.compactMap { view -> BranchSession? in
                 guard let pwd = view.pwd, !pwd.isEmpty else { return nil }
                 let title = view.title.isEmpty ? (pwd as NSString).lastPathComponent : view.title

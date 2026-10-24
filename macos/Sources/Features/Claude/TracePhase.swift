@@ -2,13 +2,18 @@
 import Foundation
 
 /// One pane's trace: racing while Claude works, gone the moment it stops.
-/// `subagents`: Claude finished its turn but its subagents are still
-/// working, so the head keeps to the bottom edge.
+/// `subagents`: Claude finished its turn but its subagents or background
+/// shells are still working, so the head keeps to the bottom edge.
 enum TracePhase: Equatable {
     case off
     case racing(since: Date, subagents: Bool = false)
 
     var isOff: Bool { self == .off }
+
+    /// Claude finished its turn; only its subagents or shells still work.
+    var subagentsOnly: Bool {
+        if case .racing(_, true) = self { true } else { false }
+    }
 
     func applying(_ state: ClaudeState, now: Date) -> TracePhase {
         switch (state, self) {

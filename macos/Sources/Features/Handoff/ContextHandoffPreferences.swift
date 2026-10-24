@@ -1,7 +1,7 @@
 #if os(macOS)
 import Foundation
 
-/// Lostty Settings → Mascot: whether long conversations hand off, and
+/// Lostty Settings → Handoff: whether long conversations hand off, and
 /// after how many tokens (spec §2).
 @MainActor
 final class ContextHandoffPreferences: ObservableObject {

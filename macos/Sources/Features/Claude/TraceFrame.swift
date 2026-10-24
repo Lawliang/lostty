@@ -3,6 +3,10 @@ import Foundation
 /// Trace animation timings (spec §4).
 enum TraceTiming {
     static let fadeIn: TimeInterval = 0.2
+    /// The traces and the Window Light redraw at most 60 times a second,
+    /// not at a ProMotion display's 120: every frame of every lit pane
+    /// runs SwiftUI on the main thread and has the window recomposited.
+    static let frameInterval: TimeInterval = 1.0 / 60
 }
 
 /// What to draw at one instant, along the `EdgePath` the head has
@@ -14,6 +18,8 @@ struct TraceFrame: Equatable {
     var length: Double
     /// Overall opacity, 0...1.
     var intensity: Double
+    /// The glowing circle round the head (TraceDraw.flare).
+    var headGlow = true
 
     /// Fades in over `TraceTiming.fadeIn` from the trace's start.
     static func intensity(elapsed: TimeInterval) -> Double {

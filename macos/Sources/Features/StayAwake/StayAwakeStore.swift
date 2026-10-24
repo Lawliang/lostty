@@ -195,7 +195,7 @@ final class StayAwakeStore: ObservableObject {
 
     /// Asked when the person turns Stay Awake on, so its notices can show.
     static func requestNotificationAuthorization() {
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert]) { _, _ in }
     }
 
     static func postMacNotification(_ text: String) {
@@ -203,7 +203,6 @@ final class StayAwakeStore: ObservableObject {
         content.title = "Lostty"
         content.body = text
         content.userInfo = ["lostty": "stay-awake"]
-        content.sound = LosttyMute.isMuted() ? nil : UNNotificationSound.default
         UNUserNotificationCenter.current().add(
             UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil))
     }

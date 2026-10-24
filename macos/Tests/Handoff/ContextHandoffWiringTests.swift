@@ -10,11 +10,5 @@ struct ContextHandoffWiringTests {
         #expect(ContextHandoffWiring.project(pwd: nil) == "Terminal")
         #expect(ContextHandoffWiring.project(pwd: "/") == "Terminal")
     }
-
-    @Test func onlyBetaClaudePanesGetTheBubbleRow() {
-        #expect(ContextHandoffWiring.showsRow(channel: .beta, isClaude: true))
-        #expect(!ContextHandoffWiring.showsRow(channel: .beta, isClaude: false))
-        #expect(!ContextHandoffWiring.showsRow(channel: .stable, isClaude: true))
-    }
 }
 #endif

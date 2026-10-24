@@ -5,26 +5,27 @@ import LosttyRemote
 import Security
 
 /// Restart to Update: quit into the Lostty installed now without ending a
-/// single session. This Lostty leaves a `RestartHandoff`, tags its sessions
-/// as restarting (so nothing clears their state in the gap), forces window
-/// restoration on, starts a helper that reopens the app once it has exited,
-/// and terminates keeping its sessions (`isRestarting`). The new Lostty
-/// restores every window, tab and split; each pane's launcher reattaches
-/// to its session (`claimOrphan`), and `resumeIfRestarted` puts back the
-/// rest.
+/// single session. This Lostty snapshots its windows (`WindowSnapshot`),
+/// leaves them in a `RestartHandoff`, tags its sessions as restarting (so
+/// nothing clears their state in the gap), forces window restoration on
+/// (for the Quick Terminal), starts a helper that reopens the app once it
+/// has exited, and terminates keeping its sessions (`isRestarting`). The
+/// new Lostty rebuilds every window, tab and split where it was; each
+/// pane's launcher reattaches to its session (`claimOrphan`), and
+/// `resumeIfRestarted` puts back the rest.
 @MainActor
 enum LosttyRestart {
-    /// The mascot's conversations to hand over, by pane: none from a build
-    /// without the mascot.
-    static func transcripts(_ carried: [UUID: String], channel: LosttyChannel) -> [String: String]? {
-        guard channel.showsMascot else { return nil }
+    /// The turn observer's conversations to hand over, by pane: none while
+    /// it's off.
+    static func transcripts(_ carried: [UUID: String], observes: Bool) -> [String: String]? {
+        guard observes else { return nil }
         return Dictionary(uniqueKeysWithValues: carried.map { ($0.key.uuidString, $0.value) })
     }
 
-    /// The conversations to give back to the observer: none in a build
-    /// without the mascot, whatever the build before handed over.
-    static func restoredTranscripts(_ saved: [String: String]?, channel: LosttyChannel) -> [UUID: String] {
-        guard channel.showsMascot else { return [:] }
+    /// The conversations to give back to the observer: none while it's
+    /// off, whatever the build before handed over.
+    static func restoredTranscripts(_ saved: [String: String]?, observes: Bool) -> [UUID: String] {
+        guard observes else { return [:] }
         return Dictionary(uniqueKeysWithValues: (saved ?? [:]).compactMap { key, path in
             UUID(uuidString: key).map { ($0, path) }
         })
@@ -52,13 +53,45 @@ enum LosttyRestart {
         return true
     }
 
+    /// Whether this launch follows a restart that left a window snapshot.
+    /// Asked by window restoration, before `resumeIfRestarted` takes the
+    /// handoff: true means macOS's restored terminal windows stand down.
+    nonisolated static let restoresFromSnapshot: Bool = {
+        guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil,
+              let handoff = RestartHandoff.peek(at: RestartHandoff.standardURL) else { return false }
+        return handoff.windows != nil && handoff.isFresh(now: Date(), isAlive: ProcessLiveness.isAlive)
+    }()
+
     static func restart(reason: Reason) {
         guard begin() else { return }
+        // Before the panel: the windows as they are, the key one in front.
+        let windows = WindowSnapshot.capture()
+        // Sparkle quits as soon as this returns, and shows its own progress.
+        guard reason != .sparkle else {
+            if let failure = prepare(reason: reason, windows: windows) { fail(failure) }
+            return
+        }
+        // The checks below take a moment (the bundle's signature, the hooks'
+        // status); say why the windows haven't closed yet.
+        let panel = SavingWindowsPanel()
+        panel.show(over: NSApp.keyWindow)
+        // A turn of the run loop puts the panel on screen first.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            MainActor.assumeIsolated {
+                let failure = prepare(reason: reason, windows: windows)
+                panel.close()
+                if let failure { fail(failure) } else { NSApp.terminate(nil) }
+            }
+        }
+    }
+
+    /// Everything but quitting; what went wrong, if anything (nothing is
+    /// closed then).
+    private static func prepare(reason: Reason, windows: WindowSnapshot?) -> String? {
         // Sparkle has put a whole, signed bundle there; anything else may be
         // a copy still in progress.
         if reason != .sparkle, !bundleIsComplete(atPath: bundlePath) {
-            fail("The Lostty at \(bundlePath) isn't complete yet (still installing?). Try again in a moment.")
-            return
+            return "The Lostty at \(bundlePath) isn't complete yet (still installing?). Try again in a moment."
         }
         let pid = ProcessInfo.processInfo.processIdentifier
         let stayAwake = StayAwakeStore.shared
@@ -69,17 +102,16 @@ enum LosttyRestart {
             stayAwakeOn: stayAwake.isOn, stayAwakeUntil: stayAwake.until,
             hookAgents: agentsWithHooks { hooks.status(agent: $0) },
             keepWindows: UserDefaults.ghostty.object(forKey: keepWindowsKey) as? Bool,
-            transcripts: LosttyRestart.transcripts(TurnObserver.shared.carry(), channel: .current))
+            transcripts: LosttyRestart.transcripts(TurnObserver.shared.carry(), observes: LosttyChannel.current.observesTurns),
+            windows: windows)
         do {
             try handoff.save(to: RestartHandoff.standardURL)
         } catch {
-            fail("Lostty couldn't save what to restore (\(error.localizedDescription)).")
-            return
+            return "Lostty couldn't save what to restore (\(error.localizedDescription))."
         }
         if reason != .sparkle, !spawnDetached(reopenScript(pid: pid, bundle: bundlePath)) {
             try? FileManager.default.removeItem(at: RestartHandoff.standardURL)
-            fail("Lostty couldn't start its relauncher.")
-            return
+            return "Lostty couldn't start its relauncher."
         }
         // Its sessions aren't abandoned: no Lostty clears their state while
         // the next one starts.
@@ -89,7 +121,7 @@ enum LosttyRestart {
         UserDefaults.ghostty.set(true, forKey: keepWindowsKey)
         NSApp.invalidateRestorableState()
         for window in NSApp.windows { window.invalidateRestorableState() }
-        if reason != .sparkle { NSApp.terminate(nil) }
+        return nil
     }
 
     /// At launch: if the last Lostty restarted (not crashed), put back what
@@ -103,6 +135,10 @@ enum LosttyRestart {
         guard environment["XCTestConfigurationFilePath"] == nil,
               let handoff = RestartHandoff.take(from: url),
               handoff.isFresh(now: Date(), isAlive: ProcessLiveness.isAlive) else { return false }
+        // First, as window restoration would have: the rest finds the panes.
+        if let windows = handoff.windows, let ghostty = (NSApp.delegate as? AppDelegate)?.ghostty {
+            windows.restore(ghostty)
+        }
         if let keep = handoff.keepWindows {
             UserDefaults.ghostty.set(keep, forKey: keepWindowsKey)
         } else {
@@ -111,7 +147,7 @@ enum LosttyRestart {
         ClaudeRuntime.shared.restore(Dictionary(uniqueKeysWithValues: handoff.claude.compactMap { key, carry in
             UUID(uuidString: key).map { ($0, carry) }
         }))
-        TurnObserver.shared.restore(LosttyRestart.restoredTranscripts(handoff.transcripts, channel: .current))
+        TurnObserver.shared.restore(LosttyRestart.restoredTranscripts(handoff.transcripts, observes: LosttyChannel.current.observesTurns))
         // Before StayAwakeStore.start(), which would otherwise restore the
         // power settings it left applied.
         if handoff.stayAwakeOn { StayAwakeStore.shared.resume(until: handoff.stayAwakeUntil) }

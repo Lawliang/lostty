@@ -130,5 +130,41 @@ struct ClaudeUsageTests {
         #expect(ClaudeUsageBlocks.fill(for: 70, accent: .blue) != .blue)
         #expect(ClaudeUsageBlocks.fill(for: 95, accent: .blue) != ClaudeUsageBlocks.fill(for: 75, accent: .blue))
     }
+
+    @Test func shorterMetersKeepTheirShape() {
+        #expect(ClaudeUsageBlocks.string(50) == "▓▓▓▓▓░░░░░")
+        #expect(ClaudeUsageBlocks.string(50, cells: 5) == "▓▓▓░░")
+        #expect(ClaudeUsageBlocks.string(2, cells: 5) == "▓░░░░")
+        #expect(ClaudeUsageBlocks.string(50, cells: 0) == "")
+    }
+
+    /// Meters 300, 200, 150 and 60 wide in the four styles; the model 80.
+    private func fit(_ width: CGFloat, model: CGFloat? = 80) -> (style: ClaudeUsageFit.Style, showsModel: Bool) {
+        ClaudeUsageFit.fit(width: width, model: model, meters: [300, 200, 150, 60])
+    }
+
+    @Test func aWideBarShowsTheModelBesideTheFullMeters() {
+        // 4 + 300 + 12 + 80 + 12 + 36 = 444.
+        #expect(fit(444) == (ClaudeUsageFit.styles[0], true))
+        #expect(fit(2000) == (ClaudeUsageFit.styles[0], true))
+    }
+
+    @Test func theModelGoesFirstThenTheMetersShorten() {
+        // Without the model the full meters need 4 + 300 + 12 + 36 = 352.
+        #expect(fit(443) == (ClaudeUsageFit.styles[0], false))
+        #expect(fit(352) == (ClaudeUsageFit.styles[0], false))
+        #expect(fit(351) == (ClaudeUsageFit.styles[1], false))
+        #expect(fit(202) == (ClaudeUsageFit.styles[2], false))
+        #expect(fit(112) == (ClaudeUsageFit.styles[3], false))
+    }
+
+    @Test func theNarrowestBarStillShowsTheNumbers() {
+        #expect(fit(40) == (ClaudeUsageFit.styles[3], false))
+        #expect(fit(0) == (ClaudeUsageFit.styles[3], false))
+    }
+
+    @Test func noModelMeansTheFullMetersNeedOnlyClearTheAppsButton() {
+        #expect(fit(352, model: nil) == (ClaudeUsageFit.styles[0], false))
+    }
 }
 #endif

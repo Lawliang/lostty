@@ -56,7 +56,7 @@ struct ContextHandoffExtractTests {
 
     @Test func theTemplateItselfIsNotAHandoff() {
         let template = ContextHandoffDirective.text(level: .limit, used: 312_000, limit: 300_000, ceiling: 400_000,
-                                                    byButton: false, problem: nil)
+                                                    byButton: false, problem: nil, file: "/tmp/pane.handoff.md")
         let block = template[template.range(of: "<lostty-handoff>")!.lowerBound...]
             .prefix { _ in true }
         let echoed = String(block[..<block.range(of: "</lostty-handoff>")!.upperBound])

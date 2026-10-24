@@ -29,6 +29,14 @@ final class ClaudeRuntime: ObservableObject {
     /// naming its conversation file: the turn observer's cue. Set at launch.
     var turnEnded: @MainActor (UUID, String) -> Void = { _, _ in }
 
+    /// A pane's agent exited (SessionEnd, or the shell reported the command
+    /// finished): the guard stops typing outcomes into it. Set at launch.
+    var agentGone: @MainActor (UUID) -> Void = { _ in }
+
+    /// A pane's agent sent a state message, naming which agent when it can
+    /// tell: the guard learns the pane runs an agent, for its badge.
+    var agentSeen: @MainActor (UUID, HookAgent?) -> Void = { _, _ in }
+
     /// What the context handoff hears: turn ends, prompts, a fresh window
     /// after /clear, and the pane's agent going away. Set at launch.
     var handoffSignal: @MainActor (UUID, ContextHandoffSignal) -> Void = { _, _ in }
@@ -77,12 +85,14 @@ final class ClaudeRuntime: ObservableObject {
             if phase(id).isOff { apply(.busy, to: id) }
             hookTurns.insert(id)
             setAction(action, for: id)
+            agentSeen(id, ClaudeMessage.agentKind(value))
             return
         }
         guard let state = ClaudeMessage.decode(value) else {
             Ghostty.logger.debug("claude: rejected malformed \(ClaudeConstants.userVarName) payload")
             return
         }
+        if state == .exit { agentGone(id) } else { agentSeen(id, ClaudeMessage.agentKind(value)) }
         // Only a turn that was under way ends: anything printed in a pane can
         // carry this user var, so an idle out of nowhere names no file.
         let turnUnderWay = !phase(id).isOff
@@ -95,7 +105,10 @@ final class ClaudeRuntime: ObservableObject {
         case .exit: hookTurns.remove(id)
         default: break
         }
+        if state == .exit { LastSessionStore.shared.agentGone(id) }
         guard state == .idle, let path = ClaudeMessage.transcript(value) else { return }
+        // The conversation to resume after the Mac restarts.
+        LastSessionStore.shared.conversation(id, transcript: path)
         if turnUnderWay { turnEnded(id, path) }
         if !permission, hookTurns.remove(id) != nil { handoffSignal(id, .stopped(transcript: path)) }
     }
@@ -103,12 +116,16 @@ final class ClaudeRuntime: ObservableObject {
     /// The pane's shell reported a command finished, so whatever ran there
     /// (claude included) is gone: a racing trace must not stay up.
     func commandFinished(_ id: UUID) {
+        agentGone(id)
+        LastSessionStore.shared.agentGone(id)
         apply(.exit, to: id)
         hookTurns.remove(id)
         handoffSignal(id, .gone)
     }
 
     func surfaceClosed(_ id: UUID) {
+        agentGone(id)
+        LastSessionStore.shared.agentGone(id)
         phases[id] = nil
         unfocused.remove(id)
         seen.remove(id)
@@ -267,6 +284,25 @@ extension ClaudeRuntime {
             }
             setAction(carry.action, for: id)
         }
+    }
+}
+
+/// One pane's share of `ClaudeRuntime`, for the views over that pane: they
+/// update when its Claude changes, not each time any pane's does (a tool
+/// call anywhere changes `actions`, and every pane has these views).
+@MainActor
+final class PaneClaude: ObservableObject {
+    @Published private(set) var phase: TracePhase = .off
+    @Published private(set) var awaiting = false
+    private var watchers: Set<AnyCancellable> = []
+
+    init(_ id: UUID, runtime: ClaudeRuntime = .shared) {
+        runtime.$phases.map { $0[id] ?? .off }.removeDuplicates()
+            .sink { [weak self] in self?.phase = $0 }
+            .store(in: &watchers)
+        runtime.$awaiting.map { $0.contains(id) }.removeDuplicates()
+            .sink { [weak self] in self?.awaiting = $0 }
+            .store(in: &watchers)
     }
 }
 #endif

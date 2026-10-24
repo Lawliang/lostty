@@ -14,6 +14,7 @@ struct BranchesPanel: View {
                 subtitle: model.snapshot?.base.map { "base \($0)" },
                 busy: model.refreshing && model.status == .loaded,
                 onClose: onClose)
+            if AgentCoordination.isOn { GuardApprovalsSection() }
             Divider().overlay(LosttyTheme.hairline)
             content
         }

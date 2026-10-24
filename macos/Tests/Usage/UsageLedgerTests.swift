@@ -62,6 +62,7 @@ struct UsageLedgerTests {
         let first = UsageLedger(url: url)
         first.reported("/c/a.jsonl", at: now, locate: claude)
         first.record(["m": TokenCounts(output: 3)], source: .branchSummary, at: now)
+        first.flush()
         let second = UsageLedger(url: url)
         #expect(second.conversations(now: now).map(\.path) == ["/c/a.jsonl"])
         #expect(second.runs(now: now) == first.runs(now: now))
@@ -74,6 +75,7 @@ struct UsageLedgerTests {
         let ledger = UsageLedger(url: url)
         #expect(ledger.conversations(now: now).isEmpty && ledger.runs(now: now).isEmpty)
         ledger.record(["m": TokenCounts(input: 1)], source: .observer, at: now)
+        ledger.flush()
         #expect(UsageLedger(url: url).runs(now: now).count == 1)
     }
 

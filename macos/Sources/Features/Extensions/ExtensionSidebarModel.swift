@@ -2,16 +2,18 @@
 import AppKit
 import Combine
 
-/// An extension reachable from the window's sidebar. Order is sidebar order.
+/// An extension reachable from the bottom bar's apps button. Order is the
+/// order the bar shows them in.
 enum LosttyExtension: String, CaseIterable, Identifiable {
     case branches
     case skins
 
-    /// How an open extension shows: over the terminal, or inside the
-    /// sidebar, which widens to `width` over the terminal's edge.
+    /// How an open extension shows: over the terminal, or over the whole
+    /// window below the title bar (the bottom bar included), until closed
+    /// from its own close button.
     enum Presentation: Equatable {
         case overlay
-        case sidebar(width: CGFloat)
+        case window
     }
 
     var id: String { rawValue }
@@ -31,7 +33,7 @@ enum LosttyExtension: String, CaseIterable, Identifiable {
 
     var presentation: Presentation {
         switch self {
-        case .branches: .sidebar(width: 340)
+        case .branches: .window
         case .skins: .overlay
         }
     }
@@ -66,6 +68,10 @@ final class ExtensionSidebarModel: ObservableObject {
     }
     /// The title bar's color (the top pane's background), set by the window.
     @Published var chromeColor: NSColor?
+    /// The bottom bar shows the apps in place of Claude's usage.
+    @Published private(set) var showsApps = false
+    /// A new window's "what's it for?" question, over everything in it.
+    @Published var newWindowPrompt: NewWindowPrompt?
 
     /// Gives keyboard focus back to the window's focused pane. Set by the
     /// window's controller.
@@ -76,13 +82,16 @@ final class ExtensionSidebarModel: ObservableObject {
 
     /// The extensions this build offers, in sidebar order.
     let available: [LosttyExtension]
-    /// The axolotl in the terminal's corner (beta only).
-    let showsMascot: Bool
+    /// The notification bubbles at the terminal's top right (not on canvas
+    /// cards: the canvas shows one stack for all of them).
+    let showsNotifications: Bool
 
-    init(branches: BranchesModel? = nil, channel: LosttyChannel = .current) {
+    init(
+        branches: BranchesModel? = nil, channel: LosttyChannel = .current, notifications: Bool = true
+    ) {
         self.branches = branches ?? BranchesModel()
         available = LosttyExtension.available(in: channel)
-        showsMascot = channel.showsMascot
+        showsNotifications = notifications
     }
 
     /// Clicking an icon opens its extension; clicking the open one closes it.
@@ -90,6 +99,12 @@ final class ExtensionSidebarModel: ObservableObject {
     func select(_ ext: LosttyExtension) {
         guard available.contains(ext) else { return }
         active = active == ext ? nil : ext
+    }
+
+    /// The bottom bar's apps button: shows the apps, or puts the usage back.
+    /// An open app stays open either way.
+    func toggleApps() {
+        showsApps.toggle()
     }
 
     /// A panel's back button and Esc.

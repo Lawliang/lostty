@@ -74,18 +74,18 @@ struct LosttyRestartTests {
         #expect(FileManager.default.fileExists(atPath: url.path))
     }
 
-    @Test func onlyABuildWithTheMascotHandsOverItsConversations() {
+    @Test func onlyWhileTheObserverIsOnAreItsConversationsHandedOver() {
         let pane = UUID()
-        #expect(LosttyRestart.transcripts([pane: "/t.jsonl"], channel: .beta) == [pane.uuidString: "/t.jsonl"])
-        #expect(LosttyRestart.transcripts([pane: "/t.jsonl"], channel: .stable) == nil)
+        #expect(LosttyRestart.transcripts([pane: "/t.jsonl"], observes: true) == [pane.uuidString: "/t.jsonl"])
+        #expect(LosttyRestart.transcripts([pane: "/t.jsonl"], observes: false) == nil)
     }
 
-    @Test func stableIgnoresConversationsABetaHandedOver() {
+    @Test func anObserverThatIsOffIgnoresConversationsHandedOver() {
         let pane = UUID()
         let saved = [pane.uuidString: "/t.jsonl", "not a uuid": "/x.jsonl"]
-        #expect(LosttyRestart.restoredTranscripts(saved, channel: .beta) == [pane: "/t.jsonl"])
-        #expect(LosttyRestart.restoredTranscripts(saved, channel: .stable).isEmpty)
-        #expect(LosttyRestart.restoredTranscripts(nil, channel: .beta).isEmpty)
+        #expect(LosttyRestart.restoredTranscripts(saved, observes: true) == [pane: "/t.jsonl"])
+        #expect(LosttyRestart.restoredTranscripts(saved, observes: false).isEmpty)
+        #expect(LosttyRestart.restoredTranscripts(nil, observes: true).isEmpty)
     }
 }
 #endif

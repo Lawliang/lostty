@@ -51,6 +51,25 @@ enum ClaudeMessage {
         return path
     }
 
+    /// Which agent sent this, when the message says: only Claude's hooks
+    /// send `tool`, `agents` and `resumed`, and an `idle` names its
+    /// transcript, which lives under the agent's own folder. Nil when it
+    /// can't tell (a `busy` comes from either).
+    static func agentKind(_ value: String) -> HookAgent? {
+        guard let object = object(value), let state = object["state"] as? String else { return nil }
+        switch state {
+        case "tool", "agents", "resumed":
+            return .claude
+        case "idle":
+            guard let path = object["transcript"] as? String else { return nil }
+            if path.contains("/.codex/") { return .codex }
+            if path.contains("/.claude/") { return .claude }
+            return nil
+        default:
+            return nil
+        }
+    }
+
     /// `{"v":1,"state":"fresh"}`: a fresh window's start hook took the
     /// context handoff after /clear. Not a ClaudeState: it changes no phase.
     static func isFresh(_ value: String) -> Bool {

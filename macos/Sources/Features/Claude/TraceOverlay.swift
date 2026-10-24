@@ -3,19 +3,55 @@ import AppKit
 import SwiftUI
 
 /// The Claude trace for one pane (spec §4). Lives in SurfaceWrapper's
-/// ZStack; draws nothing (and is not in the tree) while the pane is idle.
+/// ZStack; draws nothing while the pane is idle. On a zoomed-out canvas it
+/// keeps its size on screen.
 struct ClaudeTraceLayer: View {
     let surfaceID: UUID
-    @ObservedObject private var runtime = ClaudeRuntime.shared
+    @StateObject private var claude: PaneClaude
     @ObservedObject private var skins = SkinsRuntime.shared.manager
+    @AppStorage(TraceStyle.defaultsKey, store: .ghostty) private var style = TraceStyle.initial
+    /// The canvas's zoom on a card, 1 in a window.
+    @State private var zoom: CGFloat = 1
+    /// The head's motion, kept across frames: the Window Light's and its
+    /// bottom glow's together, so the glow comes on as the light reaches
+    /// the bottom edge.
+    @State private var journey = TraceOverlay.Journey()
+
+    init(surfaceID: UUID) {
+        self.surfaceID = surfaceID
+        _claude = StateObject(wrappedValue: PaneClaude(surfaceID))
+    }
 
     var body: some View {
-        let phase = runtime.phase(surfaceID)
-        if !phase.isOff,
-           let trace = ResolvedTrace.resolve(skin: skins.effectiveSkin(surfaceID), enabled: skins.config.trace) {
-            TraceOverlay(phase: phase, trace: trace)
-                .allowsHitTesting(false)
+        let phase = claude.phase
+        // In Window Light the website's light circles the pane while Claude
+        // works; while only subagents or shells do, it runs along the
+        // bottom edge over their bottom glow, which it draws too.
+        let windowLight = style == .window
+        ZStack {
+            if windowLight {
+                PaneLightView(surfaceID: surfaceID, phase: phase, journey: journey, zoom: zoom)
+            }
+            if !phase.isOff, !windowLight,
+               let trace = ResolvedTrace.resolve(skin: skins.effectiveSkin(surfaceID), enabled: skins.config.trace) {
+                TraceOverlay(phase: phase, trace: trace, journey: journey,
+                             headGlow: style != .skinNoGlow, canvasZoom: zoom)
+            }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(CanvasZoomProbe(zoom: $zoom))
+        .allowsHitTesting(false)
+    }
+}
+
+/// On a zoomed-out canvas, the Window Light draws as big on screen as at
+/// 100%: its lines and glow widened by the zoom, so they keep their width
+/// instead of thinning to nothing. Zoomed in, and in a window, as is.
+enum CanvasZoomCompensation {
+    /// How much bigger than at 100% the light draws at `zoom`.
+    static func scale(zoom: CGFloat) -> CGFloat {
+        guard zoom > 0 else { return 1 }
+        return 1 / min(1, zoom)
     }
 }
 
@@ -24,10 +60,14 @@ struct TraceOverlay: View {
 
     let phase: TracePhase
     let trace: ResolvedTrace
+    let journey: Journey
+    /// The glowing circle round the racing head.
+    var headGlow = true
+    /// The canvas's zoom on a card, 1 in a window.
+    var canvasZoom: CGFloat = 1
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(TraceRoute.defaultsKey, store: .ghostty) private var route = TraceRoute.initial
     @State private var windowVisible = true
-    @State private var journey = Journey()
 
     /// The head's motion, kept across frames. A class so drawing can
     /// advance it without invalidating the view.
@@ -36,43 +76,22 @@ struct TraceOverlay: View {
         var motion = TraceMotion()
     }
 
-    var body: some View {
-        TimelineView(.animation(paused: !windowVisible)) { timeline in
-            Canvas { ctx, size in
-                guard case .racing(let since, let subagents) = phase else { return }
-                let rect = Self.edgeRect(size)
-                let course: TraceCourse = subagents ? .subagents : .route(route)
-                let elapsed = max(0, timeline.date.timeIntervalSince(since))
-                let colors = TraceColors(trace)
-                let time = timeline.date.timeIntervalSinceReferenceDate
-                ctx.blendMode = .plusLighter
-                if reduceMotion {
-                    let intensity = TraceFrame.intensity(elapsed: elapsed)
-                    if subagents { Self.drawBottomGlow(in: &ctx, rect: rect, level: intensity, colors: colors) }
-                    Self.drawCalmGlow(in: &ctx, outline: course.outline(in: rect), intensity: intensity, time: time, colors: colors)
-                    return
-                }
+    private var drawing: TraceDrawing {
+        TraceDrawing(phase: phase, trace: trace, route: route, headGlow: headGlow,
+                     reduceMotion: reduceMotion)
+    }
 
-                if journey.since != since {
-                    journey.since = since
-                    journey.motion = TraceMotion()
+    var body: some View {
+        if canvasZoom < 1 {
+            ZoomedTraceView(drawing: drawing, journey: journey, zoom: canvasZoom)
+        } else {
+            TimelineView(.animation(minimumInterval: TraceTiming.frameInterval, paused: !windowVisible)) { timeline in
+                Canvas { ctx, size in
+                    drawing.draw(in: &ctx, size: size, at: timeline.date, journey: journey)
                 }
-                let legSeconds = TraceFrame.legSeconds(speed: trace.speed)
-                journey.motion.advance(to: elapsed, course: course, legSeconds: legSeconds)
-                let path = journey.motion.path(in: rect, at: elapsed, legSeconds: legSeconds)
-                guard path.length > 0 else { return }
-                // The tail is sized by the person's route, so it keeps its
-                // length on the bottom edge; early on it is only as long as
-                // the way travelled.
-                let tail = min(path.length, trace.length * TraceCourse.route(route).lapLength(in: rect))
-                let frame = TraceFrame(head: 1, length: tail / path.length, intensity: TraceFrame.intensity(elapsed: elapsed))
-                Self.drawBottomGlow(in: &ctx, rect: rect, level: journey.motion.bottomGlow(at: elapsed) * frame.intensity,
-                                    colors: colors)
-                TraceRenderers.renderer(for: trace.style)
-                    .draw(in: &ctx, along: path, frame: frame, time: time, colors: colors)
             }
+            .background(OcclusionProbe(visible: $windowVisible))
         }
-        .background(OcclusionProbe(visible: $windowVisible))
     }
 
     /// The pane's inside edge. Degenerate panes collapse to a point so every
@@ -116,9 +135,191 @@ struct TraceOverlay: View {
     }
 }
 
+/// One pane's trace, frame by frame: what TraceOverlay's Canvas draws, and
+/// on a zoomed-out canvas ZoomedTraceView.
+struct TraceDrawing {
+    let phase: TracePhase
+    let trace: ResolvedTrace
+    let route: TraceRoute
+    let headGlow: Bool
+    let reduceMotion: Bool
+
+    /// The frame at `date` in a pane of `size`.
+    func draw(in ctx: inout GraphicsContext, size: CGSize, at date: Date, journey: TraceOverlay.Journey) {
+        guard case .racing(let since, let subagents) = phase else { return }
+        let rect = TraceOverlay.edgeRect(size)
+        let course: TraceCourse = subagents ? .subagents : .route(route)
+        let elapsed = max(0, date.timeIntervalSince(since))
+        let colors = TraceColors(trace)
+        let time = date.timeIntervalSinceReferenceDate
+        ctx.blendMode = .plusLighter
+        if reduceMotion {
+            let intensity = TraceFrame.intensity(elapsed: elapsed)
+            if subagents { TraceOverlay.drawBottomGlow(in: &ctx, rect: rect, level: intensity, colors: colors) }
+            TraceOverlay.drawCalmGlow(in: &ctx, outline: course.outline(in: rect), intensity: intensity, time: time, colors: colors)
+            return
+        }
+
+        if journey.since != since {
+            journey.since = since
+            journey.motion = TraceMotion()
+        }
+        let legSeconds = TraceFrame.legSeconds(speed: trace.speed)
+        journey.motion.advance(to: elapsed, course: course, legSeconds: legSeconds)
+        let path = journey.motion.path(in: rect, at: elapsed, legSeconds: legSeconds)
+        guard path.length > 0 else { return }
+        // The tail is sized by the person's route, so it keeps its
+        // length on the bottom edge; early on it is only as long as
+        // the way travelled.
+        let tail = min(path.length, trace.length * TraceCourse.route(route).lapLength(in: rect))
+        let frame = TraceFrame(
+            head: 1, length: tail / path.length, intensity: TraceFrame.intensity(elapsed: elapsed), headGlow: headGlow)
+        TraceOverlay.drawBottomGlow(in: &ctx, rect: rect, level: journey.motion.bottomGlow(at: elapsed) * frame.intensity,
+                                    colors: colors)
+        TraceRenderers.renderer(for: trace.style)
+            .draw(in: &ctx, along: path, frame: frame, time: time, colors: colors)
+    }
+}
+
+/// The trace on a zoomed-out canvas. There SwiftUI's Canvas paints only
+/// part of the pane, a share the zoom sets from its top-left corner, so
+/// AppKit draws the same frames instead, and the canvas scales them as it
+/// does any view. Drawn at the pane's size on screen, so lines and glows
+/// keep their width.
+struct ZoomedTraceView: NSViewRepresentable {
+    let drawing: TraceDrawing
+    let journey: TraceOverlay.Journey
+    let zoom: CGFloat
+
+    func makeNSView(context: Context) -> DrawingView { DrawingView() }
+
+    func updateNSView(_ view: DrawingView, context: Context) {
+        view.drawing = drawing
+        view.journey = journey
+        view.zoom = zoom
+    }
+
+    final class DrawingView: NSView {
+        var drawing: TraceDrawing?
+        var zoom: CGFloat = 1
+        var journey = TraceOverlay.Journey()
+        private var timer: Timer?
+
+        override init(frame frameRect: NSRect) {
+            super.init(frame: frameRect)
+            wantsLayer = true
+            layerContentsRedrawPolicy = .onSetNeedsDisplay
+        }
+
+        required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+        override var isFlipped: Bool { true }
+
+        /// Clicks go to the pane under it.
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            timer?.invalidate()
+            timer = nil
+            guard window != nil else { return }
+            // As often as the trace in a window draws, pinches and scrolls
+            // included.
+            let timer = Timer(timeInterval: TraceTiming.frameInterval, repeats: true) { [weak self] _ in self?.tick() }
+            RunLoop.main.add(timer, forMode: .common)
+            self.timer = timer
+        }
+
+        deinit { timer?.invalidate() }
+
+        /// Paused while the window is minimized or covered.
+        private func tick() {
+            guard window?.occlusionState.contains(.visible) == true else { return }
+            needsDisplay = true
+        }
+
+        override func draw(_ dirtyRect: NSRect) {
+            guard let drawing, zoom > 0, let cg = NSGraphicsContext.current?.cgContext else { return }
+            let journey = self.journey
+            let date = Date()
+            let size = CGSize(width: bounds.width * zoom, height: bounds.height * zoom)
+            let renderer = ImageRenderer(content: Canvas { ctx, size in
+                drawing.draw(in: &ctx, size: size, at: date, journey: journey)
+            }.frame(width: size.width, height: size.height))
+            let height = bounds.height
+            let zoom = zoom
+            renderer.render { _, render in
+                cg.saveGState()
+                // The renderer draws y-up, at the pane's size on screen.
+                cg.translateBy(x: 0, y: height)
+                cg.scaleBy(x: 1 / zoom, y: -1 / zoom)
+                render(cg)
+                cg.restoreGState()
+            }
+        }
+    }
+}
+
+/// Reports the zoom of the canvas the view is on (1 off the canvas), as
+/// it changes.
+struct CanvasZoomProbe: NSViewRepresentable {
+    @Binding var zoom: CGFloat
+
+    func makeNSView(context: Context) -> Probe {
+        Probe { magnification in
+            DispatchQueue.main.async { if zoom != magnification { zoom = magnification } }
+        }
+    }
+
+    func updateNSView(_ nsView: Probe, context: Context) {}
+
+    final class Probe: NSView {
+        private let onChange: (CGFloat) -> Void
+        private var token: NSObjectProtocol?
+        /// The zoom last reported: panning posts the same notification.
+        private var reported: CGFloat?
+
+        init(onChange: @escaping (CGFloat) -> Void) {
+            self.onChange = onChange
+            super.init(frame: .zero)
+        }
+
+        required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+        /// Clicks go to the pane under it.
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if let token { NotificationCenter.default.removeObserver(token) }
+            token = nil
+            var view = superview
+            while let next = view, !(next is CanvasScrollView) { view = next.superview }
+            guard let canvas = view as? CanvasScrollView else { return report(1) }
+            // The clip view's bounds change as the canvas pans and zooms.
+            token = NotificationCenter.default.addObserver(
+                forName: NSView.boundsDidChangeNotification, object: canvas.contentView, queue: .main
+            ) { [weak self, weak canvas] _ in
+                if let canvas { self?.report(canvas.magnification) }
+            }
+            report(canvas.magnification)
+        }
+
+        private func report(_ zoom: CGFloat) {
+            guard zoom != reported else { return }
+            reported = zoom
+            onChange(zoom)
+        }
+
+        deinit {
+            if let token { NotificationCenter.default.removeObserver(token) }
+        }
+    }
+}
+
 /// Reports whether the hosting window is visible (not minimized or fully
 /// covered), so the animation can pause.
-private struct OcclusionProbe: NSViewRepresentable {
+struct OcclusionProbe: NSViewRepresentable {
     @Binding var visible: Bool
 
     func makeNSView(context: Context) -> Probe {

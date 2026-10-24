@@ -51,6 +51,10 @@ struct TerminalView<ViewModel: TerminalViewModel>: View {
     /// (e.g. the Quick Terminal).
     var extensionSidebar: ExtensionSidebarModel?
 
+    /// Lostty: the What's New card; off on a canvas card (the canvas window
+    /// is not one of the windows it greets).
+    var showsWhatsNew = true
+
     /// The most recently focused surface, equal to `focusedSurface` when it is non-nil.
     @State private var lastFocusedSurface: Weak<Ghostty.SurfaceView>?
 
@@ -82,6 +86,11 @@ struct TerminalView<ViewModel: TerminalViewModel>: View {
                     terminalContent
                 }
 
+                // Lostty: a new window's "what's it for?", over it all.
+                if let extensionSidebar {
+                    NewWindowPromptOverlay(sidebar: extensionSidebar)
+                }
+
                 if let surfaceView = lastFocusedSurface?.value {
                     TerminalCommandPaletteView(
                         surfaceView: surfaceView,
@@ -95,6 +104,11 @@ struct TerminalView<ViewModel: TerminalViewModel>: View {
                 // Show update information above all else.
                 if viewModel.updateOverlayIsVisible {
                     UpdateOverlay()
+                }
+
+                // Lostty: what's new, or a new build ready to restart into.
+                if let extensionSidebar, showsWhatsNew {
+                    WhatsNewOverlay(window: ObjectIdentifier(extensionSidebar))
                 }
             }
             .frame(maxWidth: .greatestFiniteMagnitude, maxHeight: .greatestFiniteMagnitude)

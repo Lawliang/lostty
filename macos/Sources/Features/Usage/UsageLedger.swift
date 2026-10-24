@@ -36,6 +36,11 @@ final class UsageLedger: @unchecked Sendable {
     private let url: URL
     private let lock = NSLock()
     private var contents: Contents
+    /// Saves run here, off the caller's thread: the file is hundreds of
+    /// kilobytes, and turn ends report from the main thread.
+    private let saving = DispatchQueue(label: "com.lawliang.lostty.usage-ledger", qos: .utility)
+    /// A save is queued; changes until it runs ride along with it.
+    private var savePending = false
 
     /// An unreadable file reads as empty; the next change rewrites it.
     init(url: URL) {
@@ -83,15 +88,30 @@ final class UsageLedger: @unchecked Sendable {
         return contents.runs.filter { now.timeIntervalSince($0.at) < Self.keep }
     }
 
-    /// Edits, drops what's older than 8 days, and saves.
+    /// Waits for queued saves to reach the file.
+    func flush() {
+        saving.sync {}
+    }
+
+    /// Edits, drops what's older than 8 days, and queues a save.
     private func change(_ now: Date, _ edit: (inout Contents) -> Void) {
         lock.lock()
         defer { lock.unlock() }
         edit(&contents)
         contents.conversations = contents.conversations.filter { now.timeIntervalSince($0.value) < Self.keep }
         contents.runs.removeAll { now.timeIntervalSince($0.at) >= Self.keep }
+        guard !savePending else { return }
+        savePending = true
+        saving.async { self.save() }
+    }
+
+    private func save() {
+        lock.lock()
+        let snapshot = contents
+        savePending = false
+        lock.unlock()
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        if let data = try? JSONEncoder().encode(contents) {
+        if let data = try? JSONEncoder().encode(snapshot) {
             try? data.write(to: url, options: .atomic)
         }
     }

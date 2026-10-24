@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 import UserNotifications
 import OSLog
@@ -137,6 +138,20 @@ class AppDelegate: NSObject,
         updateController.viewModel
     }
 
+    /// Lostty: Settings → Updates, applied as it changes.
+    private var updatePreferenceWatch: AnyCancellable?
+
+    /// Lostty's updates: release builds check daily, and download in the
+    /// background or ask first (Settings → Updates); a build made on this Mac
+    /// never checks (UpdateFeed). Setting both every time also means Sparkle
+    /// never asks "check automatically?".
+    private func applyUpdateSchedule(autoUpdate: Ghostty.Config.AutoUpdate?, installsAutomatically: Bool) {
+        let schedule = UpdateFeed.schedule(hasFeed: UpdateFeed.current != nil, autoUpdate: autoUpdate,
+                                           installsAutomatically: installsAutomatically)
+        updateController.updater.automaticallyChecksForUpdates = schedule.checks
+        updateController.updater.automaticallyDownloadsUpdates = schedule.downloads
+    }
+
     /// The elapsed time since the process was started
     var timeSinceLaunch: TimeInterval {
         return ProcessInfo.processInfo.systemUptime - applicationLaunchTime
@@ -159,6 +174,8 @@ class AppDelegate: NSObject,
     private var menuItemsByShortcut: [MenuShortcutKey: Weak<NSMenuItem>] = [:]
 
     override init() {
+        // Before any terminal looks up its font.
+        BundledTerminalFonts.register()
 #if DEBUG
         ghostty = Ghostty.App(configPath: ProcessInfo.processInfo.environment["GHOSTTY_CONFIG_PATH"])
 #else
@@ -288,14 +305,19 @@ class AppDelegate: NSObject,
 
         let center = UNUserNotificationCenter.current()
 
-        center.setNotificationCategories([
+        var categories: Set<UNNotificationCategory> = [
             UNNotificationCategory(
                 identifier: Ghostty.userNotificationCategory,
                 actions: actions,
                 intentIdentifiers: [],
                 options: [.customDismissAction]
-            )
-        ])
+            ),
+        ]
+        if AgentCoordination.isOn {
+            let guardDeny = UNNotificationAction(identifier: GuardRuntime.denyAction, title: "Deny", options: [.destructive])
+            categories.insert(UNNotificationCategory(identifier: GuardRuntime.category, actions: [guardDeny], intentIdentifiers: [], options: [.customDismissAction]))
+        }
+        center.setNotificationCategories(categories)
         center.delegate = self
 
         // Observe our appearance so we can report the correct value to libghostty.
@@ -354,15 +376,19 @@ class AppDelegate: NSObject,
         SettingsUI.installMenuItem(after: menuOpenConfig)
         // Restart to Update in the app menu, once a new build is installed.
         RestartUI.installMenuItem(after: menuOpenConfig)
-        // Each turn's end, from the agent hooks: the usage breakdown, and in
-        // the beta the mascot's turn observer, which also finds out which
+        // Lostty Beta: the canvas, in the Window menu.
+        CanvasMenu.install(before: menuBringAllToFront)
+        // File → Reopen from History, under Close All Windows.
+        SessionHistoryMenu.install(after: menuCloseAllWindows)
+        // Each turn's end, from the agent hooks: the usage breakdown, and
+        // while it's on the turn observer, which also finds out which
         // summarizer it can use. Before the restart resume, which hands it
         // each pane's conversation.
         ClaudeRuntime.shared.turnEnded = TurnEnd.handler(
-            channel: .current,
+            observes: LosttyChannel.current.observesTurns,
             observe: { pane, path in TurnObserver.shared.turnEnded(pane: pane, path: path) },
             report: { UsageLedger.shared.reported($0) })
-        if LosttyChannel.current.showsMascot { TurnObserver.shared.start() }
+        if LosttyChannel.current.observesTurns { TurnObserver.shared.start() }
         // The context handoff (beta): before the restart resume's hook
         // reinstall, which brings in the handoff's hook events.
         ContextHandoffWiring.start()
@@ -370,6 +396,9 @@ class AppDelegate: NSObject,
         // (Claude's state, Stay Awake, the window setting, hooks). Before
         // Stay Awake's crash restore, the hooks check and the Claude sync.
         LosttyRestart.resumeIfRestarted()
+        // After the Mac restarts (or a quit): "Continue your last session?";
+        // then the session is kept up to date for next time.
+        SessionRestore.offerAtLaunch(ghostty)
         // Lostty Mobile: put back power settings a crashed Lostty left
         // changed, then the menu bar icon (Stay Awake for Phone).
         StayAwakeStore.shared.start()
@@ -378,7 +407,19 @@ class AppDelegate: NSObject,
         LosttyStatusItem.shared.installIfEnabled()
         // Restart to Update: notice a new build installed over this one.
         BundleWatch.shared.start()
+        // A new build ready: a banner, and a card in the next window.
+        WhatsNewCenter.shared.start(updates: updateViewModel)
+        // Settings → Updates applies at once (its new value, mid-change).
+        updatePreferenceWatch = UpdatePreferences.shared.$installsAutomatically.dropFirst().sink { [weak self] automatic in
+            guard let self else { return }
+            applyUpdateSchedule(autoUpdate: ghostty.config.autoUpdate, installsAutomatically: automatic)
+        }
         HookNotifications.checkAtLaunch()
+        if AgentCoordination.isOn {
+            GuardRuntime.shared.start()
+            ClaudeRuntime.shared.agentGone = { GuardRuntime.shared.agentGone($0) }
+            ClaudeRuntime.shared.agentSeen = { GuardRuntime.shared.agentSeen($0, kind: $1) }
+        }
 
         // Lostty Mobile: after a crash, offer to reopen the tmux sessions
         // the previous Lostty left running.
@@ -452,7 +493,9 @@ class AppDelegate: NSObject,
             // is possible to have other windows in a few scenarios:
             //   - if we're opening a URL since `application(_:openFile:)` is called before this.
             //   - if we're restoring from persisted state
-            if TerminalController.all.isEmpty && derivedConfig.initialWindow {
+            // Lostty: not while "Continue your last session?" is up.
+            if TerminalController.all.isEmpty && CanvasController.shared?.window?.isVisible != true
+                && derivedConfig.initialWindow && !SessionRestore.offers {
                 undoManager.disableUndoRegistration()
                 _ = TerminalController.newWindow(ghostty)
                 undoManager.enableUndoRegistration()
@@ -501,7 +544,8 @@ class AppDelegate: NSObject,
         // NOTE(mitchellh): I don't think we need this check at all anymore. I'm keeping it
         // here because I don't want to remove it in a patch release cycle but we should
         // target removing it soon.
-        if (windows.allSatisfy { !$0.isVisible }) {
+        // Lostty Canvas: a hidden canvas's running terminals still ask.
+        if (windows.allSatisfy { !$0.isVisible }) && CanvasController.allCards.isEmpty {
             return .terminateNow
         }
 
@@ -561,12 +605,14 @@ class AppDelegate: NSObject,
     /// Lostty Mobile: whether any open pane is running something. Panes in
     /// tmux sessions ask tmux; the others answer as the core does.
     private static func anyPaneNeedsConfirmQuit() -> Bool {
-        NSApp.windows
-            .compactMap { $0.windowController as? BaseTerminalController }
+        BaseTerminalController.everyController
             .contains { $0.surfaceTree.contains(where: { $0.needsConfirmQuit }) }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        // Lostty: the session as it is, for "Continue your last session?".
+        LastSessionStore.shared.saveForQuit()
+
         // We have no notifications we want to persist after death,
         // so remove them all now. In the future we may want to be
         // more selective and only remove surface-targeted notifications.
@@ -808,21 +854,8 @@ class AppDelegate: NSObject,
     }
 
     @objc private func ghosttyBellDidRing(_ notification: Notification) {
-        // Lostty: the usage bar's mute silences the bell.
-        let muted = LosttyMute.isMuted()
-
-        if ghostty.config.bellFeatures.contains(.system), !muted {
-            NSSound.beep()
-        }
-
-        if ghostty.config.bellFeatures.contains(.audio), !muted {
-            if let configPath = ghostty.config.bellAudioPath,
-               let sound = NSSound(contentsOfFile: configPath.path, byReference: false) {
-                sound.volume = ghostty.config.bellAudioVolume
-                sound.play()
-            }
-        }
-
+        // Lostty makes no sounds: the bell never beeps or plays
+        // `bell-audio-path`, whatever `bell-features` says.
         if ghostty.config.bellFeatures.contains(.attention) {
             // Bounce the dock icon if we're not focused.
             NSApp.requestUserAttention(.informationalRequest)
@@ -876,12 +909,32 @@ class AppDelegate: NSObject,
     @objc private func ghosttyNewWindow(_ notification: Notification) {
         let configAny = notification.userInfo?[Ghostty.Notification.NewSurfaceConfigKey]
         let config = configAny as? Ghostty.SurfaceConfiguration
-        _ = TerminalController.newWindow(ghostty, withBaseConfig: config)
+        // Lostty Canvas: new_window from a card's pane makes a card, which
+        // asks what it's for as a new window does.
+        let onCard = MainActor.assumeIsolated {
+            guard let surface = notification.object as? Ghostty.SurfaceView,
+                  let canvas = CanvasController.shared, canvas.card(holding: surface) != nil else { return false }
+            NewWindowChoice.ask(canvas.newCard(baseConfig: config), config: config)
+            return true
+        }
+        if onCard { return }
+        // Lostty: from a terminal in a repo, asks what the window is for.
+        MainActor.assumeIsolated { NewWindowChoice.newWindow(ghostty, config: config) }
     }
 
     @objc private func ghosttyNewTab(_ notification: Notification) {
         guard let surfaceView = notification.object as? Ghostty.SurfaceView else { return }
         guard let window = surfaceView.window else { return }
+
+        // Lostty Canvas: new_tab from a card's pane makes a card beside it,
+        // which asks what it's for as a new window does.
+        let onCard = MainActor.assumeIsolated {
+            guard let canvas = CanvasController.shared, let card = canvas.card(holding: surfaceView) else { return false }
+            let config = notification.userInfo?[Ghostty.Notification.NewSurfaceConfigKey] as? Ghostty.SurfaceConfiguration
+            NewWindowChoice.ask(canvas.newCard(beside: card, baseConfig: config), config: config)
+            return true
+        }
+        if onCard { return }
 
         // We only want to listen to new tabs if the focused parent is
         // a regular terminal controller.
@@ -894,8 +947,7 @@ class AppDelegate: NSObject,
     }
 
     private func setDockBadge() {
-        let bellCount = NSApp.windows
-            .compactMap { $0.windowController as? BaseTerminalController }
+        let bellCount = BaseTerminalController.everyController
             .reduce(0) { $0 + ($1.bell ? 1 : 0) }
         let wantsBadge = ghostty.config.bellFeatures.contains(.attention) && bellCount > 0
         let label = wantsBadge ? (bellCount > 99 ? "99+" : String(bellCount)) : nil
@@ -917,12 +969,8 @@ class AppDelegate: NSObject,
         default: UserDefaults.ghostty.removeObject(forKey: "NSQuitAlwaysKeepsWindows")
         }
 
-        // Lostty's updates: release builds check daily and ask first; a build
-        // made on this Mac never checks (UpdateFeed). Setting both every time
-        // also means Sparkle never asks "check automatically?".
-        let schedule = UpdateFeed.schedule(hasFeed: UpdateFeed.current != nil, autoUpdate: config.autoUpdate)
-        updateController.updater.automaticallyChecksForUpdates = schedule.checks
-        updateController.updater.automaticallyDownloadsUpdates = schedule.downloads
+        applyUpdateSchedule(autoUpdate: config.autoUpdate,
+                            installsAutomatically: UpdatePreferences.installsAutomatically())
 
         // Config could change keybindings, so update everything that depends on that
         syncMenuShortcuts(config)
@@ -1003,6 +1051,11 @@ class AppDelegate: NSObject,
         default:
             break
         }
+
+        // Lostty Canvas: the canvas, shown or hidden.
+        if let canvas = CanvasController.shared, !canvas.isEmpty {
+            canvas.restorableState().encode(with: coder)
+        }
     }
 
     func application(_ app: NSApplication, didDecodeRestorableState coder: NSCoder) {
@@ -1013,6 +1066,15 @@ class AppDelegate: NSObject,
             let state = QuickTerminalRestorableState(coder: coder) {
             quickTerminalControllerState = .pendingRestore(state)
         }
+
+        // Lostty Canvas: the canvas's cards, their panes reattaching. After
+        // Restart to Update it comes back from Lostty's own snapshot
+        // (WindowSnapshot), not twice.
+        if ghostty.config.windowSaveState != "never", LosttyChannel.current.hasCanvas,
+           !LosttyRestart.restoresFromSnapshot, !SessionRestore.offers,
+           let state = CanvasRestorableState(coder: coder) {
+            CanvasController.restore(ghostty, state: state)
+        }
     }
 
     // MARK: - UNUserNotificationCenterDelegate
@@ -1020,10 +1082,25 @@ class AppDelegate: NSObject,
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         didReceive: UNNotificationResponse,
-        withCompletionHandler: () -> Void
+        withCompletionHandler: @escaping () -> Void
     ) {
-        ghostty.handleUserNotification(response: didReceive)
-        withCompletionHandler()
+        guard AgentCoordination.isOn else {
+            ghostty.handleUserNotification(response: didReceive)
+            withCompletionHandler()
+            return
+        }
+        // The guard's runtime lives on the main actor; make sure we are there.
+        let route: @MainActor () -> Void = { [self] in
+            if !GuardRuntime.shared.handle(didReceive) {
+                ghostty.handleUserNotification(response: didReceive)
+            }
+            withCompletionHandler()
+        }
+        if Thread.isMainThread {
+            MainActor.assumeIsolated(route)
+        } else {
+            DispatchQueue.main.async { MainActor.assumeIsolated(route) }
+        }
     }
 
     func userNotificationCenter(
@@ -1031,22 +1108,25 @@ class AppDelegate: NSObject,
         willPresent: UNNotification,
         withCompletionHandler: (UNNotificationPresentationOptions) -> Void
     ) {
+        if willPresent.request.content.userInfo["lostty"] as? String == "guard" {
+            withCompletionHandler([.banner, .list])
+            return
+        }
         // Lostty: Stay Awake's notices carry no surface, so show them here.
         if willPresent.request.content.userInfo["lostty"] as? String == "stay-awake" {
-            withCompletionHandler(LosttyMute.isMuted() ? [.banner] : [.banner, .sound])
+            withCompletionHandler([.banner])
             return
         }
         let shouldPresent = ghostty.shouldPresentNotification(notification: willPresent)
-        // Lostty: the usage bar's mute keeps notifications silent.
-        var options: UNNotificationPresentationOptions = shouldPresent ? [.banner, .sound] : []
-        if LosttyMute.isMuted() { options.remove(.sound) }
-        withCompletionHandler(options)
+        // Lostty: notifications are always silent.
+        withCompletionHandler(shouldPresent ? [.banner] : [])
     }
 
     // MARK: - GhosttyAppDelegate
 
     func findSurface(forUUID uuid: UUID) -> Ghostty.SurfaceView? {
-        for c in TerminalController.all {
+        let controllers: [BaseTerminalController] = TerminalController.all + CanvasController.allCards
+        for c in controllers {
             for view in c.surfaceTree where view.id == uuid {
                 return view
             }
@@ -1089,10 +1169,39 @@ class AppDelegate: NSObject,
     }
 
     @IBAction func newWindow(_ sender: Any?) {
-        _ = TerminalController.newWindow(ghostty)
+        // Lostty Canvas: on the canvas, New Window makes a card, starting
+        // where the focused card's pane is and asking what it's for, as ⌘N
+        // from the keyboard does.
+        if let canvas = CanvasController.key {
+            let config = canvas.focusedCard?.focusedSurface?.surface.map {
+                Ghostty.SurfaceConfiguration(from: ghostty_surface_inherited_config($0, GHOSTTY_SURFACE_CONTEXT_WINDOW))
+            }
+            NewWindowChoice.ask(canvas.newCard(baseConfig: config), config: config)
+            return
+        }
+        // Lostty: starts where the focused terminal is, as ⌘N from the
+        // keyboard does, and asks what the window is for when that's a repo.
+        let config = TerminalController.preferredParent?.focusedSurface?.surface.map {
+            Ghostty.SurfaceConfiguration(from: ghostty_surface_inherited_config($0, GHOSTTY_SURFACE_CONTEXT_WINDOW))
+        }
+        NewWindowChoice.newWindow(ghostty, config: config)
     }
 
     @IBAction func newTab(_ sender: Any?) {
+        // Lostty Canvas: on the canvas, New Tab makes a card beside the
+        // focused one, starting where its focused pane is; with none
+        // focused, a card as New Window does.
+        if let canvas = CanvasController.key {
+            guard let card = canvas.focusedCard else {
+                canvas.newCard()
+                return
+            }
+            let config = card.focusedSurface?.surface.map {
+                Ghostty.SurfaceConfiguration(from: ghostty_surface_inherited_config($0, GHOSTTY_SURFACE_CONTEXT_TAB))
+            }
+            NewWindowChoice.ask(canvas.newCard(beside: card, baseConfig: config), config: config)
+            return
+        }
         _ = TerminalController.newTab(
             ghostty,
             from: TerminalController.preferredParent?.window

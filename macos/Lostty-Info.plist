@@ -114,6 +114,8 @@
 	<string>$(LOSTTY_UPDATE_FEED)</string>
 	<key>LosttyChannel</key>
 	<string>$(LOSTTY_CHANNEL)</string>
+	<key>LosttyBuildCommit</key>
+	<string>$(LOSTTY_BUILD_COMMIT)</string>
 	<key>LosttyBetaNumber</key>
 	<string>$(LOSTTY_BETA_NUMBER)</string>
 	<key>SUScheduledCheckInterval</key>

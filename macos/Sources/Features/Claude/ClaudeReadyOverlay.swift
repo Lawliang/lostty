@@ -11,11 +11,17 @@ struct ClaudeReadyOverlay: View {
     let surfaceID: UUID
     /// The pane's cell size in points, to match the terminal's text size.
     let cellSize: CGSize
-    @ObservedObject private var runtime = ClaudeRuntime.shared
+    @StateObject private var claude: PaneClaude
     @ObservedObject private var skins = SkinsRuntime.shared.manager
 
+    init(surfaceID: UUID, cellSize: CGSize) {
+        self.surfaceID = surfaceID
+        self.cellSize = cellSize
+        _claude = StateObject(wrappedValue: PaneClaude(surfaceID))
+    }
+
     var body: some View {
-        if runtime.awaiting.contains(surfaceID) {
+        if claude.awaiting {
             ReadyLine(
                 fontSize: Self.fontSize(cellHeight: cellSize.height),
                 accent: Self.accent(for: skins.effectiveSkin(surfaceID)))

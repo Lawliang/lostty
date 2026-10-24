@@ -367,6 +367,12 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
         return c
     }
 
+    /// Lostty Canvas: this window's panes, splits and all, become a card on
+    /// the canvas and the window closes; nothing restarts.
+    func moveToCanvas() {
+        CanvasImport.move(ghostty, [self])
+    }
+
     static func newTab(
         _ ghostty: Ghostty.App,
         from parent: NSWindow? = nil,

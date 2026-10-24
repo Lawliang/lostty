@@ -3,8 +3,8 @@ import AppKit
 
 /// Which part of a pane's edge the Claude trace travels while Claude works:
 /// the whole border, or back and forth along one side. The bottom edge is
-/// kept for subagents (TraceCourse.subagents). Saved in user defaults and
-/// set from Lostty → Claude Trace Path.
+/// kept for subagents and background shells (TraceCourse.subagents).
+/// Saved in user defaults and set from Lostty → Claude Trace Path.
 enum TraceRoute: String, CaseIterable {
     case all, right, top, left
 
@@ -32,7 +32,7 @@ enum TraceRoute: String, CaseIterable {
 
 /// The Lostty → Claude Trace Path submenu, one checkmarked item per route.
 @MainActor
-final class TraceRouteMenu: NSObject, NSMenuDelegate {
+final class TraceRouteMenu: NSObject, NSMenuDelegate, NSMenuItemValidation {
     static let shared = TraceRouteMenu()
 
     static func install(after anchor: NSMenuItem) {
@@ -46,7 +46,7 @@ final class TraceRouteMenu: NSObject, NSMenuDelegate {
             submenu.addItem(item)
         }
         submenu.addItem(.separator())
-        let note = NSMenuItem(title: "Bottom edge: only subagents working", action: nil, keyEquivalent: "")
+        let note = NSMenuItem(title: "Bottom edge: only subagents or shells working", action: nil, keyEquivalent: "")
         note.isEnabled = false
         submenu.addItem(note)
         let item = NSMenuItem(title: "Claude Trace Path", action: nil, keyEquivalent: "")
@@ -59,6 +59,11 @@ final class TraceRouteMenu: NSObject, NSMenuDelegate {
         for item in menu.items where item.representedObject != nil {
             item.state = item.representedObject as? String == current.rawValue ? .on : .off
         }
+    }
+
+    /// The window light always goes all the way round: no path to pick.
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        TraceStyle.current() != .window
     }
 
     @objc private func choose(_ sender: NSMenuItem) {

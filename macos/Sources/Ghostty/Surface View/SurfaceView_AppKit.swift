@@ -227,6 +227,15 @@ extension Ghostty {
         var surface: ghostty_surface_t? {
             surfaceModel?.unsafeCValue
         }
+
+        /// Lostty: frees the engine's surface (ending its shell) while this
+        /// view lives on. The engine may message a surface until it's freed,
+        /// through this view, so a view dropped first can be messaged dead;
+        /// a caller retiring a pane outside the split tree's own closing
+        /// calls this, then holds the view a moment longer.
+        func releaseSurface() {
+            surfaceModel = nil
+        }
         /// Current scrollbar state, cached here for persistence across rebuilds
         /// of the SwiftUI view hierarchy, for example when changing splits
         var scrollbar: Ghostty.Action.Scrollbar?
@@ -426,6 +435,10 @@ extension Ghostty {
             if let bin = Bundle.main.executableURL?.path {
                 surface_cfg.environmentVariables[ClaudeConstants.binEnvKey] = bin
             }
+            // Lostty Guard: `+guard` asks this app's socket, not another build's.
+            if AgentCoordination.isOn {
+                surface_cfg.environmentVariables[GuardServer.envKey] = GuardServer.appPath.path
+            }
             // Lostty Mobile: the launcher tags the pane's session with this pid.
             surface_cfg.environmentVariables[TmuxConstants.appPIDEnvKey] =
                 String(ProcessInfo.processInfo.processIdentifier)
@@ -550,6 +563,17 @@ extension Ghostty {
         }
 
         func sizeDidChange(_ size: CGSize) {
+            // Lostty Canvas: mid-zoom or mid-drag, keep the size for when it
+            // settles.
+            if canvasZoomInFlight || canvasResizeHeld {
+                contentSize = size
+                return
+            }
+            if canvasZoom != nil {
+                contentSize = size
+                canvasSetSize()
+                return
+            }
             // Ghostty wants to know the actual framebuffer size... It is very important
             // here that we use "size" and NOT the view frame. If we're in the middle of
             // an animation (i.e. a fullscreen animation), the frame will not yet be updated.
@@ -734,6 +758,8 @@ extension Ghostty {
             // The clicked location in this window should be this view.
             let location = convert(event.locationInWindow, from: nil)
             guard hitTest(location) == self else { return event }
+            // Lostty Canvas: a card in front covering this pane takes the click.
+            guard isUncoveredByCards(at: event.locationInWindow) else { return event }
 
             // We always assume that we're resetting our mouse suppression
             // unless we see the specific scenario below to set it.
@@ -915,6 +941,9 @@ extension Ghostty {
 
         override func viewDidChangeBackingProperties() {
             super.viewDidChangeBackingProperties()
+            // Lostty Canvas: mid-zoom the compositor scales the old pixels;
+            // canvasZoomDidSettle catches up.
+            guard !canvasZoomInFlight, !canvasResizeHeld else { return }
 
             // The Core Animation compositing engine uses the layer's contentsScale property
             // to determine whether to scale its contents during compositing. When the window
@@ -939,6 +968,11 @@ extension Ghostty {
 
             guard let surface = self.surface else { return }
 
+            if canvasZoom != nil {
+                canvasSetSize()
+                return
+            }
+
             // Detect our X/Y scale factor so we can update our surface
             let fbFrame = self.convertToBacking(self.frame)
             let xScale = fbFrame.size.width / self.frame.size.width
@@ -948,6 +982,50 @@ extension Ghostty {
             // When our scale factor changes, so does our fb size so we send that too
             let scaledSize = self.convertToBacking(contentSize)
             setSurfaceSize(width: UInt32(scaledSize.width), height: UInt32(scaledSize.height))
+        }
+
+        /// Lostty Canvas: true while the canvas's zoom is changing (a pinch):
+        /// the pane keeps its pixels and grid until the zoom settles.
+        var canvasZoomInFlight = false
+
+        /// Lostty Canvas: true while its card's edge or a split divider in it
+        /// is dragged: the pane keeps its grid, its pixels pinned top-left,
+        /// and resizes once on release. (Each resize can leave a copy of the
+        /// shell's prompt in tmux's history.)
+        var canvasResizeHeld = false {
+            didSet { if oldValue, !canvasResizeHeld { sizeDidChange(contentSize) } }
+        }
+
+        /// Lostty Canvas: the canvas when this pane is on a card.
+        private var canvasScrollView: CanvasScrollView? {
+            var view = superview
+            while let next = view {
+                if let canvas = next as? CanvasScrollView { return canvas }
+                view = next.superview
+            }
+            return nil
+        }
+
+        /// Lostty Canvas: the canvas's zoom when this pane is on a card.
+        private var canvasZoom: CGFloat? { canvasScrollView?.magnification }
+
+        /// Lostty Canvas: on a card the pane draws at its 100% pixels at
+        /// every zoom, and the canvas scales the picture: text, skin and
+        /// texture grow and shrink together, and zooming never resizes the
+        /// terminal. (Zoomed past 100% the text is softer.)
+        private func canvasSetSize() {
+            guard let surface, let window, contentSize.width > 0, contentSize.height > 0 else { return }
+            let base = window.backingScaleFactor
+            ghostty_surface_set_content_scale(surface, base, base)
+            setSurfaceSize(width: UInt32(contentSize.width * base), height: UInt32(contentSize.height * base))
+        }
+
+        /// Lostty Canvas: the canvas's zoom settled: catch up on anything
+        /// held while it moved (still drawn at 100%, `canvasSetSize`).
+        func canvasZoomDidSettle(_ zoom: CGFloat) {
+            canvasZoomInFlight = false
+            guard window != nil, frame.width > 0, frame.height > 0 else { return }
+            viewDidChangeBackingProperties()
         }
 
         override func mouseDown(with event: NSEvent) {
@@ -1084,7 +1162,7 @@ extension Ghostty {
 
             // Handle focus-follows-mouse
             if let window,
-               let controller = window.windowController as? BaseTerminalController,
+               let controller = terminalController,
                !controller.commandPaletteIsShowing,
                window.isKeyWindow &&
                     !self.focused &&
@@ -1106,6 +1184,20 @@ extension Ghostty {
         }
 
         override func scrollWheel(with event: NSEvent) {
+            // Lostty Canvas: scrolling over the focused pane on a card scrolls
+            // it, and over any other pane pans the canvas; ⌥ swaps the two.
+            // Decided as the scroll starts (CanvasScrollView.scrollingPane).
+            if let canvas = canvasScrollView {
+                if CanvasScrollView.startsScroll(event) {
+                    let focused = window?.firstResponder === self
+                    canvas.scrollingPane = focused != event.modifierFlags.contains(.option) ? self : nil
+                    canvas.scrollingTicket = nil
+                }
+                if canvas.scrollingPane !== self {
+                    canvas.scrollWheel(with: event)
+                    return
+                }
+            }
             guard let surfaceModel else { return }
 
             var x = event.scrollingDeltaX
@@ -1753,8 +1845,6 @@ extension Ghostty {
             content.title = title
             content.subtitle = self.title
             content.body = body
-            // Lostty: the usage bar's mute keeps notifications silent.
-            content.sound = LosttyMute.isMuted() ? nil : UNNotificationSound.default
             content.categoryIdentifier = Ghostty.userNotificationCategory
             content.userInfo = [
                 "surface": self.id.uuidString,

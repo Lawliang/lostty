@@ -23,6 +23,7 @@ const skins = @import("skins.zig");
 const claude_state = @import("claude_state.zig");
 const claude_hooks = @import("claude_hooks.zig");
 const claude_usage = @import("claude_usage.zig");
+const guard = @import("guard.zig");
 const tmux_launch = @import("tmux_launch.zig");
 const tmux_rename = @import("tmux_rename.zig");
 const peers = @import("peers.zig");
@@ -88,6 +89,10 @@ pub const Action = enum {
     // Lostty: Claude Code's status line command; reports context and plan
     // usage to this pane.
     @"claude-usage",
+
+    // Lostty: the PreToolUse guard that stops critical agent actions
+    // until you approve them (run by hooks).
+    guard,
 
     // Lostty Mobile: run a new pane's shell in its own session on Lostty's
     // private tmux, or adopt an existing session.
@@ -183,6 +188,7 @@ pub const Action = enum {
             .@"claude-state" => try claude_state.run(alloc),
             .@"claude-hooks" => try claude_hooks.run(alloc),
             .@"claude-usage" => try claude_usage.run(alloc),
+            .guard => try guard.run(alloc),
             .@"tmux-launch" => try tmux_launch.run(alloc),
             .@"tmux-rename" => try tmux_rename.run(alloc),
             .peers => try peers.run(alloc),
@@ -229,6 +235,7 @@ pub const Action = enum {
                 .@"claude-state" => claude_state.Options,
                 .@"claude-hooks" => claude_hooks.Options,
                 .@"claude-usage" => claude_usage.Options,
+                .guard => guard.Options,
                 .@"tmux-launch" => tmux_launch.Options,
                 .@"tmux-rename" => tmux_rename.Options,
                 .peers => peers.Options,
@@ -352,10 +359,18 @@ test {
     _ = claude_state;
     _ = claude_hooks;
     _ = claude_usage;
+    _ = guard;
+    _ = @import("guard/wire.zig");
     _ = tmux_launch;
     _ = tmux_rename;
     _ = peers;
     _ = @import("tmux/naming.zig");
     _ = @import("tmux/session.zig");
     _ = @import("tmux/snippet_test.zig");
+    _ = @import("guard/shell.zig");
+    _ = @import("guard/paths.zig");
+    _ = @import("guard/config.zig");
+    _ = @import("guard/git.zig");
+    _ = @import("guard/catalog.zig");
+    _ = @import("guard/decide.zig");
 }

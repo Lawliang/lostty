@@ -26,15 +26,33 @@ struct ExtensionSidebarModelTests {
         #expect(model.active == .skins)
     }
 
-    @Test func theMascotIsInTheBetaOnly() throws {
-        #expect(try makeModel(channel: .beta).0.showsMascot)
-        #expect(try makeModel(channel: .stable).0.showsMascot == false)
+    @Test func aWindowShowsNotificationsButACanvasCardLeavesThemToTheCanvas() {
+        #expect(ExtensionSidebarModel(channel: .beta).showsNotifications)
+        #expect(ExtensionSidebarModel(channel: .beta, notifications: false).showsNotifications == false)
     }
 
     @Test func startsWithNothingOpen() throws {
         let (model, _) = try makeModel()
         #expect(model.active == nil)
         #expect(model.focusedSurfaceID == nil)
+    }
+
+    @Test func theBarShowsUsageUntilTheAppsButton() throws {
+        let (model, _) = try makeModel()
+        #expect(model.showsApps == false)
+        model.toggleApps()
+        #expect(model.showsApps)
+        model.toggleApps()
+        #expect(model.showsApps == false)
+    }
+
+    @Test func hidingTheAppsLeavesAnOpenAppOpen() throws {
+        let (model, _) = try makeModel()
+        model.toggleApps()
+        model.select(.skins)
+        model.toggleApps()
+        #expect(model.active == .skins)
+        #expect(model.showsApps == false)
     }
 
     @Test func clickingAnIconOpensItAndClickingAgainCloses() throws {
@@ -59,14 +77,14 @@ struct ExtensionSidebarModelTests {
         #expect(model.active == nil)
     }
 
-    @Test func sidebarOrderIsBranchesThenSkins() {
+    @Test func rowOrderIsBranchesThenSkins() {
         #expect(LosttyExtension.allCases == [.branches, .skins])
         #expect(LosttyExtension.branches.title == "Branches")
         #expect(LosttyExtension.skins.title == "Skins")
     }
 
-    @Test func branchesOpensInTheSidebarAndSkinsOverTheTerminal() {
-        #expect(LosttyExtension.branches.presentation == .sidebar(width: 340))
+    @Test func branchesCoversTheWindowAndSkinsTheTerminal() {
+        #expect(LosttyExtension.branches.presentation == .window)
         #expect(LosttyExtension.skins.presentation == .overlay)
     }
 

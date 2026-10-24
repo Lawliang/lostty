@@ -1,8 +1,8 @@
 #if os(macOS)
 import Foundation
 
-/// Lostty Settings → Mascot: whether the observer summarizes each turn as
-/// it ends (on) or only when you tap the mascot (off).
+/// Lostty Settings → Turn summaries: whether the observer summarizes each
+/// turn as it ends (on) or only when asked (off).
 @MainActor
 final class ObserverPreferences: ObservableObject {
     static let shared = ObserverPreferences()

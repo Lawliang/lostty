@@ -6,7 +6,7 @@ it is in.
 - `cd` into a project and the pane re-skins; leave and it reverts.
 - Split panes are skinned independently.
 - Git repos you have not configured get a stable automatic skin.
-- Override any pane from the Skins icon in the sidebar or the `skins` command.
+- Override any pane from Skins in the bottom bar's apps (the 2x2 grid button) or the `skins` command.
 
 ## Install
 
@@ -22,7 +22,7 @@ Its config lives in `~/.config/lostty/config`; an existing
 Copy `docs/skins/skins.example.toml` to `~/.config/lostty/skins/skins.toml`.
 (Lostty still reads an older `~/.config/ghostty-skins/` folder.)
 Errors never break the terminal: the last good config stays active and the
-Skins icon in the sidebar shows a yellow dot.
+Skins icon in the bottom bar's apps shows a yellow dot.
 
 ## Presets
 
@@ -63,7 +63,7 @@ override and brings the mapped skin back.
 
 ## Saved Colors
 
-Click the Skins icon in the sidebar, then go to the Custom tab (the
+Open Skins from the bottom bar's apps, then go to the Custom tab (the
 terminal `skins` picker has no Custom tab). The "Any color" row lets you pick
 any background color with a native color panel or type a hex code. Click Save
 to add it to your saved swatches. Saved colors live in
@@ -72,7 +72,7 @@ Lostty windows (max 24).
 
 ## Override
 
-- Click the Skins icon in the sidebar on the right: the picker fills the
+- Click the 2x2 grid in the bottom bar, then Skins: the picker fills the
   terminal area. Pick a skin, color, or texture and it applies to the pane
   you were last in right away, and stays. Click the icon again (or the
   close button) to go back to the terminal. **Reset** undoes it.
@@ -101,7 +101,7 @@ While Claude Code is working in a pane, a light ray races around that
 pane's edge. The moment Claude finishes (or you interrupt it), the ray
 disappears. If Claude finishes (or asks for permission) while you are in
 another pane or app, that pane dims and shows **Ready for response** until
-you look at it. Each preset has its own trace; panes without a skin get a
+you look at it: each pane, each Claude, its own. Each preset has its own trace; panes without a skin get a
 pink-and-cyan beam.
 
 Codex works the same way: the trace runs while Codex works and stops when
@@ -132,6 +132,89 @@ A skin with the same name as a preset keeps the preset's trace unless it
 sets `trace`. `[defaults] trace = false` turns traces off. With Reduce
 Motion on, the border glows gently instead of racing.
 
+**Lostty → Claude Trace Style → Window Light** swaps the skin traces for
+the website's light: while Claude or Codex works in a pane, one thin light
+circles that pane's edge (never the title bar or the bottom bar), a lap
+every 3.2 seconds, its tail running from the skin's second trace color
+into its first and a white-hot tip, with a soft glow just inside the edge.
+Each working pane has its own, in its own skin's colors; panes without a
+skin get the website's pink and cyan. A pane whose trace is off stays
+dark. A pane where only subagents or background shells still work keeps
+its bottom-edge glow, and its light goes out. Claude Trace Path doesn't
+apply (it's greyed out), and with Reduce Motion the pane's edge breathes
+instead. **Skin Traces** goes back.
+
+## Guard
+
+The guard is part of Lostty's agent coordination, which is off unless
+`~/.config/lostty/guard.json` says `"enabled": true` (anything else, or no
+file, is off). Off, Lostty behaves as if it were never built: Connect and
+updates install only the trace hooks and take out a guard hook left from
+before, and the app starts no guard, shows no guard badge or approvals, and
+its hook messages don't mention the guard. After turning it on or off,
+restart Lostty, then update the hooks (**Lostty → Claude Integration…**).
+
+When it's on, in every Claude Code and Codex pane, Lostty stops a critical
+action before it runs and asks you, even when the agent skips its own
+permission prompts:
+
+- **Deleting what git can't get back:** untracked or ignored files,
+  anything outside the repo, uncommitted changes, `git clean`, deleting a
+  branch whose commits are nowhere else, dropping a stash. Deleting a
+  committed file goes through: git can restore it.
+- **Throwing work away:** `git reset --hard`, `checkout`/`restore` over
+  changes, `rebase`, amending a pushed commit.
+- **Leaving the Mac:** force pushes, tags, branch deletes on the remote and
+  pushes to protected branches (every push if you set `"push": "all"`),
+  `gh pr/issue create`, publishing a package, scripts you list.
+- **Merging into a protected branch** (`main`, `master`, and ones you add).
+- **Changing the guardrails:** agent settings, hook files, `~/.config/lostty`,
+  `~/.ssh`, the Keychain.
+- **Writing outside the project** (temp folders excepted).
+
+The agent is told it's blocked and to carry on with other work. You get a
+notification (Deny right there, or click to see the whole request), an
+amber badge on the pane, and the request in the Branches panel. In the
+request window, Return and Escape deny. Approve it there, and if the agent
+is still running, Lostty types "Approved #N" into its pane. The agent runs
+that exact call once. An approval lasts 10 minutes; a request nobody
+answers lapses after an hour. Agents have no way to approve.
+
+A red **Guard disconnected** badge means an agent's guard hook isn't
+installed. That includes an agent you never connected. Fix it from
+**Lostty → Claude Integration…** by installing or updating the hooks.
+
+If Lostty isn't running (say, during Restart to Update) or its app was moved
+or deleted, Claude asks you in its own prompt and Codex stays blocked until
+Lostty is back.
+
+Settings live in `~/.config/lostty/guard.json`:
+
+    {
+      "push": "protected",
+      "protectedBranches": ["release"],
+      "commands": ["deploy.sh"],
+      "deletable": ["vendor"],
+      "repos": {
+        "/Users/you/projectrepos/app": { "push": "all" }
+      }
+    }
+
+By default (`"push": "protected"`) Lostty asks only for force pushes
+(including `+ref`, `--force-with-lease`), tags, deletes on the remote and
+pushes to protected branches. `"push": "all"`, globally or for one repo,
+asks for every `git push`. `deletable` folders (by default `node_modules`,
+`zig-out`, `.zig-cache`, `zig-cache`, `DerivedData`, `.build`, `__pycache__`)
+can be deleted without asking.
+
+Connecting an agent (the bubble at launch, or **Lostty → Claude
+Integration…**) sets up its guard along with the trace. Agents already
+running pick up new hooks only after you restart them. Codex asks you once
+to trust Lostty's hooks; until you do, its guard doesn't run.
+
+The guard defends against mistakes and misled agents, not a process set on
+getting around it: it isn't a sandbox.
+
 ## Project Pill
 
 At the right of the title bar, a pill names the focused pane's project and
@@ -141,10 +224,19 @@ edge), follows focus between panes and splits, and catches a checkout
 within a couple of seconds. A worktree shows its repo's name. Outside a git
 repo (or in a home folder under git) there is no pill.
 
+## Apps
+
+The 2x2 grid button in the bottom bar, left of the mute button, swaps the
+bar's Claude usage for Lostty's apps, from the left: Branches (beta) and
+Skins. Click one to open it, and again (or its close button) to close it.
+Skins fills the terminal area; Branches covers the whole window below the
+title bar until you close it (or press Escape). Click the grid again to put
+the usage back; an open app stays open.
+
 ## Claude Usage Bar
 
 A bar along the bottom of each window, as tall as the title bar and the
-same color as it and the sidebar, shows in the terminal's font the focused
+same color as it, shows in the terminal's font the focused
 pane's Claude model, a block meter for the context with the tokens in the
 window (to the nearest thousand, e.g. `50K`), and a block meter with a
 percentage for one plan limit:
