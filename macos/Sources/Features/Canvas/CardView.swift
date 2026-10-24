@@ -29,8 +29,12 @@ final class CardView: NSView, CanvasStacked {
     private let header: CardHeaderView
     private let terminal: CardTerminalHost
     private var handles: [CardEdgeHandle] = []
+    private lazy var ring = CanvasSelectionRing(on: self)
     /// Back-to-front position among the canvas's cards.
     var stackIndex = 0
+    var isSelectedCard = false {
+        didSet { if isSelectedCard != oldValue { updateRing() } }
+    }
     private var chrome: AnyCancellable?
 
     var mode: Mode = .live {
@@ -82,6 +86,7 @@ final class CardView: NSView, CanvasStacked {
 
     override func updateLayer() {
         Self.updateWindowLook(self, content: content, focused: isFocusedCard)
+        updateRing()
     }
 
     /// A card's rounded corners (its `content` clipped to them) and shadow,
@@ -115,6 +120,11 @@ final class CardView: NSView, CanvasStacked {
         header.frame = NSRect(x: 0, y: 0, width: bounds.width, height: Self.headerHeight)
         terminal.frame = NSRect(x: 0, y: Self.headerHeight, width: bounds.width, height: max(0, bounds.height - Self.headerHeight))
         for handle in handles { handle.frame = CanvasModel.handleFrame(for: handle.edges, in: bounds) }
+        updateRing()
+    }
+
+    func updateRing() {
+        ring.update(selected: isSelectedCard, in: bounds, zoom: enclosingScrollView?.magnification ?? 1)
     }
 
     /// A click on the card's SwiftUI controls while the canvas is zoomed
@@ -147,6 +157,10 @@ final class CardView: NSView, CanvasStacked {
 protocol CanvasStacked: AnyObject {
     /// Back-to-front position among the canvas's cards.
     var stackIndex: Int { get set }
+    /// In the selection: a ring round it (CanvasSelectionRing).
+    var isSelectedCard: Bool { get set }
+    /// The ring as thick on screen as the zoom has changed.
+    func updateRing()
 }
 
 /// A card's contents, laid out top-down as the card is.

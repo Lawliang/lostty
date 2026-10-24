@@ -181,9 +181,72 @@ struct CanvasModel: Equatable {
 
     /// What zooming to fit shows: every card, with a margin. nil with none.
     var fitRect: CGRect? {
-        guard let first = cards.first?.frame else { return nil }
-        return cards.dropFirst().reduce(first) { $0.union($1.frame) }
+        fitRect(of: Set(cards.map(\.id)))
+    }
+
+    /// What Zoom to Selection shows: cards `ids`, with a margin. nil with none.
+    func fitRect(of ids: Set<UUID>) -> CGRect? {
+        let frames = cards.filter { ids.contains($0.id) }.map(\.frame)
+        guard let first = frames.first else { return nil }
+        return frames.dropFirst().reduce(first) { $0.union($1) }
             .insetBy(dx: -Self.fitMargin, dy: -Self.fitMargin)
+    }
+
+    /// The cards a marquee over `rect` selects: every one it touches.
+    func cards(touching rect: CGRect) -> Set<UUID> {
+        Set(cards.filter { $0.frame.intersects(rect) }.map(\.id))
+    }
+
+    /// The space Tidy Up leaves between cards.
+    static let tidyGap: CGFloat = 14
+
+    /// How Tidy Up lays the selection out.
+    enum Tidy: CaseIterable {
+        case row, grid, column
+
+        /// The next layout, round and round.
+        var next: Tidy {
+            let all = Self.allCases
+            return all[((all.firstIndex(of: self) ?? 0) + 1) % all.count]
+        }
+
+        /// How many cards go across: a grid fills across before down, so
+        /// six cards make three across and two down.
+        func across(_ count: Int) -> Int {
+            switch self {
+            case .row: count
+            case .column: 1
+            case .grid: Int(Double(count).squareRoot().rounded(.up))
+            }
+        }
+    }
+
+    /// Tidy Up: cards `ids` in rows of `layout.across` cards, `tidyGap`
+    /// apart, each row as tall as its tallest card, from the leftmost one's
+    /// left edge and the highest one's top. A row takes them left to right
+    /// as they were, a column top to bottom, a grid in reading order.
+    func tidied(_ ids: Set<UUID>, into layout: Tidy = .row) -> [UUID: CGRect] {
+        let chosen = cards.filter { ids.contains($0.id) }
+        guard let left = chosen.map(\.frame.minX).min(), let top = chosen.map(\.frame.minY).min() else { return [:] }
+        let order = chosen.sorted { a, b in
+            layout == .row
+                ? (a.frame.minX, a.frame.minY) < (b.frame.minX, b.frame.minY)
+                : (a.frame.minY, a.frame.minX) < (b.frame.minY, b.frame.minX)
+        }
+        let across = layout.across(order.count)
+        var frames: [UUID: CGRect] = [:]
+        var x = left, y = top, rowHeight: CGFloat = 0
+        for (index, card) in order.enumerated() {
+            if index > 0, index.isMultiple(of: across) {
+                x = left
+                y += rowHeight + Self.tidyGap
+                rowHeight = 0
+            }
+            frames[card.id] = Self.clamped(CGRect(origin: CGPoint(x: x, y: y), size: card.frame.size))
+            x += card.frame.width + Self.tidyGap
+            rowHeight = max(rowHeight, card.frame.height)
+        }
+        return frames
     }
 
     /// The cards to draw live: those touching `visible` grown by half a new

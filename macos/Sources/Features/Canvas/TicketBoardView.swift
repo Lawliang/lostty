@@ -19,7 +19,11 @@ final class TicketBoardView: NSView, CanvasStacked {
     private let header: TicketBoardHeaderView
     private let host: TicketBoardHost
     private var handles: [CardEdgeHandle] = []
+    private lazy var ring = CanvasSelectionRing(on: self)
     var stackIndex = 0
+    var isSelectedCard = false {
+        didSet { if isSelectedCard != oldValue { updateRing() } }
+    }
 
     /// The focused card looks like the active window, as a terminal card does.
     var isFocusedCard = false {
@@ -77,6 +81,7 @@ final class TicketBoardView: NSView, CanvasStacked {
     override func updateLayer() {
         CardView.updateWindowLook(self, content: content, focused: isFocusedCard)
         content.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
+        updateRing()
     }
 
     override func layout() {
@@ -88,6 +93,11 @@ final class TicketBoardView: NSView, CanvasStacked {
         host.frame = NSRect(
             x: 0, y: CardView.headerHeight, width: bounds.width, height: max(0, bounds.height - CardView.headerHeight))
         for handle in handles { handle.frame = CanvasModel.handleFrame(for: handle.edges, in: bounds) }
+        updateRing()
+    }
+
+    func updateRing() {
+        ring.update(selected: isSelectedCard, in: bounds, zoom: enclosingScrollView?.magnification ?? 1)
     }
 
     /// A click on the panel while the canvas is zoomed (see TicketBoardHost)
@@ -230,7 +240,8 @@ final class TicketBoardHeaderView: NSView {
     private let title: PassthroughHostingView<TicketBoardTitle>
     private let newButton: TicketNewButtonHost
     let buttons: CardWindowButtons
-    private var start: (point: CGPoint, origin: CGPoint)?
+    /// Where a drag started, and where the cards it moves were then.
+    private var start: (point: CGPoint, origins: [UUID: CGPoint])?
 
     init(board: TicketBoard, canvas: CanvasController) {
         self.board = board
@@ -277,15 +288,13 @@ final class TicketBoardHeaderView: NSView {
             canvas?.zoom(toCard: board.id)
             return
         }
-        guard let point = documentPoint(event), let frame = canvas?.model.card(board.id)?.frame else { return }
-        start = (point, frame.origin)
+        guard let canvas, let point = documentPoint(event) else { return }
+        start = (point, canvas.beginMove(board.id))
     }
 
     override func mouseDragged(with event: NSEvent) {
-        guard let canvas, let start, let point = documentPoint(event),
-              var frame = canvas.model.card(board.id)?.frame else { return }
-        frame.origin = CGPoint(x: start.origin.x + point.x - start.point.x, y: start.origin.y + point.y - start.point.y)
-        canvas.setFrame(frame, of: board.id)
+        guard let canvas, let start, let point = documentPoint(event) else { return }
+        canvas.move(start.origins, by: CGSize(width: point.x - start.point.x, height: point.y - start.point.y))
     }
 
     override func mouseUp(with event: NSEvent) {

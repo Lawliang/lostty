@@ -4,7 +4,8 @@ import SwiftUI
 
 /// A card's title bar, drawn as a Mac window's: close, minimize and zoom
 /// buttons, the title, and the project pill and agent state. Dragging it
-/// moves the card, and off the canvas makes it a window again
+/// moves the card (and the rest of the selection with a selected card),
+/// and a lone card off the canvas makes it a window again
 /// (CanvasUnmerge); double-clicking zooms to the card at 100%; its menu
 /// moves the card to a window or closes it.
 final class CardHeaderView: NSView {
@@ -12,7 +13,8 @@ final class CardHeaderView: NSView {
     private weak var canvas: CanvasController?
     private let content: PassthroughHostingView<CardHeaderContent>
     let buttons: CardWindowButtons
-    private var start: (point: CGPoint, origin: CGPoint)?
+    /// Where a drag started, and where the cards it moves were then.
+    private var start: (point: CGPoint, origins: [UUID: CGPoint])?
 
     init(card: CardController, canvas: CanvasController) {
         self.card = card
@@ -55,17 +57,16 @@ final class CardHeaderView: NSView {
             canvas?.zoom(to: card)
             return
         }
-        guard let point = documentPoint(event), let frame = canvas?.model.card(card.id)?.frame else { return }
-        start = (point, frame.origin)
+        guard let canvas, let point = documentPoint(event) else { return }
+        start = (point, canvas.beginMove(card.id))
     }
 
     override func mouseDragged(with event: NSEvent) {
         guard let canvas, let start else { return }
-        // Off the canvas, the card holds still while it counts down.
-        guard !CanvasUnmerge.shared.dragged(card, on: canvas) else { return }
-        guard let point = documentPoint(event), var frame = canvas.model.card(card.id)?.frame else { return }
-        frame.origin = CGPoint(x: start.origin.x + point.x - start.point.x, y: start.origin.y + point.y - start.point.y)
-        canvas.setFrame(frame, of: card.id)
+        // Off the canvas, a lone card holds still while it counts down.
+        guard start.origins.count > 1 || !CanvasUnmerge.shared.dragged(card, on: canvas) else { return }
+        guard let point = documentPoint(event) else { return }
+        canvas.move(start.origins, by: CGSize(width: point.x - start.point.x, height: point.y - start.point.y))
     }
 
     override func mouseUp(with event: NSEvent) {
@@ -97,8 +98,9 @@ final class CardHeaderView: NSView {
 }
 
 /// A Mac window's red, yellow and green buttons, for a card: colored on the
-/// focused card and gray on the others, as on inactive windows, with their
-/// symbols while the pointer is over them. Red closes the card, yellow
+/// focused card while the canvas is the active window, and gray otherwise,
+/// as on inactive windows, with their symbols while the pointer is over
+/// them. Red closes the card, yellow
 /// zooms out to every card, green zooms to the card at 100%. AppKit, so
 /// they take clicks however far the canvas is zoomed.
 final class CardWindowButtons: NSView {
@@ -136,6 +138,22 @@ final class CardWindowButtons: NSView {
         NSSize(width: Self.width, height: Self.diameter)
     }
 
+    /// Gray while the canvas isn't the active window.
+    private var lit: Bool { isActive && window?.isKeyWindow == true }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        NotificationCenter.default.removeObserver(self)
+        guard let window else { return }
+        for name in [NSWindow.didBecomeKeyNotification, NSWindow.didResignKeyNotification] {
+            NotificationCenter.default.addObserver(self, selector: #selector(keyChanged), name: name, object: window)
+        }
+    }
+
+    @objc private func keyChanged() {
+        needsDisplay = true
+    }
+
     private func rect(_ button: Button) -> NSRect {
         let index = CGFloat(Button.allCases.firstIndex(of: button) ?? 0)
         return NSRect(x: index * (Self.diameter + Self.spacing), y: 0, width: Self.diameter, height: Self.diameter)
@@ -155,15 +173,17 @@ final class CardWindowButtons: NSView {
             stroke.setStroke()
             circle.lineWidth = 0.5
             circle.stroke()
-            if hovering, isActive { drawSymbol(button) }
+            if hovering, lit { drawSymbol(button) }
         }
     }
 
     private func colors(_ button: Button, dark: Bool) -> (NSColor, NSColor) {
-        guard isActive || hovering else {
-            return dark
-                ? (NSColor(white: 0.36, alpha: 1), NSColor(white: 0.30, alpha: 1))
-                : (NSColor(white: 0.86, alpha: 1), NSColor(white: 0.78, alpha: 1))
+        guard lit || hovering else {
+            // The mockup's dimmed buttons (#4A4552, #D6D3DC).
+            let gray = dark
+                ? NSColor(srgbRed: 0.290, green: 0.271, blue: 0.322, alpha: 1)
+                : NSColor(srgbRed: 0.839, green: 0.827, blue: 0.863, alpha: 1)
+            return (gray, gray)
         }
         switch button {
         case .close: return (NSColor(srgbRed: 1, green: 0.373, blue: 0.341, alpha: 1), NSColor(srgbRed: 0.878, green: 0.267, blue: 0.243, alpha: 1))
