@@ -415,7 +415,8 @@ extension CanvasModel {
     /// The one rule every zone change keeps: `zone` inside the document and
     /// at least a card's minimum size. A project overlaps no other project
     /// (sharing an edge is fine) and holds all its domains. A domain's
-    /// parent is a project that holds it, and it overlaps no sibling.
+    /// parent is a project that holds it and is bigger, and it overlaps no
+    /// sibling.
     private static func allows(_ zone: CanvasZone, among zones: [CanvasZone]) -> Bool {
         let frame = zone.frame
         guard CGRect(x: 0, y: 0, width: size, height: size).contains(frame),
@@ -427,7 +428,7 @@ extension CanvasModel {
             }
         }
         guard let project = others.first(where: { $0.id == parent }), project.parent == nil,
-              project.frame.contains(frame) else { return false }
+              project.frame.contains(frame), project.frame != frame else { return false }
         return !others.contains { $0.parent == parent && overlap($0.frame, frame) }
     }
 }

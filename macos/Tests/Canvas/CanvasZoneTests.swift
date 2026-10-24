@@ -143,6 +143,16 @@ struct CanvasZoneTests {
         #expect(model.zoneAround([c])?.frame == CGRect(x: 1460, y: 760, width: 480, height: 240))
     }
 
+    @Test func aZoneFromTheCardsOfAZoneJustMadeIsRefused() {
+        var model = CanvasModel()
+        model.add(a, frame: CGRect(x: 100, y: 100, width: 400, height: 300))
+        let around = model.zoneAround([a])
+        let added = around.map { model.addZone(zone(project, $0.frame)) }
+        #expect(added == true)
+        // The domain it offers would be the project itself.
+        #expect(model.zoneAround([a]) == nil)
+    }
+
     @Test func aZoneFromCardsOutsideZonesIsAProject() {
         var model = CanvasModel()
         model.addZone(zone(project, CGRect(x: 0, y: 0, width: 2000, height: 1000)))
