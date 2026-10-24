@@ -60,12 +60,11 @@ pub fn run(gpa: Allocator) !u8 {
         }
         const theirs_uncommitted = if (i == here) &.{} else try uncommitted(alloc, wt.path);
         // What a merge or a build of both would bring together: each
-        // side's changes since they parted, committed or not.
-        const base = git(alloc, root, &.{ "merge-base", "HEAD", wt.head }) orelse wt.head;
+        // side's changes the other doesn't have, committed or not.
         if (terminals.items.len == 0) {
             // No one's there: only its uncommitted work can be lost.
             if (theirs_uncommitted.len == 0) continue;
-            const mine = try join(alloc, try changedSince(alloc, root, base, "HEAD"), my_uncommitted);
+            const mine = try join(alloc, try onlyIn(alloc, root, "HEAD", wt.head), my_uncommitted);
             const same = try overlap(alloc, mine, theirs_uncommitted);
             if (same.len == 0) continue;
             try out.print("\n{s} ({s}), no terminal, {d} files uncommitted\n", .{
@@ -86,8 +85,8 @@ pub fn run(gpa: Allocator) !u8 {
             std.fs.path.basename(wt.path), try describeHead(alloc, wt), theirs_uncommitted.len, ahead,
         });
         for (terminals.items) |t| try printTerminal(out, t);
-        const mine = try join(alloc, try changedSince(alloc, root, base, "HEAD"), my_uncommitted);
-        const theirs = try join(alloc, try changedSince(alloc, root, base, wt.head), theirs_uncommitted);
+        const mine = try join(alloc, try onlyIn(alloc, root, "HEAD", wt.head), my_uncommitted);
+        const theirs = try join(alloc, try onlyIn(alloc, root, wt.head, "HEAD"), theirs_uncommitted);
         try printFiles(out, "same files as yours", try overlap(alloc, mine, theirs));
     }
     if (shown == 0) try out.print("\nNo other terminals in this repo.\n", .{});
@@ -193,8 +192,14 @@ fn uncommitted(alloc: Allocator, path: []const u8) ![]const []const u8 {
     return join(alloc, tracked, untracked);
 }
 
-fn changedSince(alloc: Allocator, root: []const u8, base: []const u8, head: []const u8) ![]const []const u8 {
-    return fileList(alloc, git(alloc, root, &.{ "diff", "--name-only", base, head }) orelse "");
+/// The files changed by commits `head` has and `other` doesn't. Not a diff
+/// from their merge base: once two branches have each merged the other
+/// (or main), they have several, and a diff from any one counts what both
+/// already share.
+fn onlyIn(alloc: Allocator, root: []const u8, head: []const u8, other: []const u8) ![]const []const u8 {
+    const range = try std.fmt.allocPrint(alloc, "{s}..{s}", .{ other, head });
+    const listed = git(alloc, root, &.{ "log", "--format=", "--name-only", range }) orelse "";
+    return join(alloc, try fileList(alloc, listed), &.{});
 }
 
 fn fileList(alloc: Allocator, text: []const u8) ![]const []const u8 {
