@@ -243,9 +243,9 @@ enum CanvasZoom {
 
 /// The dot grid behind the cards: a dot every `spacing` screen points.
 enum CanvasGrid {
-    /// The dots' spacing on screen, the same at every zoom: the Lostty
-    /// website's (two characters by one line of its 15px JetBrains Mono).
-    static let spacing = CGSize(width: 18, height: 24.75)
+    /// The dots' spacing on screen, the same at every zoom: a square 14pt
+    /// grid, denser than the Lostty website's.
+    static let spacing = CGSize(width: 14, height: 14)
 
     /// Where the first dot sits on screen (the view's top-left at 0, 0) when
     /// the view shows the document from `origin` at `zoom`, so dots move

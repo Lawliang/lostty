@@ -231,14 +231,14 @@ struct CanvasZoomTests {
 
     @Test func gridDotsMoveWithThePan() {
         #expect(CanvasGrid.firstDot(origin: .zero, zoom: 1) == .zero)
-        #expect(CanvasGrid.firstDot(origin: CGPoint(x: 10, y: 30), zoom: 1) == CGPoint(x: 8, y: 19.5))
+        #expect(CanvasGrid.firstDot(origin: CGPoint(x: 10, y: 30), zoom: 1) == CGPoint(x: 4, y: 12))
         // At 25% the same document point is a quarter as far on screen.
-        #expect(CanvasGrid.firstDot(origin: CGPoint(x: 100, y: 0), zoom: 0.25) == CGPoint(x: 11, y: 0))
+        #expect(CanvasGrid.firstDot(origin: CGPoint(x: 100, y: 0), zoom: 0.25) == CGPoint(x: 3, y: 0))
     }
 
     @Test func gridDotsKeepTheirSpacingAtEveryZoom() {
-        // The website's spacing, on screen, however zoomed.
-        #expect(CanvasGrid.spacing == CGSize(width: 18, height: 24.75))
+        // 14pt each way, on screen, however zoomed.
+        #expect(CanvasGrid.spacing == CGSize(width: 14, height: 14))
     }
 }
 
