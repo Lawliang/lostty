@@ -120,7 +120,13 @@ pub fn action(alloc: Allocator, input: []const u8) ?[]const u8 {
     const event = stringField(root, "hook_event_name") orelse return null;
     if (!std.mem.eql(u8, event, "PreToolUse")) return null;
     const tool = stringField(root, "tool_name") orelse return null;
-    const raw = (describe(alloc, tool, root.object.get("tool_input") orelse .null) catch return null) orelse return null;
+    return toolAction(alloc, tool, root.object.get("tool_input") orelse .null);
+}
+
+/// What a call of `tool` with `input` does, worded as `action` words it;
+/// for a subagent's feed (feed.zig) too.
+pub fn toolAction(alloc: Allocator, tool: []const u8, input: std.json.Value) ?[]const u8 {
+    const raw = (describe(alloc, tool, input) catch return null) orelse return null;
     const line = clean(alloc, raw) catch return null;
     return if (line.len == 0) null else line;
 }
@@ -186,7 +192,7 @@ fn host(url: []const u8) []const u8 {
 
 /// One line: control characters and runs of blanks become one space, then
 /// at most `action_max` characters, the last an ellipsis when cut.
-fn clean(alloc: Allocator, raw: []const u8) Allocator.Error![]const u8 {
+pub fn clean(alloc: Allocator, raw: []const u8) Allocator.Error![]const u8 {
     var out: std.ArrayList(u8) = .empty;
     var blank = false;
     for (raw) |c| {
