@@ -77,8 +77,8 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     var waits = CanvasWaits()
     /// The view to show when the window first opens (a restored canvas's).
     var pendingView: (center: CGPoint, zoom: CGFloat)?
-    /// No cards of either kind.
-    var isEmpty: Bool { model.cards.isEmpty }
+    /// No cards of either kind, and no zones.
+    var isEmpty: Bool { model.cards.isEmpty && model.zones.isEmpty }
     /// Whether the view was set the first time the window showed.
     private(set) var placed = false
     private var eventMonitor: Any?
@@ -391,12 +391,19 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     func zonesDidChange() {
         surface.zones.show(model.zones)
         updateSelectionBar()
+        saveSoon()
     }
 
     /// Adds a zone at `frame`, a domain of `parent` or a project, unless
     /// it breaks the rules.
     func addZone(_ frame: CGRect, parent: UUID?) {
         guard model.addZone(model.newZone(frame, parent: parent)) else { return }
+        zonesDidChange()
+    }
+
+    /// Saved zones back on the canvas.
+    func addZones(_ saved: [CanvasZone]) {
+        model.addZones(saved)
         zonesDidChange()
     }
 

@@ -3,7 +3,7 @@ import AppKit
 
 extension CanvasController {
     /// What the app saves for the canvas: shown or not, the view, the
-    /// cards back to front, and the tickets with their panel.
+    /// cards back to front, the tickets with their panel, and the zones.
     func restorableState() -> CanvasRestorableState {
         let visible = scrollView.documentVisibleRect
         // Never shown since launch: the view it came back with.
@@ -17,7 +17,7 @@ extension CanvasController {
         let board = CanvasSaved<SplitTree<Ghostty.SurfaceView>>.Board(
             tickets: tickets.list.tickets, frame: stack.map { model.cards[$0].frame }, stack: stack, draft: tickets.draft)
         return CanvasRestorableState(saved: .init(
-            visible: window?.isVisible ?? false, center: view.0, zoom: view.1, cards: saved, board: board))
+            visible: window?.isVisible ?? false, center: view.0, zoom: view.1, cards: saved, board: board, zones: model.zones))
     }
 
     /// Rebuilds the canvas at launch; shown only if it was.
@@ -30,6 +30,7 @@ extension CanvasController {
             canvas.addCard(tree: card.tree, frame: card.frame, focused: focused)
         }
         canvas.restoreTickets(state.saved)
+        canvas.addZones(state.saved.zones)
         canvas.pendingView = (state.saved.center, state.saved.zoom)
         // The front card was the focused one: it takes keyboard focus when
         // the canvas is next key, not now (that would pull it forward).

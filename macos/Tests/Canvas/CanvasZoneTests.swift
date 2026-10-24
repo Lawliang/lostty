@@ -29,6 +29,17 @@ struct CanvasZoneTests {
         #expect(model.zone(for: CGRect(x: 1200, y: 300, width: 400, height: 300)) == project)
     }
 
+    @Test func savedZonesComeBackWithADomainListedBeforeItsProject() {
+        var model = CanvasModel()
+        let saved = [
+            zone(domain, CGRect(x: 100, y: 100, width: 800, height: 600), in: project),
+            zone(project, CGRect(x: 0, y: 0, width: 2000, height: 1000)),
+        ]
+        model.addZones(saved)
+        #expect(Set(model.zones.map(\.id)) == [project, domain])
+        #expect(model.zone(for: CGRect(x: 100, y: 100, width: 400, height: 300)) == domain)
+    }
+
     @Test func aZoneStaysInTheDocumentAndAtLeastACardsMinimumSize() {
         var model = CanvasModel()
         let offTheEdge = model.addZone(zone(project, CGRect(x: -10, y: 0, width: 1000, height: 1000)))

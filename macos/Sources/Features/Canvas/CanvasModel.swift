@@ -329,6 +329,11 @@ extension CanvasModel {
         return adopt(zones + [zone], checking: zone.id)
     }
 
+    /// Adds saved zones in any order: each project before its domains.
+    mutating func addZones(_ saved: [CanvasZone]) {
+        for zone in saved.filter({ $0.parent == nil }) + saved.filter({ $0.parent != nil }) { addZone(zone) }
+    }
+
     /// Moves zone `id` by `delta` with everything in it: a project's
     /// domains, and the cards it held before the move. The cards moved;
     /// nil, and nothing moves, when its new frame breaks the rules.
@@ -507,8 +512,8 @@ struct CanvasWaits: Equatable {
 }
 
 /// What the canvas keeps across Restart to Update and relaunches: whether
-/// it's shown, the view, each terminal card back to front, and the
-/// tickets with their panel. Generic over the split tree, so tests can
+/// it's shown, the view, each terminal card back to front, the tickets
+/// with their panel, and the zones. Generic over the split tree, so tests can
 /// save plain values.
 struct CanvasSaved<Tree: Codable>: Codable {
     struct Card: Codable {
@@ -567,22 +572,29 @@ struct CanvasSaved<Tree: Codable>: Codable {
     var tickets: [Ticket]?
     /// Missing from a canvas saved before the panel.
     var board: Board?
+    var zones: [CanvasZone]
 
     /// Whether there's anything to bring back.
     var isEmpty: Bool {
         cards.isEmpty && (tickets ?? []).isEmpty && (board?.tickets ?? []).isEmpty && board?.draft == nil
+            && zones.isEmpty
     }
 
-    init(visible: Bool, center: CGPoint, zoom: CGFloat, cards: [Card], tickets: [Ticket]? = nil, board: Board? = nil) {
+    init(
+        visible: Bool, center: CGPoint, zoom: CGFloat, cards: [Card], tickets: [Ticket]? = nil, board: Board? = nil,
+        zones: [CanvasZone] = []
+    ) {
         self.visible = visible
         self.center = center
         self.zoom = zoom
         self.cards = cards
         self.tickets = tickets
         self.board = board
+        self.zones = zones
     }
 
-    /// Tickets that can't be read are left out, never the canvas with them.
+    /// Tickets and zones that can't be read are left out, never the canvas
+    /// with them.
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         visible = try c.decode(Bool.self, forKey: .visible)
@@ -591,6 +603,7 @@ struct CanvasSaved<Tree: Codable>: Codable {
         cards = try c.decode([Card].self, forKey: .cards)
         tickets = c.decodeEach(Ticket.self, forKey: .tickets)
         board = try? c.decodeIfPresent(Board.self, forKey: .board)
+        zones = c.decodeEach(CanvasZone.self, forKey: .zones) ?? []
     }
 }
 
