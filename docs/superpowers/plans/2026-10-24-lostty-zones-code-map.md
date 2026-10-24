@@ -44,3 +44,53 @@ Mapped on 2026-10-24 at `84113c526` (zones with more-UI-improvements merged in).
 
 - Swift: `macos/skins-test.sh <Suite>` (Swift Testing structs), full `macos/build.nu --action test`.
 - Zig: `zig build test -Dtest-filter="claude speak"`, `"claude protocol"`, `"guard"`, `"worktrees"`. Put new logic in pure helpers under `src/cli/claude/`.
+
+## Settled while building (2026-10-24)
+
+### Step 5: the brief comes from the zone file, not the `start` queue
+
+The `start` queue is read once and shared with the handoff, so a brief
+queued there reaches one session and can be eaten by, or eat, a handoff.
+The zone file is the current truth, so the hook reads the brief from it:
+
+- `<PANE>.zone.json` (beside the queue) holds `"start"`, the rendered
+  brief. The app rewrites it whenever the pane's zone, the zone's
+  settings or its members change, and deletes it when the pane leaves
+  every zone. Step 7 adds the members' agent names to the same file.
+- SessionStart with source `startup`, `clear` or `compact` prints it,
+  with the handoff's `.start` text after /clear as today. `resume` and
+  `fork` already have it. The `fresh`/`cleared` signal is unchanged.
+- Moving in or out mid-session queues `<PANE>.zone.say`, its own file,
+  so neither writer appends to the other's (`ContextHandoffStore` keeps
+  replacing `.say`). UserPromptSubmit and PostToolUse take `.say` and
+  `.zone.say` and print them as one additionalContext.
+- SessionStart already runs for every source (`hooks.zig`), so only the
+  `lostty` binary changes. No hook reinstall.
+
+### Step 7: a real PreToolUse SendMessage payload
+
+Captured from this session on 2026-10-24 with a capture hook, sending to
+a name no agent has:
+
+```json
+{
+  "session_id": "…", "transcript_path": "…", "cwd": "…",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "SendMessage",
+  "tool_input": {
+    "to": "zones-capture-nobody",
+    "summary": "capture PreToolUse SendMessage payload",
+    "message": "…",
+    "type": "message",
+    "recipient": "zones-capture-nobody",
+    "recipient_kind": "name",
+    "content": "…"
+  },
+  "tool_use_id": "toolu_…"
+}
+```
+
+The target is `tool_input.to` (also `recipient`). SendMessage's own docs
+allow a bare name, `"name [ref]"`, `"main"`, or a subagent's agentId, so
+the hook strips a trailing ` [ref]` and lets `main` and agentIds through
+(they stay inside the session).
