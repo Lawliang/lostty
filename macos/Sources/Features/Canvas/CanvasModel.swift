@@ -181,9 +181,72 @@ struct CanvasModel: Equatable {
 
     /// What zooming to fit shows: every card, with a margin. nil with none.
     var fitRect: CGRect? {
-        guard let first = cards.first?.frame else { return nil }
-        return cards.dropFirst().reduce(first) { $0.union($1.frame) }
+        fitRect(of: Set(cards.map(\.id)))
+    }
+
+    /// What Zoom to Selection shows: cards `ids`, with a margin. nil with none.
+    func fitRect(of ids: Set<UUID>) -> CGRect? {
+        let frames = cards.filter { ids.contains($0.id) }.map(\.frame)
+        guard let first = frames.first else { return nil }
+        return frames.dropFirst().reduce(first) { $0.union($1) }
             .insetBy(dx: -Self.fitMargin, dy: -Self.fitMargin)
+    }
+
+    /// The cards a marquee over `rect` selects: every one it touches.
+    func cards(touching rect: CGRect) -> Set<UUID> {
+        Set(cards.filter { $0.frame.intersects(rect) }.map(\.id))
+    }
+
+    /// The space Tidy Up leaves between cards.
+    static let tidyGap: CGFloat = 14
+
+    /// How Tidy Up lays the selection out.
+    enum Tidy: CaseIterable {
+        case row, grid, column
+
+        /// The next layout, round and round.
+        var next: Tidy {
+            let all = Self.allCases
+            return all[((all.firstIndex(of: self) ?? 0) + 1) % all.count]
+        }
+
+        /// How many cards go across: a grid fills across before down, so
+        /// six cards make three across and two down.
+        func across(_ count: Int) -> Int {
+            switch self {
+            case .row: count
+            case .column: 1
+            case .grid: Int(Double(count).squareRoot().rounded(.up))
+            }
+        }
+    }
+
+    /// Tidy Up: cards `ids` in rows of `layout.across` cards, `tidyGap`
+    /// apart, each row as tall as its tallest card, from the leftmost one's
+    /// left edge and the highest one's top. A row takes them left to right
+    /// as they were, a column top to bottom, a grid in reading order.
+    func tidied(_ ids: Set<UUID>, into layout: Tidy = .row) -> [UUID: CGRect] {
+        let chosen = cards.filter { ids.contains($0.id) }
+        guard let left = chosen.map(\.frame.minX).min(), let top = chosen.map(\.frame.minY).min() else { return [:] }
+        let order = chosen.sorted { a, b in
+            layout == .row
+                ? (a.frame.minX, a.frame.minY) < (b.frame.minX, b.frame.minY)
+                : (a.frame.minY, a.frame.minX) < (b.frame.minY, b.frame.minX)
+        }
+        let across = layout.across(order.count)
+        var frames: [UUID: CGRect] = [:]
+        var x = left, y = top, rowHeight: CGFloat = 0
+        for (index, card) in order.enumerated() {
+            if index > 0, index.isMultiple(of: across) {
+                x = left
+                y += rowHeight + Self.tidyGap
+                rowHeight = 0
+            }
+            frames[card.id] = Self.clamped(CGRect(origin: CGPoint(x: x, y: y), size: card.frame.size))
+            x += card.frame.width + Self.tidyGap
+            rowHeight = max(rowHeight, card.frame.height)
+        }
+        return frames
     }
 
     /// The cards to draw live: those touching `visible` grown by half a new
@@ -243,9 +306,9 @@ enum CanvasZoom {
 
 /// The dot grid behind the cards: a dot every `spacing` screen points.
 enum CanvasGrid {
-    /// The dots' spacing on screen, the same at every zoom: the Lostty
-    /// website's (two characters by one line of its 15px JetBrains Mono).
-    static let spacing = CGSize(width: 18, height: 24.75)
+    /// The dots' spacing on screen, the same at every zoom: a square 14pt
+    /// grid, denser than the Lostty website's.
+    static let spacing = CGSize(width: 14, height: 14)
 
     /// Where the first dot sits on screen (the view's top-left at 0, 0) when
     /// the view shows the document from `origin` at `zoom`, so dots move
@@ -289,7 +352,8 @@ struct CanvasWaits: Equatable {
 
 /// What the canvas keeps across Restart to Update and relaunches: whether
 /// it's shown, the view, each terminal card back to front, and the
-/// tickets. Generic over the split tree, so tests can save plain values.
+/// tickets with their panel. Generic over the split tree, so tests can
+/// save plain values.
 struct CanvasSaved<Tree: Codable>: Codable {
     struct Card: Codable {
         var frame: CGRect
@@ -298,6 +362,8 @@ struct CanvasSaved<Tree: Codable>: Codable {
         var focused: String?
     }
 
+    /// A ticket as its own card, as saved before the tickets panel: read so
+    /// its ticket joins the panel, never written.
     struct Ticket: Codable, Equatable {
         var id: UUID
         var frame: CGRect
@@ -309,53 +375,92 @@ struct CanvasSaved<Tree: Codable>: Codable {
         var stack: Int
     }
 
+    /// The tickets, and their panel while it's open.
+    struct Board: Codable, Equatable {
+        var tickets: [CanvasTicket]
+        /// The panel's frame and place among every card, back to front;
+        /// nil while it's closed.
+        var frame: CGRect?
+        var stack: Int?
+        /// The new ticket's sheet, open with what's typed in it.
+        var draft: CanvasTicket?
+
+        init(tickets: [CanvasTicket], frame: CGRect? = nil, stack: Int? = nil, draft: CanvasTicket? = nil) {
+            self.tickets = tickets
+            self.frame = frame
+            self.stack = stack
+            self.draft = draft
+        }
+
+        /// A ticket that can't be read is left out, never the rest.
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            tickets = c.decodeEach(CanvasTicket.self, forKey: .tickets) ?? []
+            frame = try? c.decodeIfPresent(CGRect.self, forKey: .frame)
+            stack = try? c.decodeIfPresent(Int.self, forKey: .stack)
+            draft = try? c.decodeIfPresent(CanvasTicket.self, forKey: .draft)
+        }
+    }
+
     var visible: Bool
     var center: CGPoint
     var zoom: CGFloat
     var cards: [Card]
-    /// Missing from a canvas saved before tickets.
+    /// Tickets saved as cards, before the panel; missing from a canvas
+    /// saved before tickets, or since the panel.
     var tickets: [Ticket]?
+    /// Missing from a canvas saved before the panel.
+    var board: Board?
 
     /// Whether there's anything to bring back.
-    var isEmpty: Bool { cards.isEmpty && (tickets ?? []).isEmpty }
+    var isEmpty: Bool {
+        cards.isEmpty && (tickets ?? []).isEmpty && (board?.tickets ?? []).isEmpty && board?.draft == nil
+    }
 
-    init(visible: Bool, center: CGPoint, zoom: CGFloat, cards: [Card], tickets: [Ticket]? = nil) {
+    init(visible: Bool, center: CGPoint, zoom: CGFloat, cards: [Card], tickets: [Ticket]? = nil, board: Board? = nil) {
         self.visible = visible
         self.center = center
         self.zoom = zoom
         self.cards = cards
         self.tickets = tickets
+        self.board = board
     }
 
-    /// A ticket that can't be read is left out, never the canvas with it.
+    /// Tickets that can't be read are left out, never the canvas with them.
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         visible = try c.decode(Bool.self, forKey: .visible)
         center = try c.decode(CGPoint.self, forKey: .center)
         zoom = try c.decode(CGFloat.self, forKey: .zoom)
         cards = try c.decode([Card].self, forKey: .cards)
-        guard var list = try? c.nestedUnkeyedContainer(forKey: .tickets) else {
-            tickets = nil
-            return
-        }
-        var read: [Ticket] = []
+        tickets = c.decodeEach(Ticket.self, forKey: .tickets)
+        board = try? c.decodeIfPresent(Board.self, forKey: .board)
+    }
+}
+
+extension KeyedDecodingContainer {
+    /// The list under `key` without the elements that can't be read; nil
+    /// when there's no list.
+    func decodeEach<T: Decodable>(_ type: T.Type, forKey key: Key) -> [T]? {
+        guard var list = try? nestedUnkeyedContainer(forKey: key) else { return nil }
+        var read: [T] = []
         while !list.isAtEnd {
             let index = list.currentIndex
-            if let ticket = try? list.decode(Ticket.self) {
-                read.append(ticket)
+            if let element = try? list.decode(T.self) {
+                read.append(element)
             } else {
                 _ = try? list.decode(Unread.self)
                 // Never stuck on one that can't be stepped past.
                 if list.currentIndex == index { break }
             }
         }
-        tickets = read
+        return read
     }
-
-    /// Steps past a ticket that couldn't be read: having no fields, it
-    /// reads any value.
-    private struct Unread: Decodable {}
 }
+
+/// Steps past a list element that couldn't be read: having no fields, it
+/// reads any value.
+private struct Unread: Decodable {}
 
 extension CanvasSaved: Equatable where Tree: Equatable {}
 extension CanvasSaved.Card: Equatable where Tree: Equatable {}

@@ -123,6 +123,12 @@ final class CardController: BaseTerminalController {
         super.pwdDidChange(to: to)
     }
 
+    /// Change Title… and the title bar's pencil ask over the card alone,
+    /// not with a sheet on the whole canvas.
+    override func promptTabTitle() {
+        canvas?.views[id]?.beginRename()
+    }
+
     /// Step resizing would size the whole canvas window to one card's cells.
     override func cellSizeDidChange(to: NSSize) {}
 

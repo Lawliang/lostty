@@ -27,6 +27,25 @@ struct TraceCourseTests {
         #expect(TraceCourse.subagents.next(after: .bottomLeft) == .bottomRight)
     }
 
+    @Test func allAroundTheHeadKeepsTheWayItWasGoing() {
+        let all = TraceCourse.route(.all)
+        #expect(all.next(after: .bottomLeft, from: .bottomRight) == .topLeft)
+        // Back from the bottom edge running left to right: up the right
+        // side, then on round counterclockwise.
+        #expect(all.next(after: .bottomRight, from: .bottomLeft) == .topRight)
+        #expect(all.next(after: .topRight, from: .bottomRight) == .topLeft)
+        #expect(all.next(after: .topRight, from: .topLeft) == .bottomRight)
+    }
+
+    @Test func backFromTheBottomEdgeTheHeadGoesUpTheSideItReached() {
+        // A leg takes 0.6s. Subagents: right to left, then left to right;
+        // Claude works again meanwhile.
+        var motion = TraceMotion()
+        motion.advance(to: 0.9, course: .subagents, legSeconds: 0.6)
+        motion.advance(to: 1.3, course: .route(.all), legSeconds: 0.6)
+        #expect(motion.legs.last.map { [$0.from, $0.to] } == [.bottomRight, .topRight])
+    }
+
     // Off the course, the head takes the side that leads onto it.
     @Test func offTheCourseTheHeadMakesForIt() {
         #expect(TraceCourse.subagents.next(after: .topRight) == .bottomRight)
