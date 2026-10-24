@@ -182,5 +182,44 @@ struct CanvasZoneTests {
         // All eight taken: round again from the first.
         #expect(model.nextColor(parent: project) == .blue)
     }
+
+    @Test func aNewZoneIsNamedAndColoredForWhereItGoes() {
+        var model = CanvasModel()
+        let first = model.newZone(CGRect(x: 0, y: 0, width: 4000, height: 2000), parent: nil)
+        #expect(first.name == "Zone 1")
+        #expect(first.color == .blue)
+        #expect(first.parent == nil)
+        model.addZone(first)
+        let inside = model.newZone(CGRect(x: 100, y: 100, width: 800, height: 600), parent: first.id)
+        #expect(inside.name == "Domain 2")
+        #expect(inside.color == .green)
+        #expect(inside.parent == first.id)
+        #expect(model.newZone(CGRect(x: 5000, y: 0, width: 800, height: 600), parent: nil).name == "Zone 2")
+    }
+
+    @Test func aZoneDrawnWhollyInsideAProjectIsItsDomain() {
+        var model = CanvasModel()
+        model.addZone(zone(project, CGRect(x: 0, y: 0, width: 4000, height: 2000)))
+        model.addZone(zone(domain, CGRect(x: 100, y: 100, width: 800, height: 600), in: project))
+        #expect(model.project(holding: CGRect(x: 1000, y: 100, width: 800, height: 600)) == project)
+        #expect(model.project(holding: CGRect(x: 3500, y: 100, width: 800, height: 600)) == nil)
+        #expect(model.project(holding: CGRect(x: 5000, y: 100, width: 800, height: 600)) == nil)
+    }
+
+    @Test func draggingAZoneEdgeResizesItAsACardsWould() {
+        var model = CanvasModel()
+        model.addZone(zone(project, CGRect(x: 0, y: 0, width: 4000, height: 2000)))
+        model.addZone(zone(domain, CGRect(x: 100, y: 100, width: 800, height: 600), in: project))
+        let start = CGRect(x: 0, y: 0, width: 4000, height: 2000)
+        let wider = CanvasModel.resized(start, edges: [.right, .bottom], by: CGSize(width: 500, height: 100))
+        let grew = model.setZoneFrame(wider, of: project)
+        #expect(grew)
+        #expect(model.zone(project)?.frame == CGRect(x: 0, y: 0, width: 4500, height: 2100))
+        // Shrinking past the domain is refused; the last allowed frame stays.
+        let past = CanvasModel.resized(wider, edges: .right, by: CGSize(width: -4000, height: 0))
+        let shrank = model.setZoneFrame(past, of: project)
+        #expect(!shrank)
+        #expect(model.zone(project)?.frame == wider)
+    }
 }
 #endif

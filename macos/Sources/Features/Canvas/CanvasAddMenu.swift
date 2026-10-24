@@ -8,12 +8,13 @@ import SwiftUI
 /// it; choosing one, clicking anywhere else or Escape closes it.
 final class CanvasAddMenuView: NSView {
     enum Item: CaseIterable {
-        case terminal, ticket
+        case terminal, ticket, zone
 
         var title: String {
             switch self {
             case .terminal: "New Terminal"
             case .ticket: "Tickets"
+            case .zone: "New Zone"
             }
         }
 
@@ -21,6 +22,7 @@ final class CanvasAddMenuView: NSView {
             switch self {
             case .terminal: "terminal"
             case .ticket: "ticket"
+            case .zone: "square.dashed"
             }
         }
     }

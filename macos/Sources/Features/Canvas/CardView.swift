@@ -313,22 +313,38 @@ final class CardTerminalHost: NSHostingView<CardTerminal> {
     }
 }
 
-/// A strip along a card's edge, or a square at its corner, that resizes
-/// the card by dragging.
+/// A strip along a card's or zone's edge, or a square at its corner, that
+/// resizes it by dragging.
 final class CardEdgeHandle: NSView {
     let edges: CanvasModel.Edges
-    private let id: UUID
-    private weak var canvas: CanvasController?
+    /// Where it is when a drag starts.
+    private let currentFrame: () -> CGRect?
+    private let resize: (CGRect) -> Void
     /// Told when a drag starts and ends (a terminal card holds its grids).
     private let hold: (Bool) -> Void
     private var start: (point: CGPoint, frame: CGRect)?
 
-    init(edges: CanvasModel.Edges, id: UUID, canvas: CanvasController, hold: @escaping (Bool) -> Void = { _ in }) {
+    init(
+        edges: CanvasModel.Edges, frame: @escaping () -> CGRect?, resize: @escaping (CGRect) -> Void,
+        hold: @escaping (Bool) -> Void = { _ in }
+    ) {
         self.edges = edges
-        self.id = id
-        self.canvas = canvas
+        currentFrame = frame
+        self.resize = resize
         self.hold = hold
         super.init(frame: .zero)
+    }
+
+    /// Card `id`'s: it settles once let go.
+    convenience init(edges: CanvasModel.Edges, id: UUID, canvas: CanvasController, hold: @escaping (Bool) -> Void = { _ in }) {
+        self.init(
+            edges: edges,
+            frame: { [weak canvas] in canvas?.model.card(id)?.frame },
+            resize: { [weak canvas] frame in canvas?.setFrame(frame, of: id) },
+            hold: { [weak canvas] holding in
+                hold(holding)
+                if !holding { canvas?.cardFrameDidSettle() }
+            })
     }
 
     @available(*, unavailable)
@@ -362,22 +378,21 @@ final class CardEdgeHandle: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
-        guard let frame = canvas?.model.card(id)?.frame, let point = documentPoint(event) else { return }
+        guard let frame = currentFrame(), let point = documentPoint(event) else { return }
         start = (point, frame)
         hold(true)
     }
 
     override func mouseDragged(with event: NSEvent) {
-        guard let canvas, let start, let point = documentPoint(event) else { return }
+        guard let start, let point = documentPoint(event) else { return }
         let delta = CGSize(width: point.x - start.point.x, height: point.y - start.point.y)
-        canvas.setFrame(CanvasModel.resized(start.frame, edges: edges, by: delta), of: id)
+        resize(CanvasModel.resized(start.frame, edges: edges, by: delta))
     }
 
     override func mouseUp(with event: NSEvent) {
         guard start != nil else { return }
         start = nil
         hold(false)
-        canvas?.cardFrameDidSettle()
     }
 
     /// Where `event` is on the canvas document, however zoomed.

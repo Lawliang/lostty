@@ -380,6 +380,21 @@ extension CanvasModel {
         return (frame, parent)
     }
 
+    /// A new zone at `frame`: "Zone N" for a project, "Domain N" for a
+    /// domain of `parent`, N one past the zones there are, in the next color.
+    func newZone(_ frame: CGRect, parent: UUID?) -> CanvasZone {
+        let number = zones.count + 1
+        return CanvasZone(
+            id: UUID(), frame: frame, name: parent == nil ? "Zone \(number)" : "Domain \(number)",
+            color: nextColor(parent: parent), parent: parent)
+    }
+
+    /// The project wholly holding `frame`, which a zone drawn there is a
+    /// domain of.
+    func project(holding frame: CGRect) -> UUID? {
+        zones.first { $0.parent == nil && $0.frame.contains(frame) }?.id
+    }
+
     /// The color a new zone takes: the first in order that no other
     /// project uses, for a project; that neither `parent` nor its domains
     /// use, for a domain. Round again once all are taken.

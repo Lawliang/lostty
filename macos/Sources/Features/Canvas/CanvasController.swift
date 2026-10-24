@@ -57,6 +57,8 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     /// What a marquee under way adds to: the selection it started with
     /// under ⇧, else nothing.
     var marqueeBase: Set<UUID>?
+    /// New Zone was chosen: the next marquee draws a zone instead.
+    var drawsZone = false
     /// The layout Tidy Up uses, chosen on the selection's bar.
     var tidyLayout = CanvasModel.Tidy.row
     /// A press on a group of selected cards under way: where it started,
@@ -168,11 +170,16 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         document.dragged = { [weak self] rect in self?.marqueeMoved(to: rect) }
         document.dragEnded = { [weak self] in self?.marqueeEnded() }
         document.selectedAll = { [weak self] in self?.selectAllCards() }
-        document.deselected = { [weak self] in self?.selection = [] }
+        document.deselected = { [weak self] in
+            self?.selection = []
+            self?.drawsZone = false
+        }
+        surface.zones.canvas = self
         surface.addMenu.chose = { [weak self] item in
             switch item {
             case .terminal: self?.newCard()
             case .ticket: self?.showTickets()
+            case .zone: self?.startDrawingZone()
             }
         }
         NotificationCenter.default.addObserver(
@@ -342,12 +349,13 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         restack()
     }
 
-    /// The cards' views in `model`'s order. Reorders without taking views
-    /// out of the window, so the focused pane keeps keyboard focus.
+    /// The cards' views in `model`'s order, over the zones. Reorders
+    /// without taking views out of the window, so the focused pane keeps
+    /// keyboard focus.
     private func restack() {
         for (index, entry) in model.cards.enumerated() { view(entry.id)?.stackIndex = index }
         scrollView.document.sortSubviews({ a, b, _ in
-            let left = (a as? CanvasStacked)?.stackIndex ?? 0, right = (b as? CanvasStacked)?.stackIndex ?? 0
+            let left = (a as? CanvasStacked)?.stackIndex ?? Int.min, right = (b as? CanvasStacked)?.stackIndex ?? Int.min
             return left < right ? .orderedAscending : left > right ? .orderedDescending : .orderedSame
         }, context: nil)
     }
@@ -374,6 +382,71 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     func cardFrameDidSettle() {
         updateVisibility()
         saveSoon()
+    }
+
+    // MARK: Zones
+
+    /// The zones' views follow `model.zones`, and Zone from Selection
+    /// whether it can make one.
+    func zonesDidChange() {
+        surface.zones.show(model.zones)
+        updateSelectionBar()
+    }
+
+    /// Adds a zone at `frame`, a domain of `parent` or a project, unless
+    /// it breaks the rules.
+    func addZone(_ frame: CGRect, parent: UUID?) {
+        guard model.addZone(model.newZone(frame, parent: parent)) else { return }
+        zonesDidChange()
+    }
+
+    /// A zone round the selected cards.
+    func zoneFromSelection() {
+        guard let around = model.zoneAround(selection) else { return }
+        addZone(around.frame, parent: around.parent)
+    }
+
+    /// New Zone: the next drag on the canvas between the cards draws one;
+    /// Escape cancels.
+    func startDrawingZone() {
+        canvasClicked()
+        selection = []
+        drawsZone = true
+    }
+
+    /// Zone `id` and everything in it drawn `delta` from where they are,
+    /// while its label is dragged, when the move keeps the rules; true then.
+    /// The model moves only once the drag ends (`moveZone`).
+    func previewZoneMove(_ id: UUID, by delta: CGSize) -> Bool {
+        var moved = model
+        guard let cards = moved.moveZone(id, by: delta) else { return false }
+        surface.zones.show(moved.zones)
+        for card in cards { if let frame = moved.card(card)?.frame { view(card)?.frame = frame } }
+        updateSelectionOutline(in: moved)
+        return true
+    }
+
+    /// Moves zone `id` by `delta` with everything in it, or puts it back
+    /// where it was when the move breaks the rules.
+    func moveZone(_ id: UUID, by delta: CGSize) {
+        let held = model.members(of: id)
+        model.moveZone(id, by: delta)
+        for card in held { if let frame = model.card(card)?.frame { view(card)?.frame = frame } }
+        zonesDidChange()
+        updateSelectionOutline()
+        cardFrameDidSettle()
+    }
+
+    /// Resizing, live: a frame that breaks the rules leaves it as it was.
+    func setZoneFrame(_ frame: CGRect, of id: UUID) {
+        guard model.setZoneFrame(frame, of: id) else { return }
+        zonesDidChange()
+    }
+
+    /// Removes zone `id` and its domains; the cards stay.
+    func removeZone(_ id: UUID) {
+        model.removeZone(id)
+        zonesDidChange()
     }
 
     /// A card's panes changed. With none left the card goes, kept a while
@@ -618,6 +691,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         guard scrollView.magnification != settledZoom else { return }
         // As thick on screen as the zoom changes.
         for id in selection { view(id)?.updateRing() }
+        surface.zones.updateEdges()
         // While the zoom moves the panes keep their pixels (the compositor
         // scales them) and their grid; they re-render once it settles.
         for card in cards {

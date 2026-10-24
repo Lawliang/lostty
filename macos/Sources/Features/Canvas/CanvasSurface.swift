@@ -241,6 +241,7 @@ final class CanvasSurfaceView: NSView {
     let selection = CanvasSelectionView()
     let selectionBar = CanvasSelectionBarView(rootView: CanvasSelectionBar())
     let addMenu = CanvasAddMenuView()
+    let zones = CanvasZoneLayer(frame: NSRect(x: 0, y: 0, width: CanvasModel.size, height: CanvasModel.size))
     private let grid = CanvasGridView(frame: .zero)
     private let notifications = CanvasNotificationsView(rootView: NotificationStackView())
 
@@ -249,6 +250,7 @@ final class CanvasSurfaceView: NSView {
         grid.scrollView = scrollView
         addSubview(grid)
         addSubview(scrollView)
+        scrollView.document.addSubview(zones)
         selection.document = scrollView.document
         addSubview(selection)
         selectionBar.isHidden = true
