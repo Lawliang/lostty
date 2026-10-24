@@ -30,6 +30,23 @@ engine code or other-platform code (`src/apprt/gtk`, `flatpak/`, `snap/`,
 - Shared Swift package for the phone: `macos/LosttyRemote`
 - GTK (Linux and FreeBSD) app, kept from upstream: `src/apprt/gtk`
 
+## Other Terminals
+
+Several terminals often work on this repo at once, each in its own
+worktree, and they share one installed app.
+
+- Before you run `macos/install.sh` or merge into `main`, run
+  `lostty +peers` from your worktree. It lists the other worktrees with a
+  terminal in them, the files you both change, and where the installed
+  build came from.
+- Message each peer it lists with the same files as yours, and wait for
+  its answer before you go on. Find the peer with
+  ListAgents: its tmux location matches the `terminal:` line. Ask whether
+  your install or merge would drop or clash with its work.
+- If `+peers` says an install would drop work the installed build has,
+  don't install until that work is merged into your branch, or the user
+  says to go ahead.
+
 ## Issue and PR Guidelines
 
 - Never create an issue.
