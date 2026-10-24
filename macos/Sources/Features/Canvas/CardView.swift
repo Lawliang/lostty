@@ -30,6 +30,8 @@ final class CardView: NSView, CanvasStacked {
     private let terminal: CardTerminalHost
     private var handles: [CardEdgeHandle] = []
     private lazy var ring = CanvasSelectionRing(on: self)
+    private var rename: CardRenameOverlay?
+    var isRenaming: Bool { rename != nil }
     /// Back-to-front position among the canvas's cards.
     var stackIndex = 0
     var isSelectedCard = false {
@@ -120,7 +122,26 @@ final class CardView: NSView, CanvasStacked {
         header.frame = NSRect(x: 0, y: 0, width: bounds.width, height: Self.headerHeight)
         terminal.frame = NSRect(x: 0, y: Self.headerHeight, width: bounds.width, height: max(0, bounds.height - Self.headerHeight))
         for handle in handles { handle.frame = CanvasModel.handleFrame(for: handle.edges, in: bounds) }
+        rename?.frame = bounds
         updateRing()
+    }
+
+    /// Asks for the card's title over the card (CardRenameOverlay); blank
+    /// restores the default. The card's pane has the keyboard after, unless
+    /// a click away took it.
+    func beginRename() {
+        guard rename == nil else { return }
+        let overlay = CardRenameOverlay(title: card.titleOverride ?? card.title) { [weak self] title in
+            self?.card.renameTab(to: title.isEmpty ? nil : title)
+        } closed: { [weak self] refocus in
+            guard let self else { return }
+            rename = nil
+            if refocus { canvas?.focus(card) }
+        }
+        rename = overlay
+        overlay.frame = bounds
+        content.addSubview(overlay)
+        window?.makeFirstResponder(overlay.field)
     }
 
     func updateRing() {
@@ -150,6 +171,75 @@ final class CardView: NSView, CanvasStacked {
         for view in card.surfaceTree {
             if let surface = view.surface { ghostty_surface_set_occlusion(surface, mode == .live) }
         }
+    }
+}
+
+/// Renaming a card: a dark veil over just that card, and a field for its
+/// new title. Return renames it; Esc, a click on the veil or clicking away
+/// leaves it as it was.
+final class CardRenameOverlay: NSView, NSTextFieldDelegate {
+    let field = NSTextField()
+    private let label = NSTextField(labelWithString: "Rename")
+    private let hint = NSTextField(labelWithString: "Leave blank to restore the default.")
+    private let renamed: (String) -> Void
+    /// Whether the card should take the keyboard back.
+    private let closed: (Bool) -> Void
+    private var done = false
+
+    init(title: String, renamed: @escaping (String) -> Void, closed: @escaping (Bool) -> Void) {
+        self.renamed = renamed
+        self.closed = closed
+        super.init(frame: .zero)
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.black.withAlphaComponent(0.55).cgColor
+        label.font = .systemFont(ofSize: 13, weight: .semibold)
+        label.textColor = .white
+        hint.font = .systemFont(ofSize: 11)
+        hint.textColor = NSColor(white: 1, alpha: 0.7)
+        field.stringValue = title
+        field.font = .systemFont(ofSize: 13)
+        field.delegate = self
+        for view in [label, field, hint] { addSubview(view) }
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    override var isFlipped: Bool { true }
+
+    override func layout() {
+        super.layout()
+        let width = min(320, bounds.width - 40)
+        let x = (bounds.width - width) / 2
+        let fieldHeight: CGFloat = 24
+        let top = (bounds.height - fieldHeight) / 2
+        label.sizeToFit()
+        hint.sizeToFit()
+        label.frame.origin = CGPoint(x: x, y: top - label.frame.height - 6)
+        field.frame = NSRect(x: x, y: top, width: width, height: fieldHeight)
+        hint.frame.origin = CGPoint(x: x, y: top + fieldHeight + 6)
+    }
+
+    override func mouseDown(with event: NSEvent) { finish(rename: false, refocus: true) }
+
+    func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
+        switch selector {
+        case #selector(NSResponder.insertNewline(_:)): finish(rename: true, refocus: true)
+        case #selector(NSResponder.cancelOperation(_:)): finish(rename: false, refocus: true)
+        default: return false
+        }
+        return true
+    }
+
+    /// Clicked away: whatever was clicked keeps the keyboard.
+    func controlTextDidEndEditing(_ obj: Notification) { finish(rename: false, refocus: false) }
+
+    private func finish(rename: Bool, refocus: Bool) {
+        guard !done else { return }
+        done = true
+        if rename { renamed(field.stringValue) }
+        removeFromSuperview()
+        closed(refocus)
     }
 }
 

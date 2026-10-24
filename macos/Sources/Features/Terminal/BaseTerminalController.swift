@@ -384,8 +384,7 @@ class BaseTerminalController: NSWindowController,
         alert.alertStyle = .informational
 
         let textField = NSTextField(frame: NSRect(x: 0, y: 0, width: 250, height: 24))
-        // Lostty: a canvas card's own title, not the canvas window's.
-        textField.stringValue = titleOverride ?? windowTitle
+        textField.stringValue = titleOverride ?? window.title
         alert.accessoryView = textField
 
         alert.addButton(withTitle: "OK")

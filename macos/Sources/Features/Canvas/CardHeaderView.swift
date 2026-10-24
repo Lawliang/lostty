@@ -20,11 +20,7 @@ final class CardHeaderView: NSView {
     init(card: CardController, canvas: CanvasController) {
         self.card = card
         self.canvas = canvas
-        let rename = CardRenameButton { [weak card, weak canvas] in
-            guard let card else { return }
-            canvas?.focus(card)
-            card.promptTabTitle()
-        }
+        let rename = CardRenameButton { [weak card] in card?.promptTabTitle() }
         self.rename = rename
         content = PassthroughHostingView(rootView: CardHeaderContent(card: card) { rename.frame = $0 })
         buttons = CardWindowButtons { [weak card, weak canvas] button in
@@ -290,7 +286,7 @@ struct CardHeaderContent: View {
 /// The pencil after a card's title: asks for a new title for the card.
 /// AppKit, as the window buttons are, so it takes clicks at any zoom.
 final class CardRenameButton: NSView {
-    static let size: CGFloat = 14
+    static let size: CGFloat = 18
 
     private let action: () -> Void
     private var hovering = false {
@@ -309,8 +305,8 @@ final class CardRenameButton: NSView {
     override var isFlipped: Bool { true }
 
     override func draw(_ dirtyRect: NSRect) {
-        let config = NSImage.SymbolConfiguration(pointSize: 10, weight: .medium)
-            .applying(.init(paletteColors: [NSColor.labelColor.withAlphaComponent(hovering ? 0.8 : 0.4)]))
+        let config = NSImage.SymbolConfiguration(pointSize: 13, weight: .semibold)
+            .applying(.init(paletteColors: [NSColor.labelColor.withAlphaComponent(hovering ? 1 : 0.65)]))
         guard let image = NSImage(systemSymbolName: "pencil", accessibilityDescription: "Rename")?
             .withSymbolConfiguration(config) else { return }
         image.draw(in: NSRect(x: bounds.midX - image.size.width / 2, y: bounds.midY - image.size.height / 2,
