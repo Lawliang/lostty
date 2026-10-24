@@ -472,6 +472,28 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         zonesDidChange()
     }
 
+    /// Zone `id`'s name, color, folder, brief or key prefix, from its
+    /// settings.
+    func updateZone(_ id: UUID, _ change: (inout CanvasZone) -> Void) {
+        guard model.updateZone(id, change) else { return }
+        zonesDidChange()
+    }
+
+    /// Zoom to Zone: zone `id` in view, with a margin.
+    func zoomToZone(_ id: UUID) {
+        guard let frame = model.zone(id)?.frame else { return }
+        zoomToFit(frame.insetBy(dx: -CanvasModel.fitMargin, dy: -CanvasModel.fitMargin))
+    }
+
+    /// What's in zone `id`, back to front: each terminal card's title as its
+    /// header shows it, and "Tickets" for the tickets panel.
+    func memberTitles(of id: UUID) -> [String] {
+        let members = model.members(of: id)
+        return model.cards.filter { members.contains($0.id) }.compactMap { entry in
+            entry.id == tickets.id ? "Tickets" : cards.first { $0.id == entry.id }?.title
+        }
+    }
+
     /// A card's panes changed. With none left the card goes, kept a while
     /// for Undo; when Undo gives it its panes back, it returns where it was.
     func cardTreeDidChange(_ card: CardController, from old: SplitTree<Ghostty.SurfaceView>, to new: SplitTree<Ghostty.SurfaceView>) {

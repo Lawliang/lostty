@@ -1,5 +1,6 @@
 #if os(macOS)
 import AppKit
+import SwiftUI
 
 /// The canvas's zones, behind every card: the document's first subview,
 /// as big as it. Takes clicks only on a zone's label and edges, so the
@@ -109,7 +110,7 @@ final class CanvasZoneView: NSView {
 }
 
 /// A zone's name on a pill of its color. Dragging it moves the zone and
-/// everything in it; a click or right-click opens the zone's menu.
+/// everything in it; a click opens its settings, a right-click its menu.
 final class CanvasZoneLabel: NSView {
     private let id: UUID
     private weak var canvas: CanvasController?
@@ -119,6 +120,7 @@ final class CanvasZoneLabel: NSView {
     /// Where a drag started on the document, and how far the zone has
     /// been allowed to follow it.
     private var drag: (start: CGPoint, allowed: CGSize, moved: Bool)?
+    private var settings: NSPopover?
 
     init(id: UUID, canvas: CanvasController) {
         self.id = id
@@ -181,7 +183,7 @@ final class CanvasZoneLabel: NSView {
         guard let drag else { return }
         self.drag = nil
         guard drag.moved else {
-            NSMenu.popUpContextMenu(zoneMenu(), with: event, for: self)
+            showSettings()
             return
         }
         canvas?.moveZone(id, by: drag.allowed)
@@ -194,13 +196,46 @@ final class CanvasZoneLabel: NSView {
 
     private func zoneMenu() -> NSMenu {
         let menu = NSMenu()
-        let remove = NSMenuItem(title: "Remove Zone", action: #selector(removeZone), keyEquivalent: "")
-        remove.target = self
-        menu.addItem(remove)
+        for (title, action) in [
+            ("Zone Settings…", #selector(showSettings)),
+            ("Zoom to Zone", #selector(zoomToZone)),
+            ("Remove Zone", #selector(removeZone)),
+        ] {
+            menu.addItem(withTitle: title, action: action, keyEquivalent: "").target = self
+        }
         return menu
     }
 
+    @objc private func showSettings() {
+        guard let canvas, let zone = canvas.model.zone(id) else { return }
+        if let settings, settings.isShown {
+            settings.close()
+            return
+        }
+        let id = id
+        let popover = NSPopover()
+        // Not transient: a folder picker opened from it mustn't close it.
+        popover.behavior = .semitransient
+        let host = NSHostingController(rootView: CanvasZoneSettings(
+            zone: zone,
+            project: zone.parent.flatMap { canvas.model.zone($0) },
+            members: canvas.memberTitles(of: id),
+            update: { [weak canvas] change in canvas?.updateZone(id, change) },
+            zoomToZone: { [weak self] in self?.zoomToZone() },
+            remove: { [weak self] in self?.removeZone() }))
+        host.sizingOptions = [.preferredContentSize]
+        popover.contentViewController = host
+        popover.show(relativeTo: bounds, of: self, preferredEdge: .maxY)
+        settings = popover
+    }
+
+    @objc private func zoomToZone() {
+        settings?.close()
+        canvas?.zoomToZone(id)
+    }
+
     @objc private func removeZone() {
+        settings?.close()
         canvas?.removeZone(id)
     }
 
