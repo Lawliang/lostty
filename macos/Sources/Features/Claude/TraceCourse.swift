@@ -58,15 +58,20 @@ enum TraceCourse: Equatable {
         }
     }
 
-    /// The corner the head heads for from `corner`. On the course, it keeps
-    /// going: clockwise all around, or back along its side. Off it (the
+    /// The corner the head heads for from `corner`, having come from
+    /// `previous`. On the course, it keeps going: all around the way it was
+    /// going (clockwise, unless it came onto the loop running the other
+    /// way, as from the bottom edge), or back along its side. Off it (the
     /// course just changed), it takes the side that leads onto the course.
-    func next(after corner: Corner) -> Corner {
+    func next(after corner: Corner, from previous: Corner? = nil) -> Corner {
         let corners = corners
         guard corners.contains(corner) else {
             return corner.neighbors.first(where: corners.contains) ?? corners[0]
         }
-        if self == .route(.all) { return corner.clockwiseNext }
+        if self == .route(.all) {
+            guard previous == corner.clockwiseNext else { return corner.clockwiseNext }
+            return corner.neighbors.first { $0 != previous } ?? corner.clockwiseNext
+        }
         return corners.first { $0 != corner } ?? corner
     }
 
@@ -119,7 +124,8 @@ struct TraceMotion: Equatable {
             begin(Leg(from: first, to: course.next(after: first), start: 0), course: course)
         }
         while let last = legs.last, elapsed >= last.start + legSeconds {
-            begin(Leg(from: last.to, to: course.next(after: last.to), start: last.start + legSeconds), course: course)
+            let next = course.next(after: last.to, from: last.from)
+            begin(Leg(from: last.to, to: next, start: last.start + legSeconds), course: course)
             if legs.count > Self.keptLegs { legs.removeFirst() }
         }
     }
