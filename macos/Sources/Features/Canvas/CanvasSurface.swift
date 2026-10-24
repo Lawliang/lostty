@@ -32,7 +32,7 @@ final class CanvasScrollView: NSScrollView {
     /// canvas. Decided where the scroll starts, so a pane the canvas pans
     /// under the pointer doesn't take it over, nor does its momentum change.
     weak var scrollingPane: NSView?
-    /// The ticket whose text the scroll under way scrolls (TicketDetailsHost),
+    /// The tickets panel whose list the scroll under way scrolls (TicketBoardHost),
     /// or nil. Decided where the scroll starts, as `scrollingPane` is; the
     /// canvas never hands a scroll on to it.
     weak var scrollingTicket: NSView?
@@ -57,21 +57,64 @@ final class CanvasScrollView: NSScrollView {
 
 /// The canvas itself: the cards are its subviews, framed in document
 /// points, y down. Draws nothing. Takes the keyboard when no card has it,
-/// so keys go nowhere.
+/// so keys go nowhere but ⌘A, which selects every card, and Escape, which
+/// deselects them. Dragging on it between the cards draws a marquee.
 final class CanvasDocumentView: NSView {
-    /// A click between the cards (CanvasController.canvasClicked).
-    var clicked: (() -> Void)?
+    /// A click between the cards (CanvasController.canvasClicked), with ⇧
+    /// or not.
+    var clicked: ((Bool) -> Void)?
+    /// The marquee from the click to the pointer, as it's dragged.
+    var dragged: ((CGRect) -> Void)?
+    var dragEnded: (() -> Void)?
+    var selectedAll: (() -> Void)?
+    var deselected: (() -> Void)?
+    private var start: CGPoint?
 
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { true }
 
     override func mouseDown(with event: NSEvent) {
-        clicked?()
+        start = convert(event.locationInWindow, from: nil)
+        clicked?(event.modifierFlags.contains(.shift))
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard let start else { return }
+        let point = convert(event.locationInWindow, from: nil)
+        dragged?(CGRect(x: min(start.x, point.x), y: min(start.y, point.y),
+                        width: abs(point.x - start.x), height: abs(point.y - start.y)))
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        guard start != nil else { return }
+        start = nil
+        dragEnded?()
+    }
+
+    override func selectAll(_ sender: Any?) {
+        selectedAll?()
+    }
+
+    /// Pointer moves anywhere on the canvas, over the cards too, so the
+    /// canvas can show a hand over a selected group (its event monitor
+    /// sees them).
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if trackingAreas.isEmpty {
+            addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .activeInKeyWindow, .inVisibleRect], owner: self))
+        }
+    }
+
+    override func mouseMoved(with event: NSEvent) {}
+
+    override func keyDown(with event: NSEvent) {
+        guard event.keyCode == 53 else { return super.keyDown(with: event) }
+        deselected?()
     }
 }
 
-/// The Lostty website's background: its paper color and dots, as dense
-/// as there, the same on screen at every zoom and moving as the canvas
+/// The Lostty website's background: its paper color and dots, a square
+/// 14pt grid, the same on screen at every zoom and moving as the canvas
 /// pans. The dots are one picture, a gap bigger than the view each way;
 /// panning only moves it (no drawing), and it's redrawn only when the gap
 /// (the zoom), the view's size or the appearance changes.
@@ -190,10 +233,13 @@ final class CanvasGridView: NSView {
     }
 }
 
-/// The grid with the scroll view over it, and over that the + button and
-/// the notification stack, pinned to the window's corners at every zoom.
+/// The grid with the scroll view over it, over that the selection's
+/// outline, and over that the + button, the selection's bar and the
+/// notification stack, pinned to the window's edges at every zoom.
 final class CanvasSurfaceView: NSView {
     let scrollView = CanvasScrollView(frame: .zero)
+    let selection = CanvasSelectionView()
+    let selectionBar = CanvasSelectionBarView(rootView: CanvasSelectionBar())
     let addMenu = CanvasAddMenuView()
     private let grid = CanvasGridView(frame: .zero)
     private let notifications = CanvasNotificationsView(rootView: NotificationStackView())
@@ -203,6 +249,10 @@ final class CanvasSurfaceView: NSView {
         grid.scrollView = scrollView
         addSubview(grid)
         addSubview(scrollView)
+        selection.document = scrollView.document
+        addSubview(selection)
+        selectionBar.isHidden = true
+        addSubview(selectionBar)
         addSubview(addMenu)
         // As big as its bubbles, at the top right.
         notifications.sizingOptions = [.intrinsicContentSize]
@@ -223,6 +273,12 @@ final class CanvasSurfaceView: NSView {
         super.layout()
         grid.frame = bounds
         scrollView.frame = bounds
+        selection.frame = bounds
+        let picked = selection.selected.reduce(CGRect.null) { $0.union($1) }
+        if !picked.isNull {
+            selectionBar.frame = CanvasSelectionBarView.frame(
+                size: selectionBar.fittingSize, under: convert(picked, from: scrollView.document), in: bounds)
+        }
         // Its button `margin` in from the bottom right (the view is unflipped).
         let size = CanvasAddMenuView.size, room = CanvasAddMenuView.shadowRoom, margin = CanvasAddMenuView.margin
         addMenu.frame = NSRect(
@@ -232,12 +288,14 @@ final class CanvasSurfaceView: NSView {
 
     @objc private func canvasMoved() {
         grid.update()
+        selection.needsDisplay = true
+        needsLayout = true
     }
 
     /// Whether a click at `point` (in the window) is on what floats over
-    /// the cards: the + menu, or a notification.
+    /// the cards: the + menu, the selection's bar, or a notification.
     func floats(at point: NSPoint) -> Bool {
-        addMenu.covers(point) || notifications.hitTest(convert(point, from: nil)) != nil
+        addMenu.covers(point) || selectionBar.covers(point) || notifications.hitTest(convert(point, from: nil)) != nil
     }
 }
 

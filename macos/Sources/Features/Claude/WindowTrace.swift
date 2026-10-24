@@ -115,29 +115,25 @@ enum WindowTrace {
     /// The website's gradient, `transparent 0 64%, color-mix(accent2 70%)
     /// 80%, accent 93%, #fff 95%, transparent 96%`, but with the tip the
     /// head's color lightened rather than white. Running counterclockwise,
-    /// it's mirrored so the tail stays behind the head. `tail` shortens the
-    /// tail toward the head, 1 its full length and 0 none.
-    static func shades(_ colors: TraceColors, clockwise: Bool = true, tail length: Double = 1) -> [Shade] {
+    /// it's mirrored so the tail stays behind the head.
+    static func shades(_ colors: TraceColors, clockwise: Bool = true) -> [Shade] {
         let tail = colors.secondary, head = colors.primary, lit = tip(colors)
         let tints: [(RGB, Double)] = [(tail, 0), (tail, 0), (tail, 0.7), (head, 1), (lit, 1), (lit, 0), (lit, 0)]
-        let locations = stopLocations.enumerated().map { i, location in
-            (1...2).contains(i) ? stopLocations[3] - (stopLocations[3] - location) * length : location
-        }
-        let shades = zip(tints, locations).map { Shade(rgb: $0.0, alpha: $0.1, location: $1) }
+        let shades = zip(tints, stopLocations).map { Shade(rgb: $0.0, alpha: $0.1, location: $1) }
         guard !clockwise else { return shades }
         return shades.reversed().map { Shade(rgb: $0.rgb, alpha: $0.alpha, location: 1 - $0.location) }
     }
 
     /// One frame of the light: where its gradient points (`endPoint`),
-    /// which way it runs, how much of its tail shows, how strongly the
-    /// subagents' bottom glow shows, and how much of the light shows off
-    /// the bottom edge.
+    /// which way it runs, how strongly the subagents' bottom glow shows,
+    /// how much of the light circling the edge shows rather than its trail
+    /// along the bottom, and that trail (`along`).
     struct Frame: Equatable {
         var endPoint: CGPoint
         var clockwise: Bool
-        var tail: Double
         var bottom: Double
         var sides: Double
+        var along: [[Shade]]
     }
 
     /// The light at `elapsed` in a pane whose inside edge is `rect`, moving
@@ -154,23 +150,71 @@ enum WindowTrace {
         let bottom = lighting.subagents ? TraceFrame.intensity(elapsed: elapsed) * onBottom * bottomGlowStrength : 0
         let legSeconds = TraceFrame.legSeconds(speed: lighting.speed)
         return Frame(
-            endPoint: endPoint(turn: turn), clockwise: head.clockwise,
-            tail: tail(journey.motion, course: course, elapsed: elapsed, legSeconds: legSeconds),
-            bottom: bottom, sides: 1 - onBottom)
+            endPoint: endPoint(turn: turn), clockwise: head.clockwise, bottom: bottom, sides: 1 - onBottom,
+            along: along(journey.motion, colors: lighting.colors, in: rect, elapsed: elapsed, legSeconds: legSeconds))
     }
 
-    /// How much of its tail the light shows. Along the bottom for subagents
-    /// the head turns back at each corner, where the gradient's tail would
-    /// jump round behind it; so the tail shrinks into the head as it slows
-    /// into the corner, and grows again as it leaves.
-    static func tail(_ motion: TraceMotion, course: TraceCourse, elapsed: Double, legSeconds: Double) -> Double {
-        let legs = motion.legs
-        guard course == .subagents, let leg = legs.last, Set([leg.from, leg.to]) == [.bottomLeft, .bottomRight]
-        else { return 1 }
+    /// The two ways along the bottom edge, right to left and left to right.
+    static let ways: [(from: Corner, to: Corner)] = [(.bottomRight, .bottomLeft), (.bottomLeft, .bottomRight)]
+
+    /// The light along the bottom edge for subagents: the website's
+    /// gradient laid along the way the head has travelled, as the skin
+    /// traces' tail is, so where the head turns back at a corner its tail
+    /// folds back along the edge behind it rather than swinging round the
+    /// pane's center. One gradient across the pane for each of `ways`, as
+    /// shares of the pane's width (`rect` is its inside edge), each keeping
+    /// its stops in the same order from frame to frame for Core Animation
+    /// to blend between.
+    static func along(
+        _ motion: TraceMotion, colors: TraceColors, in rect: CGRect, elapsed: Double, legSeconds: Double
+    ) -> [[Shade]] {
+        // The stops from just ahead of the tip back to the tail's end, as
+        // distances behind the head: their share of a turn as a share of
+        // the course's lap, there and back.
+        let lap = TraceCourse.subagents.lapLength(in: rect)
+        let tipLocation = stopLocations[4]
+        let profile = shades(colors)[1...5].reversed().map { stop in
+            (behind: (tipLocation - stop.location) * lap, shade: stop)
+        }
+        func shade(behind distance: Double) -> Shade {
+            guard let after = profile.firstIndex(where: { $0.behind > distance }) else {
+                return profile[profile.count - 1].shade
+            }
+            guard after > 0 else { return profile[0].shade }
+            let (a, b) = (profile[after - 1], profile[after])
+            let t = (distance - a.behind) / (b.behind - a.behind)
+            return Shade(rgb: a.shade.rgb.mixed(with: b.shade.rgb, amount: t),
+                         alpha: a.shade.alpha + (b.shade.alpha - a.shade.alpha) * t, location: 0)
+        }
+        let width = Double(rect.minX + rect.maxX), length = Double(rect.width)
+        guard let leg = motion.legs.last, width > 0 else { return ways.map { _ in [] } }
+        let previous = motion.legs.dropLast().last
+        // How far the head is along its leg.
+        let from = leg.from.point(in: rect), to = leg.to.point(in: rect)
         let u = min(1, max(0, (elapsed - leg.start) / legSeconds))
-        let turnedBack = legs.count > 1 && legs[legs.count - 2].from == leg.to
-        if u < 0.5, !turnedBack { return 1 }
-        return min(1, 2 * sin(.pi * u))
+        let travelled = Double(hypot(to.x - from.x, to.y - from.y)) * (1 - cos(.pi * u)) / 2
+        return ways.map { way in
+            // Each stop's place along the way, from its start corner. A stop
+            // off this way's leg waits at the corner it would come in by, in
+            // the color the tail has there.
+            let stops = profile.map { stop -> (at: Double, shade: Shade) in
+                let ahead = travelled - stop.behind
+                if leg.from == way.from, leg.to == way.to {
+                    return ahead >= 0 ? (min(ahead, length), stop.shade) : (0, shade(behind: travelled))
+                }
+                if let previous, previous.from == way.from, previous.to == way.to {
+                    return ahead >= 0 ? (length, shade(behind: travelled)) : (max(0, length + ahead), stop.shade)
+                }
+                return (0, shade(behind: .infinity))
+            }
+            let start = Double(way.from.point(in: rect).x)
+            let sign: Double = way.to.point(in: rect).x > way.from.point(in: rect).x ? 1 : -1
+            let laid = stops.map {
+                Shade(rgb: $0.shade.rgb, alpha: $0.shade.alpha, location: (start + sign * $0.at) / width)
+            }
+            // Left to right, the stops come right to left.
+            return sign > 0 ? laid.reversed() : laid
+        }
     }
 
     /// The light's frames every `step` seconds over `duration` from
@@ -258,7 +302,7 @@ private struct WindowLightLayer: NSViewRepresentable {
 /// turned round the pane's center, seen through a thin line along the
 /// edge and, softer, a blurred band just inside it (the website's glow
 /// spills outside the box; a pane can't draw there); while only subagents
-/// work, kept to the bottom edge over their bottom glow. Core Animation
+/// work, laid along the bottom edge over their bottom glow. Core Animation
 /// plays the motion: every
 /// few seconds it's handed the frames ahead (`WindowTrace.frames`), and
 /// between those Lostty does nothing. Holds still while its window is
@@ -275,21 +319,31 @@ final class WindowLightView: NSView {
 
     private var setup = Setup()
     private var journey = TraceOverlay.Journey()
-    /// Each gradient is a square (conic gradients measure angles in unit
-    /// space) inside a pane-sized box that its mask cuts.
+    /// The light circling the edge. Each gradient is a square (conic
+    /// gradients measure angles in unit space) inside a pane-sized box that
+    /// its mask cuts.
+    private let loopBox = CALayer()
     private let glowBox = CALayer()
     private let glow = CAGradientLayer()
     private let glowMask = CALayer()
     private let lineBox = CALayer()
     private let line = CAGradientLayer()
     private let lineMask = CAShapeLayer()
-    /// Holds the glow and the line; its mask shows them only along the
-    /// bottom edge while the head keeps to it for subagents.
-    private let lightBox = CALayer()
-    private let curtain = CALayer()
-    private let edgeStrip = CALayer()
-    private let sideCurtain = CALayer()
-    /// How far in from the bottom edge the light shows then.
+    /// The light along the bottom edge for subagents: a gradient across
+    /// the pane for each way the head runs (`WindowTrace.along`), seen
+    /// through the same glow and line, only in a strip along the bottom
+    /// edge.
+    private let alongBox = CALayer()
+    private let alongGlowBox = CALayer()
+    private let alongGlows = [CAGradientLayer(), CAGradientLayer()]
+    private let alongGlowMask = CALayer()
+    private let alongLineBox = CALayer()
+    private let alongLines = [CAGradientLayer(), CAGradientLayer()]
+    private let alongLineMask = CAShapeLayer()
+    /// The strip's ends are cut on the diagonal, as a mitred corner, so
+    /// the sides don't show where they meet the bottom edge.
+    private let edgeStrip = CAShapeLayer()
+    /// How far in from the bottom edge the strip reaches.
     private static let edgeStripDepth: CGFloat = 28
     /// Reduce Motion: no circling; the whole edge breathes.
     private let calm = CAShapeLayer()
@@ -316,22 +370,30 @@ final class WindowLightView: NSView {
             gradient.type = .conic
             gradient.startPoint = CGPoint(x: 0.5, y: 0.5)
         }
-        glowBox.opacity = 0.55
-        glowBox.mask = glowMask
-        glowBox.addSublayer(glow)
-        // While a resize or a pinch goes on, the old mask stretches.
-        glowMask.contentsGravity = .resize
-        lineMask.fillColor = nil
-        lineMask.strokeColor = CGColor(gray: 0, alpha: 1)
-        lineBox.mask = lineMask
-        lineBox.addSublayer(line)
-        for part in [edgeStrip, sideCurtain] {
-            part.backgroundColor = CGColor(gray: 0, alpha: 1)
-            curtain.addSublayer(part)
+        for gradient in alongGlows + alongLines {
+            gradient.startPoint = CGPoint(x: 0, y: 0.5)
+            gradient.endPoint = CGPoint(x: 1, y: 0.5)
         }
-        lightBox.mask = curtain
-        lightBox.addSublayer(glowBox)
-        lightBox.addSublayer(lineBox)
+        for (box, mask, gradients) in [(glowBox, glowMask, [glow]), (alongGlowBox, alongGlowMask, alongGlows)] {
+            box.opacity = 0.55
+            box.mask = mask
+            for gradient in gradients { box.addSublayer(gradient) }
+            // While a resize or a pinch goes on, the old mask stretches.
+            mask.contentsGravity = .resize
+        }
+        for (box, mask, gradients) in [(lineBox, lineMask, [line]), (alongLineBox, alongLineMask, alongLines)] {
+            mask.fillColor = nil
+            mask.strokeColor = CGColor(gray: 0, alpha: 1)
+            box.mask = mask
+            for gradient in gradients { box.addSublayer(gradient) }
+        }
+        loopBox.addSublayer(glowBox)
+        loopBox.addSublayer(lineBox)
+        edgeStrip.fillColor = CGColor(gray: 0, alpha: 1)
+        alongBox.mask = edgeStrip
+        alongBox.addSublayer(alongGlowBox)
+        alongBox.addSublayer(alongLineBox)
+        alongBox.opacity = 0
         calm.fillColor = nil
         calm.isHidden = true
         bottom.contentsGravity = .resize
@@ -371,8 +433,8 @@ final class WindowLightView: NSView {
 
     override func layout() {
         super.layout()
-        if let layer, glowBox.superlayer !== layer {
-            for sublayer in [lightBox, calm, bottom] { layer.addSublayer(sublayer) }
+        if let layer, loopBox.superlayer !== layer {
+            for sublayer in [loopBox, alongBox, calm, bottom] { layer.addSublayer(sublayer) }
         }
         let scale = CanvasZoomCompensation.scale(zoom: setup.zoom)
         let side = max(bounds.width, bounds.height)
@@ -381,15 +443,26 @@ final class WindowLightView: NSView {
         let edge = CGPath(rect: bounds.insetBy(dx: scale, dy: scale), transform: nil)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        for box in [lightBox, curtain, glowBox, lineBox, calm, glowMask, lineMask, bottom] { box.frame = bounds }
+        let boxes = [loopBox, glowBox, lineBox, glowMask, lineMask, alongBox, alongGlowBox, alongLineBox,
+                     alongGlowMask, alongLineMask, edgeStrip, calm, bottom]
+        for box in boxes { box.frame = bounds }
+        for gradient in alongGlows + alongLines { gradient.frame = bounds }
         // The view is flipped: the bottom edge is at maxY.
-        let depth = min(bounds.height, Self.edgeStripDepth * scale)
-        edgeStrip.frame = CGRect(x: 0, y: bounds.height - depth, width: bounds.width, height: depth)
-        sideCurtain.frame = CGRect(x: 0, y: 0, width: bounds.width, height: bounds.height - depth)
+        let (width, height) = (bounds.width, bounds.height)
+        let depth = min(height, width / 2, Self.edgeStripDepth * scale)
+        let strip = CGMutablePath()
+        strip.addLines(between: [
+            CGPoint(x: 0, y: height), CGPoint(x: width, y: height),
+            CGPoint(x: width - depth, y: height - depth), CGPoint(x: depth, y: height - depth),
+        ])
+        strip.closeSubpath()
+        edgeStrip.path = strip
         glow.frame = square
         line.frame = square
-        lineMask.path = edge
-        lineMask.lineWidth = 2 * scale
+        for mask in [lineMask, alongLineMask] {
+            mask.path = edge
+            mask.lineWidth = 2 * scale
+        }
         calm.path = edge
         calm.lineWidth = 2 * scale
         CATransaction.commit()
@@ -444,6 +517,7 @@ final class WindowLightView: NSView {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         glowMask.contents = image
+        alongGlowMask.contents = image
         CATransaction.commit()
         maskDrawn = key
     }
@@ -498,9 +572,10 @@ final class WindowLightView: NSView {
             step: Self.step)
         let colors = lighting.colors
         func shown(_ frame: WindowTrace.Frame) -> Colors {
-            Colors(WindowTrace.shades(colors, clockwise: frame.clockwise, tail: frame.tail))
+            Colors(WindowTrace.shades(colors, clockwise: frame.clockwise))
         }
         let shades = frames.map(shown)
+        let laid = frames.map { $0.along.map(Colors.init) }
         let times = frames.indices.map { NSNumber(value: Double($0) / Double(frames.count - 1)) }
         func animation(_ keyPath: String, _ values: [Any]) -> CAKeyframeAnimation {
             let animation = CAKeyframeAnimation(keyPath: keyPath)
@@ -528,10 +603,23 @@ final class WindowLightView: NSView {
             gradient.add(flips, forKey: "colors")
             gradient.add(locations, forKey: "locations")
         }
+        for way in WindowTrace.ways.indices {
+            let current = Colors(now.along[way])
+            let tints = animation("colors", laid.map { $0[way].colors })
+            let stops = animation("locations", laid.map { $0[way].locations })
+            for gradient in [alongGlows[way], alongLines[way]] {
+                gradient.colors = current.colors
+                gradient.locations = current.locations
+                gradient.add(tints, forKey: "colors")
+                gradient.add(stops, forKey: "locations")
+            }
+        }
         bottom.opacity = Float(now.bottom)
         bottom.add(animation("opacity", frames.map { NSNumber(value: $0.bottom) }), forKey: "bottom")
-        sideCurtain.opacity = Float(now.sides)
-        sideCurtain.add(animation("opacity", frames.map { NSNumber(value: $0.sides) }), forKey: "sides")
+        loopBox.opacity = Float(now.sides)
+        loopBox.add(animation("opacity", frames.map { NSNumber(value: $0.sides) }), forKey: "sides")
+        alongBox.opacity = Float(1 - now.sides)
+        alongBox.add(animation("opacity", frames.map { NSNumber(value: 1 - $0.sides) }), forKey: "sides")
         CATransaction.commit()
         guard handOn == nil else { return }
         handOn = Timer.scheduledTimer(withTimeInterval: Self.handOnEvery, repeats: true) { [weak self] _ in
@@ -546,7 +634,7 @@ final class WindowLightView: NSView {
         guard glow.animation(forKey: "turn") != nil else { return }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        for gradient in [glow, line] {
+        for gradient in [glow, line] + alongGlows + alongLines {
             if let shown = gradient.presentation() {
                 gradient.endPoint = shown.endPoint
                 gradient.colors = shown.colors
@@ -554,10 +642,10 @@ final class WindowLightView: NSView {
             }
             for key in ["turn", "colors", "locations"] { gradient.removeAnimation(forKey: key) }
         }
-        if let shown = bottom.presentation() { bottom.opacity = shown.opacity }
-        bottom.removeAnimation(forKey: "bottom")
-        if let shown = sideCurtain.presentation() { sideCurtain.opacity = shown.opacity }
-        sideCurtain.removeAnimation(forKey: "sides")
+        for (box, key) in [(bottom, "bottom"), (loopBox, "sides"), (alongBox, "sides")] {
+            if let shown = box.presentation() { box.opacity = shown.opacity }
+            box.removeAnimation(forKey: key)
+        }
         CATransaction.commit()
     }
 
@@ -578,8 +666,8 @@ final class WindowLightView: NSView {
         let calmNow = setup.reduceMotion && setup.lighting != nil
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        glowBox.isHidden = calmNow
-        lineBox.isHidden = calmNow
+        loopBox.isHidden = calmNow
+        alongBox.isHidden = calmNow
         calm.isHidden = !calmNow
         calm.removeAnimation(forKey: "breath")
         // Still, the bottom glow is simply on while only subagents work.

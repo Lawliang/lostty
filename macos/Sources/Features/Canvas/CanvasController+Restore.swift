@@ -3,7 +3,7 @@ import AppKit
 
 extension CanvasController {
     /// What the app saves for the canvas: shown or not, the view, the
-    /// cards back to front, and the tickets.
+    /// cards back to front, and the tickets with their panel.
     func restorableState() -> CanvasRestorableState {
         let visible = scrollView.documentVisibleRect
         // Never shown since launch: the view it came back with.
@@ -13,13 +13,11 @@ extension CanvasController {
             guard let card = cards.first(where: { $0.id == entry.id }), !card.surfaceTree.isEmpty else { return nil }
             return .init(frame: entry.frame, tree: card.surfaceTree, focused: card.focusedSurface?.id.uuidString)
         }
-        // Drafts too: a form open comes back open, with what's typed in it.
-        let tickets = model.cards.enumerated().compactMap { stack, entry -> CanvasSaved<SplitTree<Ghostty.SurfaceView>>.Ticket? in
-            guard let card = self.tickets[entry.id]?.ticket else { return nil }
-            return .init(id: entry.id, frame: entry.frame, ticket: card.ticket, draft: card.draft, stack: stack)
-        }
+        let stack = model.cards.firstIndex { $0.id == tickets.id }
+        let board = CanvasSaved<SplitTree<Ghostty.SurfaceView>>.Board(
+            tickets: tickets.list.tickets, frame: stack.map { model.cards[$0].frame }, stack: stack, draft: tickets.draft)
         return CanvasRestorableState(saved: .init(
-            visible: window?.isVisible ?? false, center: view.0, zoom: view.1, cards: saved, tickets: tickets))
+            visible: window?.isVisible ?? false, center: view.0, zoom: view.1, cards: saved, board: board))
     }
 
     /// Rebuilds the canvas at launch; shown only if it was.
@@ -31,12 +29,7 @@ extension CanvasController {
             let focused = card.focused.flatMap { id in card.tree.first { $0.id.uuidString == id } }
             canvas.addCard(tree: card.tree, frame: card.frame, focused: focused)
         }
-        // Back where they stood among the cards; a ticket already on the
-        // canvas (reopened from history) isn't brought back twice.
-        let tickets = (state.saved.tickets ?? []).filter { canvas.tickets[$0.id] == nil }
-        for ticket in tickets.sorted(by: { $0.stack < $1.stack }) {
-            canvas.addTicket(ticket.ticket, id: ticket.id, frame: ticket.frame, stack: ticket.stack, draft: ticket.draft)
-        }
+        canvas.restoreTickets(state.saved)
         canvas.pendingView = (state.saved.center, state.saved.zoom)
         // The front card was the focused one: it takes keyboard focus when
         // the canvas is next key, not now (that would pull it forward).
@@ -49,6 +42,22 @@ extension CanvasController {
         } else {
             // Hidden: its panes run but don't draw until it's opened.
             canvas.updateVisibility()
+        }
+    }
+
+    /// The tickets back in the panel, and the panel back where it stood
+    /// among the cards if it was open. Tickets saved as cards (before the
+    /// panel) join it, and it opens where the front one was. A ticket
+    /// already in the panel (reopened from history) isn't added twice.
+    private func restoreTickets<Tree>(_ saved: CanvasSaved<Tree>) {
+        let old = (saved.tickets ?? []).sorted { $0.stack < $1.stack }
+        tickets.list.merge((saved.board?.tickets ?? []) + old.map(\.ticket))
+        if tickets.draft == nil { tickets.draft = saved.board?.draft }
+        if let frame = saved.board?.frame {
+            openTickets(frame: frame, stack: saved.board?.stack)
+        } else if let front = old.last(where: \.ticket.isCreated) {
+            openTickets(
+                frame: CGRect(origin: front.frame.origin, size: TicketBoardView.newSize), stack: front.stack)
         }
     }
 }
