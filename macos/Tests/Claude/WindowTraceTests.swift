@@ -156,32 +156,36 @@ struct WindowTraceTests {
         #expect(shades[3].rgb == WindowTrace.websitePink)
     }
 
-    @Test func aShorterTailMovesItsStopsTowardTheHead() {
-        let colors = TraceColors(primary: WindowTrace.websitePink, secondary: WindowTrace.websiteCyan)
-        let none = WindowTrace.shades(colors, tail: 0).map(\.location)
-        #expect(none == [0, 0.93, 0.93, 0.93, 0.95, 0.96, 1])
-        let half = WindowTrace.shades(colors, tail: 0.5).map(\.location)
-        #expect(zip(half, [0, 0.785, 0.865, 0.93, 0.95, 0.96, 1]).allSatisfy { abs($0 - $1) < 1e-9 })
-        let mirrored = WindowTrace.shades(colors, clockwise: false, tail: 0).map(\.location)
-        #expect(zip(mirrored, [0, 0.04, 0.05, 0.07, 0.07, 0.07, 1]).allSatisfy { abs($0 - $1) < 1e-9 })
-    }
-
     private func frame(_ elapsed: Double, subagents: Bool = true, journey: TraceOverlay.Journey) -> WindowTrace.Frame {
         let lit = lighting(.racing(since: since, subagents: subagents))!
         return WindowTrace.frame(journey, lighting: lit, route: .all, in: rect, elapsed: elapsed)
     }
 
-    @Test func alongTheBottomTheTailShrinksIntoEachCornerWhereTheHeadTurnsBack() {
-        // A leg takes 0.6s: right to left, then back.
+    @Test func alongTheBottomTheLightIsLaidAlongTheWayTravelled() {
+        // A leg takes 0.6s: right to left, then back. Halfway along the
+        // first, the head is midway and the right-to-left gradient has it.
         let journey = TraceOverlay.Journey()
-        #expect(frame(0.1, journey: journey).tail == 1)
-        #expect(frame(0.3, journey: journey).tail == 1)
-        #expect(frame(0.59, journey: journey).tail < 0.2)
-        #expect(frame(0.61, journey: journey).tail < 0.2)
-        #expect(frame(0.9, journey: journey).tail == 1)
-        // Round a route's corners the tail keeps its length.
-        let route = TraceOverlay.Journey()
-        for elapsed in [0.59, 0.61, 1.19] { #expect(frame(elapsed, subagents: false, journey: route).tail == 1) }
+        let along = frame(0.3, journey: journey).along
+        let tip = along[0].first { $0.rgb == WindowTrace.tip(lighting(.racing(since: since))!.colors) && $0.alpha == 1 }
+        #expect(abs((tip?.location ?? 0) - 0.5) < 1e-9)
+        #expect(along[1].allSatisfy { $0.alpha == 0 })
+    }
+
+    @Test func turningBackTheTailFoldsAlongTheEdgeBehindTheHead() {
+        let journey = TraceOverlay.Journey()
+        // Just after turning back at the left corner: the head leaves it
+        // left to right, its tail still lies along the way it came.
+        let along = frame(0.65, journey: journey).along
+        #expect(along[1].contains { $0.alpha == 1 && $0.location < 0.1 })
+        #expect(along[0].contains { $0.alpha > 0.5 && $0.location < 0.3 })
+        // Each gradient's stops stay in order, all the way.
+        for elapsed in stride(from: 0.0, through: 3, by: 1.0 / 30) {
+            for way in frame(elapsed, journey: journey).along {
+                let locations = way.map(\.location)
+                #expect(locations == locations.sorted())
+                #expect(locations.allSatisfy { (0...1).contains($0) })
+            }
+        }
     }
 
     @Test func alongTheBottomTheLightShowsOnlyThere() {
