@@ -95,6 +95,18 @@ final class CanvasDocumentView: NSView {
         selectedAll?()
     }
 
+    /// Pointer moves anywhere on the canvas, over the cards too, so the
+    /// canvas can show a hand over a selected group (its event monitor
+    /// sees them).
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if trackingAreas.isEmpty {
+            addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .activeInKeyWindow, .inVisibleRect], owner: self))
+        }
+    }
+
+    override func mouseMoved(with event: NSEvent) {}
+
     override func keyDown(with event: NSEvent) {
         guard event.keyCode == 53 else { return super.keyDown(with: event) }
         deselected?()
@@ -262,11 +274,11 @@ final class CanvasSurfaceView: NSView {
         grid.frame = bounds
         scrollView.frame = bounds
         selection.frame = bounds
-        // Its bottom `margin` up from the bottom middle, the room for its shadow past that.
-        let bar = selectionBar.fittingSize, barRoom = CanvasSelectionBarView.shadowRoom
-        selectionBar.frame = NSRect(
-            x: (bounds.midX - bar.width / 2).rounded(), y: bounds.minY + CanvasSelectionBarView.margin - barRoom,
-            width: bar.width, height: bar.height)
+        let picked = selection.selected.reduce(CGRect.null) { $0.union($1) }
+        if !picked.isNull {
+            selectionBar.frame = CanvasSelectionBarView.frame(
+                size: selectionBar.fittingSize, under: convert(picked, from: scrollView.document), in: bounds)
+        }
         // Its button `margin` in from the bottom right (the view is unflipped).
         let size = CanvasAddMenuView.size, room = CanvasAddMenuView.shadowRoom, margin = CanvasAddMenuView.margin
         addMenu.frame = NSRect(
@@ -277,6 +289,7 @@ final class CanvasSurfaceView: NSView {
     @objc private func canvasMoved() {
         grid.update()
         selection.needsDisplay = true
+        needsLayout = true
     }
 
     /// Whether a click at `point` (in the window) is on what floats over

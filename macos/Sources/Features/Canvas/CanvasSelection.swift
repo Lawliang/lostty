@@ -11,10 +11,16 @@ final class CanvasSelectionView: NSView {
     /// The marquee, in document points.
     var marquee: CGRect? { didSet { needsDisplay = true } }
     /// The selected cards' frames, in document points.
-    var selected: [CGRect] = [] { didSet { needsDisplay = true } }
+    var selected: [CGRect] = [] {
+        didSet {
+            needsDisplay = true
+            // The bar sits under them.
+            superview?.needsLayout = true
+        }
+    }
 
     /// Room between the outline and the cards in it.
-    static let outlineRoom: CGFloat = 8
+    nonisolated static let outlineRoom: CGFloat = 8
     /// The selection's color, in both appearances: the light blue of a
     /// browser's focus ring (#99C8FF), as in the drag-select mockup.
     static let color = NSColor(srgbRed: 0.6, green: 0.784, blue: 1, alpha: 1)
@@ -90,13 +96,25 @@ final class CanvasSelectionRing {
     }
 }
 
-/// The bar at the bottom of the canvas while cards are selected: how
+/// The bar under the selected cards' outline while cards are selected: how
 /// many, Zoom to Selection, Tidy Up with the layout it uses, and Deselect.
 final class CanvasSelectionBarView: NSHostingView<CanvasSelectionBar> {
     /// Room round the bar for its shadow.
-    static let shadowRoom: CGFloat = 16
-    /// From the canvas's bottom edge to the bar's.
-    static let margin: CGFloat = 18
+    nonisolated static let shadowRoom: CGFloat = 16
+    /// From the selection's outline to the bar, and the least from the
+    /// canvas's edges.
+    nonisolated static let margin: CGFloat = 12
+
+    /// The bar's frame of `size` (with the room for its shadow) in `bounds`
+    /// (y up): centered under `selection`, the selected cards' outline,
+    /// kept inside `bounds`.
+    nonisolated static func frame(size: CGSize, under selection: CGRect, in bounds: CGRect) -> CGRect {
+        let room = shadowRoom
+        let top = selection.minY - CanvasSelectionView.outlineRoom - margin
+        let x = min(max(selection.midX - size.width / 2, bounds.minX + margin - room), bounds.maxX - margin + room - size.width)
+        let y = min(max(top + room - size.height, bounds.minY + margin - room), bounds.maxY - margin + room - size.height)
+        return CGRect(x: x.rounded(), y: y.rounded(), width: size.width, height: size.height)
+    }
 
     /// The bar itself, without the room for its shadow.
     private var live: CGRect {
@@ -252,6 +270,7 @@ extension CanvasController {
         for entry in model.cards { view(entry.id)?.isSelectedCard = selection.contains(entry.id) }
         updateSelectionOutline()
         updateSelectionBar()
+        if let window { updateGroupHover(at: window.mouseLocationOutsideOfEventStream) }
     }
 
     /// The bar shows the selection's count and Tidy Up's layout.

@@ -59,6 +59,12 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     var marqueeBase: Set<UUID>?
     /// The layout Tidy Up uses, chosen on the selection's bar.
     var tidyLayout = CanvasModel.Tidy.row
+    /// A press on a group of selected cards under way: where it started,
+    /// the card under it, where the cards were, and whether it has moved.
+    var groupDrag: (point: CGPoint, id: UUID, origins: [UUID: CGPoint], moved: Bool)?
+    /// The pointer is over a group of selected cards: an open hand, the
+    /// panes' own cursors off.
+    var overGroup = false
     /// Cards whose panes are moving to a window: gone for good, not for Undo.
     private var moving: Set<UUID> = []
     /// The zoom the terminals last rendered at.
@@ -185,17 +191,29 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         // smooth, off-main-thread scrolling.)
         // A click on the tickets panel focuses it first, wherever it lands
         // (its rows and fields take the click themselves). A click on a card
-        // changes the selection first.
-        eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.magnify, .leftMouseDown, .rightMouseDown]) { [weak self] event in
+        // changes the selection first, and a press on a group of selected
+        // cards drags them all.
+        let events: NSEvent.EventTypeMask = [.magnify, .leftMouseDown, .rightMouseDown, .leftMouseDragged, .leftMouseUp, .mouseMoved]
+        eventMonitor = NSEvent.addLocalMonitorForEvents(matching: events) { [weak self] event in
             guard let self, event.window === window else { return event }
-            guard event.type == .magnify else {
-                if event.type == .leftMouseDown, selectionClicked(event) { return nil }
+            switch event.type {
+            case .magnify:
+                stopGlide()
+                scrollView.magnify(with: event)
+                return nil
+            case .leftMouseDown:
+                if groupPressed(event) || selectionClicked(event) { return nil }
                 ticketClicked(event)
                 return event
+            case .rightMouseDown:
+                ticketClicked(event)
+                return event
+            case .leftMouseDragged, .leftMouseUp:
+                return groupDragged(event) ? nil : event
+            default:
+                updateGroupHover(at: event.locationInWindow)
+                return event
             }
-            stopGlide()
-            scrollView.magnify(with: event)
-            return nil
         }
     }
 
@@ -484,6 +502,72 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         // Otherwise a pane keeps the keyboard, and keys type into it.
         if !((window?.firstResponder as? NSView)?.isDescendant(of: view) ?? false) { window?.makeFirstResponder(view) }
         if let previous { letGo(of: previous) }
+    }
+
+    /// The selected card under a click at `point` (in the window) while two
+    /// or more are selected, on its panes or title bar, not its resize
+    /// handles or window buttons, nor anything over the cards.
+    func groupCard(at point: NSPoint) -> UUID? {
+        guard selection.count > 1, !surface.floats(at: point) else { return nil }
+        let inDocument = scrollView.document.convert(point, from: nil)
+        guard scrollView.documentVisibleRect.contains(inDocument), let id = model.card(at: inDocument),
+              selection.contains(id) else { return nil }
+        let hit = surface.hitTest(point)
+        return hit is CardEdgeHandle || hit is CardWindowButtons ? nil : id
+    }
+
+    /// A press on a group of selected cards: a drag moves them all; let go
+    /// without moving, the selection goes and the card pressed takes focus.
+    private func groupPressed(_ event: NSEvent) -> Bool {
+        guard !event.modifierFlags.contains(.shift), let id = groupCard(at: event.locationInWindow) else { return false }
+        let point = scrollView.document.convert(event.locationInWindow, from: nil)
+        groupDrag = (point, id, beginMove(id), false)
+        return true
+    }
+
+    private func groupDragged(_ event: NSEvent) -> Bool {
+        guard var drag = groupDrag else { return false }
+        if event.type == .leftMouseUp {
+            groupDrag = nil
+            if drag.moved {
+                cardFrameDidSettle()
+            } else {
+                selection = []
+                if drag.id == tickets.id {
+                    ticketWillFocus(drag.id)
+                } else if let card = cards.first(where: { $0.id == drag.id }) {
+                    focus(card)
+                }
+            }
+            updateGroupHover(at: event.locationInWindow)
+            return true
+        }
+        let point = scrollView.document.convert(event.locationInWindow, from: nil)
+        let delta = CGSize(width: point.x - drag.point.x, height: point.y - drag.point.y)
+        // A click that wobbles isn't a drag.
+        guard drag.moved || hypot(delta.width, delta.height) * scrollView.magnification >= 3 else { return true }
+        drag.moved = true
+        groupDrag = drag
+        NSCursor.closedHand.set()
+        move(drag.origins, by: delta)
+        return true
+    }
+
+    /// An open hand over a group of selected cards, which drags them; the
+    /// panes' own cursors everywhere else.
+    func updateGroupHover(at point: NSPoint) {
+        let over = groupCard(at: point) != nil
+        if over != overGroup {
+            overGroup = over
+            if over {
+                window?.disableCursorRects()
+            } else {
+                window?.enableCursorRects()
+                window?.resetCursorRects()
+                NSCursor.arrow.set()
+            }
+        }
+        if over, groupDrag == nil { NSCursor.openHand.set() }
     }
 
     /// A click on a card: with ⇧ on its title bar it goes in or out of the

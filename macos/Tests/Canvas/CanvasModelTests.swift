@@ -91,6 +91,19 @@ struct CanvasModelTests {
         #expect(CanvasModel.Tidy.column.next == .row)
     }
 
+    @Test func theSelectionBarSitsUnderTheOutlineInsideTheCanvas() {
+        let size = CGSize(width: 400, height: 66), room = CanvasSelectionBarView.shadowRoom
+        let canvas = CGRect(x: 0, y: 0, width: 1200, height: 800)
+        // y up: under a selection from y 300 to 600, the bar's top is 8 + 12 below its bottom.
+        let bar = CanvasSelectionBarView.frame(size: size, under: CGRect(x: 100, y: 300, width: 600, height: 300), in: canvas)
+        #expect(bar.midX == 400)
+        #expect(bar.maxY - room == 300 - CanvasSelectionView.outlineRoom - CanvasSelectionBarView.margin)
+        // A selection at the bottom left: the bar stays 12 inside the canvas.
+        let low = CanvasSelectionBarView.frame(size: size, under: CGRect(x: -500, y: -200, width: 300, height: 300), in: canvas)
+        #expect(low.minX + room == 12)
+        #expect(low.minY + room == 12)
+    }
+
     @Test func zoomToSelectionShowsOnlyTheSelectedCards() {
         var model = CanvasModel()
         model.add(a, frame: CGRect(x: 0, y: 0, width: 400, height: 300))
