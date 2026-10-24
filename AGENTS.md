@@ -53,15 +53,18 @@ worktree, and they share one installed app.
 a Claude Code plugin (`/pstack:poteto-mode`). Its playbooks assume a
 GitHub team workflow. In this repo these rules win over them:
 
-- **No PRs, no pushes.** The "Opening a PR" step ends at small, ordered
-  commits on your local branch. Skip PR, babysit, shipping and
-  autopilot-full steps with pstack's one-line note
-  (`Skipped here: <step>. AGENTS.md: no PRs.`). Never push.
+- **No PRs.** The "Opening a PR" step ends at small, ordered commits on
+  your branch. Skip PR, babysit, shipping and autopilot-full steps with
+  pstack's one-line note (`Skipped here: <step>. AGENTS.md: no PRs.`).
+- **`main` is the base.** Finished work merges into `main` as a merge
+  commit when the user says, after `+peers` and the full test suites.
+  Then push `main` to `origin`. The repo is public: push nothing else
+  unless the user asks, and never force-push.
 - **Commit titles follow this repo**, not Conventional Commits:
   `lostty: <area>: <what is now true>`, such as
   `lostty: canvas: the + button opens one tickets panel`.
 - **Worktrees** go in `.claude/worktrees/<name>`, branched from the branch
-  the user names (usually `UI-improvements`), not `main`. Never switch
+  the user names (usually `main`). Never switch
   the main checkout's branch, and never `git reset --hard` a branch that
   another worktree has checked out. A fresh worktree needs
   `macos/GhosttyKit.xcframework` and `zig-out` copied from the main
