@@ -28,7 +28,8 @@ pub const Options = struct {
 /// call is about to do, for Lostty Mobile's session list, and denies a
 /// SendMessage to an agent outside the pane's zone. It never fails,
 /// and prints only what the Mac app keeps for the pane (speak.Kind): the
-/// queued texts on `busy` and `done`, and on `start` the zone's brief,
+/// queued texts on `busy`, the handoff's directive on `done` (a zone
+/// move's note waits for the next prompt), and on `start` the zone's brief,
 /// after the handoff when it follows /clear. Outside Lostty, without a
 /// terminal, or with a bad argument it does nothing and exits 0, so a hook
 /// can never break Claude.
@@ -45,11 +46,12 @@ pub fn run(gpa: Allocator) !u8 {
     var detail: protocol.Detail = .{};
     switch (state) {
         // A prompt: give Claude what's queued for it, then say busy.
-        .busy => speakQueued(alloc, pane, "UserPromptSubmit"),
-        // After a tool call: only speak (Claude's own calls, not a subagent's).
+        .busy => speakTexts(alloc, "UserPromptSubmit", &.{ take(alloc, pane, .say), take(alloc, pane, .zone_say) }),
+        // After a tool call: only speak the handoff's directive (Claude's
+        // own calls, not a subagent's).
         .done => {
             if (hookInput(alloc)) |input| if (speak.isSubagent(alloc, input)) return 0;
-            speakQueued(alloc, pane, "PostToolUse");
+            speakTexts(alloc, "PostToolUse", &.{take(alloc, pane, .say)});
             return 0;
         },
         // A session starting without the zone's brief gets it. After
@@ -84,12 +86,6 @@ pub fn run(gpa: Allocator) !u8 {
     defer tty.close();
     tty.writeAll(seq) catch {};
     return 0;
-}
-
-/// Prints the handoff's directive and any zone move's note, taken from
-/// the queue, as one additionalContext for `event`.
-fn speakQueued(alloc: Allocator, pane: []const u8, event: []const u8) void {
-    speakTexts(alloc, event, &.{ take(alloc, pane, .say), take(alloc, pane, .zone_say) });
 }
 
 /// Prints `texts` as Claude Code's additionalContext for `event`, or

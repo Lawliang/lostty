@@ -6,8 +6,9 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 /// A file the Mac app keeps for a pane. Hooks take the queued texts once:
-/// `say` (the handoff's directive) and `zone_say` (a zone move's note) on
-/// UserPromptSubmit and PostToolUse, `start` (the handoff for the fresh
+/// `say` (the handoff's directive) on UserPromptSubmit and PostToolUse,
+/// `zone_say` (a zone move's note) on UserPromptSubmit only, so it never
+/// lands mid-turn, `start` (the handoff for the fresh
 /// window) on SessionStart after /clear. `zone` (zone.zig) is read, never
 /// taken: the app keeps it current. `zone_allow`, the owner's Allow Once,
 /// names the one agent a SendMessage may reach outside the zone, and is

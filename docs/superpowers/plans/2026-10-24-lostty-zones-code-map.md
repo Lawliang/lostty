@@ -62,8 +62,9 @@ The zone file is the current truth, so the hook reads the brief from it:
   `fork` already have it. The `fresh`/`cleared` signal is unchanged.
 - Moving in or out mid-session queues `<PANE>.zone.say`, its own file,
   so neither writer appends to the other's (`ContextHandoffStore` keeps
-  replacing `.say`). UserPromptSubmit and PostToolUse take `.say` and
-  `.zone.say` and print them as one additionalContext.
+  replacing `.say`). UserPromptSubmit takes `.say` and `.zone.say` and
+  prints them as one additionalContext. PostToolUse takes only `.say`,
+  so a zone note waits for the next prompt instead of landing mid-turn.
 - SessionStart already runs for every source (`hooks.zig`), so only the
   `lostty` binary changes. No hook reinstall.
 
