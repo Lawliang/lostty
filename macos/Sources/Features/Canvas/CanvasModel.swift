@@ -605,6 +605,65 @@ struct CanvasWaits: Equatable {
     }
 }
 
+/// What a zone's label says beside its name (zones spec §3): a project's
+/// folder and its counts across it and its domains; a domain's brief's
+/// first line.
+struct CanvasZoneCaption: Equatable {
+    /// A card in the zone.
+    enum Member {
+        case terminal(panes: [UUID])
+        case tickets
+    }
+
+    struct Count: Equatable {
+        enum Kind { case terminals, ticketPanels, working, waiting }
+
+        var kind: Kind
+        var value: Int
+
+        var text: String {
+            switch kind {
+            case .terminals: "\(value) terminal\(value == 1 ? "" : "s")"
+            case .ticketPanels: "\(value) ticket panel\(value == 1 ? "" : "s")"
+            case .working: "\(value) working"
+            case .waiting: "\(value) waiting"
+            }
+        }
+    }
+
+    /// A project's folder, tilde-abbreviated, or a domain's brief's first
+    /// line; nil when it has none.
+    var note: String?
+    /// A project's counts, leaving out each zero but the terminals of an
+    /// empty zone. A domain has none.
+    var counts: [Count] = []
+
+    var text: String { counts.map(\.text).joined(separator: " · ") }
+
+    /// `working` and `waiting` are panes; one waiting on you counts only as
+    /// waiting.
+    init(_ zone: CanvasZone, folder: String?, members: [Member], working: Set<UUID>, waiting: Set<UUID>) {
+        guard zone.parent == nil else {
+            note = zone.brief.trimmingCharacters(in: .whitespacesAndNewlines)
+                .split(whereSeparator: \.isNewline).first
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+            return
+        }
+        note = folder.map { ($0 as NSString).abbreviatingWithTildeInPath }
+        let panes = Set(members.flatMap { member -> [UUID] in
+            if case .terminal(let panes) = member { panes } else { [] }
+        })
+        let terminals = members.count(where: { if case .terminal = $0 { true } else { false } })
+        let all = [
+            Count(kind: .terminals, value: terminals),
+            Count(kind: .ticketPanels, value: members.count - terminals),
+            Count(kind: .working, value: panes.intersection(working.subtracting(waiting)).count),
+            Count(kind: .waiting, value: panes.intersection(waiting).count),
+        ]
+        counts = members.isEmpty ? [Count(kind: .terminals, value: 0)] : all.filter { $0.value > 0 }
+    }
+}
+
 /// What the canvas keeps across Restart to Update and relaunches: whether
 /// it's shown, the view, each terminal card back to front, the tickets
 /// with their panels, and the zones. Generic over the split tree, so tests can

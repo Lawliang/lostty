@@ -40,6 +40,11 @@ final class CanvasZoneLayer: NSView {
         views[id]?.label.showSettings()
     }
 
+    /// What each zone's label says beside its name.
+    func showCaptions(_ captions: [UUID: CanvasZoneCaption]) {
+        for (id, caption) in captions { views[id]?.caption.show(caption) }
+    }
+
     /// The edges as thick on screen as the zoom has changed.
     func updateEdges() {
         for view in views.values { view.updateEdge(zoom: zoom) }
@@ -53,6 +58,7 @@ final class CanvasZoneLayer: NSView {
 /// resize it.
 final class CanvasZoneView: NSView {
     let label: CanvasZoneLabel
+    let caption = CanvasZoneCaptionView()
     private var handles: [CardEdgeHandle] = []
     private var isDomain = false
 
@@ -62,6 +68,7 @@ final class CanvasZoneView: NSView {
         wantsLayer = true
         layer?.cornerCurve = .continuous
         addSubview(label)
+        addSubview(caption)
         for edges in CanvasModel.handleEdges {
             let handle = CardEdgeHandle(
                 edges: edges,
@@ -94,6 +101,8 @@ final class CanvasZoneView: NSView {
         CATransaction.commit()
         updateEdge(zoom: zoom)
         label.show(zone.name, color: zone.color, isDomain: isDomain)
+        caption.color = zone.color
+        caption.isDomain = isDomain
         needsLayout = true
     }
 
@@ -111,6 +120,8 @@ final class CanvasZoneView: NSView {
         let size = label.pillSize
         label.frame = CGRect(
             x: inset.x, y: inset.y, width: min(size.width, max(0, bounds.width - 2 * inset.x)), height: size.height)
+        let start = label.frame.maxX + 8
+        caption.frame = CGRect(x: start, y: inset.y, width: max(0, bounds.width - inset.x - start), height: size.height)
         for handle in handles { handle.frame = CanvasModel.handleFrame(for: handle.edges, in: bounds) }
     }
 }
@@ -250,7 +261,93 @@ final class CanvasZoneLabel: NSView {
     }
 }
 
+/// A zone's caption beside its label: a project's folder by the pill and
+/// its counts at the right, a domain's brief by the pill. Text only, so a
+/// press there starts the marquee as anywhere else in the zone.
+final class CanvasZoneCaptionView: NSView {
+    var color: CanvasZone.Color = .blue {
+        didSet { if color != oldValue { needsDisplay = true } }
+    }
+    var isDomain = false {
+        didSet { if isDomain != oldValue { needsDisplay = true } }
+    }
+    private var caption: CanvasZoneCaption?
+
+    override var isFlipped: Bool { true }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    func show(_ new: CanvasZoneCaption) {
+        guard new != caption else { return }
+        caption = new
+        needsDisplay = true
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard let caption else { return }
+        let counts = countsText(caption)
+        let countsWidth = min(counts.size().width.rounded(.up), bounds.width)
+        draw(counts, in: CGRect(x: bounds.width - countsWidth, y: 0, width: countsWidth, height: bounds.height))
+        guard let note = caption.note else { return }
+        let gap: CGFloat = counts.length > 0 ? 16 : 0
+        draw(NSAttributedString(string: note, attributes: [
+            .font: isDomain ? NSFont.systemFont(ofSize: 11) : NSFont.monospacedSystemFont(ofSize: 11.5, weight: .regular),
+            .foregroundColor: color.caption,
+        ]), in: CGRect(x: 0, y: 0, width: max(0, bounds.width - countsWidth - gap), height: bounds.height))
+    }
+
+    private func countsText(_ caption: CanvasZoneCaption) -> NSAttributedString {
+        let text = NSMutableAttributedString()
+        let plain: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 11.5), .foregroundColor: NSColor.secondaryLabelColor,
+        ]
+        for (index, count) in caption.counts.enumerated() {
+            if index > 0 { text.append(NSAttributedString(string: " · ", attributes: plain)) }
+            let strong: NSColor? = switch count.kind {
+            case .working: Self.working
+            case .waiting: Self.waiting
+            case .terminals, .ticketPanels: nil
+            }
+            text.append(NSAttributedString(string: count.text, attributes: strong.map {
+                [.font: NSFont.systemFont(ofSize: 11.5, weight: .semibold), .foregroundColor: $0]
+            } ?? plain))
+        }
+        return text
+    }
+
+    private func draw(_ text: NSAttributedString, in rect: CGRect) {
+        guard rect.width > 0, text.length > 0 else { return }
+        let height = text.size().height
+        text.draw(
+            with: CGRect(x: rect.minX, y: (rect.height - height) / 2, width: rect.width, height: height),
+            options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
+    }
+
+    private static let working = NSColor(name: nil) { appearance in
+        isDark(appearance)
+            ? NSColor(srgbRed: 0xB9 / 255, green: 0xA8 / 255, blue: 1, alpha: 1)
+            : NSColor(srgbRed: 0x6B / 255, green: 0x4F / 255, blue: 0xD8 / 255, alpha: 1)
+    }
+    private static let waiting = NSColor(name: nil) { appearance in
+        isDark(appearance)
+            ? NSColor(srgbRed: 0xF2 / 255, green: 0xC1 / 255, blue: 0x4E / 255, alpha: 1)
+            : NSColor(srgbRed: 0x8C / 255, green: 0x6A / 255, blue: 0x0C / 255, alpha: 1)
+    }
+}
+
+private func isDark(_ appearance: NSAppearance) -> Bool {
+    appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+}
+
 extension CanvasZone.Color {
+    /// A caption's text on the zone's faint fill: the tint lightened on the
+    /// dark canvas, the pill's shade on the light one.
+    var caption: NSColor {
+        NSColor(name: nil) { appearance in
+            isDark(appearance) ? tint.blended(withFraction: 0.4, of: .white) ?? tint : pill
+        }
+    }
+
     /// The zone's fill and edge, faded.
     var tint: NSColor {
         switch self {

@@ -349,5 +349,51 @@ struct CanvasZoneTests {
         #expect(model.ticketTag(inDomain, shownIn: domain) == nil)
         #expect(model.ticketTag(inDomain, shownIn: nil) == nil)
     }
+
+    @Test func aProjectsCaptionCountsItsCardsAndThePanesWorkingAndWaiting() {
+        let (p1, p2, p3, p4) = (UUID(), UUID(), UUID(), UUID())
+        let caption = CanvasZoneCaption(
+            zone(project, .zero),
+            folder: NSHomeDirectory() + "/projectrepos/textberry",
+            members: [.terminal(panes: [p1, p2]), .terminal(panes: [p3]), .tickets, .tickets, .terminal(panes: [p4])],
+            working: [p1, p3, UUID()],
+            waiting: [p2])
+        #expect(caption.note == "~/projectrepos/textberry")
+        #expect(caption.text == "3 terminals · 2 ticket panels · 2 working · 1 waiting")
+    }
+
+    @Test func aCaptionSaysOneInTheSingularAndLeavesOutZeros() {
+        let pane = UUID()
+        let caption = CanvasZoneCaption(
+            zone(project, .zero), folder: nil, members: [.terminal(panes: [pane]), .tickets], working: [], waiting: [pane])
+        #expect(caption.note == nil)
+        #expect(caption.text == "1 terminal · 1 ticket panel · 1 waiting")
+    }
+
+    @Test func aPaneWaitingOnYouIsntAlsoCountedWorking() {
+        let pane = UUID()
+        let caption = CanvasZoneCaption(
+            zone(project, .zero), folder: nil, members: [.terminal(panes: [pane])], working: [pane], waiting: [pane])
+        #expect(caption.text == "1 terminal · 1 waiting")
+    }
+
+    @Test func anEmptyProjectSaysItHasNoTerminals() {
+        let caption = CanvasZoneCaption(zone(project, .zero), folder: "/tmp/x", members: [], working: [], waiting: [])
+        #expect(caption.text == "0 terminals")
+        let panelOnly = CanvasZoneCaption(zone(project, .zero), folder: nil, members: [.tickets], working: [], waiting: [])
+        #expect(panelOnly.text == "1 ticket panel")
+    }
+
+    @Test func aDomainsCaptionIsTheFirstLineOfItsBrief() {
+        var briefed = zone(domain, .zero, in: project)
+        briefed.brief = "\n  Phone number, contacts, first text.  \nKeep it short."
+        let caption = CanvasZoneCaption(
+            briefed, folder: "/tmp/x", members: [.terminal(panes: [UUID()])], working: [], waiting: [])
+        #expect(caption.note == "Phone number, contacts, first text.")
+        #expect(caption.counts.isEmpty)
+
+        briefed.brief = " \n "
+        #expect(CanvasZoneCaption(briefed, folder: nil, members: [], working: [], waiting: []).note == nil)
+    }
 }
 #endif

@@ -85,6 +85,8 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     /// The glide to a card under way (CanvasController+Glide).
     var glide: CanvasGlide?
     var waits = CanvasWaits()
+    /// The panes whose Claude is working, its subagents included.
+    private var working: Set<UUID> = []
     /// The view to show when the window first opens (a restored canvas's).
     var pendingView: (center: CGPoint, zoom: CGFloat)?
     /// No cards of either kind, and no zones.
@@ -199,7 +201,18 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
             .sink { [weak self] responder in self?.firstResponderChanged(responder) }
             .store(in: &cancellables)
         ClaudeRuntime.shared.$awaiting
-            .sink { [weak self] awaiting in self?.waits.update(awaiting: awaiting, now: Date()) }
+            .sink { [weak self] awaiting in
+                self?.waits.update(awaiting: awaiting, now: Date())
+                self?.updateZoneCaptions()
+            }
+            .store(in: &cancellables)
+        ClaudeRuntime.shared.$phases
+            .map { Set($0.keys) }
+            .removeDuplicates()
+            .sink { [weak self] working in
+                self?.working = working
+                self?.updateZoneCaptions()
+            }
             .store(in: &cancellables)
         NotificationCenter.default.publisher(for: .losttySessionsChanged)
             .sink { [weak self] _ in self?.tmuxSessionsDidChange() }
@@ -567,6 +580,22 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
                 title: "\(card.title) left \(left)",
                 detail: move.to.flatMap(model.zoneTitle).map { "Now in \($0)." } ?? "It's in no zone now."))
         }
+        updateZoneCaptions()
+    }
+
+    /// Each zone's label says what's in it now (zones spec §3).
+    private func updateZoneCaptions() {
+        let waiting = Set(waits.since.keys)
+        let captions = model.zones.map { zone in
+            let held = zone.parent == nil ? model.members(of: zone.id) : []
+            let members = held.compactMap { id -> CanvasZoneCaption.Member? in
+                if ticketPanels[id] != nil { return .tickets }
+                return cards.first { $0.id == id }.map { .terminal(panes: $0.surfaceTree.map(\.id)) }
+            }
+            return (zone.id, CanvasZoneCaption(
+                zone, folder: model.startFolder(ofZone: zone.id), members: members, working: working, waiting: waiting))
+        }
+        surface.zones.showCaptions(Dictionary(uniqueKeysWithValues: captions))
     }
 
     /// Lists Lostty's tmux sessions again, off the main thread, and brings
@@ -696,6 +725,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         if let placed = model.card(board.id)?.frame { view.frame = placed }
         restack()
         saveSoon()
+        updateZoneCaptions()
         return view
     }
 
@@ -713,6 +743,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         selection.remove(id)
         view.removeFromSuperview()
         saveSoon()
+        updateZoneCaptions()
     }
 
     /// The canvas's tickets are now `new`: every panel lists them.
