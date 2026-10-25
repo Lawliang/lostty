@@ -1,6 +1,7 @@
 # Lostty Zones — design
 
-Date: 2026-10-24. Status: decided in four grilling rounds; for review.
+Date: 2026-10-24. Status: decided in four grilling rounds; built on `zones` (see the
+code map's "Settled while building" for where the build differs).
 Branch: `zones`, started from `UI-improvements` (`64f25ae52`).
 Mockup: [Lostty Zones](https://claude.ai/artifact/2mwS6kZL7Di2aKJiYBanEp).
 
@@ -95,9 +96,10 @@ has a subfolder.
 - **Folder.** A terminal made inside a zone (the + menu, ⌘T beside a
   card in it) starts in the domain's subfolder, else the project's
   folder. A terminal that `cd`s elsewhere stays a member.
-- **Brief.** When a pane is in a zone, the app queues a `start` text
-  for it (the same queue as the context handoff, `speak.zig`), so its
-  next Claude session gets, at SessionStart:
+- **Brief.** When a pane is in a zone, the app keeps the brief in the
+  pane's zone file (`<PANE>.zone.json`), so every Claude session that
+  starts there (new, after /clear, after compaction) gets, at
+  SessionStart:
 
   ```
   Lostty zone: Textberry › Onboarding (~/projectrepos/textberry).
@@ -177,10 +179,11 @@ the per-pane zone files are written again.
   moved, or a zone moved or resized, work out each card's zone; for
   each change, rewrite that pane's zone file, queue the `say` text and
   show the notice.
-- **Agent context:** the app writes the `start`/`say` queue files
-  (append, so a handoff's text queued for the same pane isn't lost).
-  No change to the hooks for the brief: SessionStart and
-  UserPromptSubmit already print what's queued.
+- **Agent context:** the app keeps the brief in the pane's zone file
+  and queues move notes in `<PANE>.zone.say`, apart from the handoff's
+  `start`/`say` queue. SessionStart prints the brief, and
+  UserPromptSubmit and PostToolUse print the notes. Only the `lostty`
+  binary changes; the hooks don't.
 - **`+peers`** (`src/cli/peers.zig`): filter to the zone file's members.
 - **SendMessage hook** (`src/cli/claude_state.zig`, `tool` state): deny
   a SendMessage whose target isn't a member and has no allowance;
@@ -232,10 +235,12 @@ levels, and any OS-level sandboxing.
 
 - **The SendMessage target's name.** The hook has to match the target
   Claude Code names to a pane's agent; it relies on the same mapping
-  `+peers` uses. An unknown target is treated as outside.
-- **The hook changes need reinstalling the Claude hooks** (the Update
-  click), and running sessions pick them up only after a restart.
-- **The `start` queue is shared with the context handoff:** the app
-  must append, not replace.
+  `+peers` uses. A name no Claude session file has (a subagent or
+  teammate) goes through; a session outside the zone is denied.
+- **The hook changes need a new `lostty` binary**, not a hook
+  reinstall: the hook commands are unchanged. Running sessions pick
+  the binary up once Lostty is updated and they restart.
+- **The handoff's queue stays the handoff's:** zone briefs and notes
+  live in their own files, so neither writer appends to the other's.
 - **Drawing cost:** zones must not redraw while panning or zooming; they
   are static layers moved by the canvas's transform.
