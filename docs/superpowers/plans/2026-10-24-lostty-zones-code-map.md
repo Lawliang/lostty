@@ -94,3 +94,31 @@ The target is `tool_input.to` (also `recipient`). SendMessage's own docs
 allow a bare name, `"name [ref]"`, `"main"`, or a subagent's agentId, so
 the hook strips a trailing ` [ref]` and lets `main` and agentIds through
 (they stay inside the session).
+
+### Step 7: names to panes, through tmux
+
+Claude Code's `~/.claude/sessions/<pid>.json` holds each session's
+`name` (what ListAgents shows) and `tmux` location (`zones-2:@12.%12`,
+the same form `+peers` prints). Lostty's panes run in tmux sessions on
+the `lostty` socket, so the tmux session name is the join key:
+
+- The zone file gains `"members"`: the tmux session names of every pane
+  in the sender's project zone, its domains included (domains of one
+  project can talk). The app knows each pane's session
+  (`TmuxOwnership`).
+- The PreToolUse hook, on `tool_name == "SendMessage"` with a zone
+  file: strip a trailing ` [ref]` from `tool_input.to`, find the
+  session file whose `name` matches. Allowed: `main`, no matching
+  session file (an in-process subagent or teammate, or a name that
+  fails anyway), or a session whose tmux session is a member. Denied:
+  any other match, including a session outside tmux. This turns the
+  spec's "an unknown target is treated as outside" around, because
+  in-process subagents have names too and must keep working.
+- Allow Once: the app writes `<PANE>.zone.allow` holding the target
+  name; the hook takes it (rename, like `speak.take`) only when it
+  names this target. The latest Allow Once wins.
+- The brief's "Other agents in this zone" line is rendered by the hook
+  at SessionStart from the members and the session files, so names are
+  current without the app tracking them.
+- `+peers` with a zone file lists only rows whose tmux session is a
+  member.
