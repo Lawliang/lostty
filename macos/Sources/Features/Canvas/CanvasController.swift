@@ -262,13 +262,17 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         return newCard(at: frame, zone: model.zone(for: frame), baseConfig: baseConfig)
     }
 
-    /// ⌘T on a card: a new card beside it, as big, starting where its
-    /// focused pane is (`baseConfig`), or in its zone's folder, or in
-    /// the folder of `other`'s zone when it lands outside every zone.
+    /// ⌘T on a card: a new card beside it, as big, its zone growing to
+    /// hold it when full, starting where its focused pane is
+    /// (`baseConfig`), or in its zone's folder, or in the folder of
+    /// `other`'s zone when it lands outside every zone.
     @discardableResult
     func newCard(beside other: CardController, baseConfig: Ghostty.SurfaceConfiguration?)
         -> (card: CardController, config: Ghostty.SurfaceConfiguration?) {
         let frame = model.placement(beside: other.id) ?? model.placement(in: scrollView.documentVisibleRect)
+        if let home = model.card(other.id).flatMap({ model.zone(for: $0.frame) }), model.growZone(home, toHold: frame) {
+            zonesDidChange()
+        }
         return newCard(at: frame, zone: model.startZone(beside: other.id, at: frame), baseConfig: baseConfig)
     }
 

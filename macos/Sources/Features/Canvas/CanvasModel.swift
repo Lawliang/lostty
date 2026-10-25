@@ -400,6 +400,23 @@ extension CanvasModel {
         return adopt(resized, checking: id)
     }
 
+    /// ⌘T in a full zone `id`: it grows to hold `spot` with `zoneMargin` to
+    /// spare, a domain's project first when it must. False, and nothing
+    /// changes, when it holds `spot` already or growing breaks the rules.
+    @discardableResult
+    mutating func growZone(_ id: UUID, toHold spot: CGRect) -> Bool {
+        guard let zone = zone(id), !zone.frame.contains(spot) else { return false }
+        let grown = zone.frame.union(spot.insetBy(dx: -Self.zoneMargin, dy: -Self.zoneMargin))
+        var next = self
+        if let parent = zone.parent, let project = self.zone(parent)?.frame, !project.contains(grown) {
+            let room = project.union(grown.insetBy(dx: -Self.domainInset, dy: -Self.domainInset))
+            guard next.setZoneFrame(room, of: parent) else { return false }
+        }
+        guard next.setZoneFrame(grown, of: id) else { return false }
+        self = next
+        return true
+    }
+
     /// Changes zone `id`'s name, color, folder, brief or key prefix. False,
     /// and nothing changes, when `change` moves it or gives it another
     /// project: only `moveZone` and `setZoneFrame` do that, under the rules.

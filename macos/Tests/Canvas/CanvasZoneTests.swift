@@ -36,6 +36,55 @@ struct CanvasZoneTests {
         #expect(model.placement(beside: a) == CGRect(x: 700, y: 900, width: 600, height: 400))
     }
 
+    /// A project at (0, 0, 2000, 1000) with card `a` in it walled in by
+    /// cards on its right, left and top: ⌘T on `a` goes below, outside.
+    private func fullProject() -> (model: CanvasModel, spot: CGRect) {
+        var model = CanvasModel()
+        model.addZone(zone(project, CGRect(x: 0, y: 0, width: 2000, height: 1000)))
+        model.add(a, frame: CGRect(x: 700, y: 500, width: 600, height: 400))
+        model.add(b, frame: CGRect(x: 1300, y: 500, width: 600, height: 400))
+        model.add(c, frame: CGRect(x: 100, y: 500, width: 600, height: 400))
+        model.add(UUID(), frame: CGRect(x: 700, y: 100, width: 600, height: 400))
+        return (model, CGRect(x: 700, y: 900, width: 600, height: 400))
+    }
+
+    @Test func aFullProjectGrowsToHoldTheNewCard() {
+        var (model, spot) = fullProject()
+        #expect(model.placement(beside: a) == spot)
+        let grew = model.growZone(project, toHold: spot)
+        #expect(grew)
+        #expect(model.zone(project)?.frame == CGRect(x: 0, y: 0, width: 2000, height: 1340))
+        #expect(model.zone(for: spot) == project)
+        let grewAgain = model.growZone(project, toHold: spot)
+        #expect(!grewAgain)
+    }
+
+    @Test func aFullDomainGrowsAndItsProjectWithIt() {
+        var model = CanvasModel()
+        model.addZone(zone(project, CGRect(x: 0, y: 0, width: 1500, height: 1000)))
+        model.addZone(zone(domain, CGRect(x: 100, y: 100, width: 1200, height: 800), in: project))
+        model.add(a, frame: CGRect(x: 100, y: 100, width: 600, height: 400))
+        model.add(b, frame: CGRect(x: 700, y: 100, width: 600, height: 400))
+        model.add(c, frame: CGRect(x: 100, y: 500, width: 600, height: 400))
+        model.add(UUID(), frame: CGRect(x: 700, y: 500, width: 600, height: 400))
+        let spot = CGRect(x: 1300, y: 100, width: 600, height: 400)
+        #expect(model.placement(beside: a) == spot)
+        let grew = model.growZone(domain, toHold: spot)
+        #expect(grew)
+        #expect(model.zone(domain)?.frame == CGRect(x: 100, y: 60, width: 1840, height: 840))
+        #expect(model.zone(project)?.frame == CGRect(x: 0, y: 0, width: 1952, height: 1000))
+        #expect(model.zone(for: spot) == domain)
+    }
+
+    @Test func aFullZoneDoesntGrowIntoItsNeighbour() {
+        var (model, spot) = fullProject()
+        model.addZone(zone(other, CGRect(x: 0, y: 1000, width: 2000, height: 1000)))
+        let zones = model.zones
+        let grew = model.growZone(project, toHold: spot)
+        #expect(!grew)
+        #expect(model.zones == zones)
+    }
+
     @Test func aCardBesideOneInAZoneStartsInItsZoneOrTheSourcesZone() {
         var model = CanvasModel()
         model.addZone(zone(project, CGRect(x: 0, y: 0, width: 2000, height: 1000)))
