@@ -57,8 +57,9 @@ final class CanvasScrollView: NSScrollView {
 
 /// The canvas itself: the cards are its subviews, framed in document
 /// points, y down. Draws nothing. Takes the keyboard when no card has it,
-/// so keys go nowhere but ⌘A, which selects every card, and Escape, which
-/// deselects them. Dragging on it between the cards draws a marquee.
+/// so keys go nowhere but ⌘A, which selects every card, Escape, which
+/// deselects them, and ⌘Z and ⇧⌘Z, which undo and redo. Dragging on it
+/// between the cards draws a marquee.
 final class CanvasDocumentView: NSView {
     /// A click between the cards (CanvasController.canvasClicked), with ⇧
     /// or not.
@@ -106,6 +107,18 @@ final class CanvasDocumentView: NSView {
 
     override func selectAll(_ sender: Any?) {
         selectedAll?()
+    }
+
+    /// The Edit menu's Undo has no shortcut: a pane's ⌘Z is its own
+    /// keybinding, so with no pane focused nothing else would take it.
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        guard window?.firstResponder === self, event.charactersIgnoringModifiers?.lowercased() == "z",
+              mods == .command || mods == [.command, .shift], let undo = window?.undoManager else {
+            return super.performKeyEquivalent(with: event)
+        }
+        if mods.contains(.shift) { undo.redo() } else { undo.undo() }
+        return true
     }
 
     /// Pointer moves anywhere on the canvas, over the cards too, so the
