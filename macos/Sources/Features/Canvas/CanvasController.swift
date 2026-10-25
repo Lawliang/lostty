@@ -572,7 +572,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         for move in before.panes.moves(to: now) {
             let left = move.from.flatMap { before.model.zoneTitle($0) }
             if let note = move.to.flatMap(model.zoneMovedIn) ?? left.map(CanvasModel.zoneMovedOut) {
-                zoneStore.writeSay(move.pane, note)
+                zoneStore.replaceSay(move.pane, note)
             }
             guard let from = move.from, let left, model.zone(from) != nil,
                   let card = cards.first(where: { $0.surfaceTree.contains { $0.id == move.pane } }),
@@ -626,7 +626,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
             actionTitle: "Allow Once",
             action: { [weak self] in
                 self?.zoneStore.writeAllow(pane, target: target)
-                self?.zoneStore.writeSay(pane, "You may retry your message to \(target) once.")
+                self?.zoneStore.appendSay(pane, "You may retry your message to \(target) once.")
                 LosttyNotifications.shared.dismiss(kind: kind)
             },
             secondaryTitle: "Zone Settings",

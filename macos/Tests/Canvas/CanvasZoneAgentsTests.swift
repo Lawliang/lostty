@@ -90,7 +90,8 @@ struct CanvasZoneAgentsTests {
         let pane = UUID()
         store.writeZone(pane, CanvasZoneFile(
             start: "Lostty zone: Textberry.", zone: "Textberry", folder: nil, members: ["tb-1", "tb-2"]))
-        store.writeSay(pane, "You're now in zone Textberry.")
+        store.replaceSay(pane, "You've left zone Onboarding.")
+        store.replaceSay(pane, "You're now in zone Textberry.")
         store.writeAllow(pane, target: "lostty-a9")
 
         let url = handoff.panes.appendingPathComponent("\(pane.uuidString).zone.json")
@@ -103,7 +104,7 @@ struct CanvasZoneAgentsTests {
         #expect(try String(contentsOf: allow, encoding: .utf8) == "lostty-a9")
         let say = handoff.panes.appendingPathComponent("\(pane.uuidString).zone.say")
         #expect(try String(contentsOf: say, encoding: .utf8) == "You're now in zone Textberry.")
-        store.writeSay(pane, "You may retry your message to lostty-a9 once.")
+        store.appendSay(pane, "You may retry your message to lostty-a9 once.")
         #expect(try String(contentsOf: say, encoding: .utf8)
             == "You're now in zone Textberry.\n\nYou may retry your message to lostty-a9 once.")
         #expect(handoff.loadStates().isEmpty)
