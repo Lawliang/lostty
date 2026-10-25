@@ -3,11 +3,22 @@ import AppKit
 import SwiftUI
 
 /// The canvas's zones, behind every card: the document's first subview,
-/// as big as it. Takes clicks only on a zone's label and edges, so the
-/// marquee, card clicks and panning work in a zone as anywhere else.
+/// as big as it. Takes clicks only on a zone's edges, so the marquee,
+/// card clicks and panning work in a zone as anywhere else. Their labels
+/// go in `labels`, over every card.
 final class CanvasZoneLayer: NSView {
     weak var canvas: CanvasController?
+    let labels: CanvasZoneLabelLayer
     private var views: [UUID: CanvasZoneView] = [:]
+    private var titles: [UUID: CanvasZoneTitle] = [:]
+
+    override init(frame frameRect: NSRect) {
+        labels = CanvasZoneLabelLayer(frame: frameRect)
+        super.init(frame: frameRect)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
     override var isFlipped: Bool { true }
 
@@ -16,33 +27,37 @@ final class CanvasZoneLayer: NSView {
         return hit === self ? nil : hit
     }
 
-    /// Draws `zones`, projects under their domains, keeping the view of a
-    /// zone that's still there (a drag on it goes on).
+    /// Draws `zones` and their labels, projects under their domains,
+    /// keeping the views of a zone that's still there (a drag on it goes on).
     func show(_ zones: [CanvasZone]) {
         guard let canvas else { return }
         let ordered = zones.filter { $0.parent == nil } + zones.filter { $0.parent != nil }
         let kept = Set(zones.map(\.id))
-        for (id, view) in views where !kept.contains(id) {
-            view.removeFromSuperview()
+        for id in views.keys where !kept.contains(id) {
             views[id] = nil
+            titles[id] = nil
         }
         let shown = ordered.map { zone in
             let view = views[zone.id] ?? CanvasZoneView(id: zone.id, canvas: canvas)
+            let title = titles[zone.id] ?? CanvasZoneTitle(id: zone.id, canvas: canvas)
             views[zone.id] = view
+            titles[zone.id] = title
             view.show(zone, zoom: zoom)
-            return view
+            title.show(zone)
+            return (view: view, title: title)
         }
-        if subviews != shown { subviews = shown }
+        if subviews != shown.map(\.view) { subviews = shown.map(\.view) }
+        if labels.subviews != shown.map(\.title) { labels.subviews = shown.map(\.title) }
     }
 
     /// Opens zone `id`'s settings, as a click on its label does.
     func showSettings(_ id: UUID) {
-        views[id]?.label.showSettings()
+        titles[id]?.label.showSettings()
     }
 
     /// What each zone's label says beside its name.
     func showCaptions(_ captions: [UUID: CanvasZoneCaption]) {
-        for (id, caption) in captions { views[id]?.caption.show(caption) }
+        for (id, caption) in captions { titles[id]?.caption.show(caption) }
     }
 
     /// The edges as thick on screen as the zoom has changed.
@@ -53,22 +68,27 @@ final class CanvasZoneLayer: NSView {
     private var zoom: CGFloat { enclosingScrollView?.magnification ?? 1 }
 }
 
-/// One zone: a rounded area with a faint fill of its color and a solid
-/// edge, its label inside the top edge, and handles along its edges that
-/// resize it.
+/// The zones' labels: the document's last subview, over every card, as
+/// big as it. Takes clicks only on a label.
+final class CanvasZoneLabelLayer: NSView {
+    override var isFlipped: Bool { true }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let hit = super.hitTest(point)
+        return hit === self ? nil : hit
+    }
+}
+
+/// One zone: a rounded area with a faint fill of its color, a solid edge,
+/// and handles along its edges that resize it.
 final class CanvasZoneView: NSView {
-    let label: CanvasZoneLabel
-    let caption = CanvasZoneCaptionView()
     private var handles: [CardEdgeHandle] = []
     private var isDomain = false
 
     init(id: UUID, canvas: CanvasController) {
-        label = CanvasZoneLabel(id: id, canvas: canvas)
         super.init(frame: .zero)
         wantsLayer = true
         layer?.cornerCurve = .continuous
-        addSubview(label)
-        addSubview(caption)
         for edges in CanvasModel.handleEdges {
             let handle = CardEdgeHandle(
                 edges: edges,
@@ -100,9 +120,6 @@ final class CanvasZoneView: NSView {
         layer?.borderColor = zone.color.tint.withAlphaComponent(0.5).cgColor
         CATransaction.commit()
         updateEdge(zoom: zoom)
-        label.show(zone.name, color: zone.color, isDomain: isDomain)
-        caption.color = zone.color
-        caption.isDomain = isDomain
         needsLayout = true
     }
 
@@ -116,13 +133,53 @@ final class CanvasZoneView: NSView {
 
     override func layout() {
         super.layout()
-        let inset = isDomain ? CGPoint(x: 12, y: 10) : CGPoint(x: 14, y: 12)
-        let size = label.pillSize
-        label.frame = CGRect(
-            x: inset.x, y: inset.y, width: min(size.width, max(0, bounds.width - 2 * inset.x)), height: size.height)
-        let start = label.frame.maxX + 8
-        caption.frame = CGRect(x: start, y: inset.y, width: max(0, bounds.width - inset.x - start), height: size.height)
         for handle in handles { handle.frame = CanvasModel.handleFrame(for: handle.edges, in: bounds) }
+    }
+}
+
+/// A zone's label and caption inside its top edge, as tall as the label
+/// and no wider than the zone. Nothing behind them, and only the label
+/// takes clicks, so a card under the caption shows through and keeps its
+/// clicks.
+final class CanvasZoneTitle: NSView {
+    let label: CanvasZoneLabel
+    let caption = CanvasZoneCaptionView()
+
+    init(id: UUID, canvas: CanvasController) {
+        label = CanvasZoneLabel(id: id, canvas: canvas)
+        super.init(frame: .zero)
+        addSubview(label)
+        addSubview(caption)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    override var isFlipped: Bool { true }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let hit = super.hitTest(point)
+        return hit === self ? nil : hit
+    }
+
+    func show(_ zone: CanvasZone) {
+        let isDomain = zone.parent != nil
+        label.show(zone.name, color: zone.color, isDomain: isDomain)
+        caption.color = zone.color
+        caption.isDomain = isDomain
+        let inset = isDomain ? CGPoint(x: 12, y: 10) : CGPoint(x: 14, y: 12)
+        frame = CGRect(
+            x: zone.frame.minX + inset.x, y: zone.frame.minY + inset.y,
+            width: max(0, zone.frame.width - 2 * inset.x), height: label.pillSize.height)
+        needsLayout = true
+    }
+
+    override func layout() {
+        super.layout()
+        let size = label.pillSize
+        label.frame = CGRect(x: 0, y: 0, width: min(size.width, bounds.width), height: size.height)
+        let start = label.frame.maxX + 8
+        caption.frame = CGRect(x: start, y: 0, width: max(0, bounds.width - start), height: size.height)
     }
 }
 
@@ -263,7 +320,7 @@ final class CanvasZoneLabel: NSView {
 
 /// A zone's caption beside its label: a project's folder by the pill and
 /// its counts at the right, a domain's brief by the pill. Text only, so a
-/// press there starts the marquee as anywhere else in the zone.
+/// press there goes to the card or the canvas under it.
 final class CanvasZoneCaptionView: NSView {
     var color: CanvasZone.Color = .blue {
         didSet { if color != oldValue { needsDisplay = true } }

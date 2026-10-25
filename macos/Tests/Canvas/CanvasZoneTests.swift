@@ -1,5 +1,5 @@
 #if os(macOS)
-import Foundation
+import AppKit
 import Testing
 @testable import Lostty
 
@@ -512,5 +512,29 @@ struct CanvasZoneTests {
         briefed.brief = " \n "
         #expect(CanvasZoneCaption(briefed, folder: nil, members: [], working: [], waiting: []).note == nil)
     }
+
+    @MainActor @Test func zoneLabelsStackOverEveryCardAndTheZonesUnderThem() {
+        let document = CanvasDocumentView(frame: .zero)
+        let zones = CanvasZoneLayer(frame: .zero)
+        let back = StackedCard(stackIndex: 0), front = StackedCard(stackIndex: 1)
+        for view in [zones.labels, front, zones, back] { document.addSubview(view) }
+        document.restack()
+        #expect(document.subviews == [zones, back, front, zones.labels])
+    }
+}
+
+private final class StackedCard: NSView, CanvasStacked {
+    var stackIndex: Int
+    var isSelectedCard = false
+
+    init(stackIndex: Int) {
+        self.stackIndex = stackIndex
+        super.init(frame: .zero)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    func updateRing() {}
 }
 #endif

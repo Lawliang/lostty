@@ -73,6 +73,19 @@ final class CanvasDocumentView: NSView {
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { true }
 
+    /// Back to front: the zones, the cards in `stackIndex` order, the
+    /// zones' labels. Reorders without taking views out of the window, so
+    /// the focused pane keeps keyboard focus.
+    func restack() {
+        sortSubviews({ a, b, _ in
+            func depth(_ view: NSView) -> Int {
+                view is CanvasZoneLabelLayer ? Int.max : (view as? CanvasStacked)?.stackIndex ?? Int.min
+            }
+            let left = depth(a), right = depth(b)
+            return left < right ? .orderedAscending : left > right ? .orderedDescending : .orderedSame
+        }, context: nil)
+    }
+
     override func mouseDown(with event: NSEvent) {
         start = convert(event.locationInWindow, from: nil)
         clicked?(event.modifierFlags.contains(.shift))
@@ -251,6 +264,7 @@ final class CanvasSurfaceView: NSView {
         addSubview(grid)
         addSubview(scrollView)
         scrollView.document.addSubview(zones)
+        scrollView.document.addSubview(zones.labels)
         selection.document = scrollView.document
         addSubview(selection)
         selectionBar.isHidden = true
@@ -295,9 +309,11 @@ final class CanvasSurfaceView: NSView {
     }
 
     /// Whether a click at `point` (in the window) is on what floats over
-    /// the cards: the + menu, the selection's bar, or a notification.
+    /// the cards: the + menu, the selection's bar, a notification, or a
+    /// zone's label.
     func floats(at point: NSPoint) -> Bool {
         addMenu.covers(point) || selectionBar.covers(point) || notifications.hitTest(convert(point, from: nil)) != nil
+            || zones.labels.hitTest(scrollView.document.convert(point, from: nil)) != nil
     }
 }
 

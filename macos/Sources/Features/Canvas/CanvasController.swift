@@ -323,9 +323,9 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         cards.append(card)
         model.add(card.id, frame: frame)
         let view = CardView(card: card, canvas: self)
-        view.stackIndex = model.cards.count - 1
         views[card.id] = view
         scrollView.document.addSubview(view)
+        restack()
         if let placed = model.card(card.id)?.frame { view.frame = placed }
         updateVisibility()
         saveSoon()
@@ -403,15 +403,11 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         restack()
     }
 
-    /// The cards' views in `model`'s order, over the zones. Reorders
-    /// without taking views out of the window, so the focused pane keeps
-    /// keyboard focus.
+    /// The cards' views in `model`'s order, over the zones and under
+    /// their labels.
     private func restack() {
         for (index, entry) in model.cards.enumerated() { view(entry.id)?.stackIndex = index }
-        scrollView.document.sortSubviews({ a, b, _ in
-            let left = (a as? CanvasStacked)?.stackIndex ?? Int.min, right = (b as? CanvasStacked)?.stackIndex ?? Int.min
-            return left < right ? .orderedAscending : left > right ? .orderedDescending : .orderedSame
-        }, context: nil)
+        scrollView.document.restack()
     }
 
     /// The view of card `id`, of either kind.
