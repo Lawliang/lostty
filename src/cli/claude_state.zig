@@ -4,6 +4,7 @@ const Action = @import("ghostty.zig").Action;
 const protocol = @import("claude/protocol.zig");
 const speak = @import("claude/speak.zig");
 const zone = @import("claude/zone.zig");
+const wire = @import("guard/wire.zig");
 
 pub const Options = struct {
     pub fn deinit(self: Options) void {
@@ -24,7 +25,8 @@ pub const Options = struct {
 /// or background shells still working) or mean nothing should be sent
 /// (protocol.refine), and marks Claude asking permission. An `idle` also names the conversation
 /// file, for the Mac's turn observer. `tool` (PreToolUse) sends what the tool
-/// call is about to do, for Lostty Mobile's session list. It never fails,
+/// call is about to do, for Lostty Mobile's session list, and denies a
+/// SendMessage to an agent outside the pane's zone. It never fails,
 /// and prints only what the Mac app keeps for the pane (speak.Kind): the
 /// queued texts on `busy` and `done`, and on `start` the zone's brief,
 /// after the handoff when it follows /clear. Outside Lostty, without a
@@ -59,7 +61,7 @@ pub fn run(gpa: Allocator) !u8 {
             if (!zone.briefsAt(source)) return 0;
             const cleared = std.mem.eql(u8, source, "clear");
             const handoff = if (cleared) take(alloc, pane, .start) else null;
-            speakTexts(alloc, "SessionStart", &.{ handoff, zoneBrief(alloc, pane) });
+            speakTexts(alloc, "SessionStart", &.{ handoff, zoneBrief(alloc, pane, input) });
             if (!cleared) return 0;
             state = if (handoff != null) .fresh else .cleared;
         },
@@ -68,7 +70,11 @@ pub fn run(gpa: Allocator) !u8 {
             detail.permission = state == .idle and protocol.isPermissionPrompt(alloc, input);
             if (state == .idle) detail.transcript = protocol.transcriptPath(alloc, input);
         },
-        .tool => detail.action = protocol.action(alloc, hookInput(alloc) orelse return 0) orelse return 0,
+        .tool => {
+            const input = hookInput(alloc) orelse return 0;
+            detail.denied = keepInside(alloc, pane, input);
+            detail.action = protocol.action(alloc, input) orelse return 0;
+        },
         else => {},
     }
 
@@ -106,13 +112,71 @@ fn take(alloc: Allocator, pane: []const u8, kind: speak.Kind) ?[]const u8 {
     return speak.take(alloc, paneFile(alloc, pane, kind) orelse return null);
 }
 
-/// The brief of the pane's zone, left in place for the next session. A
-/// move's note still queued is dropped: the brief is the zone as it is now.
-fn zoneBrief(alloc: Allocator, pane: []const u8) ?[]const u8 {
+/// The brief of the pane's zone, left in place for the next session, and
+/// the zone's other agents. A move's note still queued is dropped: the
+/// brief is the zone as it is now.
+fn zoneBrief(alloc: Allocator, pane: []const u8, input: []const u8) ?[]const u8 {
     if (paneFile(alloc, pane, .zone_say)) |path| std.fs.deleteFileAbsolute(path) catch {};
+    const file = zoneFile(alloc, pane) orelse return null;
+    const start = file.start orelse return null;
+    const members = file.members orelse return start;
+    const names = zone.others(alloc, members, agents(alloc), zone.sessionId(alloc, input), std.posix.getenv("TMUX_PANE")) catch return start;
+    const line = (zone.othersLine(alloc, names) catch return start) orelse return start;
+    return std.fmt.allocPrint(alloc, "{s}\n{s}", .{ start, line }) catch start;
+}
+
+/// A SendMessage to an agent outside the pane's zone: prints Claude
+/// Code's deny and returns the target, for the app's notice. The owner's
+/// Allow Once for that target lets one through.
+fn keepInside(alloc: Allocator, pane: []const u8, input: []const u8) ?[]const u8 {
+    const to = zone.sendTarget(alloc, input) orelse return null;
+    const file = zoneFile(alloc, pane) orelse return null;
+    const members = file.members orelse return null;
+    if (zone.decide(to, members, agents(alloc)) == .allow) return null;
+    if (allowedOnce(alloc, pane, to)) return null;
+    const reason = zone.denyReason(alloc, to, file.zone) catch return null;
+    const out = wire.claudeJson(alloc, "deny", reason) catch return null;
+    std.fs.File.stdout().writeAll(out) catch {};
+    return if (to.len <= protocol.denied_max) to else null;
+}
+
+/// Takes the pane's Allow Once when it names `to`.
+fn allowedOnce(alloc: Allocator, pane: []const u8, to: []const u8) bool {
+    const path = paneFile(alloc, pane, .zone_allow) orelse return false;
+    const text = std.fs.cwd().readFileAlloc(alloc, path, speak.text_max) catch return false;
+    if (!zone.allows(text, to)) return false;
+    const taken = speak.take(alloc, path) orelse return false;
+    return zone.allows(taken, to);
+}
+
+fn zoneFile(alloc: Allocator, pane: []const u8) ?zone.File {
     const path = paneFile(alloc, pane, .zone) orelse return null;
     const json = std.fs.cwd().readFileAlloc(alloc, path, speak.text_max) catch return null;
-    return zone.start(alloc, json);
+    return zone.parse(alloc, json);
+}
+
+/// Claude Code's running sessions, from its session files.
+fn agents(alloc: Allocator) []const zone.Agent {
+    const dir_path = sessionsDir(alloc) orelse return &.{};
+    var dir = std.fs.openDirAbsolute(dir_path, .{ .iterate = true }) catch return &.{};
+    defer dir.close();
+    var list: std.ArrayList(zone.Agent) = .empty;
+    var it = dir.iterate();
+    while (it.next() catch null) |entry| {
+        if (entry.kind != .file or !std.mem.endsWith(u8, entry.name, ".json")) continue;
+        const json = dir.readFileAlloc(alloc, entry.name, 1 << 16) catch continue;
+        const agent = zone.parseAgent(alloc, json) orelse continue;
+        list.append(alloc, agent) catch break;
+    }
+    return list.items;
+}
+
+/// `$CLAUDE_CONFIG_DIR/sessions`, else `~/.claude/sessions`.
+fn sessionsDir(alloc: Allocator) ?[]const u8 {
+    if (std.posix.getenv("CLAUDE_CONFIG_DIR")) |config| if (config.len > 0)
+        return std.fs.path.join(alloc, &.{ config, "sessions" }) catch null;
+    const home = std.posix.getenv("HOME") orelse return null;
+    return std.fs.path.join(alloc, &.{ home, ".claude", "sessions" }) catch null;
 }
 
 /// The hook input Claude Code writes to stdin, or null when stdin is a

@@ -71,7 +71,9 @@ pub fn parseReply(alloc: Allocator, line: []const u8) ?Reply {
 
 pub const Output = struct { stdout: []const u8 = "", stderr: []const u8 = "", exit: u8 = 0 };
 
-fn claudeJson(alloc: Allocator, decision: []const u8, reason: []const u8) Allocator.Error![]const u8 {
+/// Claude Code's PreToolUse output: `decision` ("deny", "ask") with
+/// `reason`, which Claude reads.
+pub fn claudeJson(alloc: Allocator, decision: []const u8, reason: []const u8) Allocator.Error![]const u8 {
     var h = std.json.ObjectMap.init(alloc);
     try h.put("hookEventName", .{ .string = "PreToolUse" });
     try h.put("permissionDecision", .{ .string = decision });

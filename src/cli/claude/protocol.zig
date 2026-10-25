@@ -25,10 +25,16 @@ pub const Detail = struct {
     /// `idle`: the conversation file the Stop or Notification hook named,
     /// for the Mac's turn observer.
     transcript: ?[]const u8 = null,
+    /// `tool`: the agent a SendMessage was for, kept inside the pane's
+    /// zone (zone.zig), for the canvas's notice.
+    denied: ?[]const u8 = null,
 };
 
 /// The longest action sent, in characters.
 pub const action_max = 80;
+
+/// The longest kept-inside target sent, in bytes; a longer one is dropped.
+pub const denied_max = 256;
 
 /// The longest conversation file path sent, in bytes; a longer one is
 /// dropped rather than cut.
@@ -284,8 +290,8 @@ pub fn findTty(ctx: anytype, start: i32, max_hops: usize) ?[]const u8 {
 }
 
 /// OSC 1337 SetUserVar carrying `{"v":1,"state":"<state>"}`, plus
-/// `"action"`, `"permission":true` and `"transcript"` when `detail` has
-/// them. With `tmux`, wrapped in tmux's DCS passthrough (requires
+/// `"action"`, `"permission":true`, `"transcript"` and `"denied"` when
+/// `detail` has them. With `tmux`, wrapped in tmux's DCS passthrough (requires
 /// `allow-passthrough on`).
 pub fn encodeSequence(alloc: Allocator, state: State, detail: Detail, tmux: bool) ![]u8 {
     const json = try std.json.Stringify.valueAlloc(alloc, .{
@@ -294,6 +300,7 @@ pub fn encodeSequence(alloc: Allocator, state: State, detail: Detail, tmux: bool
         .action = detail.action,
         .permission = if (detail.permission) true else null,
         .transcript = detail.transcript,
+        .denied = detail.denied,
     }, .{ .emit_null_optional_fields = false });
     defer alloc.free(json);
     return encodeUserVar(alloc, user_var_name, json, tmux);
@@ -585,4 +592,15 @@ test "claude protocol: encodeSequence carries the transcript" {
         "{\"v\":1,\"state\":\"idle\",\"permission\":true,\"transcript\":\"/t.jsonl\"}",
         try decodeSequence(alloc, asks),
     );
+}
+
+test "claude protocol: encodeSequence carries a message kept inside the zone" {
+    const t = std.testing;
+    var arena = std.heap.ArenaAllocator.init(t.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+    const kept = try encodeSequence(alloc, .tool, .{ .action = "SendMessage", .denied = "lostty-a9" }, false);
+    try t.expectEqualStrings(
+        \\{"v":1,"state":"tool","action":"SendMessage","denied":"lostty-a9"}
+    , try decodeSequence(alloc, kept));
 }

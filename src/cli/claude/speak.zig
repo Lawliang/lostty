@@ -9,12 +9,15 @@ const Allocator = std.mem.Allocator;
 /// `say` (the handoff's directive) and `zone_say` (a zone move's note) on
 /// UserPromptSubmit and PostToolUse, `start` (the handoff for the fresh
 /// window) on SessionStart after /clear. `zone` (zone.zig) is read, never
-/// taken: the app keeps it current.
+/// taken: the app keeps it current. `zone_allow`, the owner's Allow Once,
+/// names the one agent a SendMessage may reach outside the zone, and is
+/// taken by that message.
 pub const Kind = enum {
     say,
     start,
     zone_say,
     zone,
+    zone_allow,
 
     fn suffix(kind: Kind) []const u8 {
         return switch (kind) {
@@ -22,6 +25,7 @@ pub const Kind = enum {
             .start => "start",
             .zone_say => "zone.say",
             .zone => "zone.json",
+            .zone_allow => "zone.allow",
         };
     }
 };
