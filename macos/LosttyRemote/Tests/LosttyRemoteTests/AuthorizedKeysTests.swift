@@ -84,7 +84,10 @@ struct AuthorizedKeysFileTests {
     let home = FileManager.default.temporaryDirectory.appendingPathComponent("lostty-home-\(UUID().uuidString)")
 
     func perms(_ url: URL) throws -> Int {
-        try FileManager.default.attributesOfItem(atPath: url.path)[.posixPermissions] as! Int
+        guard let mode = try FileManager.default.attributesOfItem(atPath: url.path)[.posixPermissions] as? Int else {
+            throw CocoaError(.fileReadUnknown)
+        }
+        return mode
     }
 
     @Test func createsSSHDirAndFileWithTightPermissions() throws {

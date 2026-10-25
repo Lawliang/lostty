@@ -4,6 +4,7 @@ check_for_updates: false
 
 excluded:
   - build
+  - LosttyRemote/.build
 
 disabled_rules:
   - cyclomatic_complexity
