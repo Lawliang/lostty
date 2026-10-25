@@ -176,5 +176,17 @@ struct CanvasZoneStore: Sendable {
 
     /// The latest Allow Once wins.
     func writeAllow(_ pane: UUID, target: String) { write(Data(target.utf8), to: file(pane, "zone.allow")) }
+
+    /// The zone files of every pane but `live`'s go: a quit or a crash
+    /// left them, and the hooks mustn't read a zone for a pane no longer
+    /// in it. The folder's other files stay.
+    func sweep(keeping live: Set<UUID>) {
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: panes.path)) ?? []
+        for name in names {
+            guard let dot = name.firstIndex(of: "."), let pane = UUID(uuidString: String(name[..<dot])), !live.contains(pane),
+                  ["zone.json", "zone.say", "zone.allow"].contains(name[name.index(after: dot)...]) else { continue }
+            try? FileManager.default.removeItem(at: panes.appendingPathComponent(name))
+        }
+    }
 }
 #endif

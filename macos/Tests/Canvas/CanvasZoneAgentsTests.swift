@@ -137,5 +137,24 @@ struct CanvasZoneAgentsTests {
         store.removeSay(pane)
         #expect(try FileManager.default.contentsOfDirectory(atPath: handoff.panes.path).isEmpty)
     }
+
+    @Test func sweepingRemovesOnlyTheZoneFilesOfPanesGoneFromTheCanvas() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = CanvasZoneStore(panes: ContextHandoffStore(root: root).panes)
+        let live = UUID(), gone = UUID()
+        for pane in [live, gone] {
+            store.writeZone(pane, CanvasZoneFile(start: "Lostty zone: Textberry.", zone: "Textberry", folder: nil))
+            store.replaceSay(pane, "You're now in zone Textberry.")
+            store.writeAllow(pane, target: "lostty-a9")
+        }
+        let others = ["say", "start", "json", "handoff.md"].map { "\(gone.uuidString).\($0)" } + ["notes.txt"]
+        for name in others { try Data("x".utf8).write(to: store.panes.appendingPathComponent(name)) }
+
+        store.sweep(keeping: [live])
+
+        let left = try Set(FileManager.default.contentsOfDirectory(atPath: store.panes.path))
+        #expect(left == Set(["zone.json", "zone.say", "zone.allow"].map { "\(live.uuidString).\($0)" } + others))
+    }
 }
 #endif

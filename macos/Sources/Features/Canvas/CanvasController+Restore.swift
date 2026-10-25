@@ -34,6 +34,13 @@ extension CanvasController {
             canvas.addCard(tree: card.tree, frame: card.frame, focused: focused)
         }
         canvas.restoreTickets(state.saved)
+        // A Lostty running beside this one (a Debug build and the
+        // installed app) shares the zone files' folder: its panes' aren't stale.
+        let alone = !NSWorkspace.shared.runningApplications.contains { app in
+            app.processIdentifier != ProcessInfo.processInfo.processIdentifier
+                && ["com.lawliang.lostty", "com.lawliang.lostty.debug"].contains(app.bundleIdentifier ?? "")
+        }
+        if alone { canvas.zoneStore.sweep(keeping: Set(canvas.cards.flatMap { $0.surfaceTree.map(\.id) })) }
         canvas.pendingView = (state.saved.center, state.saved.zoom)
         // The front card was the focused one: it takes keyboard focus when
         // the canvas is next key, not now (that would pull it forward).
