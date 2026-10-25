@@ -532,11 +532,14 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     }
 
     /// Undo `action` puts the zones back as `before` had them, and Redo
-    /// puts them back as they are now.
+    /// puts them back as they are now. A zone change is often noticed
+    /// late, so it stays undoable for at least a minute unless
+    /// `undo-timeout = 0` turns undo off.
     private func registerZoneUndo(_ action: String, _ before: CanvasZoneSnapshot) {
         guard let manager = (NSApp.delegate as? AppDelegate)?.undoManager else { return }
+        let timeout = ghostty.config.undoTimeout
         manager.setActionName(action)
-        manager.registerUndo(withTarget: self, expiresAfter: ghostty.config.undoTimeout) { canvas in
+        manager.registerUndo(withTarget: self, expiresAfter: timeout == .zero ? .zero : max(timeout, .seconds(60))) { canvas in
             canvas.restoreZones(before, action)
         }
     }
