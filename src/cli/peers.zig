@@ -3,6 +3,9 @@ const Allocator = std.mem.Allocator;
 const Action = @import("ghostty.zig").Action;
 const session = @import("tmux/session.zig");
 const launch = @import("tmux_launch.zig");
+const protocol = @import("claude/protocol.zig");
+const speak = @import("claude/speak.zig");
+const zone = @import("claude/zone.zig");
 
 pub const Options = struct {
     pub fn deinit(self: Options) void {
@@ -22,7 +25,8 @@ pub const Options = struct {
 /// worktree doesn't have, the files both change, and its tmux session as
 /// Claude Code's ListAgents shows it, to message), any other worktree whose
 /// uncommitted work touches the same files, and where the installed Lostty
-/// was built (`macos/install.sh` records it). It only reads.
+/// was built (`macos/install.sh` records it). In a canvas zone it lists
+/// only the zone's terminals. It only reads.
 pub fn run(gpa: Allocator) !u8 {
     var arena_state = std.heap.ArenaAllocator.init(gpa);
     defer arena_state.deinit();
@@ -42,7 +46,7 @@ pub fn run(gpa: Allocator) !u8 {
         return 1;
     };
     const worktrees = try parseWorktrees(alloc, git(alloc, root, &.{ "worktree", "list", "--porcelain" }) orelse "");
-    const sessions = try listSessions(alloc);
+    const sessions = try inZone(alloc, try listSessions(alloc), zoneMembers(alloc));
     const here = owner(worktrees, root) orelse return 1;
     const me = std.posix.getenv("TMUX_PANE");
     const my_uncommitted = try uncommitted(alloc, root);
@@ -151,6 +155,31 @@ fn listSessions(alloc: Allocator) ![]Session {
     const tmux = session.findTmux(alloc, std.posix.getenv("PATH"), launch.isExecutable) orelse return &.{};
     const listed = launch.runTmux(alloc, &.{ tmux, "-L", session.socket, "list-sessions", "-F", session_format }) orelse return &.{};
     return parseSessions(alloc, listed);
+}
+
+/// The sessions in `members`, the tmux sessions of the zone this pane is
+/// in; all of them when it's in none (null).
+pub fn inZone(alloc: Allocator, sessions: []const Session, members: ?[]const []const u8) ![]const Session {
+    const names = members orelse return sessions;
+    var kept: std.ArrayList(Session) = .empty;
+    for (sessions) |s| {
+        const name = s.location[0 .. std.mem.indexOfScalar(u8, s.location, ':') orelse s.location.len];
+        for (names) |m| if (std.mem.eql(u8, m, name)) {
+            try kept.append(alloc, s);
+            break;
+        };
+    }
+    return kept.items;
+}
+
+/// The members in this pane's zone file (LOSTTY_SURFACE); null without one.
+fn zoneMembers(alloc: Allocator) ?[]const []const u8 {
+    const pane = std.posix.getenv(protocol.surface_env) orelse return null;
+    if (!speak.isPaneId(pane)) return null;
+    const home = std.posix.getenv("HOME") orelse return null;
+    const path = speak.queuedPath(alloc, home, pane, .zone) catch return null;
+    const json = std.fs.cwd().readFileAlloc(alloc, path, speak.text_max) catch return null;
+    return (zone.parse(alloc, json) orelse return null).members;
 }
 
 /// The worktree `path` is in: the deepest one holding it, since worktrees
@@ -351,6 +380,18 @@ test "sessions: location, Claude and folder" {
     try testing.expectEqualStrings("working", sessions[0].claude);
     try testing.expectEqualStrings("", sessions[1].claude);
     try testing.expectEqualStrings("/repo", sessions[1].path);
+}
+
+test "sessions: a zone keeps only its members" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const listed = try parseSessions(a, "tb-1:@6.%6\tworking\t/t\nlostty:@2.%2\t\t/repo\ntb-10:@3.%3\t\t/t\n");
+    const kept = try inZone(a, listed, &.{ "tb-1", "tb-2" });
+    try testing.expectEqual(@as(usize, 1), kept.len);
+    try testing.expectEqualStrings("tb-1:@6.%6", kept[0].location);
+    try testing.expectEqual(@as(usize, 3), (try inZone(a, listed, null)).len);
+    try testing.expectEqual(@as(usize, 0), (try inZone(a, listed, &.{})).len);
 }
 
 test "files both sides change" {
