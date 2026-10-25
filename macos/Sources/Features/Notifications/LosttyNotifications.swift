@@ -34,6 +34,8 @@ struct LosttyNotification: Identifiable {
         case handoff(UUID)
         /// A new Lostty is ready for Restart to Update.
         case update
+        /// A canvas card left its zone.
+        case zone(card: UUID)
 
         /// Bubbles in the same slot replace each other (a connect result
         /// takes the place of its agent's "not connected" bubble).
@@ -42,6 +44,7 @@ struct LosttyNotification: Identifiable {
             case .hooksMissing(let agent), .hooks(let agent): "hooks-\(agent.rawValue)"
             case .handoff(let pane): "handoff-\(pane.uuidString)"
             case .update: "update"
+            case .zone(let card): "zone-\(card.uuidString)"
             }
         }
     }

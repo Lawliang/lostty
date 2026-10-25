@@ -69,6 +69,11 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     var overGroup = false
     /// Cards whose panes are moving to a window: gone for good, not for Undo.
     private var moving: Set<UUID> = []
+    /// Each pane's zone and the zones as they were, when last worked out.
+    private var membership = (panes: CanvasPaneZones(), model: CanvasModel())
+    /// The zone file last written for each pane in a zone.
+    private var zoneFiles: [UUID: CanvasZoneFile] = [:]
+    let zoneStore = CanvasZoneStore.standard
     /// The zoom the terminals last rendered at.
     var settledZoom: CGFloat = 1
     var settleWork: DispatchWorkItem?
@@ -293,6 +298,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         updateVisibility()
         saveSoon()
         for surface in card.surfaceTree { surface.canvasZoomDidSettle(settledZoom) }
+        zoneMembershipDidChange()
     }
 
     /// Whether a click at `point` (in the window) is on the + menu or a
@@ -394,20 +400,22 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         if selection.contains(id) { updateSelectionOutline() }
     }
 
-    /// A drag or resize ended.
+    /// A drag or resize ended, of a card or a zone.
     func cardFrameDidSettle() {
         updateVisibility()
         saveSoon()
+        zoneMembershipDidChange()
     }
 
     // MARK: Zones
 
     /// The zones' views follow `model.zones`, and Zone from Selection
-    /// whether it can make one.
-    func zonesDidChange() {
+    /// whether it can make one. Membership waits for a resize to settle.
+    func zonesDidChange(settled: Bool = true) {
         surface.zones.show(model.zones)
         updateSelectionBar()
         saveSoon()
+        if settled { zoneMembershipDidChange() }
     }
 
     /// Adds a zone at `frame`, a domain of `parent` or a project, unless
@@ -463,7 +471,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     /// Resizing, live: a frame that breaks the rules leaves it as it was.
     func setZoneFrame(_ frame: CGRect, of id: UUID) {
         guard model.setZoneFrame(frame, of: id) else { return }
-        zonesDidChange()
+        zonesDidChange(settled: false)
     }
 
     /// Removes zone `id` and its domains; the cards stay.
@@ -507,6 +515,43 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         updateVisibility()
         saveSoon()
         for surface in card.surfaceTree { surface.canvasZoomDidSettle(settledZoom) }
+        zoneMembershipDidChange()
+    }
+
+    /// Works out each pane's zone again (zones spec §5, §9). A pane in a
+    /// zone has its zone file, kept current. A pane that moved in or out
+    /// is told with its next prompt, and a card that left a zone still on
+    /// the canvas shows a notice. A pane new to the canvas didn't move.
+    func zoneMembershipDidChange() {
+        let now = model.paneZones(cards.map { ($0.id, $0.surfaceTree.map(\.id)) })
+        let before = membership
+        membership = (now, model)
+
+        for pane in zoneFiles.keys where now.zones[pane] == nil {
+            zoneStore.removeZone(pane)
+            zoneFiles[pane] = nil
+        }
+        for pane in before.panes.panes.subtracting(now.panes) { zoneStore.removeSay(pane) }
+        for (pane, zone) in now.zones {
+            guard let file = model.zoneFile(zone), zoneFiles[pane] != file else { continue }
+            zoneStore.writeZone(pane, file)
+            zoneFiles[pane] = file
+        }
+
+        var noticed: Set<UUID> = []
+        for move in before.panes.moves(to: now) {
+            let left = move.from.flatMap { before.model.zoneTitle($0) }
+            if let note = move.to.flatMap(model.zoneMovedIn) ?? left.map(CanvasModel.zoneMovedOut) {
+                zoneStore.writeSay(move.pane, note)
+            }
+            guard let from = move.from, let left, model.zone(from) != nil,
+                  let card = cards.first(where: { $0.surfaceTree.contains { $0.id == move.pane } }),
+                  noticed.insert(card.id).inserted else { continue }
+            LosttyNotifications.shared.post(LosttyNotification(
+                kind: .zone(card: card.id),
+                title: "\(card.title) left \(left)",
+                detail: move.to.flatMap(model.zoneTitle).map { "Now in \($0)." } ?? "It's in no zone now."))
+        }
     }
 
     private func retire(_ card: CardController) {

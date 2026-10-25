@@ -25,12 +25,13 @@ extension CanvasController {
         guard !state.saved.isEmpty else { return }
         let canvas = shared ?? CanvasController(ghostty)
         shared = canvas
+        // Zones first: a pane restored into its zone hasn't moved there.
+        canvas.addZones(state.saved.zones)
         for card in state.saved.cards {
             let focused = card.focused.flatMap { id in card.tree.first { $0.id.uuidString == id } }
             canvas.addCard(tree: card.tree, frame: card.frame, focused: focused)
         }
         canvas.restoreTickets(state.saved)
-        canvas.addZones(state.saved.zones)
         canvas.pendingView = (state.saved.center, state.saved.zoom)
         // The front card was the focused one: it takes keyboard focus when
         // the canvas is next key, not now (that would pull it forward).
