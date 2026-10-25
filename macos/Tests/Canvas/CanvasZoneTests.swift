@@ -173,21 +173,27 @@ struct CanvasZoneTests {
         model.add(a, frame: CGRect(x: 100, y: 100, width: 400, height: 300))
         model.add(b, frame: CGRect(x: 600, y: 100, width: 400, height: 300))
         model.add(c, frame: CGRect(x: 1500, y: 800, width: 400, height: 300))
+        let d = UUID()
+        model.add(d, frame: CGRect(x: 0, y: 0, width: 400, height: 300))
         let around = model.zoneAround([a, b])
         #expect(around?.frame == CGRect(x: 60, y: 60, width: 980, height: 380))
         #expect(around?.parent == project)
-        // Clipped to the project's bottom edge.
-        #expect(model.zoneAround([c])?.frame == CGRect(x: 1460, y: 760, width: 480, height: 240))
+        // Clipped 12 inside the project's bottom edge.
+        #expect(model.zoneAround([c])?.frame == CGRect(x: 1460, y: 760, width: 480, height: 228))
+        // Clipped 12 inside its left edge and 48 below its top, clear of its label.
+        #expect(model.zoneAround([d])?.frame == CGRect(x: 12, y: 48, width: 428, height: 292))
     }
 
-    @Test func aZoneFromTheCardsOfAZoneJustMadeIsRefused() {
+    @Test func aZoneFromTheCardsOfAZoneJustMadeIsADomainBelowItsLabel() {
         var model = CanvasModel()
         model.add(a, frame: CGRect(x: 100, y: 100, width: 400, height: 300))
         let around = model.zoneAround([a])
         let added = around.map { model.addZone(zone(project, $0.frame)) }
         #expect(added == true)
-        // The domain it offers would be the project itself.
-        #expect(model.zoneAround([a]) == nil)
+        // The project is (60, 60, 480, 380).
+        let domain = model.zoneAround([a])
+        #expect(domain?.frame == CGRect(x: 72, y: 108, width: 456, height: 320))
+        #expect(domain?.parent == project)
     }
 
     @Test func aZoneFromCardsOutsideZonesIsAProject() {

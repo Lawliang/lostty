@@ -337,6 +337,11 @@ struct CanvasZone: Equatable, Identifiable, Codable {
 extension CanvasModel {
     /// The room left round the cards in a zone made from them.
     static let zoneMargin: CGFloat = 40
+    /// How far a domain made from cards keeps below its project's top
+    /// edge, clear of the project's label (a 26pt pill, 12pt in).
+    static let projectLabelBand: CGFloat = 48
+    /// How far it keeps from the project's other edges.
+    static let domainInset: CGFloat = 12
 
     func zone(_ id: UUID) -> CanvasZone? {
         zones.first { $0.id == id }
@@ -469,8 +474,8 @@ extension CanvasModel {
 
     /// Zone from Selection: a frame round cards `ids` with `zoneMargin` to
     /// spare, kept in the document. When every card's centre is in one
-    /// project, a domain of it, kept inside it. nil without cards, or when
-    /// the zone would break the rules.
+    /// project, a domain of it, kept inside it and below its label. nil
+    /// without cards, or when the zone would break the rules.
     func zoneAround(_ ids: Set<UUID>) -> (frame: CGRect, parent: UUID?)? {
         let chosen = cards.filter { ids.contains($0.id) }
         guard !chosen.isEmpty else { return nil }
@@ -478,7 +483,12 @@ extension CanvasModel {
             zone(for: card.frame).flatMap { self.zone($0) }.map { $0.parent ?? $0.id }
         })
         let parent = projects.count == 1 ? projects.first ?? nil : nil
-        let bounds = parent.flatMap { zone($0)?.frame } ?? CGRect(x: 0, y: 0, width: Self.size, height: Self.size)
+        let bounds = parent.flatMap { zone($0)?.frame }.map { project in
+            CGRect(
+                x: project.minX + Self.domainInset, y: project.minY + Self.projectLabelBand,
+                width: project.width - 2 * Self.domainInset,
+                height: project.height - Self.projectLabelBand - Self.domainInset)
+        } ?? CGRect(x: 0, y: 0, width: Self.size, height: Self.size)
         let frame = chosen.reduce(CGRect.null) { $0.union($1.frame) }
             .insetBy(dx: -Self.zoneMargin, dy: -Self.zoneMargin)
             .intersection(bounds)
