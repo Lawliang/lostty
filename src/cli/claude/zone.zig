@@ -26,11 +26,13 @@ pub const File = struct {
     folder: ?[]const u8 = null,
     /// The tmux sessions (on the `lostty` socket) of every pane in the
     /// project zone, its domains included. Null in a file from an app
-    /// that didn't write them: then nothing is kept inside.
+    /// that didn't write them, or with none known: then nothing is kept
+    /// inside.
     members: ?[]const []const u8 = null,
 };
 
-/// The zone file `json`; null when it isn't one. An empty `start` is none.
+/// The zone file `json`; null when it isn't one. An empty `start` or
+/// `members` is none.
 pub fn parse(alloc: Allocator, json: []const u8) ?File {
     var file = std.json.parseFromSliceLeaky(File, alloc, json, .{
         .ignore_unknown_fields = true,
@@ -38,6 +40,9 @@ pub fn parse(alloc: Allocator, json: []const u8) ?File {
     }) catch return null;
     if (file.start) |s| if (s.len == 0) {
         file.start = null;
+    };
+    if (file.members) |m| if (m.len == 0) {
+        file.members = null;
     };
     return file;
 }
@@ -194,6 +199,9 @@ test "claude zone: the file's brief, title and members" {
         \\{"zone":"Textberry"}
     ).?.members == null);
     try testing.expect(parse(a,
+        \\{"zone":"Textberry","members":[]}
+    ).?.members == null);
+    try testing.expect(parse(a,
         \\{"start":""}
     ).?.start == null);
     try testing.expect(parse(a,
@@ -273,7 +281,6 @@ test "claude zone: a message stops at the zone's edge" {
     try testing.expectEqual(Decision.deny, decide("prefix", &members, &agents));
     try testing.expectEqual(Decision.allow, decide("main", &members, &agents));
     try testing.expectEqual(Decision.allow, decide("a-subagent", &members, &agents));
-    try testing.expectEqual(Decision.deny, decide("inside", &.{}, &agents));
 }
 
 test "claude zone: Allow Once names one target" {

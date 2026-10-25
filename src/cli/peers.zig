@@ -382,7 +382,7 @@ test "sessions: location, Claude and folder" {
     try testing.expectEqualStrings("/repo", sessions[1].path);
 }
 
-test "sessions: a zone keeps only its members" {
+test "sessions: a zone keeps only its members, if it knows any" {
     var arena = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -391,7 +391,8 @@ test "sessions: a zone keeps only its members" {
     try testing.expectEqual(@as(usize, 1), kept.len);
     try testing.expectEqualStrings("tb-1:@6.%6", kept[0].location);
     try testing.expectEqual(@as(usize, 3), (try inZone(a, listed, null)).len);
-    try testing.expectEqual(@as(usize, 0), (try inZone(a, listed, &.{})).len);
+    const unknown = zone.parse(a, "{\"members\":[]}").?.members;
+    try testing.expectEqual(@as(usize, 3), (try inZone(a, listed, unknown)).len);
 }
 
 test "files both sides change" {
