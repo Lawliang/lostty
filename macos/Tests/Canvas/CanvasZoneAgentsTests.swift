@@ -44,6 +44,22 @@ struct CanvasZoneAgentsTests {
         #expect(CanvasModel.zoneMovedOut(of: "Textberry") == "You've left zone Textberry.")
     }
 
+    @Test func theOwnerHearsOfAPaneOnlyWhenItLeavesItsProject() {
+        let before = textberry()
+        var after = before
+        let elsewhere = UUID()
+        after.addZone(CanvasZone(id: elsewhere, frame: CGRect(x: 3000, y: 0, width: 2000, height: 1000)))
+        let pane = UUID()
+        func move(_ from: UUID?, _ to: UUID?) -> CanvasPaneZones.Move { .init(pane: pane, from: from, to: to) }
+        #expect(!after.leftProject(move(project, domain), before: before))
+        #expect(!after.leftProject(move(domain, project), before: before))
+        #expect(!after.leftProject(move(nil, project), before: before))
+        #expect(after.leftProject(move(domain, nil), before: before))
+        #expect(after.leftProject(move(project, elsewhere), before: before))
+        after.removeZone(domain)
+        #expect(!after.leftProject(move(domain, nil), before: before))
+    }
+
     @Test func aNoticeShortensALongCardTitle() {
         #expect(CanvasModel.noticeTitle("claude") == "claude")
         let forty = String(repeating: "a", count: 40)

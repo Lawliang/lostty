@@ -39,6 +39,14 @@ extension CanvasModel {
         return result
     }
 
+    /// Whether the owner hears of `move`, worked out on the model
+    /// `before` it and this one after: its pane left its project, for
+    /// another or for none, and the zone it left is still here.
+    func leftProject(_ move: CanvasPaneZones.Move, before: CanvasModel) -> Bool {
+        guard let from = move.from, zone(from) != nil else { return false }
+        return before.projectZone(from) != move.to.flatMap(projectZone)
+    }
+
     /// Zone `id` as its agents are told it: "Textberry › Onboarding" for a
     /// domain, "Textberry" for a project.
     func zoneTitle(_ id: UUID) -> String? {

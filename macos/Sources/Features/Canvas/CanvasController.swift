@@ -546,8 +546,8 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
 
     /// Works out each pane's zone again (zones spec §5, §9). A pane in a
     /// zone has its zone file, kept current. A pane that moved in or out
-    /// is told with its next prompt, and a card that left a zone still on
-    /// the canvas shows a notice. A pane new to the canvas didn't move.
+    /// is told with its next prompt, and a card that left its project, a
+    /// zone still on the canvas, shows a notice. A pane new to the canvas didn't move.
     func zoneMembershipDidChange() {
         let now = model.paneZones(cards.map { ($0.id, $0.surfaceTree.map(\.id)) })
         let before = membership
@@ -574,7 +574,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
             if let note = move.to.flatMap(model.zoneMovedIn) ?? left.map(CanvasModel.zoneMovedOut) {
                 zoneStore.replaceSay(move.pane, note)
             }
-            guard let from = move.from, let left, model.zone(from) != nil,
+            guard let left, model.leftProject(move, before: before.model),
                   let card = cards.first(where: { $0.surfaceTree.contains { $0.id == move.pane } }),
                   noticed.insert(card.id).inserted else { continue }
             LosttyNotifications.shared.post(LosttyNotification(
