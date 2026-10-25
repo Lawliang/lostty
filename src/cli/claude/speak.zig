@@ -5,10 +5,26 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-/// Which queued text a hook takes: `say` (the directive) on
+/// A file the Mac app keeps for a pane. Hooks take the queued texts once:
+/// `say` (the handoff's directive) and `zone_say` (a zone move's note) on
 /// UserPromptSubmit and PostToolUse, `start` (the handoff for the fresh
-/// window) on SessionStart after /clear.
-pub const Kind = enum { say, start };
+/// window) on SessionStart after /clear. `zone` (zone.zig) is read, never
+/// taken: the app keeps it current.
+pub const Kind = enum {
+    say,
+    start,
+    zone_say,
+    zone,
+
+    fn suffix(kind: Kind) []const u8 {
+        return switch (kind) {
+            .say => "say",
+            .start => "start",
+            .zone_say => "zone.say",
+            .zone => "zone.json",
+        };
+    }
+};
 
 /// Under $HOME: where the Mac app queues each pane's text.
 pub const panes_dir = "Library/Application Support/Lostty/handoff/panes";
@@ -32,7 +48,20 @@ pub fn isPaneId(s: []const u8) bool {
 }
 
 pub fn queuedPath(alloc: Allocator, home: []const u8, pane: []const u8, kind: Kind) Allocator.Error![]u8 {
-    return std.fmt.allocPrint(alloc, "{s}/{s}/{s}.{s}", .{ home, panes_dir, pane, @tagName(kind) });
+    return std.fmt.allocPrint(alloc, "{s}/{s}/{s}.{s}", .{ home, panes_dir, pane, kind.suffix() });
+}
+
+/// The non-empty `texts` as one, in order, a blank line between; null
+/// when there are none.
+pub fn join(alloc: Allocator, texts: []const ?[]const u8) Allocator.Error!?[]u8 {
+    var out: std.ArrayList(u8) = .empty;
+    for (texts) |text| {
+        const t = text orelse continue;
+        if (t.len == 0) continue;
+        if (out.items.len > 0) try out.appendSlice(alloc, "\n\n");
+        try out.appendSlice(alloc, t);
+    }
+    return if (out.items.len == 0) null else try out.toOwnedSlice(alloc);
 }
 
 /// Claude Code's hook output that adds `text` to the model's context.
@@ -93,6 +122,24 @@ test "claude speak: queued path" {
         "/Users/me/Library/Application Support/Lostty/handoff/panes/0F8C2A5E-1B2C-4D3E-8F90-A1B2C3D4E5F6.say",
         try queuedPath(a, "/Users/me", "0F8C2A5E-1B2C-4D3E-8F90-A1B2C3D4E5F6", .say),
     );
+    try std.testing.expectEqualStrings(
+        "/Users/me/Library/Application Support/Lostty/handoff/panes/0F8C2A5E-1B2C-4D3E-8F90-A1B2C3D4E5F6.zone.say",
+        try queuedPath(a, "/Users/me", "0F8C2A5E-1B2C-4D3E-8F90-A1B2C3D4E5F6", .zone_say),
+    );
+    try std.testing.expectEqualStrings(
+        "/Users/me/Library/Application Support/Lostty/handoff/panes/0F8C2A5E-1B2C-4D3E-8F90-A1B2C3D4E5F6.zone.json",
+        try queuedPath(a, "/Users/me", "0F8C2A5E-1B2C-4D3E-8F90-A1B2C3D4E5F6", .zone),
+    );
+}
+
+test "claude speak: texts join with a blank line, skipping missing ones" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    try std.testing.expectEqualStrings("handoff\n\nbrief", (try join(a, &.{ "handoff", "brief" })).?);
+    try std.testing.expectEqualStrings("brief", (try join(a, &.{ null, "brief" })).?);
+    try std.testing.expectEqualStrings("say", (try join(a, &.{ "say", "" })).?);
+    try std.testing.expect((try join(a, &.{ null, null })) == null);
 }
 
 test "claude speak: output is Claude's additionalContext JSON" {

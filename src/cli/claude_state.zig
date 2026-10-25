@@ -3,6 +3,7 @@ const Allocator = std.mem.Allocator;
 const Action = @import("ghostty.zig").Action;
 const protocol = @import("claude/protocol.zig");
 const speak = @import("claude/speak.zig");
+const zone = @import("claude/zone.zig");
 
 pub const Options = struct {
     pub fn deinit(self: Options) void {
@@ -24,9 +25,11 @@ pub const Options = struct {
 /// (protocol.refine), and marks Claude asking permission. An `idle` also names the conversation
 /// file, for the Mac's turn observer. `tool` (PreToolUse) sends what the tool
 /// call is about to do, for Lostty Mobile's session list. It never fails,
-/// and prints only the context handoff's queued text (`busy`, `done`,
-/// `start`): outside Lostty, without a terminal, or with a bad argument it
-/// does nothing and exits 0, so a hook can never break Claude.
+/// and prints only what the Mac app keeps for the pane (speak.Kind): the
+/// queued texts on `busy` and `done`, and on `start` the zone's brief,
+/// after the handoff when it follows /clear. Outside Lostty, without a
+/// terminal, or with a bad argument it does nothing and exits 0, so a hook
+/// can never break Claude.
 pub fn run(gpa: Allocator) !u8 {
     var arena_state = std.heap.ArenaAllocator.init(gpa);
     defer arena_state.deinit();
@@ -39,21 +42,26 @@ pub fn run(gpa: Allocator) !u8 {
     const pane = std.posix.getenv(protocol.surface_env) orelse return 0;
     var detail: protocol.Detail = .{};
     switch (state) {
-        // A prompt: give Claude the directive queued for it, then say busy.
-        .busy => _ = speakQueued(alloc, pane, .say, "UserPromptSubmit"),
+        // A prompt: give Claude what's queued for it, then say busy.
+        .busy => speakQueued(alloc, pane, "UserPromptSubmit"),
         // After a tool call: only speak (Claude's own calls, not a subagent's).
         .done => {
             if (hookInput(alloc)) |input| if (speak.isSubagent(alloc, input)) return 0;
-            _ = speakQueued(alloc, pane, .say, "PostToolUse");
+            speakQueued(alloc, pane, "PostToolUse");
             return 0;
         },
-        // A fresh window after /clear: hand it the handoff and say so, or
-        // say it was cleared with none (the Mac disarms the pane).
+        // A session starting without the zone's brief gets it. After
+        // /clear the fresh window also gets the handoff, and says so, or
+        // says it was cleared with none (the Mac disarms the pane).
         .start => {
             const input = hookInput(alloc) orelse return 0;
             const source = speak.sessionSource(alloc, input) orelse return 0;
-            if (!std.mem.eql(u8, source, "clear")) return 0;
-            state = if (speakQueued(alloc, pane, .start, "SessionStart")) .fresh else .cleared;
+            if (!zone.briefsAt(source)) return 0;
+            const cleared = std.mem.eql(u8, source, "clear");
+            const handoff = if (cleared) take(alloc, pane, .start) else null;
+            speakTexts(alloc, "SessionStart", &.{ handoff, zoneBrief(alloc, pane) });
+            if (!cleared) return 0;
+            state = if (handoff != null) .fresh else .cleared;
         },
         .idle, .resumed => if (hookInput(alloc)) |input| {
             state = protocol.refine(alloc, state, input) orelse return 0;
@@ -72,17 +80,39 @@ pub fn run(gpa: Allocator) !u8 {
     return 0;
 }
 
-/// Prints the text the Mac app queued for this pane as Claude Code's
-/// additionalContext for `event`. False when nothing was queued (or the
-/// pane id isn't one Lostty sets).
-fn speakQueued(alloc: Allocator, pane: []const u8, kind: speak.Kind, event: []const u8) bool {
-    if (!speak.isPaneId(pane)) return false;
-    const home = std.posix.getenv("HOME") orelse return false;
-    const path = speak.queuedPath(alloc, home, pane, kind) catch return false;
-    const text = speak.take(alloc, path) orelse return false;
-    const out = speak.output(alloc, event, text) catch return false;
-    std.fs.File.stdout().writeAll(out) catch return false;
-    return true;
+/// Prints the handoff's directive and any zone move's note, taken from
+/// the queue, as one additionalContext for `event`.
+fn speakQueued(alloc: Allocator, pane: []const u8, event: []const u8) void {
+    speakTexts(alloc, event, &.{ take(alloc, pane, .say), take(alloc, pane, .zone_say) });
+}
+
+/// Prints `texts` as Claude Code's additionalContext for `event`, or
+/// nothing when there are none.
+fn speakTexts(alloc: Allocator, event: []const u8, texts: []const ?[]const u8) void {
+    const text = (speak.join(alloc, texts) catch return) orelse return;
+    const out = speak.output(alloc, event, text) catch return;
+    std.fs.File.stdout().writeAll(out) catch {};
+}
+
+/// The pane's file of `kind`, or null when the pane id isn't one Lostty
+/// sets.
+fn paneFile(alloc: Allocator, pane: []const u8, kind: speak.Kind) ?[]const u8 {
+    if (!speak.isPaneId(pane)) return null;
+    const home = std.posix.getenv("HOME") orelse return null;
+    return speak.queuedPath(alloc, home, pane, kind) catch null;
+}
+
+fn take(alloc: Allocator, pane: []const u8, kind: speak.Kind) ?[]const u8 {
+    return speak.take(alloc, paneFile(alloc, pane, kind) orelse return null);
+}
+
+/// The brief of the pane's zone, left in place for the next session. A
+/// move's note still queued is dropped: the brief is the zone as it is now.
+fn zoneBrief(alloc: Allocator, pane: []const u8) ?[]const u8 {
+    if (paneFile(alloc, pane, .zone_say)) |path| std.fs.deleteFileAbsolute(path) catch {};
+    const path = paneFile(alloc, pane, .zone) orelse return null;
+    const json = std.fs.cwd().readFileAlloc(alloc, path, speak.text_max) catch return null;
+    return zone.start(alloc, json);
 }
 
 /// The hook input Claude Code writes to stdin, or null when stdin is a
@@ -122,4 +152,5 @@ const Ps = struct {
 test {
     _ = @import("claude/protocol.zig");
     _ = @import("claude/speak.zig");
+    _ = @import("claude/zone.zig");
 }
