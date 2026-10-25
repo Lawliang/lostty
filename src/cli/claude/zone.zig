@@ -21,6 +21,9 @@ pub const File = struct {
     start: ?[]const u8 = null,
     /// The zone's title: "Textberry › Onboarding" for a domain.
     zone: ?[]const u8 = null,
+    /// The zone's folder, absolute: a domain's subfolder, else the
+    /// project's. The Guard keeps writes inside it.
+    folder: ?[]const u8 = null,
     /// The tmux sessions (on the `lostty` socket) of every pane in the
     /// project zone, its domains included. Null in a file from an app
     /// that didn't write them: then nothing is kept inside.
@@ -183,6 +186,10 @@ test "claude zone: the file's brief, title and members" {
     try testing.expectEqualStrings("Textberry › Onboarding", file.zone.?);
     try testing.expectEqual(@as(usize, 2), file.members.?.len);
     try testing.expectEqualStrings("tb-2", file.members.?[1]);
+    try testing.expect(file.folder == null);
+    try testing.expectEqualStrings("/Users/me/t/onboarding", parse(a,
+        \\{"folder":"/Users/me/t/onboarding"}
+    ).?.folder.?);
     try testing.expect(parse(a,
         \\{"zone":"Textberry"}
     ).?.members == null);

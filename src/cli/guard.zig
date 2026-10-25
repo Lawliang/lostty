@@ -5,6 +5,8 @@ const decide = @import("guard/decide.zig");
 const wire = @import("guard/wire.zig");
 const config = @import("guard/config.zig");
 const git = @import("guard/git.zig");
+const speak = @import("claude/speak.zig");
+const zone = @import("claude/zone.zig");
 
 pub const Options = struct {
     pub fn deinit(self: Options) void {
@@ -68,7 +70,7 @@ fn runFor(alloc: Allocator, pane: []const u8, agent: wire.Agent) !u8 {
     var buf: [4096]u8 = undefined;
     var reader = std.fs.File.stdin().reader(&buf);
     const input = try reader.interface.allocRemaining(alloc, .limited(8 << 20));
-    const env: decide.Env = .{ .home = home, .tmpdir = std.posix.getenv("TMPDIR"), .config = cfg };
+    const env: decide.Env = .{ .home = home, .tmpdir = std.posix.getenv("TMPDIR"), .config = cfg, .zone_folder = zoneFolder(alloc, home, pane) };
     const verdict = try decide.decide(alloc, env, git.Live{ .alloc = alloc }, input);
     const c = switch (verdict) {
         .harmless => return 0,
@@ -80,6 +82,48 @@ fn runFor(alloc: Allocator, pane: []const u8, agent: wire.Agent) !u8 {
         .deny => |id| try wire.outputDeny(alloc, agent, id, c),
     } else try wire.outputUnreachable(alloc, agent, c);
     return emit(out);
+}
+
+/// The folder in the pane's zone file, resolved; null without a zone
+/// file, a folder, or a directory there.
+fn zoneFolder(alloc: Allocator, home: []const u8, pane: []const u8) ?[]const u8 {
+    if (!speak.isPaneId(pane)) return null;
+    const path = speak.queuedPath(alloc, home, pane, .zone) catch return null;
+    const json = std.fs.cwd().readFileAlloc(alloc, path, speak.text_max) catch return null;
+    const folder = (zone.parse(alloc, json) orelse return null).folder orelse return null;
+    if (!std.fs.path.isAbsolute(folder)) return null;
+    var dir = std.fs.openDirAbsolute(folder, .{}) catch return null;
+    defer dir.close();
+    return dir.realpathAlloc(alloc, ".") catch null;
+}
+
+test "guard zone: the folder in the pane's zone file" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.makePath(speak.panes_dir);
+    try tmp.dir.makePath("t/onboarding");
+    try tmp.dir.writeFile(.{ .sub_path = "t/notes.md", .data = "" });
+    const home = try tmp.dir.realpathAlloc(a, ".");
+    const pane = "0F8C2A5E-1B2C-4D3E-8F90-A1B2C3D4E5F6";
+    const zone_path = try speak.queuedPath(a, home, pane, .zone);
+    const domain = try std.fs.path.join(a, &.{ home, "t/onboarding" });
+
+    try std.testing.expect(zoneFolder(a, home, pane) == null);
+    for ([_][]const u8{
+        "{\"zone\":\"Textberry\",\"folder\":null}",
+        "{\"folder\":\"t/onboarding\"}",
+        try std.fmt.allocPrint(a, "{{\"folder\":\"{s}/t/notes.md\"}}", .{home}),
+        try std.fmt.allocPrint(a, "{{\"folder\":\"{s}/t/gone\"}}", .{home}),
+    }) |json| {
+        try std.fs.cwd().writeFile(.{ .sub_path = zone_path, .data = json });
+        try std.testing.expect(zoneFolder(a, home, pane) == null);
+    }
+    try std.fs.cwd().writeFile(.{ .sub_path = zone_path, .data = try std.fmt.allocPrint(a, "{{\"folder\":\"{s}/\"}}", .{domain}) });
+    try std.testing.expectEqualStrings(domain, zoneFolder(a, home, pane).?);
+    try std.testing.expect(zoneFolder(a, home, "../x") == null);
 }
 
 fn emit(out: wire.Output) u8 {

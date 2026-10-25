@@ -33,6 +33,8 @@ pub const Ctx = struct {
     home: []const u8,
     tmpdir: ?[]const u8,
     config: config.Config,
+    /// The pane's zone folder: writes stay inside it instead of the project.
+    zone_folder: ?[]const u8 = null,
 };
 
 const Error = Allocator.Error;
@@ -107,6 +109,12 @@ const sudo_longs = [_][]const u8{ "user", "group", "chdir", "host", "prompt", "o
 fn projectRoot(ctx: Ctx) ?[]const u8 {
     const c = ctx.cwd orelse return null;
     return paths.findRepo(ctx.alloc, c) orelse c;
+}
+
+/// The folder writes stay in. A zone's folder narrows only this: the
+/// guard.json settings and pushes still go by the repo.
+fn writeLimit(ctx: Ctx) ?[]const u8 {
+    return ctx.zone_folder orelse projectRoot(ctx);
 }
 
 fn listed(commands: []const []const u8, text: []const u8) bool {
@@ -408,7 +416,7 @@ pub fn patch(ctx: Ctx, probe: anytype, text: []const u8) Error!?Finding {
 /// outside the project can't be put back from the repo.
 fn mvSources(ctx: Ctx, probe: anytype, sources: []const shell.Word) Error!?Finding {
     const cwd = ctx.cwd orelse return null;
-    const project = projectRoot(ctx).?;
+    const project = writeLimit(ctx).?;
     var outside: std.ArrayList(shell.Word) = .empty;
     for (sources) |w| {
         if (w.dynamic) continue;
@@ -492,7 +500,8 @@ fn isDeletable(rel: []const u8, names: []const []const u8) bool {
 }
 
 /// A file tool's write, or a shell write: critical for guardrails and for
-/// places outside the project (the repo, or the folder when there's none).
+/// places outside the project (the repo, or the folder when there's none),
+/// or outside the pane's zone folder when it has one.
 pub fn write(ctx: Ctx, probe: anytype, w: shell.Word) Error!?Finding {
     _ = probe; // the project is found on disk; no git process for a write
     if (w.dynamic or std.mem.indexOf(u8, w.text, "{}") != null) return finding(.outside, "writes to a path held in a variable");
@@ -504,9 +513,10 @@ pub fn write(ctx: Ctx, probe: anytype, w: shell.Word) Error!?Finding {
     const abs = try paths.resolve(ctx.alloc, cwd, w.text);
     if (paths.isGuardrail(abs, ctx.home)) return finding(.guardrails, "changes a file the guard depends on");
     if (paths.isWriteExempt(abs, ctx.home, ctx.tmpdir)) return null;
-    const project = projectRoot(ctx).?;
+    const project = writeLimit(ctx).?;
     if (paths.inside(abs, project)) return null;
-    return .{ .group = .outside, .why = try std.fmt.allocPrint(ctx.alloc, "writes {s}, outside the project", .{abs}) };
+    const limit = if (ctx.zone_folder != null) "the zone's folder" else "the project";
+    return .{ .group = .outside, .why = try std.fmt.allocPrint(ctx.alloc, "writes {s}, outside {s}", .{ abs, limit }) };
 }
 
 fn gitCommand(ctx_in: Ctx, probe: anytype, args_in: []const shell.Word) Error!?Finding {
@@ -866,6 +876,39 @@ test "guard catalog: leaving the Mac and merging" {
     try std.testing.expectEqual(@as(?Group, .merging), try group(a, .{ .current = "main" }, "git merge feature"));
     try std.testing.expectEqual(@as(?Group, null), try group(a, .{ .current = "feature" }, "git merge main"));
     try std.testing.expectEqual(@as(?Group, .leaving), try group(a, .{}, "gh pr merge 12"));
+}
+
+test "guard catalog: a zone's folder is the limit for writes" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.makePath(".git");
+    try tmp.dir.makePath("app");
+    const repo = try tmp.dir.realpathAlloc(a, ".");
+    const app = try std.fs.path.join(a, &.{ repo, "app" });
+    const cfg = config.Config.parse(a, try std.fmt.allocPrint(a, "{{\"repos\":{{\"{s}\":{{\"commands\":[\"deploy.sh\"]}}}}}}", .{repo}));
+    const zoned: Ctx = .{ .alloc = a, .cwd = app, .home = "/Users/me", .tmpdir = null, .config = cfg, .zone_folder = app };
+    const plain: Ctx = .{ .alloc = a, .cwd = app, .home = "/Users/me", .tmpdir = null, .config = cfg };
+    const p: Fake = .{ .root = repo };
+    const run = struct {
+        fn f(c: Ctx, probe: Fake, src: []const u8) !?Finding {
+            const cmds = try shell.parse(c.alloc, src, "/Users/me");
+            for (cmds) |cmd| if (try classify(c, probe, cmd)) |found| return found;
+            return null;
+        }
+    }.f;
+
+    try std.testing.expect((try run(zoned, p, "echo x > notes.md")) == null);
+    try std.testing.expect((try run(zoned, p, "echo x > /tmp/scratch")) == null);
+    const out = (try run(zoned, p, "echo x > ../README.md")).?;
+    try std.testing.expectEqual(Group.outside, out.group);
+    try std.testing.expect(std.mem.endsWith(u8, out.why, "outside the zone's folder"));
+    try std.testing.expectEqual(Group.outside, (try write(zoned, p, .{ .text = try std.fs.path.join(a, &.{ repo, "README.md" }), .dynamic = false })).?.group);
+    try std.testing.expect((try run(plain, p, "echo x > ../README.md")) == null);
+    // The repo's settings still apply inside the zone.
+    try std.testing.expectEqual(Group.leaving, (try run(zoned, p, "deploy.sh")).?.group);
 }
 
 test "guard catalog: push set to all asks for every push" {

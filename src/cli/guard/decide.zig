@@ -30,7 +30,7 @@ pub const Critical = struct {
 
 pub const Verdict = union(enum) { harmless, critical: Critical };
 
-pub const Env = struct { home: []const u8, tmpdir: ?[]const u8, config: config.Config };
+pub const Env = struct { home: []const u8, tmpdir: ?[]const u8, config: config.Config, zone_folder: ?[]const u8 = null };
 
 fn str(obj: std.json.Value, key: []const u8) ?[]const u8 {
     if (obj != .object) return null;
@@ -53,7 +53,7 @@ pub fn decide(alloc: Allocator, e: Env, probe: anytype, input_json: []const u8) 
             cwd = try paths.resolve(alloc, cwd, wd.string);
         }
     }
-    const ctx: catalog.Ctx = .{ .alloc = alloc, .cwd = cwd, .home = e.home, .tmpdir = e.tmpdir, .config = e.config };
+    const ctx: catalog.Ctx = .{ .alloc = alloc, .cwd = cwd, .home = e.home, .tmpdir = e.tmpdir, .config = e.config, .zone_folder = e.zone_folder };
 
     var input: []const u8 = "";
     var found: ?catalog.Finding = null;
@@ -386,6 +386,18 @@ test "guard decide: cd moves where later commands run" {
     try std.testing.expect(try decide(a, e, Fake{}, try bash(a, "(cd /elsewhere && ls); rm x", "/r")) == .harmless);
     // cd inside the repo stays fine.
     try std.testing.expect(try decide(a, e, Fake{}, try bash(a, "cd sub && rm x", "/r")) == .harmless);
+}
+
+test "guard decide: a cd doesn't leave the zone's folder" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var zoned = env(a);
+    zoned.zone_folder = "/r/app";
+    const leaves = try bash(a, "cd .. && echo x > README.md", "/r/app");
+    try std.testing.expectEqual(catalog.Group.outside, (try decide(a, zoned, Fake{}, leaves)).critical.group);
+    try std.testing.expect(try decide(a, env(a), Fake{}, leaves) == .harmless);
+    try std.testing.expect(try decide(a, zoned, Fake{}, try bash(a, "echo x > notes.md", "/r/app")) == .harmless);
 }
 
 test "guard decide: file tools" {
