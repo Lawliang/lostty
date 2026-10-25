@@ -3,9 +3,10 @@ import Foundation
 
 /// A Jira-style ticket kept on the canvas: no Jira account, saved with the
 /// canvas. It has a key (LT-1, or its project's prefix, as TB-1) once it's
-/// created, and keeps it; until then it's a draft. It reads forgivingly: a field missing, or a type, priority or
-/// status this build doesn't know (saved by a newer one), takes its
-/// default, so the canvas always comes back.
+/// created, and keeps it; until then it's a draft. It reads forgivingly: a
+/// field missing, or a type, priority or status this build doesn't know
+/// (saved by a newer one), takes its default, so the canvas always comes
+/// back.
 struct CanvasTicket: Codable, Equatable {
     enum Kind: String, Codable, CaseIterable, ForgivingCase {
         case task, bug, story
