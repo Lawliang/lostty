@@ -36,6 +36,14 @@ enum ClaudeMessage {
         return action
     }
 
+    /// The agent a SendMessage was for, when the hook kept it inside the
+    /// pane's zone: `{"v":1,"state":"tool","action":"SendMessage","denied":"name"}`.
+    static func denied(_ value: String) -> String? {
+        guard let object = object(value), object["state"] as? String == "tool",
+              let target = object["denied"] as? String, !target.isEmpty else { return nil }
+        return target
+    }
+
     /// An `idle` that is Claude asking permission (`"permission":true`) to
     /// run the last action, rather than finishing its turn.
     static func isPermission(_ value: String) -> Bool {

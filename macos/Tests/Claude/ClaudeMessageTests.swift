@@ -34,6 +34,18 @@ struct ClaudeMessageTests {
         #expect(ClaudeMessage.action(#"{"v":2,"state":"tool","action":"x"}"#) == nil)
     }
 
+    @Test func readsAMessageKeptInsideTheZone() {
+        // Exact JSON `+claude-state tool` encodes for a denied SendMessage (see protocol.zig).
+        let kept = #"{"v":1,"state":"tool","action":"SendMessage","denied":"lostty-a9"}"#
+        #expect(ClaudeMessage.denied(kept) == "lostty-a9")
+        #expect(ClaudeMessage.action(kept) == "SendMessage")
+        #expect(ClaudeMessage.decode(kept) == nil)
+        #expect(ClaudeMessage.denied(#"{"v":1,"state":"tool","action":"SendMessage"}"#) == nil)
+        #expect(ClaudeMessage.denied(#"{"v":1,"state":"tool","denied":""}"#) == nil)
+        #expect(ClaudeMessage.denied(#"{"v":1,"state":"busy","denied":"x"}"#) == nil)
+        #expect(ClaudeMessage.denied(#"{"v":2,"state":"tool","denied":"x"}"#) == nil)
+    }
+
     @Test func readsAPermissionWait() {
         #expect(ClaudeMessage.isPermission(#"{"v":1,"state":"idle","permission":true}"#))
         #expect(ClaudeMessage.decode(#"{"v":1,"state":"idle","permission":true}"#) == .idle)

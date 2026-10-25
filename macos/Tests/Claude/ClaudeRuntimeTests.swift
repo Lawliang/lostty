@@ -54,6 +54,20 @@ struct ClaudeRuntimeTests {
         #expect(runtime.actions[pane] == nil)
     }
 
+    @Test func aMessageKeptInsideTheZoneIsReportedAndStillAnAction() {
+        let runtime = makeRuntime()
+        var kept: [(UUID, String)] = []
+        runtime.messageKeptInside = { kept.append(($0, $1)) }
+        runtime.userVarChanged(pane, name: "LOSTTY_CLAUDE", value: action("Reading Foo.swift"))
+        #expect(kept.isEmpty)
+        // Exact JSON `+claude-state tool` encodes for a denied SendMessage (see protocol.zig).
+        runtime.userVarChanged(
+            pane, name: "LOSTTY_CLAUDE", value: #"{"v":1,"state":"tool","action":"SendMessage","denied":"lostty-a9"}"#)
+        #expect(kept.map(\.0) == [pane])
+        #expect(kept.map(\.1) == ["lostty-a9"])
+        #expect(runtime.actions[pane] == "SendMessage")
+    }
+
     @Test func aPermissionWaitKeepsTheActionItAsksFor() {
         let runtime = makeRuntime()
         runtime.userVarChanged(pane, name: "LOSTTY_CLAUDE", value: payload("busy"))

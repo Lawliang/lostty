@@ -41,6 +41,10 @@ final class ClaudeRuntime: ObservableObject {
     /// after /clear, and the pane's agent going away. Set at launch.
     var handoffSignal: @MainActor (UUID, ContextHandoffSignal) -> Void = { _, _ in }
 
+    /// A pane's hook kept a SendMessage inside its zone, naming the agent
+    /// it was for: the canvas's notice. Set at launch.
+    var messageKeptInside: @MainActor (UUID, String) -> Void = { _, _ in }
+
     private let now: () -> Date
     private let schedule: Scheduler
     /// Panes not focused right now. Panes start focused (SurfaceView does).
@@ -79,6 +83,7 @@ final class ClaudeRuntime: ObservableObject {
             handoffSignal(id, .cleared)
             return
         }
+        if let target = ClaudeMessage.denied(value) { messageKeptInside(id, target) }
         if let action = ClaudeMessage.action(value) {
             // A tool starting means Claude works, even with no new prompt
             // (it carries on after a permission prompt without one).
