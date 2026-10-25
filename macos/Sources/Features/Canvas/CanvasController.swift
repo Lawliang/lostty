@@ -580,6 +580,36 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         }
     }
 
+    /// Pane `pane`'s agent tried to message `target`, outside its zone, and
+    /// the hook kept the message inside (zones spec §3, §7): a notice with
+    /// Allow Once and the zone's settings, until dismissed.
+    func messageKeptInside(pane: UUID, target: String) {
+        guard let zone = membership.panes.zones[pane], let project = model.projectZone(zone),
+              let name = model.zone(project)?.name,
+              let card = cards.first(where: { $0.surfaceTree.contains { $0.id == pane } }) else { return }
+        let kind = LosttyNotification.Kind.keptInside(pane: pane)
+        LosttyNotifications.shared.post(LosttyNotification(
+            kind: kind,
+            title: "Kept inside \(name)",
+            detail: "\(card.title) tried to message \(target), which is outside the zone.",
+            actionTitle: "Allow Once",
+            action: { [weak self] in
+                self?.zoneStore.writeAllow(pane, target: target)
+                self?.zoneStore.writeSay(pane, "You may retry your message to \(target) once.")
+                LosttyNotifications.shared.dismiss(kind: kind)
+            },
+            secondaryTitle: "Zone Settings",
+            secondaryAction: { [weak self] in self?.showZoneSettings(project) },
+            persistent: true))
+    }
+
+    /// Zone `id` in view in the front window, its settings open.
+    private func showZoneSettings(_ id: UUID) {
+        window?.makeKeyAndOrderFront(nil)
+        zoomToZone(id)
+        surface.zones.showSettings(id)
+    }
+
     private func retire(_ card: CardController) {
         guard let frame = model.card(card.id)?.frame else { return }
         model.remove(card.id)

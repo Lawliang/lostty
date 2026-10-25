@@ -91,6 +91,7 @@ struct CanvasZoneAgentsTests {
         store.writeZone(pane, CanvasZoneFile(
             start: "Lostty zone: Textberry.", zone: "Textberry", folder: nil, members: ["tb-1", "tb-2"]))
         store.writeSay(pane, "You're now in zone Textberry.")
+        store.writeAllow(pane, target: "lostty-a9")
 
         let url = handoff.panes.appendingPathComponent("\(pane.uuidString).zone.json")
         let json = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
@@ -98,6 +99,8 @@ struct CanvasZoneAgentsTests {
         #expect(json["zone"] as? String == "Textberry")
         #expect(json["folder"] is NSNull)
         #expect(json["members"] as? [String] == ["tb-1", "tb-2"])
+        let allow = handoff.panes.appendingPathComponent("\(pane.uuidString).zone.allow")
+        #expect(try String(contentsOf: allow, encoding: .utf8) == "lostty-a9")
         let say = handoff.panes.appendingPathComponent("\(pane.uuidString).zone.say")
         #expect(try String(contentsOf: say, encoding: .utf8) == "You're now in zone Textberry.")
         #expect(handoff.loadStates().isEmpty)

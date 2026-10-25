@@ -19,7 +19,7 @@ struct NotificationStackView: View {
 }
 
 /// An iOS-style banner: frosted rounded card, icon, title, one line of
-/// detail, an optional action and a close button.
+/// detail, up to two actions and a close button.
 private struct NotificationBubble: View {
     let item: LosttyNotification
     let center: LosttyNotifications
@@ -39,15 +39,27 @@ private struct NotificationBubble: View {
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                if let actionTitle = item.actionTitle, let action = item.action {
-                    Button(actionTitle) { action() }
-                        .buttonStyle(.plain)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 4)
-                        .background(Capsule().fill(Color.accentColor))
-                        .padding(.top, 6)
+                if item.actionTitle != nil || item.secondaryTitle != nil {
+                    HStack(spacing: 6) {
+                        if let actionTitle = item.actionTitle, let action = item.action {
+                            Button(actionTitle) { action() }
+                                .buttonStyle(.plain)
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 4)
+                                .background(Capsule().fill(Color.accentColor))
+                        }
+                        if let title = item.secondaryTitle, let action = item.secondaryAction {
+                            Button(title) { action() }
+                                .buttonStyle(.plain)
+                                .font(.system(size: 12, weight: .semibold))
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 4)
+                                .background(Capsule().fill(Color.primary.opacity(0.12)))
+                        }
+                    }
+                    .padding(.top, 6)
                 }
             }
 

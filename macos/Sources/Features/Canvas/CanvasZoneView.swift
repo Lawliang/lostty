@@ -35,6 +35,11 @@ final class CanvasZoneLayer: NSView {
         if subviews != shown { subviews = shown }
     }
 
+    /// Opens zone `id`'s settings, as a click on its label does.
+    func showSettings(_ id: UUID) {
+        views[id]?.label.showSettings()
+    }
+
     /// The edges as thick on screen as the zoom has changed.
     func updateEdges() {
         for view in views.values { view.updateEdge(zoom: zoom) }
@@ -47,7 +52,7 @@ final class CanvasZoneLayer: NSView {
 /// edge, its label inside the top edge, and handles along its edges that
 /// resize it.
 final class CanvasZoneView: NSView {
-    private let label: CanvasZoneLabel
+    let label: CanvasZoneLabel
     private var handles: [CardEdgeHandle] = []
     private var isDomain = false
 
@@ -207,7 +212,7 @@ final class CanvasZoneLabel: NSView {
         return menu
     }
 
-    @objc private func showSettings() {
+    @objc func showSettings() {
         guard let canvas, let zone = canvas.model.zone(id) else { return }
         if let settings, settings.isShown {
             settings.close()

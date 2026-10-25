@@ -117,8 +117,9 @@ struct CanvasZoneFile: Equatable, Encodable {
 
 /// Each pane's zone files, in the context handoff's queue folder
 /// (`ContextHandoffStore.panes`): `<PANE>.zone.json`, read by the hooks
-/// and kept current, and `<PANE>.zone.say`, a move's note, taken by the
-/// next prompt or tool call.
+/// and kept current, `<PANE>.zone.say`, a move's note, taken by the
+/// next prompt or tool call, and `<PANE>.zone.allow`, the owner's Allow
+/// Once, taken by the one SendMessage it names.
 struct CanvasZoneStore: Sendable {
     static let standard = CanvasZoneStore(panes: ContextHandoffStore.standard.panes)
 
@@ -140,10 +141,16 @@ struct CanvasZoneStore: Sendable {
         write(data, to: file(pane, "zone.json"))
     }
 
-    func removeZone(_ pane: UUID) { try? FileManager.default.removeItem(at: file(pane, "zone.json")) }
+    /// The pane is in no zone: its Allow Once goes too.
+    func removeZone(_ pane: UUID) {
+        for ext in ["zone.json", "zone.allow"] { try? FileManager.default.removeItem(at: file(pane, ext)) }
+    }
 
     func writeSay(_ pane: UUID, _ text: String) { write(Data(text.utf8), to: file(pane, "zone.say")) }
 
     func removeSay(_ pane: UUID) { try? FileManager.default.removeItem(at: file(pane, "zone.say")) }
+
+    /// The latest Allow Once wins.
+    func writeAllow(_ pane: UUID, target: String) { write(Data(target.utf8), to: file(pane, "zone.allow")) }
 }
 #endif
