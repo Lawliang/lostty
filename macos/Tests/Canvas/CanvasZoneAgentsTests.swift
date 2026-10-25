@@ -44,6 +44,14 @@ struct CanvasZoneAgentsTests {
         #expect(CanvasModel.zoneMovedOut(of: "Textberry") == "You've left zone Textberry.")
     }
 
+    @Test func aNoticeShortensALongCardTitle() {
+        #expect(CanvasModel.noticeTitle("claude") == "claude")
+        let forty = String(repeating: "a", count: 40)
+        #expect(CanvasModel.noticeTitle(forty) == forty)
+        #expect(CanvasModel.noticeTitle("clear; claude -p 'Call SendMessage exactly once to lostty-27'")
+            == "clear; claude -p 'Call SendMessage exac…")
+    }
+
     @Test func aCardsPanesShareItsZone() {
         var model = textberry()
         model.add(card, frame: CGRect(x: 200, y: 200, width: 400, height: 300))

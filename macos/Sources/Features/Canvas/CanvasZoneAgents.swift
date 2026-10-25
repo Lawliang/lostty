@@ -67,6 +67,12 @@ extension CanvasModel {
         "You've left zone \(title)."
     }
 
+    /// A card's title as a notice names it: a running command's title is
+    /// its whole command line, so a long one ends in an ellipsis.
+    static func noticeTitle(_ title: String, limit: Int = 40) -> String {
+        title.count <= limit ? title : title.prefix(limit - 1).trimmingCharacters(in: .whitespaces) + "…"
+    }
+
     /// "Name: brief" for zone `id`'s project, then for the domain, leaving
     /// out an empty brief.
     private func briefLines(_ id: UUID) -> [String] {

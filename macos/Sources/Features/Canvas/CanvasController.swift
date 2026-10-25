@@ -579,7 +579,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
                   noticed.insert(card.id).inserted else { continue }
             LosttyNotifications.shared.post(LosttyNotification(
                 kind: .zone(card: card.id),
-                title: "\(card.title) left \(left)",
+                title: "\(CanvasModel.noticeTitle(card.title)) left \(left)",
                 detail: move.to.flatMap(model.zoneTitle).map { "Now in \($0)." } ?? "It's in no zone now."))
         }
         updateZoneCaptions()
@@ -622,7 +622,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         LosttyNotifications.shared.post(LosttyNotification(
             kind: kind,
             title: "Kept inside \(name)",
-            detail: "\(card.title) tried to message \(target), which is outside the zone.",
+            detail: "\(CanvasModel.noticeTitle(card.title)) tried to message \(target), which is outside the zone.",
             actionTitle: "Allow Once",
             action: { [weak self] in
                 self?.zoneStore.writeAllow(pane, target: target)
