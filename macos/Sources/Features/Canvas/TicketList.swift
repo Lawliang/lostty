@@ -1,9 +1,10 @@
 #if os(macOS)
 import Foundation
 
-/// A tickets panel's list: every ticket, in sections by status, the one
-/// selected, and the sections folded away. Pure; each panel's TicketBoard
-/// makes one from the canvas's tickets and its own selection and folds.
+/// A tickets panel's list: the tickets of the zones it shows, in sections
+/// by status, the one selected, and the sections folded away. Pure; each
+/// panel's TicketBoard makes one from the canvas's tickets and its own
+/// zones, selection and folds.
 struct TicketList: Equatable {
     /// The sections top to bottom: what's under way, what's next, what's done.
     static let sections: [CanvasTicket.Status] = [.inProgress, .toDo, .done]
@@ -14,16 +15,25 @@ struct TicketList: Equatable {
     /// The selected ticket's key.
     var selected: String?
     var folded: Set<CanvasTicket.Status> = []
+    /// The zones whose tickets show; nil for every ticket.
+    private(set) var zones: Set<UUID>?
 
     init(tickets: [CanvasTicket] = []) {
         merge(tickets)
     }
 
-    /// `tickets` as they are, created and in order.
-    init(tickets: [CanvasTicket], selected: String?, folded: Set<CanvasTicket.Status>) {
+    /// `tickets` as they are, created and in order, showing those of
+    /// `zones`. A selected ticket that doesn't show isn't selected.
+    init(tickets: [CanvasTicket], zones: Set<UUID>?, selected: String?, folded: Set<CanvasTicket.Status>) {
         self.tickets = tickets
-        self.selected = selected
+        self.zones = zones
         self.folded = folded
+        self.selected = selected.flatMap { ticket($0) }.flatMap { shows($0) ? $0.key : nil }
+    }
+
+    func shows(_ ticket: CanvasTicket) -> Bool {
+        guard let zones else { return true }
+        return ticket.zone.map(zones.contains) ?? false
     }
 
     func ticket(_ key: String) -> CanvasTicket? {
@@ -31,13 +41,13 @@ struct TicketList: Equatable {
     }
 
     func count(_ status: CanvasTicket.Status) -> Int {
-        tickets.filter { $0.status == status }.count
+        tickets.filter { $0.status == status && shows($0) }.count
     }
 
     /// A section's tickets top to bottom: In Progress and Up Next highest
     /// priority first, then oldest first; Completed latest first.
     func tickets(in status: CanvasTicket.Status) -> [CanvasTicket] {
-        let these = tickets.filter { $0.status == status }
+        let these = tickets.filter { $0.status == status && shows($0) }
         guard status != .done else { return these.reversed() }
         let rank = { (ticket: CanvasTicket) in CanvasTicket.Priority.allCases.firstIndex(of: ticket.priority) ?? 0 }
         return these.enumerated()

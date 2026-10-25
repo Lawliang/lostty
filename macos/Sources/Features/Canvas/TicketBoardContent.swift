@@ -184,7 +184,7 @@ private struct TicketSectionHeader: View {
 }
 
 /// A ticket in the list: its type, key, status (click for the next one),
-/// summary, priority and assignee. Click to select it, double-click to
+/// summary, its domain in a project's panel, priority and assignee. Click to select it, double-click to
 /// edit its summary.
 private struct TicketRow: View {
     @ObservedObject var board: TicketBoard
@@ -199,7 +199,7 @@ private struct TicketRow: View {
                 .font(.system(size: 11.5, design: .monospaced))
                 .foregroundStyle(.tertiary)
                 .lineLimit(1)
-                .frame(width: 44, alignment: .leading)
+                .frame(width: 52, alignment: .leading)
             Button { board.cycleStatus(of: key) } label: {
                 TicketStatusIcon(status: ticket.status)
                     .contentShape(Circle())
@@ -212,6 +212,16 @@ private struct TicketRow: View {
                 .lineLimit(1)
                 .truncationMode(.tail)
                 .frame(maxWidth: .infinity, alignment: .leading)
+            if let domain = board.tag(of: ticket) {
+                Text(domain.name)
+                    .font(.system(size: 10.5, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color(nsColor: domain.color.pill), in: Capsule())
+                    .help("In \(domain.name)")
+            }
             TicketPriorityIcon(priority: ticket.priority)
                 .help("\(ticket.priority.title) priority")
             TicketAvatar(name: ticket.assignee)

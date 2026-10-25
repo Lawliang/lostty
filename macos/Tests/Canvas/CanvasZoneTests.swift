@@ -333,5 +333,21 @@ struct CanvasZoneTests {
         model.updateZone(project) { $0.keyPrefix = " tb " }
         #expect(model.ticketPrefix(ofZone: domain) == "TB")
     }
+
+    @Test func aPanelListsItsZonesTicketsTaggingADomainsInItsProjects() {
+        var model = CanvasModel()
+        model.addZone(zone(project, CGRect(x: 0, y: 0, width: 2000, height: 1000)))
+        model.addZone(zone(domain, CGRect(x: 0, y: 0, width: 800, height: 600), in: project))
+        model.addZone(zone(other, CGRect(x: 3000, y: 0, width: 1000, height: 1000)))
+        #expect(model.ticketZones(shownIn: nil) == nil)
+        #expect(model.ticketZones(shownIn: project) == [project, domain])
+        #expect(model.ticketZones(shownIn: domain) == [domain])
+
+        let inDomain = CanvasTicket(key: "LT-1", zone: domain), inProject = CanvasTicket(key: "LT-2", zone: project)
+        #expect(model.ticketTag(inDomain, shownIn: project)?.id == domain)
+        #expect(model.ticketTag(inProject, shownIn: project) == nil)
+        #expect(model.ticketTag(inDomain, shownIn: domain) == nil)
+        #expect(model.ticketTag(inDomain, shownIn: nil) == nil)
+    }
 }
 #endif

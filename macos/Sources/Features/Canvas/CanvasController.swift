@@ -403,6 +403,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
 
     /// A drag or resize ended, of a card or a zone.
     func cardFrameDidSettle() {
+        relistTickets()
         updateVisibility()
         saveSoon()
         zoneMembershipDidChange()
@@ -414,6 +415,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     /// whether it can make one. Membership waits for a resize to settle.
     func zonesDidChange(settled: Bool = true) {
         surface.zones.show(model.zones)
+        relistTickets()
         updateSelectionBar()
         saveSoon()
         if settled { zoneMembershipDidChange() }
@@ -636,6 +638,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         } else {
             model.add(board.id, frame: frame)
         }
+        board.list.moveToEnd(last: false)
         let view = TicketBoardView(board: board, canvas: self)
         ticketPanels[board.id] = view
         scrollView.document.addSubview(view)
@@ -664,9 +667,15 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     /// The canvas's tickets are now `new`: every panel lists them.
     func setTickets(_ new: [CanvasTicket]) {
         guard new != tickets else { return }
-        for panel in ticketPanels.values { panel.board.objectWillChange.send() }
+        relistTickets()
         tickets = new
         saveSoon()
+    }
+
+    /// Every panel lists its tickets again: they, the zone it's in, or
+    /// that zone's domains changed.
+    private func relistTickets() {
+        for panel in ticketPanels.values { panel.board.objectWillChange.send() }
     }
 
     /// A panel was clicked or took the keyboard: it comes to the front,

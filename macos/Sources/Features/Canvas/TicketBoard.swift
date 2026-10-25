@@ -30,10 +30,14 @@ final class TicketBoard: ObservableObject {
     @Published private var selected: String?
     @Published private var folded: Set<CanvasTicket.Status> = []
 
-    /// The canvas's tickets, as this panel lists them. Each panel has its
-    /// own selection and folds; the tickets are the canvas's.
+    /// The canvas's tickets, as this panel lists them: those of the zone
+    /// it's in (with its domains'), or every one outside every zone. Each
+    /// panel has its own selection and folds; the tickets are the canvas's.
     var list: TicketList {
-        get { TicketList(tickets: canvas?.tickets ?? [], selected: selected, folded: folded) }
+        get {
+            let zones = canvas.flatMap { $0.model.ticketZones(shownIn: $0.ticketZone(of: id)) }
+            return TicketList(tickets: canvas?.tickets ?? [], zones: zones, selected: selected, folded: folded)
+        }
         set {
             if selected != newValue.selected { selected = newValue.selected }
             if folded != newValue.folded { folded = newValue.folded }
@@ -70,11 +74,15 @@ final class TicketBoard: ObservableObject {
     init(canvas: CanvasController, draft: CanvasTicket? = nil) {
         self.canvas = canvas
         self.draft = draft
-        selected = list.shown.first
     }
 
     var selectedTicket: CanvasTicket? {
         list.selected.flatMap(list.ticket)
+    }
+
+    /// The domain `ticket`'s row is tagged with, in a project's panel.
+    func tag(of ticket: CanvasTicket) -> CanvasZone? {
+        canvas.flatMap { $0.model.ticketTag(ticket, shownIn: $0.ticketZone(of: id)) }
     }
 
     /// The names tickets are assigned to, for the assignee menus.
