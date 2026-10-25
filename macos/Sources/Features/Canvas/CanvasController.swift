@@ -60,15 +60,17 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     /// under ⇧, else nothing.
     var marqueeBase: Set<UUID>?
     /// New Zone was chosen: the next marquee draws a zone instead.
-    var drawsZone = false
+    var drawsZone = false {
+        didSet { if drawsZone != oldValue { updateGroupHover(at: window?.mouseLocationOutsideOfEventStream ?? .zero) } }
+    }
     /// The layout Tidy Up uses, chosen on the selection's bar.
     var tidyLayout = CanvasModel.Tidy.row
     /// A press on a group of selected cards under way: where it started,
     /// the card under it, where the cards were, and whether it has moved.
     var groupDrag: (point: CGPoint, id: UUID, origins: [UUID: CGPoint], moved: Bool)?
-    /// The pointer is over a group of selected cards: an open hand, the
-    /// panes' own cursors off.
-    var overGroup = false
+    /// The canvas sets the cursor (`updateGroupHover`), the panes' own
+    /// cursors off.
+    var ownsCursor = false
     /// Cards whose panes are moving to a window: gone for good, not for Undo.
     private var moving: Set<UUID> = []
     /// The zones as a zone resize under way found them, for its Undo.
@@ -189,6 +191,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         }
         surface.zones.canvas = self
         surface.addMenu.chose = { [weak self] item in
+            self?.drawsZone = false
             switch item {
             case .terminal: self?.newCard()
             case .ticket: self?.showTickets()
@@ -236,6 +239,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
                 scrollView.magnify(with: event)
                 return nil
             case .leftMouseDown:
+                if drawsZone, surface.hitTest(event.locationInWindow) !== scrollView.document { drawsZone = false }
                 if groupPressed(event) || selectionClicked(event) { return nil }
                 ticketClicked(event)
                 return event
@@ -873,12 +877,14 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         return true
     }
 
-    /// An open hand over a group of selected cards, which drags them; the
+    /// While New Zone waits, a crosshair where a drag draws the zone; else
+    /// an open hand over a group of selected cards, which drags them; the
     /// panes' own cursors everywhere else.
     func updateGroupHover(at point: NSPoint) {
-        let over = groupCard(at: point) != nil
-        if over != overGroup {
-            overGroup = over
+        let draws = drawsZone && surface.hitTest(point) === scrollView.document
+        let over = draws || groupCard(at: point) != nil
+        if over != ownsCursor {
+            ownsCursor = over
             if over {
                 window?.disableCursorRects()
             } else {
@@ -887,7 +893,11 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
                 NSCursor.arrow.set()
             }
         }
-        if over, groupDrag == nil { NSCursor.openHand.set() }
+        if draws {
+            NSCursor.crosshair.set()
+        } else if over, groupDrag == nil {
+            NSCursor.openHand.set()
+        }
     }
 
     /// A click on a card: with ⇧ on its title bar it goes in or out of the
