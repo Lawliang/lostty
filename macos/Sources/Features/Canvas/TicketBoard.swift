@@ -2,9 +2,10 @@
 import AppKit
 import SwiftUI
 
-/// The tickets panel's state: the list, the new ticket being written, and
-/// where the keyboard is. Every change saves the canvas. Moving, changing,
-/// making and deleting a ticket can be undone; typing undoes in its field.
+/// A tickets panel's state: its list of the canvas's tickets, the new
+/// ticket being written, and where the keyboard is. Every change saves the
+/// canvas. Moving, changing, making and deleting a ticket can be undone;
+/// typing undoes in its field.
 @MainActor
 final class TicketBoard: ObservableObject {
     /// The fields the keyboard can be sent to.
@@ -26,8 +27,18 @@ final class TicketBoard: ObservableObject {
 
     /// The panel's card on the canvas.
     let id = UUID()
-    @Published var list = TicketList() {
-        didSet { if list != oldValue { canvas?.saveSoon() } }
+    @Published private var selected: String?
+    @Published private var folded: Set<CanvasTicket.Status> = []
+
+    /// The canvas's tickets, as this panel lists them. Each panel has its
+    /// own selection and folds; the tickets are the canvas's.
+    var list: TicketList {
+        get { TicketList(tickets: canvas?.tickets ?? [], selected: selected, folded: folded) }
+        set {
+            if selected != newValue.selected { selected = newValue.selected }
+            if folded != newValue.folded { folded = newValue.folded }
+            canvas?.setTickets(newValue.tickets)
+        }
     }
 
     /// The new ticket's sheet while it's open, with what's typed in it.
@@ -50,11 +61,17 @@ final class TicketBoard: ObservableObject {
     /// Where each anchor is, for its menu (not published: it changes with
     /// every layout).
     var anchors: [Anchor: CGRect] = [:]
-    weak var canvas: CanvasController?
+    private(set) weak var canvas: CanvasController?
     /// The panel's view: shows a menu under a frame in the content, and
     /// gives the list the keyboard.
     var popUp: ((NSMenu, CGRect) -> Void)?
     var focusList: (() -> Void)?
+
+    init(canvas: CanvasController, draft: CanvasTicket? = nil) {
+        self.canvas = canvas
+        self.draft = draft
+        selected = list.shown.first
+    }
 
     var selectedTicket: CanvasTicket? {
         list.selected.flatMap(list.ticket)

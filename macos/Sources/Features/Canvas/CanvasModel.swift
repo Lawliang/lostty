@@ -553,7 +553,7 @@ struct CanvasWaits: Equatable {
 
 /// What the canvas keeps across Restart to Update and relaunches: whether
 /// it's shown, the view, each terminal card back to front, the tickets
-/// with their panel, and the zones. Generic over the split tree, so tests can
+/// with their panels, and the zones. Generic over the split tree, so tests can
 /// save plain values.
 struct CanvasSaved<Tree: Codable>: Codable {
     struct Card: Codable {
@@ -576,31 +576,45 @@ struct CanvasSaved<Tree: Codable>: Codable {
         var stack: Int
     }
 
-    /// The tickets, and their panel while it's open.
+    /// The tickets, and their open panels.
     struct Board: Codable, Equatable {
+        /// A tickets panel: its frame, its place among every card, back to
+        /// front, and its new ticket's sheet, open with what's typed in it.
+        struct Panel: Codable, Equatable {
+            var frame: CGRect
+            var stack: Int
+            var draft: CanvasTicket?
+        }
+
         var tickets: [CanvasTicket]
-        /// The panel's frame and place among every card, back to front;
-        /// nil while it's closed.
-        var frame: CGRect?
-        var stack: Int?
-        /// The new ticket's sheet, open with what's typed in it.
+        var panels: [Panel]
+        /// A new ticket's sheet left open in a panel since closed: the next
+        /// panel opened takes it.
         var draft: CanvasTicket?
 
-        init(tickets: [CanvasTicket], frame: CGRect? = nil, stack: Int? = nil, draft: CanvasTicket? = nil) {
+        init(tickets: [CanvasTicket], panels: [Panel] = [], draft: CanvasTicket? = nil) {
             self.tickets = tickets
-            self.frame = frame
-            self.stack = stack
+            self.panels = panels
             self.draft = draft
         }
 
-        /// A ticket that can't be read is left out, never the rest.
+        /// A ticket or panel that can't be read is left out, never the rest.
+        /// A canvas saved with one panel (its frame and stack beside the
+        /// tickets) comes back with it, the sheet in it.
         init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             tickets = c.decodeEach(CanvasTicket.self, forKey: .tickets) ?? []
-            frame = try? c.decodeIfPresent(CGRect.self, forKey: .frame)
-            stack = try? c.decodeIfPresent(Int.self, forKey: .stack)
+            panels = c.decodeEach(Panel.self, forKey: .panels) ?? []
             draft = try? c.decodeIfPresent(CanvasTicket.self, forKey: .draft)
+            let one = try decoder.container(keyedBy: OnePanel.self)
+            if !c.contains(.panels), let frame = try? one.decodeIfPresent(CGRect.self, forKey: .frame) {
+                let stack = (try? one.decodeIfPresent(Int.self, forKey: .stack)) ?? Int.max
+                panels = [Panel(frame: frame, stack: stack, draft: draft)]
+                draft = nil
+            }
         }
+
+        private enum OnePanel: String, CodingKey { case frame, stack }
     }
 
     var visible: Bool
@@ -617,7 +631,7 @@ struct CanvasSaved<Tree: Codable>: Codable {
     /// Whether there's anything to bring back.
     var isEmpty: Bool {
         cards.isEmpty && (tickets ?? []).isEmpty && (board?.tickets ?? []).isEmpty && board?.draft == nil
-            && zones.isEmpty
+            && (board?.panels ?? []).allSatisfy { $0.draft == nil } && zones.isEmpty
     }
 
     init(

@@ -1,8 +1,9 @@
 #if os(macOS)
 import Foundation
 
-/// The tickets panel's list: every ticket, in sections by status, the one
-/// selected, and the sections folded away. Pure; TicketBoard publishes it.
+/// A tickets panel's list: every ticket, in sections by status, the one
+/// selected, and the sections folded away. Pure; each panel's TicketBoard
+/// makes one from the canvas's tickets and its own selection and folds.
 struct TicketList: Equatable {
     /// The sections top to bottom: what's under way, what's next, what's done.
     static let sections: [CanvasTicket.Status] = [.inProgress, .toDo, .done]
@@ -16,6 +17,13 @@ struct TicketList: Equatable {
 
     init(tickets: [CanvasTicket] = []) {
         merge(tickets)
+    }
+
+    /// `tickets` as they are, created and in order.
+    init(tickets: [CanvasTicket], selected: String?, folded: Set<CanvasTicket.Status>) {
+        self.tickets = tickets
+        self.selected = selected
+        self.folded = folded
     }
 
     func ticket(_ key: String) -> CanvasTicket? {

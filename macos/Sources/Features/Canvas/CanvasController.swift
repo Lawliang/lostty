@@ -32,11 +32,17 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     private(set) var cards: [CardController] = []
     /// The card holding keyboard focus, or that last held it.
     private(set) weak var focusedCard: CardController?
-    /// The canvas's tickets, kept while their panel is closed.
-    let tickets = TicketBoard()
-    /// The tickets panel's card while it's open. It shares `model` with the
-    /// terminal cards, so it stacks, blocks clicks and fits to view alike.
-    private(set) var ticketsView: TicketBoardView?
+    /// The canvas's tickets, kept while no panel is open. Every panel lists
+    /// them.
+    private(set) var tickets: [CanvasTicket] = []
+    /// The open tickets panels' cards. They share `model` with the terminal
+    /// cards, so they stack, block clicks and fit to view alike.
+    private(set) var ticketPanels: [UUID: TicketBoardView] = [:]
+    /// A new ticket's sheet left open in a panel since closed: the next
+    /// panel opened takes it.
+    var parkedDraft: CanvasTicket? {
+        didSet { if parkedDraft != oldValue { saveSoon() } }
+    }
     /// The highest ticket number handed out, app-wide, so a deleted ticket's
     /// isn't handed out again, even once the canvas is emptied (and so not
     /// saved).
@@ -116,7 +122,6 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         window.isReleasedWhenClosed = false
         window.minSize = NSSize(width: 480, height: 320)
         super.init(window: window)
-        tickets.canvas = self
         window.delegate = self
         // Plain AppKit, not in an NSHostingView: AppKit then hit tests the
         // cards for an accessibility app, and each answers as it's zoomed.
@@ -326,7 +331,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     /// focused card: no pane has the keyboard, and scrolling pans the canvas
     /// over every pane.
     private func canvasClicked() {
-        ticketsView?.isFocusedCard = false
+        for panel in ticketPanels.values { panel.isFocusedCard = false }
         guard let previous = focusedCard else {
             // Out of a ticket's field, too.
             window?.makeFirstResponder(scrollView.document)
@@ -363,7 +368,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         card.applyTitleToWindow()
         sidebar.focusedSurfaceID = card.focusedSurface?.id
         for (id, view) in views { view.isFocusedCard = id == card.id }
-        ticketsView?.isFocusedCard = false
+        for panel in ticketPanels.values { panel.isFocusedCard = false }
     }
 
     func bringToFront(_ id: UUID) {
@@ -385,7 +390,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     /// The view of card `id`, of either kind.
     func view(_ id: UUID) -> (NSView & CanvasStacked)? {
         if let card = views[id] { return card }
-        return id == tickets.id ? ticketsView : nil
+        return ticketPanels[id]
     }
 
     /// The front-most terminal card.
@@ -498,7 +503,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     func memberTitles(of id: UUID) -> [String] {
         let members = model.members(of: id)
         return model.cards.filter { members.contains($0.id) }.compactMap { entry in
-            entry.id == tickets.id ? "Tickets" : cards.first { $0.id == entry.id }?.title
+            ticketPanels[entry.id] != nil ? "Tickets" : cards.first { $0.id == entry.id }?.title
         }
     }
 
@@ -607,59 +612,72 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
 
     // MARK: Tickets
 
-    /// + → Tickets: the panel opens in the middle of the view, or comes
-    /// forward where it is, at 100% (where its rows take clicks), its list
-    /// taking the keyboard.
+    /// + → Tickets: a panel opens in the middle of the view, or the one in
+    /// the zone there (or outside every zone, as there) comes forward where
+    /// it is, at 100% (where its rows take clicks), its list taking the
+    /// keyboard.
     func showTickets() {
-        if ticketsView == nil {
-            openTickets(frame: model.placement(size: TicketBoardView.newSize, in: scrollView.documentVisibleRect))
-        }
-        ticketWillFocus(tickets.id)
-        window?.makeFirstResponder(ticketsView)
-        guard let frame = model.card(tickets.id)?.frame else { return }
-        if scrollView.magnification != 1 || !scrollView.documentVisibleRect.contains(frame) { zoom(toCard: tickets.id) }
+        let spot = model.placement(size: TicketBoardView.newSize, in: scrollView.documentVisibleRect)
+        let zone = model.zone(for: spot)
+        let there = model.cards.last { ticketPanels[$0.id] != nil && model.zone(for: $0.frame) == zone }
+        let id = there?.id ?? openTickets(frame: spot, draft: parkedDraft).board.id
+        if there == nil { parkedDraft = nil }
+        ticketWillFocus(id)
+        window?.makeFirstResponder(ticketPanels[id])
+        guard let frame = model.card(id)?.frame else { return }
+        if scrollView.magnification != 1 || !scrollView.documentVisibleRect.contains(frame) { zoom(toCard: id) }
     }
 
-    /// The panel's card at `frame`: in front, or back at `stack` when
+    /// A panel's card at `frame`: in front, or back at `stack` when
     /// restored.
     @discardableResult
-    func openTickets(frame: CGRect, stack: Int? = nil) -> TicketBoardView {
-        if let ticketsView { return ticketsView }
+    func openTickets(frame: CGRect, stack: Int? = nil, draft: CanvasTicket? = nil) -> TicketBoardView {
+        let board = TicketBoard(canvas: self, draft: draft)
         if let stack {
-            model.insert(tickets.id, frame: frame, at: stack)
+            model.insert(board.id, frame: frame, at: stack)
         } else {
-            model.add(tickets.id, frame: frame)
+            model.add(board.id, frame: frame)
         }
-        let view = TicketBoardView(board: tickets, canvas: self)
-        ticketsView = view
+        let view = TicketBoardView(board: board, canvas: self)
+        ticketPanels[board.id] = view
         scrollView.document.addSubview(view)
-        if let placed = model.card(tickets.id)?.frame { view.frame = placed }
+        if let placed = model.card(board.id)?.frame { view.frame = placed }
         restack()
         saveSoon()
         return view
     }
 
-    /// The red button, ⌘W or Close Tickets: the panel goes, its tickets
-    /// stay for the next time it's opened.
-    func closeTickets() {
-        guard let view = ticketsView else { return }
+    /// The red button, ⌘W or Close Tickets: panel `id` goes, the tickets
+    /// stay, and its sheet waits for the next panel opened. Its Undo goes
+    /// with it.
+    func closeTickets(_ id: UUID) {
+        guard let view = ticketPanels.removeValue(forKey: id) else { return }
         if (window?.firstResponder as? NSView)?.isDescendant(of: view) ?? false {
             window?.makeFirstResponder(scrollView.document)
         }
-        ticketsView = nil
-        model.remove(tickets.id)
-        selection.remove(tickets.id)
+        if let draft = view.board.draft { parkedDraft = draft }
+        (NSApp.delegate as? AppDelegate)?.undoManager.removeAllActions(withTarget: view.board)
+        model.remove(id)
+        selection.remove(id)
         view.removeFromSuperview()
         saveSoon()
     }
 
-    /// The panel was clicked or took the keyboard: it comes to the front,
-    /// looks focused, and no terminal card is. Keys go to its list, unless
-    /// one of its fields has them.
+    /// The canvas's tickets are now `new`: every panel lists them.
+    func setTickets(_ new: [CanvasTicket]) {
+        guard new != tickets else { return }
+        for panel in ticketPanels.values { panel.board.objectWillChange.send() }
+        tickets = new
+        saveSoon()
+    }
+
+    /// A panel was clicked or took the keyboard: it comes to the front,
+    /// looks focused, and no other card is. Keys go to its list, unless one
+    /// of its fields has them.
     func ticketWillFocus(_ id: UUID) {
-        guard let view = ticketsView, id == tickets.id else { return }
+        guard let view = ticketPanels[id] else { return }
         bringToFront(id)
-        view.isFocusedCard = true
+        for (other, panel) in ticketPanels { panel.isFocusedCard = other == id }
         let previous = focusedCard
         focusedCard = nil
         // Otherwise a pane keeps the keyboard, and keys type into it.
@@ -697,7 +715,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
                 cardFrameDidSettle()
             } else {
                 selection = []
-                if drag.id == tickets.id {
+                if ticketPanels[drag.id] != nil {
                     ticketWillFocus(drag.id)
                 } else if let card = cards.first(where: { $0.id == drag.id }) {
                     focus(card)
@@ -752,11 +770,11 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         return true
     }
 
-    /// A click in the canvas's view on the panel, not on what floats over it.
+    /// A click in the canvas's view on a panel, not on what floats over it.
     private func ticketClicked(_ event: NSEvent) {
         guard !surface.floats(at: event.locationInWindow) else { return }
         let point = scrollView.document.convert(event.locationInWindow, from: nil)
-        guard scrollView.documentVisibleRect.contains(point), let id = model.card(at: point), id == tickets.id else { return }
+        guard scrollView.documentVisibleRect.contains(point), let id = model.card(at: point), ticketPanels[id] != nil else { return }
         ticketWillFocus(id)
     }
 
@@ -770,7 +788,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     /// The key the next ticket will get, without handing it out.
     func peekNextTicketKey(defaults: UserDefaults = .standard) -> String {
         CanvasTicket.nextKey(
-            after: tickets.list.tickets.compactMap(\.key), lastNumber: defaults.integer(forKey: Self.lastTicketNumberKey))
+            after: tickets.compactMap(\.key), lastNumber: defaults.integer(forKey: Self.lastTicketNumberKey))
     }
 
     // MARK: View
