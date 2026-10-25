@@ -103,6 +103,9 @@ struct CanvasZoneAgentsTests {
         #expect(try String(contentsOf: allow, encoding: .utf8) == "lostty-a9")
         let say = handoff.panes.appendingPathComponent("\(pane.uuidString).zone.say")
         #expect(try String(contentsOf: say, encoding: .utf8) == "You're now in zone Textberry.")
+        store.writeSay(pane, "You may retry your message to lostty-a9 once.")
+        #expect(try String(contentsOf: say, encoding: .utf8)
+            == "You're now in zone Textberry.\n\nYou may retry your message to lostty-a9 once.")
         #expect(handoff.loadStates().isEmpty)
 
         store.removeZone(pane)

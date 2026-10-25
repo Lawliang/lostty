@@ -146,7 +146,13 @@ struct CanvasZoneStore: Sendable {
         for ext in ["zone.json", "zone.allow"] { try? FileManager.default.removeItem(at: file(pane, ext)) }
     }
 
-    func writeSay(_ pane: UUID, _ text: String) { write(Data(text.utf8), to: file(pane, "zone.say")) }
+    /// Adds `text` after any note not yet taken, so an Allow Once doesn't
+    /// drop a move's note, or a move an Allow Once's.
+    func writeSay(_ pane: UUID, _ text: String) {
+        let url = file(pane, "zone.say")
+        let queued = (try? String(contentsOf: url, encoding: .utf8)).map { $0 + "\n\n" } ?? ""
+        write(Data((queued + text).utf8), to: url)
+    }
 
     func removeSay(_ pane: UUID) { try? FileManager.default.removeItem(at: file(pane, "zone.say")) }
 
