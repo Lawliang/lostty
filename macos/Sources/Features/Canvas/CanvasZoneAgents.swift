@@ -78,27 +78,40 @@ extension CanvasModel {
         }
     }
 
-    /// The zone file of a pane in zone `id`.
-    func zoneFile(_ id: UUID) -> CanvasZoneFile? {
-        guard let title = zoneTitle(id), let start = zoneStart(id) else { return nil }
-        return CanvasZoneFile(start: start, zone: title, folder: startFolder(ofZone: id))
+    /// The project zone `id` is in: itself, or its domain's project.
+    func projectZone(_ id: UUID) -> UUID? {
+        zone(id).map { $0.parent ?? $0.id }
+    }
+
+    /// The zone file of a pane in zone `id`. Its members are the tmux
+    /// sessions (`sessions`, by pane) of every pane in the same project as
+    /// `panes` has them, domains included; a pane with none is left out.
+    func zoneFile(_ id: UUID, panes: CanvasPaneZones, sessions: [UUID: String]) -> CanvasZoneFile? {
+        guard let title = zoneTitle(id), let start = zoneStart(id), let project = projectZone(id) else { return nil }
+        let members = Set(panes.zones.compactMap { pane, zone in
+            projectZone(zone) == project ? sessions[pane] : nil
+        })
+        return CanvasZoneFile(start: start, zone: title, folder: startFolder(ofZone: id), members: members.sorted())
     }
 }
 
 /// `<PANE>.zone.json`: what the hooks know of a pane's zone (zones spec
-/// §7). `+claude-state start` prints `start`.
+/// §7). `+claude-state start` prints `start`; `+claude-state tool` and
+/// `+peers` keep to `members`, tmux session names on Lostty's socket.
 struct CanvasZoneFile: Equatable, Encodable {
     let start: String
     let zone: String
     let folder: String?
+    var members: [String] = []
 
-    private enum CodingKeys: String, CodingKey { case start, zone, folder }
+    private enum CodingKeys: String, CodingKey { case start, zone, folder, members }
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(start, forKey: .start)
         try container.encode(zone, forKey: .zone)
         try container.encode(folder, forKey: .folder)
+        try container.encode(members, forKey: .members)
     }
 }
 

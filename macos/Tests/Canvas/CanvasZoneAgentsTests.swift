@@ -67,13 +67,29 @@ struct CanvasZoneAgentsTests {
         #expect(before.moves(to: before).isEmpty)
     }
 
+    @Test func aZoneFilesMembersAreItsProjectsTmuxSessions() throws {
+        var model = textberry()
+        let elsewhere = UUID(), p4 = UUID(), p5 = UUID()
+        model.addZone(CanvasZone(id: elsewhere, frame: CGRect(x: 5000, y: 0, width: 1000, height: 1000), name: "Lostty"))
+        let panes = CanvasPaneZones(
+            panes: [p1, p2, p3, p4, p5], zones: [p1: domain, p2: project, p3: elsewhere, p4: domain, p5: project])
+        let sessions = [p1: "tb-onboarding", p2: "tb-api", p3: "lostty", p5: "tb-api"]
+        let file = try #require(model.zoneFile(domain, panes: panes, sessions: sessions))
+        #expect(file.zone == "Textberry › Onboarding")
+        #expect(file.members == ["tb-api", "tb-onboarding"])
+        #expect(model.zoneFile(project, panes: panes, sessions: sessions)?.members == ["tb-api", "tb-onboarding"])
+        #expect(model.zoneFile(elsewhere, panes: panes, sessions: sessions)?.members == ["lostty"])
+        #expect(model.zoneFile(domain, panes: panes, sessions: [:])?.members == [])
+    }
+
     @Test func theZoneFileIsJSONTheHooksReadAndNotAHandoffState() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
         let handoff = ContextHandoffStore(root: root)
         let store = CanvasZoneStore(panes: handoff.panes)
         let pane = UUID()
-        store.writeZone(pane, CanvasZoneFile(start: "Lostty zone: Textberry.", zone: "Textberry", folder: nil))
+        store.writeZone(pane, CanvasZoneFile(
+            start: "Lostty zone: Textberry.", zone: "Textberry", folder: nil, members: ["tb-1", "tb-2"]))
         store.writeSay(pane, "You're now in zone Textberry.")
 
         let url = handoff.panes.appendingPathComponent("\(pane.uuidString).zone.json")
@@ -81,6 +97,7 @@ struct CanvasZoneAgentsTests {
         #expect(json["start"] as? String == "Lostty zone: Textberry.")
         #expect(json["zone"] as? String == "Textberry")
         #expect(json["folder"] is NSNull)
+        #expect(json["members"] as? [String] == ["tb-1", "tb-2"])
         let say = handoff.panes.appendingPathComponent("\(pane.uuidString).zone.say")
         #expect(try String(contentsOf: say, encoding: .utf8) == "You're now in zone Textberry.")
         #expect(handoff.loadStates().isEmpty)

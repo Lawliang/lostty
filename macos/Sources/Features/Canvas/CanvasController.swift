@@ -76,6 +76,9 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     /// The zone file last written for each pane in a zone.
     private var zoneFiles: [UUID: CanvasZoneFile] = [:]
     let zoneStore = CanvasZoneStore.standard
+    /// Lostty's tmux sessions as last listed: which pane each one shows,
+    /// for the zone files' members.
+    private var tmuxSessions: [TmuxSession] = []
     /// The zoom the terminals last rendered at.
     var settledZoom: CGFloat = 1
     var settleWork: DispatchWorkItem?
@@ -197,6 +200,9 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
             .store(in: &cancellables)
         ClaudeRuntime.shared.$awaiting
             .sink { [weak self] awaiting in self?.waits.update(awaiting: awaiting, now: Date()) }
+            .store(in: &cancellables)
+        NotificationCenter.default.publisher(for: .losttySessionsChanged)
+            .sink { [weak self] _ in self?.tmuxSessionsDidChange() }
             .store(in: &cancellables)
         // A terminal has no use for pinches, so pinching anywhere zooms the
         // canvas. (Scrolling over a pane, which pans the canvas, is the
@@ -537,8 +543,12 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
             zoneFiles[pane] = nil
         }
         for pane in before.panes.panes.subtracting(now.panes) { zoneStore.removeSay(pane) }
+        let pid = ProcessInfo.processInfo.processIdentifier
+        let sessions = now.zones.keys.reduce(into: [UUID: String]()) { names, pane in
+            names[pane] = TmuxOwnership.showing(pane, ownedBy: pid, in: tmuxSessions).first?.name
+        }
         for (pane, zone) in now.zones {
-            guard let file = model.zoneFile(zone), zoneFiles[pane] != file else { continue }
+            guard let file = model.zoneFile(zone, panes: now, sessions: sessions), zoneFiles[pane] != file else { continue }
             zoneStore.writeZone(pane, file)
             zoneFiles[pane] = file
         }
@@ -556,6 +566,17 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
                 kind: .zone(card: card.id),
                 title: "\(card.title) left \(left)",
                 detail: move.to.flatMap(model.zoneTitle).map { "Now in \($0)." } ?? "It's in no zone now."))
+        }
+    }
+
+    /// Lists Lostty's tmux sessions again, off the main thread, and brings
+    /// the zone files' members up to date.
+    private func tmuxSessionsDidChange() {
+        Task { @MainActor [weak self] in
+            let sessions = await Task.detached(priority: .utility) { TmuxClient().sessions() }.value
+            guard let self else { return }
+            tmuxSessions = sessions
+            zoneMembershipDidChange()
         }
     }
 
