@@ -83,9 +83,10 @@ final class TicketBoard: ObservableObject {
         return Set(names.filter { !$0.isEmpty }).sorted { $0.localizedStandardCompare($1) == .orderedAscending }
     }
 
-    /// The key the new ticket will get.
+    /// The key the new ticket will get, with the prefix of the zone the
+    /// panel is in.
     var nextKey: String {
-        canvas?.peekNextTicketKey() ?? CanvasTicket.nextKey(after: list.tickets.compactMap(\.key))
+        canvas.map { $0.nextTicketKey(in: $0.ticketZone(of: id)) } ?? CanvasTicket.nextKey(after: [])
     }
 
     // MARK: The list
@@ -180,8 +181,9 @@ final class TicketBoard: ObservableObject {
         focusList?()
     }
 
-    /// The new ticket gets the next key and joins the list, selected. With
-    /// Create More on the sheet stays, for another of the same kind.
+    /// The new ticket gets the zone the panel is in and its next key, and
+    /// joins the list, selected. With Create More on the sheet stays, for
+    /// another of the same kind.
     func create() {
         guard var ticket = draft else { return }
         guard ticket.canSave else {
@@ -189,7 +191,8 @@ final class TicketBoard: ObservableObject {
             focusRequest = .newSummary
             return
         }
-        let key = canvas?.nextTicketKey() ?? nextKey
+        ticket.zone = canvas?.ticketZone(of: id)
+        let key = canvas?.nextTicketKey(in: ticket.zone, take: true) ?? nextKey
         ticket.key = key
         ticket.summary = ticket.summary.trimmingCharacters(in: .whitespacesAndNewlines)
         ticket.assignee = ticket.assignee.trimmingCharacters(in: .whitespaces)

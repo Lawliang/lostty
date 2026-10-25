@@ -135,7 +135,7 @@ struct CanvasZoneTests {
         model.addZone(zone(domain, CGRect(x: 0, y: 0, width: 800, height: 600), in: project))
         model.addZone(zone(other, CGRect(x: 3000, y: 0, width: 1000, height: 1000)))
         model.add(a, frame: CGRect(x: 100, y: 100, width: 400, height: 300))
-        model.removeZone(project)
+        #expect(model.removeZone(project) == [project, domain])
         #expect(model.zones.map(\.id) == [other])
         #expect(model.card(a)?.frame == CGRect(x: 100, y: 100, width: 400, height: 300))
         #expect(model.zone(for: CGRect(x: 100, y: 100, width: 400, height: 300)) == nil)
@@ -310,6 +310,28 @@ struct CanvasZoneTests {
         #expect(!moved)
         #expect(!orphaned)
         #expect(model == before)
+    }
+
+    @Test func aProjectsDefaultTicketPrefixIsItsInitials() {
+        #expect(CanvasZone.defaultTicketPrefix("Textberry") == "TE")
+        #expect(CanvasZone.defaultTicketPrefix("Text Berry") == "TB")
+        #expect(CanvasZone.defaultTicketPrefix("TextBerry") == "TB")
+        #expect(CanvasZone.defaultTicketPrefix("lostty main") == "LM")
+        #expect(CanvasZone.defaultTicketPrefix("my-big-fat-app") == "MBF")
+        #expect(CanvasZone.defaultTicketPrefix("") == "LT")
+    }
+
+    @Test func aTicketTakesItsProjectsPrefixInAnyOfItsZones() {
+        var model = CanvasModel()
+        var named = zone(project, CGRect(x: 0, y: 0, width: 2000, height: 1000))
+        named.name = "Textberry"
+        model.addZone(named)
+        model.addZone(zone(domain, CGRect(x: 0, y: 0, width: 800, height: 600), in: project))
+        #expect(model.ticketPrefix(ofZone: project) == "TE")
+        #expect(model.ticketPrefix(ofZone: domain) == "TE")
+        #expect(model.ticketPrefix(ofZone: nil) == "LT")
+        model.updateZone(project) { $0.keyPrefix = " tb " }
+        #expect(model.ticketPrefix(ofZone: domain) == "TB")
     }
 }
 #endif

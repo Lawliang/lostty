@@ -43,10 +43,6 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     var parkedDraft: CanvasTicket? {
         didSet { if parkedDraft != oldValue { saveSoon() } }
     }
-    /// The highest ticket number handed out, app-wide, so a deleted ticket's
-    /// isn't handed out again, even once the canvas is emptied (and so not
-    /// saved).
-    static let lastTicketNumberKey = "LosttyCanvasLastTicketNumber"
     /// The title bar's pill follows the focused card's pane. (Each card has
     /// its own bottom bar.)
     let sidebar = ExtensionSidebarModel()
@@ -479,9 +475,11 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         zonesDidChange(settled: false)
     }
 
-    /// Removes zone `id` and its domains; the cards stay.
+    /// Removes zone `id` and its domains; the cards stay, and the tickets
+    /// made in them are in no zone, keeping their keys.
     func removeZone(_ id: UUID) {
-        model.removeZone(id)
+        let gone = model.removeZone(id)
+        setTickets(tickets.map { $0.leaving(gone) })
         zonesDidChange()
     }
 
@@ -778,17 +776,16 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         ticketWillFocus(id)
     }
 
-    /// The key a newly created ticket gets; the next is one past it.
-    func nextTicketKey(defaults: UserDefaults = .standard) -> String {
-        let key = peekNextTicketKey(defaults: defaults)
-        if let number = CanvasTicket.number(of: key) { defaults.set(number, forKey: Self.lastTicketNumberKey) }
-        return key
+    /// The zone ticket panel `id` is in, where it is now.
+    func ticketZone(of id: UUID) -> UUID? {
+        model.card(id).flatMap { model.zone(for: $0.frame) }
     }
 
-    /// The key the next ticket will get, without handing it out.
-    func peekNextTicketKey(defaults: UserDefaults = .standard) -> String {
+    /// The key the next ticket made in `zone` gets, with its project's
+    /// prefix; `take` hands it out.
+    func nextTicketKey(in zone: UUID?, take: Bool = false) -> String {
         CanvasTicket.nextKey(
-            after: tickets.compactMap(\.key), lastNumber: defaults.integer(forKey: Self.lastTicketNumberKey))
+            prefix: model.ticketPrefix(ofZone: zone), after: tickets.compactMap(\.key), defaults: .standard, take: take)
     }
 
     // MARK: View

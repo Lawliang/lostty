@@ -296,8 +296,35 @@ struct CanvasZone: Equatable, Identifiable, Codable {
     /// A project's folder; a domain's subfolder of it.
     var folder: String?
     var brief = ""
-    /// A project's ticket key prefix.
+    /// A project's ticket key prefix as set; `ticketPrefix` is the one used.
     var keyPrefix: String?
+
+    /// A project's tickets' key prefix: the one set, in capitals, else the
+    /// default for its name.
+    var ticketPrefix: String {
+        let set = (keyPrefix ?? "").filter { $0.isLetter || $0.isNumber }.uppercased()
+        return set.isEmpty ? Self.defaultTicketPrefix(name) : set
+    }
+
+    /// The first letters of `name`'s words, split at spaces, hyphens and
+    /// camelCase humps, in capitals, at most three; a name of one word
+    /// gives its first two letters (Textberry: TE; Text Berry: TB). LT for
+    /// a name with no letters.
+    static func defaultTicketPrefix(_ name: String) -> String {
+        let chars = Array(name)
+        let isWord = { (char: Character) in char.isLetter || char.isNumber }
+        var firsts: [Character] = []
+        for (index, char) in chars.enumerated() where isWord(char) {
+            guard index > 0 else {
+                firsts.append(char)
+                continue
+            }
+            let before = chars[index - 1]
+            if !isWord(before) || (before.isLowercase && char.isUppercase) { firsts.append(char) }
+        }
+        if firsts.count == 1 { firsts = Array(chars.filter(isWord).prefix(2)) }
+        return firsts.isEmpty ? CanvasTicket.defaultPrefix : String(firsts.prefix(3)).uppercased()
+    }
 }
 
 extension CanvasModel {
@@ -401,9 +428,20 @@ extension CanvasModel {
         return trimmed.isEmpty ? nil : trimmed
     }
 
-    /// Removes zone `id` and its domains; the cards in them stay.
-    mutating func removeZone(_ id: UUID) {
-        zones.removeAll { $0.id == id || $0.parent == id }
+    /// Removes zone `id` and its domains, returning their ids; the cards in
+    /// them stay.
+    @discardableResult
+    mutating func removeZone(_ id: UUID) -> Set<UUID> {
+        let gone = Set(zones.filter { $0.id == id || $0.parent == id }.map(\.id))
+        zones.removeAll { gone.contains($0.id) }
+        return gone
+    }
+
+    /// The key prefix of a ticket made in zone `id`: its project's, or LT
+    /// in no zone.
+    func ticketPrefix(ofZone id: UUID?) -> String {
+        guard let zone = id.flatMap({ self.zone($0) }) else { return CanvasTicket.defaultPrefix }
+        return (zone.parent.flatMap { self.zone($0) } ?? zone).ticketPrefix
     }
 
     /// Zone from Selection: a frame round cards `ids` with `zoneMargin` to

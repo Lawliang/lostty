@@ -3,7 +3,8 @@ import AppKit
 import SwiftUI
 
 /// A zone's settings, in a popover from its label: name, color, folder,
-/// brief, what's inside and the boundary's rules. Edits apply as they're
+/// brief, a project's ticket key prefix, what's inside and the boundary's
+/// rules. Edits apply as they're
 /// made.
 struct CanvasZoneSettings: View {
     /// A domain's project; nil for a project.
@@ -18,6 +19,7 @@ struct CanvasZoneSettings: View {
     @State private var color: CanvasZone.Color
     @State private var folder: String
     @State private var brief: String
+    @State private var keyPrefix: String
     @State private var pickedOutside = false
 
     init(
@@ -34,9 +36,13 @@ struct CanvasZoneSettings: View {
         _color = State(initialValue: zone.color)
         _folder = State(initialValue: zone.folder ?? "")
         _brief = State(initialValue: zone.brief)
+        _keyPrefix = State(initialValue: zone.keyPrefix ?? "")
     }
 
     private var isDomain: Bool { project != nil }
+    private var prefix: String {
+        CanvasZone(id: UUID(), frame: .zero, name: name, keyPrefix: keyPrefix).ticketPrefix
+    }
     private var projectFolder: String? {
         project?.folder.flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 }
     }
@@ -63,6 +69,13 @@ struct CanvasZoneSettings: View {
                         """)
                 }
             }
+            if !isDomain {
+                section("Ticket key prefix") {
+                    TextField(CanvasZone.defaultTicketPrefix(name), text: $keyPrefix)
+                        .textFieldStyle(.roundedBorder)
+                    note("Tickets made here and in its domains: \(prefix)-1, \(prefix)-2…")
+                }
+            }
             section("Inside") { inside }
             section("Boundary") { note(boundary) }
             Divider()
@@ -82,6 +95,10 @@ struct CanvasZoneSettings: View {
             update { $0.folder = trimmed.isEmpty ? nil : trimmed }
         }
         .onChange(of: brief) { _, value in update { $0.brief = value } }
+        .onChange(of: keyPrefix) { _, value in
+            let trimmed = value.trimmingCharacters(in: .whitespaces)
+            update { $0.keyPrefix = trimmed.isEmpty ? nil : trimmed }
+        }
     }
 
     private var swatches: some View {
