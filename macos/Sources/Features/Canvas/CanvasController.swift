@@ -256,22 +256,24 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     @discardableResult
     func newCard(baseConfig: Ghostty.SurfaceConfiguration? = nil)
         -> (card: CardController, config: Ghostty.SurfaceConfiguration?) {
-        newCard(at: model.placement(in: scrollView.documentVisibleRect), baseConfig: baseConfig)
+        let frame = model.placement(in: scrollView.documentVisibleRect)
+        return newCard(at: frame, zone: model.zone(for: frame), baseConfig: baseConfig)
     }
 
     /// ⌘T on a card: a new card beside it, as big, starting where its
-    /// focused pane is (`baseConfig`), or in its zone's folder.
+    /// focused pane is (`baseConfig`), or in its zone's folder, or in
+    /// the folder of `other`'s zone when it lands outside every zone.
     @discardableResult
     func newCard(beside other: CardController, baseConfig: Ghostty.SurfaceConfiguration?)
         -> (card: CardController, config: Ghostty.SurfaceConfiguration?) {
         let frame = model.placement(beside: other.id) ?? model.placement(in: scrollView.documentVisibleRect)
-        return newCard(at: frame, baseConfig: baseConfig)
+        return newCard(at: frame, zone: model.startZone(beside: other.id, at: frame), baseConfig: baseConfig)
     }
 
-    private func newCard(at frame: CGRect, baseConfig: Ghostty.SurfaceConfiguration?)
+    private func newCard(at frame: CGRect, zone: UUID?, baseConfig: Ghostty.SurfaceConfiguration?)
         -> (card: CardController, config: Ghostty.SurfaceConfiguration?) {
         var config = baseConfig
-        if let zone = model.zone(for: frame), let folder = model.startFolder(ofZone: zone), Self.isFolder(folder) {
+        if let zone, let folder = model.startFolder(ofZone: zone), Self.isFolder(folder) {
             config = config ?? Ghostty.SurfaceConfiguration()
             config?.workingDirectory = folder
         }

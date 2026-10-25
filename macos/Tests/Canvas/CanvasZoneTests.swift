@@ -21,6 +21,32 @@ struct CanvasZoneTests {
         #expect(model.zone(for: CGRect(x: 1800, y: 350, width: 500, height: 300)) == nil)
     }
 
+    @Test func aCardBesideOneInAZoneStaysInTheZone() {
+        let d = UUID()
+        var model = CanvasModel()
+        model.addZone(zone(project, CGRect(x: 0, y: 0, width: 2000, height: 1000)))
+        model.add(a, frame: CGRect(x: 700, y: 500, width: 600, height: 400))
+        model.add(b, frame: CGRect(x: 1300, y: 500, width: 600, height: 400))
+        // Right is taken and below leaves the zone: left.
+        #expect(model.placement(beside: a) == CGRect(x: 100, y: 500, width: 600, height: 400))
+        model.add(c, frame: CGRect(x: 100, y: 500, width: 600, height: 400))
+        #expect(model.placement(beside: a) == CGRect(x: 700, y: 100, width: 600, height: 400))
+        // No side inside the zone is free: below, as outside zones.
+        model.add(d, frame: CGRect(x: 700, y: 100, width: 600, height: 400))
+        #expect(model.placement(beside: a) == CGRect(x: 700, y: 900, width: 600, height: 400))
+    }
+
+    @Test func aCardBesideOneInAZoneStartsInItsZoneOrTheSourcesZone() {
+        var model = CanvasModel()
+        model.addZone(zone(project, CGRect(x: 0, y: 0, width: 2000, height: 1000)))
+        model.addZone(zone(other, CGRect(x: 0, y: 2000, width: 2000, height: 1000)))
+        model.add(a, frame: CGRect(x: 700, y: 500, width: 600, height: 400))
+        model.add(b, frame: CGRect(x: 5000, y: 5000, width: 600, height: 400))
+        #expect(model.startZone(beside: a, at: CGRect(x: 700, y: 900, width: 600, height: 400)) == project)
+        #expect(model.startZone(beside: a, at: CGRect(x: 100, y: 2100, width: 600, height: 400)) == other)
+        #expect(model.startZone(beside: b, at: CGRect(x: 5600, y: 5000, width: 600, height: 400)) == nil)
+    }
+
     @Test func aDomainWinsOverItsProject() {
         var model = CanvasModel()
         model.addZone(zone(project, CGRect(x: 0, y: 0, width: 2000, height: 1000)))

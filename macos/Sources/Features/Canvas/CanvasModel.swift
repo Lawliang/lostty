@@ -86,18 +86,25 @@ struct CanvasModel: Equatable {
     /// and right while its top-left corner would sit on another card's.
     /// ⌘T: a card the size of card `id`, beside it: to its right, else
     /// below, left or above, the first side no card covers; else further
-    /// right, past whatever is there. Nil without that card.
+    /// right, past whatever is there. In a zone, the first such side
+    /// wholly inside the zone comes first. Nil without that card.
     func placement(beside id: UUID) -> CGRect? {
         guard let from = card(id)?.frame else { return nil }
         let across = from.width + Self.besideGap, down = from.height + Self.besideGap
         let sides = [CGPoint(x: across, y: 0), CGPoint(x: 0, y: down), CGPoint(x: -across, y: 0), CGPoint(x: 0, y: -down)]
             + (2...20).map { CGPoint(x: across * CGFloat($0), y: 0) }
-        for side in sides {
-            let spot = Self.clamped(from.offsetBy(dx: side.x, dy: side.y))
+        let free = sides.map { Self.clamped(from.offsetBy(dx: $0.x, dy: $0.y)) }
             // Sharing an edge isn't covering.
-            if !cards.contains(where: { Self.overlap($0.frame, spot) }) { return spot }
-        }
-        return Self.clamped(from.offsetBy(dx: Self.nudge, dy: Self.nudge))
+            .filter { spot in !cards.contains { Self.overlap($0.frame, spot) } }
+        let home = zone(for: from).flatMap { zone($0)?.frame }
+        return free.first { home?.contains($0) == true } ?? free.first
+            ?? Self.clamped(from.offsetBy(dx: Self.nudge, dy: Self.nudge))
+    }
+
+    /// The zone whose folder a ⌘T card at `frame` beside card `id` starts
+    /// in: its own, else card `id`'s.
+    func startZone(beside id: UUID, at frame: CGRect) -> UUID? {
+        zone(for: frame) ?? card(id).flatMap { zone(for: $0.frame) }
     }
 
     private static func overlap(_ a: CGRect, _ b: CGRect) -> Bool {
