@@ -188,11 +188,11 @@ final class TicketBoardView: NSView, CanvasStacked {
     /// ⌘W (Close) and ⇧⌘W (Close Window) in the panel close it, as the red
     /// button does, not the canvas.
     @IBAction func close(_ sender: Any?) {
-        canvas?.closeTickets()
+        canvas?.closeTickets(board.id)
     }
 
     @IBAction func closeWindow(_ sender: Any?) {
-        canvas?.closeTickets()
+        canvas?.closeTickets(board.id)
     }
 }
 
@@ -251,7 +251,7 @@ final class TicketBoardHeaderView: NSView {
         buttons = CardWindowButtons { [weak board, weak canvas] button in
             guard let board, let canvas else { return }
             switch button {
-            case .close: canvas.closeTickets()
+            case .close: canvas.closeTickets(board.id)
             case .minimize: canvas.zoomToFit()
             case .zoom: canvas.zoom(toCard: board.id)
             }
@@ -316,7 +316,7 @@ final class TicketBoardHeaderView: NSView {
     }
 
     @objc private func closeTickets() {
-        canvas?.closeTickets()
+        canvas?.closeTickets(board.id)
     }
 
     private func documentPoint(_ event: NSEvent) -> CGPoint? {

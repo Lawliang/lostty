@@ -138,6 +138,8 @@ struct CanvasSelectionBar: View {
     var tidy: () -> Void = {}
     /// The layout button: the next layout.
     var nextLayout: () -> Void = {}
+    /// Zone from Selection; nil when no zone fits round the cards.
+    var makeZone: (() -> Void)?
     var deselect: () -> Void = {}
     @Environment(\.colorScheme) private var colorScheme
 
@@ -155,6 +157,10 @@ struct CanvasSelectionBar: View {
             CanvasSelectionButton(action: nextLayout) { CanvasTidyIcon(layout: layout) }
                 .help(layout.help)
                 .accessibilityLabel(layout.help)
+            if let makeZone {
+                separator
+                CanvasSelectionButton(action: makeZone) { Text("Zone from Selection") }
+            }
             separator
             CanvasSelectionButton(action: deselect) { Text("Deselect") }
         }
@@ -239,17 +245,24 @@ extension CanvasController {
     /// A drag on the canvas between the cards starts a marquee: it selects
     /// every card it touches, with ⇧ as well as those already selected.
     func marqueeBegan(adding: Bool) {
+        guard !drawsZone else { return }
         marqueeBase = adding ? selection : []
         if !adding { selection = [] }
     }
 
     /// The marquee, in document points, as dragged so far.
     func marqueeMoved(to rect: CGRect) {
-        selection = (marqueeBase ?? selection).union(model.cards(touching: rect))
+        if !drawsZone { selection = (marqueeBase ?? selection).union(model.cards(touching: rect)) }
         surface.selection.marquee = rect
     }
 
+    /// Drawing a zone, the marquee is its frame, in the project that
+    /// wholly holds it if one does.
     func marqueeEnded() {
+        if drawsZone, let rect = surface.selection.marquee {
+            addZone(rect, parent: model.project(holding: rect))
+        }
+        drawsZone = false
         marqueeBase = nil
         surface.selection.marquee = nil
     }
@@ -273,7 +286,6 @@ extension CanvasController {
         if let window { updateGroupHover(at: window.mouseLocationOutsideOfEventStream) }
     }
 
-    /// The bar shows the selection's count and Tidy Up's layout.
     func updateSelectionBar() {
         surface.selectionBar.rootView = CanvasSelectionBar(
             count: selection.count,
@@ -285,14 +297,16 @@ extension CanvasController {
                 tidyLayout = tidyLayout.next
                 updateSelectionBar()
             },
+            makeZone: model.zoneAround(selection) == nil ? nil : { [weak self] in self?.zoneFromSelection() },
             deselect: { [weak self] in self?.selection = [] })
         surface.selectionBar.isHidden = selection.isEmpty
         surface.needsLayout = true
     }
 
-    /// The outline round the selection, where its cards are now.
-    func updateSelectionOutline() {
-        surface.selection.selected = model.cards.filter { selection.contains($0.id) }.map(\.frame)
+    /// The outline round the selection, where its cards are now (in
+    /// `shown`, while a zone's drag shows them elsewhere).
+    func updateSelectionOutline(in shown: CanvasModel? = nil) {
+        surface.selection.selected = (shown ?? model).cards.filter { selection.contains($0.id) }.map(\.frame)
     }
 
     /// A title bar drag on card `id` starts: where it, and the rest of the

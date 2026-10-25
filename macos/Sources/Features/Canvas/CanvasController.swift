@@ -12,6 +12,8 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     /// The app's one canvas, made the first time it's opened or restored.
     /// Set only by `show(_:freshCard:)` and `restore(_:state:)`.
     static var shared: CanvasController?
+    /// Screen points a press may move and still be a click.
+    static let clickWobble: CGFloat = 3
 
     /// The canvas while it's the key window: where ⌘N makes a card.
     static var key: CanvasController? {
@@ -32,15 +34,17 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     private(set) var cards: [CardController] = []
     /// The card holding keyboard focus, or that last held it.
     private(set) weak var focusedCard: CardController?
-    /// The canvas's tickets, kept while their panel is closed.
-    let tickets = TicketBoard()
-    /// The tickets panel's card while it's open. It shares `model` with the
-    /// terminal cards, so it stacks, blocks clicks and fits to view alike.
-    private(set) var ticketsView: TicketBoardView?
-    /// The highest ticket number handed out, app-wide, so a deleted ticket's
-    /// isn't handed out again, even once the canvas is emptied (and so not
-    /// saved).
-    static let lastTicketNumberKey = "LosttyCanvasLastTicketNumber"
+    /// The canvas's tickets, kept while no panel is open. Every panel lists
+    /// them.
+    private(set) var tickets: [CanvasTicket] = []
+    /// The open tickets panels' cards. They share `model` with the terminal
+    /// cards, so they stack, block clicks and fit to view alike.
+    private(set) var ticketPanels: [UUID: TicketBoardView] = [:]
+    /// A new ticket's sheet left open in a panel since closed: the next
+    /// panel opened takes it.
+    var parkedDraft: CanvasTicket? {
+        didSet { if parkedDraft != oldValue { saveSoon() } }
+    }
     /// The title bar's pill follows the focused card's pane. (Each card has
     /// its own bottom bar.)
     let sidebar = ExtensionSidebarModel()
@@ -57,26 +61,35 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     /// What a marquee under way adds to: the selection it started with
     /// under ⇧, else nothing.
     var marqueeBase: Set<UUID>?
+    var drawsZone = false {
+        didSet { if drawsZone != oldValue { updateGroupHover(at: window?.mouseLocationOutsideOfEventStream ?? .zero) } }
+    }
     /// The layout Tidy Up uses, chosen on the selection's bar.
     var tidyLayout = CanvasModel.Tidy.row
     /// A press on a group of selected cards under way: where it started,
     /// the card under it, where the cards were, and whether it has moved.
     var groupDrag: (point: CGPoint, id: UUID, origins: [UUID: CGPoint], moved: Bool)?
-    /// The pointer is over a group of selected cards: an open hand, the
-    /// panes' own cursors off.
-    var overGroup = false
+    /// The canvas sets the cursor (`updateGroupHover`), the panes' own
+    /// cursors off.
+    var ownsCursor = false
     /// Cards whose panes are moving to a window: gone for good, not for Undo.
     private var moving: Set<UUID> = []
+    private var zoneResizeStart: CanvasZoneSnapshot?
+    private var membership = (panes: CanvasPaneZones(), model: CanvasModel())
+    private var zoneFiles: [UUID: CanvasZoneFile] = [:]
+    let zoneStore = CanvasZoneStore.standard
+    private var tmuxSessions: [TmuxSession] = []
     /// The zoom the terminals last rendered at.
     var settledZoom: CGFloat = 1
     var settleWork: DispatchWorkItem?
     /// The glide to a card under way (CanvasController+Glide).
     var glide: CanvasGlide?
     var waits = CanvasWaits()
+    /// The panes whose Claude is working, its subagents included.
+    private var working: Set<UUID> = []
     /// The view to show when the window first opens (a restored canvas's).
     var pendingView: (center: CGPoint, zoom: CGFloat)?
-    /// No cards of either kind.
-    var isEmpty: Bool { model.cards.isEmpty }
+    var isEmpty: Bool { model.cards.isEmpty && model.zones.isEmpty }
     /// Whether the view was set the first time the window showed.
     private(set) var placed = false
     private var eventMonitor: Any?
@@ -109,7 +122,6 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         window.isReleasedWhenClosed = false
         window.minSize = NSSize(width: 480, height: 320)
         super.init(window: window)
-        tickets.canvas = self
         window.delegate = self
         // Plain AppKit, not in an NSHostingView: AppKit then hit tests the
         // cards for an accessibility app, and each answers as it's zoomed.
@@ -168,11 +180,17 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         document.dragged = { [weak self] rect in self?.marqueeMoved(to: rect) }
         document.dragEnded = { [weak self] in self?.marqueeEnded() }
         document.selectedAll = { [weak self] in self?.selectAllCards() }
-        document.deselected = { [weak self] in self?.selection = [] }
+        document.deselected = { [weak self] in
+            self?.selection = []
+            self?.drawsZone = false
+        }
+        surface.zones.canvas = self
         surface.addMenu.chose = { [weak self] item in
+            self?.drawsZone = false
             switch item {
             case .terminal: self?.newCard()
             case .ticket: self?.showTickets()
+            case .zone: self?.startDrawingZone()
             }
         }
         NotificationCenter.default.addObserver(
@@ -183,7 +201,21 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
             .sink { [weak self] responder in self?.firstResponderChanged(responder) }
             .store(in: &cancellables)
         ClaudeRuntime.shared.$awaiting
-            .sink { [weak self] awaiting in self?.waits.update(awaiting: awaiting, now: Date()) }
+            .sink { [weak self] awaiting in
+                self?.waits.update(awaiting: awaiting, now: Date())
+                self?.updateZoneCaptions()
+            }
+            .store(in: &cancellables)
+        ClaudeRuntime.shared.$phases
+            .map { Set($0.keys) }
+            .removeDuplicates()
+            .sink { [weak self] working in
+                self?.working = working
+                self?.updateZoneCaptions()
+            }
+            .store(in: &cancellables)
+        NotificationCenter.default.publisher(for: .losttySessionsChanged)
+            .sink { [weak self] _ in self?.tmuxSessionsDidChange() }
             .store(in: &cancellables)
         // A terminal has no use for pinches, so pinching anywhere zooms the
         // canvas. (Scrolling over a pane, which pans the canvas, is the
@@ -202,6 +234,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
                 scrollView.magnify(with: event)
                 return nil
             case .leftMouseDown:
+                if drawsZone, surface.hitTest(event.locationInWindow) !== scrollView.document { drawsZone = false }
                 if groupPressed(event) || selectionClicked(event) { return nil }
                 ticketClicked(event)
                 return event
@@ -219,23 +252,45 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
 
     // MARK: Cards
 
-    /// A new card with one fresh terminal, in the middle of the view.
+    /// A new card with one fresh terminal, in the middle of the view; in a
+    /// zone, starting in its folder. `config` is what it started with.
     @discardableResult
-    func newCard(baseConfig: Ghostty.SurfaceConfiguration? = nil) -> CardController {
-        let card = CardController(ghostty, canvas: self, baseConfig: baseConfig)
-        add(card, frame: model.placement(in: scrollView.documentVisibleRect))
-        focus(card)
-        return card
+    func newCard(baseConfig: Ghostty.SurfaceConfiguration? = nil)
+        -> (card: CardController, config: Ghostty.SurfaceConfiguration?) {
+        let frame = model.placement(in: scrollView.documentVisibleRect)
+        return newCard(at: frame, zone: model.zone(for: frame), baseConfig: baseConfig)
     }
 
-    /// ⌘T on a card: a new card beside it, as big, starting where its
-    /// focused pane is (`baseConfig`), shown and focused.
+    /// ⌘T on a card: a new card beside it, as big, its zone growing to
+    /// hold it when full, starting where its focused pane is
+    /// (`baseConfig`), or in its zone's folder, or in the folder of
+    /// `other`'s zone when it lands outside every zone.
     @discardableResult
-    func newCard(beside other: CardController, baseConfig: Ghostty.SurfaceConfiguration?) -> CardController {
-        let card = CardController(ghostty, canvas: self, baseConfig: baseConfig)
-        add(card, frame: model.placement(beside: other.id) ?? model.placement(in: scrollView.documentVisibleRect))
+    func newCard(beside other: CardController, baseConfig: Ghostty.SurfaceConfiguration?)
+        -> (card: CardController, config: Ghostty.SurfaceConfiguration?) {
+        let frame = model.placement(beside: other.id) ?? model.placement(in: scrollView.documentVisibleRect)
+        if let home = model.card(other.id).flatMap({ model.zone(for: $0.frame) }), model.growZone(home, toHold: frame) {
+            zonesDidChange()
+        }
+        return newCard(at: frame, zone: model.startZone(beside: other.id, at: frame), baseConfig: baseConfig)
+    }
+
+    private func newCard(at frame: CGRect, zone: UUID?, baseConfig: Ghostty.SurfaceConfiguration?)
+        -> (card: CardController, config: Ghostty.SurfaceConfiguration?) {
+        var config = baseConfig
+        if let zone, let folder = model.startFolder(ofZone: zone), Self.isFolder(folder) {
+            config = config ?? Ghostty.SurfaceConfiguration()
+            config?.workingDirectory = folder
+        }
+        let card = CardController(ghostty, canvas: self, baseConfig: config)
+        add(card, frame: frame)
         focus(card)
-        return card
+        return (card, config)
+    }
+
+    private static func isFolder(_ path: String) -> Bool {
+        var isDirectory: ObjCBool = false
+        return FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory) && isDirectory.boolValue
     }
 
     /// A card holding `tree`: panes moved in from a window, or restored.
@@ -263,13 +318,14 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         cards.append(card)
         model.add(card.id, frame: frame)
         let view = CardView(card: card, canvas: self)
-        view.stackIndex = model.cards.count - 1
         views[card.id] = view
         scrollView.document.addSubview(view)
+        restack()
         if let placed = model.card(card.id)?.frame { view.frame = placed }
         updateVisibility()
         saveSoon()
         for surface in card.surfaceTree { surface.canvasZoomDidSettle(settledZoom) }
+        zoneMembershipDidChange()
     }
 
     /// Whether a click at `point` (in the window) is on the + menu or a
@@ -297,7 +353,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     /// focused card: no pane has the keyboard, and scrolling pans the canvas
     /// over every pane.
     private func canvasClicked() {
-        ticketsView?.isFocusedCard = false
+        for panel in ticketPanels.values { panel.isFocusedCard = false }
         guard let previous = focusedCard else {
             // Out of a ticket's field, too.
             window?.makeFirstResponder(scrollView.document)
@@ -334,7 +390,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         card.applyTitleToWindow()
         sidebar.focusedSurfaceID = card.focusedSurface?.id
         for (id, view) in views { view.isFocusedCard = id == card.id }
-        ticketsView?.isFocusedCard = false
+        for panel in ticketPanels.values { panel.isFocusedCard = false }
     }
 
     func bringToFront(_ id: UUID) {
@@ -342,20 +398,17 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         restack()
     }
 
-    /// The cards' views in `model`'s order. Reorders without taking views
-    /// out of the window, so the focused pane keeps keyboard focus.
+    /// The cards' views in `model`'s order, over the zones and under
+    /// their labels.
     private func restack() {
         for (index, entry) in model.cards.enumerated() { view(entry.id)?.stackIndex = index }
-        scrollView.document.sortSubviews({ a, b, _ in
-            let left = (a as? CanvasStacked)?.stackIndex ?? 0, right = (b as? CanvasStacked)?.stackIndex ?? 0
-            return left < right ? .orderedAscending : left > right ? .orderedDescending : .orderedSame
-        }, context: nil)
+        scrollView.document.restack()
     }
 
     /// The view of card `id`, of either kind.
     func view(_ id: UUID) -> (NSView & CanvasStacked)? {
         if let card = views[id] { return card }
-        return id == tickets.id ? ticketsView : nil
+        return ticketPanels[id]
     }
 
     /// The front-most terminal card.
@@ -370,10 +423,145 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         if selection.contains(id) { updateSelectionOutline() }
     }
 
-    /// A drag or resize ended.
     func cardFrameDidSettle() {
+        relistTickets()
         updateVisibility()
         saveSoon()
+        zoneMembershipDidChange()
+    }
+
+    /// The zones' views follow `model.zones`, and Zone from Selection
+    /// whether it can make one. Membership waits for a resize to settle.
+    func zonesDidChange(settled: Bool = true) {
+        surface.zones.show(model.zones)
+        relistTickets()
+        updateSelectionBar()
+        saveSoon()
+        if settled { zoneMembershipDidChange() }
+    }
+
+    /// Adds a zone at `frame`, a domain of `parent` or a project, unless
+    /// it breaks the rules.
+    func addZone(_ frame: CGRect, parent: UUID?) {
+        let before = model.zoneSnapshot()
+        guard model.addZone(model.newZone(frame, parent: parent)) else { return }
+        registerZoneUndo("New Zone", before)
+        zonesDidChange()
+    }
+
+    func addZones(_ saved: [CanvasZone]) {
+        model.addZones(saved)
+        membership.panes = CanvasPaneZones()
+        zonesDidChange()
+    }
+
+    func zoneFromSelection() {
+        guard let around = model.zoneAround(selection) else { return }
+        addZone(around.frame, parent: around.parent)
+    }
+
+    func startDrawingZone() {
+        canvasClicked()
+        selection = []
+        drawsZone = true
+    }
+
+    /// Zone `id` and everything in it drawn `delta` from where they are,
+    /// while its label is dragged, when the move keeps the rules; true then.
+    /// The model moves only once the drag ends (`moveZone`).
+    func previewZoneMove(_ id: UUID, by delta: CGSize) -> Bool {
+        var moved = model
+        guard let cards = moved.moveZone(id, by: delta) else { return false }
+        surface.zones.show(moved.zones)
+        for card in cards { if let frame = moved.card(card)?.frame { view(card)?.frame = frame } }
+        updateSelectionOutline(in: moved)
+        return true
+    }
+
+    /// Moves zone `id` by `delta` with everything in it, or puts it back
+    /// where it was when the move breaks the rules.
+    func moveZone(_ id: UUID, by delta: CGSize) {
+        let held = model.members(of: id)
+        let before = model.zoneSnapshot(cards: held)
+        if delta != .zero, model.moveZone(id, by: delta) != nil { registerZoneUndo("Move Zone", before) }
+        for card in held { if let frame = model.card(card)?.frame { view(card)?.frame = frame } }
+        zonesDidChange()
+        updateSelectionOutline()
+        cardFrameDidSettle()
+    }
+
+    /// Resizing, live: a frame that breaks the rules leaves it as it was.
+    func setZoneFrame(_ frame: CGRect, of id: UUID) {
+        guard model.setZoneFrame(frame, of: id) else { return }
+        zonesDidChange(settled: false)
+    }
+
+    /// A zone resize began, or ended: one Undo for the whole drag.
+    func holdZoneResize(_ holding: Bool) {
+        if holding {
+            zoneResizeStart = model.zoneSnapshot()
+            return
+        }
+        if let start = zoneResizeStart, start.zones != model.zones { registerZoneUndo("Resize Zone", start) }
+        zoneResizeStart = nil
+        cardFrameDidSettle()
+    }
+
+    /// Removes zone `id` and its domains; the cards stay, and the tickets
+    /// made in them are in no zone, keeping their keys.
+    func removeZone(_ id: UUID) {
+        let zones = model.zones
+        let gone = model.removeZone(id)
+        guard !gone.isEmpty else { return }
+        var before = model.zoneSnapshot(tickets: tickets.filter { $0.zone.map(gone.contains) == true })
+        before.zones = zones
+        registerZoneUndo("Remove Zone", before)
+        setTickets(tickets.map { $0.leaving(gone) })
+        zonesDidChange()
+    }
+
+    /// Undo `action` puts the zones back as `before` had them, and Redo
+    /// puts them back as they are now. A zone change is often noticed
+    /// late, so it stays undoable for at least a minute unless
+    /// `undo-timeout = 0` turns undo off.
+    private func registerZoneUndo(_ action: String, _ before: CanvasZoneSnapshot) {
+        guard let manager = (NSApp.delegate as? AppDelegate)?.undoManager else { return }
+        let timeout = ghostty.config.undoTimeout
+        manager.setActionName(action)
+        manager.registerUndo(withTarget: self, expiresAfter: timeout == .zero ? .zero : max(timeout, .seconds(60))) { canvas in
+            canvas.restoreZones(before, action)
+        }
+    }
+
+    private func restoreZones(_ snapshot: CanvasZoneSnapshot, _ action: String) {
+        let now = model.zoneSnapshot(
+            cards: Set(snapshot.frames.keys), tickets: tickets.filter { $0.key.map(snapshot.ticketZones.keys.contains) == true })
+        registerZoneUndo(action, now)
+        model.restore(snapshot)
+        for card in snapshot.frames.keys { if let frame = model.card(card)?.frame { view(card)?.frame = frame } }
+        setTickets(snapshot.restoring(tickets))
+        zonesDidChange()
+        updateSelectionOutline()
+        cardFrameDidSettle()
+    }
+
+    func updateZone(_ id: UUID, _ change: (inout CanvasZone) -> Void) {
+        guard model.updateZone(id, change) else { return }
+        zonesDidChange()
+    }
+
+    func zoomToZone(_ id: UUID) {
+        guard let frame = model.zone(id)?.frame else { return }
+        zoomToFit(frame.insetBy(dx: -CanvasModel.fitMargin, dy: -CanvasModel.fitMargin))
+    }
+
+    /// What's in zone `id`, back to front: each terminal card's title as its
+    /// header shows it, and "Tickets" for the tickets panel.
+    func memberTitles(of id: UUID) -> [String] {
+        let members = model.members(of: id)
+        return model.cards.filter { members.contains($0.id) }.compactMap { entry in
+            ticketPanels[entry.id] != nil ? "Tickets" : cards.first { $0.id == entry.id }?.title
+        }
     }
 
     /// A card's panes changed. With none left the card goes, kept a while
@@ -389,6 +577,102 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         updateVisibility()
         saveSoon()
         for surface in card.surfaceTree { surface.canvasZoomDidSettle(settledZoom) }
+        zoneMembershipDidChange()
+    }
+
+    /// Works out each pane's zone again (zones spec §5, §9). A pane in a
+    /// zone has its zone file, kept current. A pane that moved in or out
+    /// is told with its next prompt, and a card that left its project, a
+    /// zone still on the canvas, shows a notice. A pane new to the canvas didn't move.
+    func zoneMembershipDidChange() {
+        let now = model.paneZones(cards.map { ($0.id, $0.surfaceTree.map(\.id)) })
+        let before = membership
+        membership = (now, model)
+
+        for pane in zoneFiles.keys where now.zones[pane] == nil {
+            zoneStore.removeZone(pane)
+            zoneFiles[pane] = nil
+        }
+        for pane in before.panes.panes.subtracting(now.panes) { zoneStore.removeSay(pane) }
+        let pid = ProcessInfo.processInfo.processIdentifier
+        let sessions = now.zones.keys.reduce(into: [UUID: String]()) { names, pane in
+            names[pane] = TmuxOwnership.showing(pane, ownedBy: pid, in: tmuxSessions).first?.name
+        }
+        for (pane, zone) in now.zones {
+            guard let file = model.zoneFile(zone, panes: now, sessions: sessions), zoneFiles[pane] != file else { continue }
+            zoneStore.writeZone(pane, file)
+            zoneFiles[pane] = file
+        }
+
+        var noticed: Set<UUID> = []
+        for move in before.panes.moves(to: now) {
+            let left = move.from.flatMap { before.model.zoneTitle($0) }
+            if let note = move.to.flatMap(model.zoneMovedIn) ?? left.map(CanvasModel.zoneMovedOut) {
+                zoneStore.replaceSay(move.pane, note)
+            }
+            guard let left, model.leftProject(move, before: before.model),
+                  let card = cards.first(where: { $0.surfaceTree.contains { $0.id == move.pane } }),
+                  noticed.insert(card.id).inserted else { continue }
+            LosttyNotifications.shared.post(LosttyNotification(
+                kind: .zone(card: card.id),
+                title: "\(CanvasModel.noticeTitle(card.title)) left \(left)",
+                detail: move.to.flatMap(model.zoneTitle).map { "Now in \($0)." } ?? "It's in no zone now."))
+        }
+        updateZoneCaptions()
+    }
+
+    private func updateZoneCaptions() {
+        let waiting = Set(waits.since.keys)
+        let captions = model.zones.map { zone in
+            let held = zone.parent == nil ? model.members(of: zone.id) : []
+            let members = held.compactMap { id -> CanvasZoneCaption.Member? in
+                if ticketPanels[id] != nil { return .tickets }
+                return cards.first { $0.id == id }.map { .terminal(panes: $0.surfaceTree.map(\.id)) }
+            }
+            return (zone.id, CanvasZoneCaption(
+                zone, folder: model.startFolder(ofZone: zone.id), members: members, working: working, waiting: waiting))
+        }
+        surface.zones.showCaptions(Dictionary(uniqueKeysWithValues: captions))
+    }
+
+    /// Lists Lostty's tmux sessions again, off the main thread, and brings
+    /// the zone files' members up to date.
+    private func tmuxSessionsDidChange() {
+        Task { @MainActor [weak self] in
+            let sessions = await Task.detached(priority: .utility) { TmuxClient().sessions() }.value
+            guard let self else { return }
+            tmuxSessions = sessions
+            zoneMembershipDidChange()
+        }
+    }
+
+    /// Pane `pane`'s agent tried to message `target`, outside its zone, and
+    /// the hook kept the message inside (zones spec §3, §7): a notice with
+    /// Allow Once and the zone's settings, until dismissed.
+    func messageKeptInside(pane: UUID, target: String) {
+        guard let zone = membership.panes.zones[pane], let project = model.projectZone(zone),
+              let name = model.zone(project)?.name,
+              let card = cards.first(where: { $0.surfaceTree.contains { $0.id == pane } }) else { return }
+        let kind = LosttyNotification.Kind.keptInside(pane: pane)
+        LosttyNotifications.shared.post(LosttyNotification(
+            kind: kind,
+            title: "Kept inside \(name)",
+            detail: "\(CanvasModel.noticeTitle(card.title)) tried to message \(target), which is outside the zone.",
+            actionTitle: "Allow Once",
+            action: { [weak self] in
+                self?.zoneStore.writeAllow(pane, target: target)
+                self?.zoneStore.appendSay(pane, "You may retry your message to \(target) once.")
+                LosttyNotifications.shared.dismiss(kind: kind)
+            },
+            secondaryTitle: "Zone Settings",
+            secondaryAction: { [weak self] in self?.showZoneSettings(project) },
+            persistent: true))
+    }
+
+    private func showZoneSettings(_ id: UUID) {
+        window?.makeKeyAndOrderFront(nil)
+        zoomToZone(id)
+        surface.zones.showSettings(id)
     }
 
     private func retire(_ card: CardController) {
@@ -444,59 +728,78 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
 
     // MARK: Tickets
 
-    /// + → Tickets: the panel opens in the middle of the view, or comes
-    /// forward where it is, at 100% (where its rows take clicks), its list
-    /// taking the keyboard.
+    /// + → Tickets: a panel opens in the middle of the view, or the one in
+    /// the zone there (or outside every zone, as there) comes forward where
+    /// it is, at 100% (where its rows take clicks), its list taking the
+    /// keyboard.
     func showTickets() {
-        if ticketsView == nil {
-            openTickets(frame: model.placement(size: TicketBoardView.newSize, in: scrollView.documentVisibleRect))
-        }
-        ticketWillFocus(tickets.id)
-        window?.makeFirstResponder(ticketsView)
-        guard let frame = model.card(tickets.id)?.frame else { return }
-        if scrollView.magnification != 1 || !scrollView.documentVisibleRect.contains(frame) { zoom(toCard: tickets.id) }
+        let spot = model.placement(size: TicketBoardView.newSize, in: scrollView.documentVisibleRect)
+        let zone = model.zone(for: spot)
+        let there = model.cards.last { ticketPanels[$0.id] != nil && model.zone(for: $0.frame) == zone }
+        let id = there?.id ?? openTickets(frame: spot, draft: parkedDraft).board.id
+        if there == nil { parkedDraft = nil }
+        ticketWillFocus(id)
+        window?.makeFirstResponder(ticketPanels[id])
+        guard let frame = model.card(id)?.frame else { return }
+        if scrollView.magnification != 1 || !scrollView.documentVisibleRect.contains(frame) { zoom(toCard: id) }
     }
 
-    /// The panel's card at `frame`: in front, or back at `stack` when
+    /// A panel's card at `frame`: in front, or back at `stack` when
     /// restored.
     @discardableResult
-    func openTickets(frame: CGRect, stack: Int? = nil) -> TicketBoardView {
-        if let ticketsView { return ticketsView }
+    func openTickets(frame: CGRect, stack: Int? = nil, draft: CanvasTicket? = nil) -> TicketBoardView {
+        let board = TicketBoard(canvas: self, draft: draft)
         if let stack {
-            model.insert(tickets.id, frame: frame, at: stack)
+            model.insert(board.id, frame: frame, at: stack)
         } else {
-            model.add(tickets.id, frame: frame)
+            model.add(board.id, frame: frame)
         }
-        let view = TicketBoardView(board: tickets, canvas: self)
-        ticketsView = view
+        board.list.moveToEnd(last: false)
+        let view = TicketBoardView(board: board, canvas: self)
+        ticketPanels[board.id] = view
         scrollView.document.addSubview(view)
-        if let placed = model.card(tickets.id)?.frame { view.frame = placed }
+        if let placed = model.card(board.id)?.frame { view.frame = placed }
         restack()
         saveSoon()
+        updateZoneCaptions()
         return view
     }
 
-    /// The red button, ⌘W or Close Tickets: the panel goes, its tickets
-    /// stay for the next time it's opened.
-    func closeTickets() {
-        guard let view = ticketsView else { return }
+    /// The red button, ⌘W or Close Tickets: panel `id` goes, the tickets
+    /// stay, and its sheet waits for the next panel opened. Its Undo goes
+    /// with it.
+    func closeTickets(_ id: UUID) {
+        guard let view = ticketPanels.removeValue(forKey: id) else { return }
         if (window?.firstResponder as? NSView)?.isDescendant(of: view) ?? false {
             window?.makeFirstResponder(scrollView.document)
         }
-        ticketsView = nil
-        model.remove(tickets.id)
-        selection.remove(tickets.id)
+        if let draft = view.board.draft { parkedDraft = draft }
+        (NSApp.delegate as? AppDelegate)?.undoManager.removeAllActions(withTarget: view.board)
+        model.remove(id)
+        selection.remove(id)
         view.removeFromSuperview()
+        saveSoon()
+        updateZoneCaptions()
+    }
+
+    func setTickets(_ new: [CanvasTicket]) {
+        guard new != tickets else { return }
+        relistTickets()
+        tickets = new
         saveSoon()
     }
 
-    /// The panel was clicked or took the keyboard: it comes to the front,
-    /// looks focused, and no terminal card is. Keys go to its list, unless
-    /// one of its fields has them.
+    private func relistTickets() {
+        for panel in ticketPanels.values { panel.board.objectWillChange.send() }
+    }
+
+    /// A panel was clicked or took the keyboard: it comes to the front,
+    /// looks focused, and no other card is. Keys go to its list, unless one
+    /// of its fields has them.
     func ticketWillFocus(_ id: UUID) {
-        guard let view = ticketsView, id == tickets.id else { return }
+        guard let view = ticketPanels[id] else { return }
         bringToFront(id)
-        view.isFocusedCard = true
+        for (other, panel) in ticketPanels { panel.isFocusedCard = other == id }
         let previous = focusedCard
         focusedCard = nil
         // Otherwise a pane keeps the keyboard, and keys type into it.
@@ -534,7 +837,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
                 cardFrameDidSettle()
             } else {
                 selection = []
-                if drag.id == tickets.id {
+                if ticketPanels[drag.id] != nil {
                     ticketWillFocus(drag.id)
                 } else if let card = cards.first(where: { $0.id == drag.id }) {
                     focus(card)
@@ -545,8 +848,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         }
         let point = scrollView.document.convert(event.locationInWindow, from: nil)
         let delta = CGSize(width: point.x - drag.point.x, height: point.y - drag.point.y)
-        // A click that wobbles isn't a drag.
-        guard drag.moved || hypot(delta.width, delta.height) * scrollView.magnification >= 3 else { return true }
+        guard drag.moved || hypot(delta.width, delta.height) * scrollView.magnification >= Self.clickWobble else { return true }
         drag.moved = true
         groupDrag = drag
         NSCursor.closedHand.set()
@@ -554,12 +856,14 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         return true
     }
 
-    /// An open hand over a group of selected cards, which drags them; the
+    /// While New Zone waits, a crosshair where a drag draws the zone; else
+    /// an open hand over a group of selected cards, which drags them; the
     /// panes' own cursors everywhere else.
     func updateGroupHover(at point: NSPoint) {
-        let over = groupCard(at: point) != nil
-        if over != overGroup {
-            overGroup = over
+        let draws = drawsZone && surface.hitTest(point) === scrollView.document
+        let over = draws || groupCard(at: point) != nil
+        if over != ownsCursor {
+            ownsCursor = over
             if over {
                 window?.disableCursorRects()
             } else {
@@ -568,7 +872,11 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
                 NSCursor.arrow.set()
             }
         }
-        if over, groupDrag == nil { NSCursor.openHand.set() }
+        if draws {
+            NSCursor.crosshair.set()
+        } else if over, groupDrag == nil {
+            NSCursor.openHand.set()
+        }
     }
 
     /// A click on a card: with ⇧ on its title bar it goes in or out of the
@@ -589,25 +897,23 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         return true
     }
 
-    /// A click in the canvas's view on the panel, not on what floats over it.
+    /// A click in the canvas's view on a panel, not on what floats over it.
     private func ticketClicked(_ event: NSEvent) {
         guard !surface.floats(at: event.locationInWindow) else { return }
         let point = scrollView.document.convert(event.locationInWindow, from: nil)
-        guard scrollView.documentVisibleRect.contains(point), let id = model.card(at: point), id == tickets.id else { return }
+        guard scrollView.documentVisibleRect.contains(point), let id = model.card(at: point), ticketPanels[id] != nil else { return }
         ticketWillFocus(id)
     }
 
-    /// The key a newly created ticket gets; the next is one past it.
-    func nextTicketKey(defaults: UserDefaults = .standard) -> String {
-        let key = peekNextTicketKey(defaults: defaults)
-        if let number = CanvasTicket.number(of: key) { defaults.set(number, forKey: Self.lastTicketNumberKey) }
-        return key
+    func ticketZone(of id: UUID) -> UUID? {
+        model.card(id).flatMap { model.zone(for: $0.frame) }
     }
 
-    /// The key the next ticket will get, without handing it out.
-    func peekNextTicketKey(defaults: UserDefaults = .standard) -> String {
+    /// The key the next ticket made in `zone` gets, with its project's
+    /// prefix; `take` hands it out.
+    func nextTicketKey(in zone: UUID?, take: Bool = false) -> String {
         CanvasTicket.nextKey(
-            after: tickets.list.tickets.compactMap(\.key), lastNumber: defaults.integer(forKey: Self.lastTicketNumberKey))
+            prefix: model.ticketPrefix(ofZone: zone), after: tickets.compactMap(\.key), defaults: .standard, take: take)
     }
 
     // MARK: View
@@ -618,6 +924,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         guard scrollView.magnification != settledZoom else { return }
         // As thick on screen as the zoom changes.
         for id in selection { view(id)?.updateRing() }
+        surface.zones.updateEdges()
         // While the zoom moves the panes keep their pixels (the compositor
         // scales them) and their grid; they re-render once it settles.
         for card in cards {

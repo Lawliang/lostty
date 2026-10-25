@@ -45,6 +45,8 @@ struct CanvasModel: Equatable {
 
     /// Back to front: the last is drawn on top.
     private(set) var cards: [Card] = []
+    /// Behind every card; apart from `cards` so a hit test finds cards only.
+    private(set) var zones: [CanvasZone] = []
 
     func card(_ id: UUID) -> Card? {
         cards.first { $0.id == id }
@@ -84,18 +86,25 @@ struct CanvasModel: Equatable {
     /// and right while its top-left corner would sit on another card's.
     /// ⌘T: a card the size of card `id`, beside it: to its right, else
     /// below, left or above, the first side no card covers; else further
-    /// right, past whatever is there. Nil without that card.
+    /// right, past whatever is there. In a zone, the first such side
+    /// wholly inside the zone comes first. Nil without that card.
     func placement(beside id: UUID) -> CGRect? {
         guard let from = card(id)?.frame else { return nil }
         let across = from.width + Self.besideGap, down = from.height + Self.besideGap
         let sides = [CGPoint(x: across, y: 0), CGPoint(x: 0, y: down), CGPoint(x: -across, y: 0), CGPoint(x: 0, y: -down)]
             + (2...20).map { CGPoint(x: across * CGFloat($0), y: 0) }
-        for side in sides {
-            let spot = Self.clamped(from.offsetBy(dx: side.x, dy: side.y))
+        let free = sides.map { Self.clamped(from.offsetBy(dx: $0.x, dy: $0.y)) }
             // Sharing an edge isn't covering.
-            if !cards.contains(where: { Self.overlap($0.frame, spot) }) { return spot }
-        }
-        return Self.clamped(from.offsetBy(dx: Self.nudge, dy: Self.nudge))
+            .filter { spot in !cards.contains { Self.overlap($0.frame, spot) } }
+        let home = zone(for: from).flatMap { zone($0)?.frame }
+        return free.first { home?.contains($0) == true } ?? free.first
+            ?? Self.clamped(from.offsetBy(dx: Self.nudge, dy: Self.nudge))
+    }
+
+    /// The zone whose folder a ⌘T card at `frame` beside card `id` starts
+    /// in: its own, else card `id`'s.
+    func startZone(beside id: UUID, at frame: CGRect) -> UUID? {
+        zone(for: frame) ?? card(id).flatMap { zone(for: $0.frame) }
     }
 
     private static func overlap(_ a: CGRect, _ b: CGRect) -> Bool {
@@ -277,6 +286,315 @@ struct CanvasModel: Equatable {
     }
 }
 
+/// An area of the canvas behind the cards, holding those whose centres it
+/// covers: a project, or a domain inside one. Two levels only.
+struct CanvasZone: Equatable, Identifiable, Codable {
+    /// Each new zone takes the next of these, in order.
+    enum Color: String, CaseIterable, Codable {
+        case blue, green, orange, purple, pink, teal, yellow, red
+    }
+
+    let id: UUID
+    var frame: CGRect
+    var name = ""
+    var color: Color = .blue
+    /// nil for a project; a domain's project.
+    var parent: UUID?
+    /// A project's folder; a domain's subfolder of it.
+    var folder: String?
+    var brief = ""
+    /// A project's ticket key prefix as set; `ticketPrefix` is the one used.
+    var keyPrefix: String?
+
+    var ticketPrefix: String {
+        let set = (keyPrefix ?? "").filter { $0.isLetter || $0.isNumber }.uppercased()
+        return set.isEmpty ? Self.defaultTicketPrefix(name) : set
+    }
+
+    /// The first letters of `name`'s words, split at spaces, hyphens and
+    /// camelCase humps, in capitals, at most three; a name of one word
+    /// gives its first two letters (Textberry: TE; Text Berry: TB). LT for
+    /// a name with no letters.
+    static func defaultTicketPrefix(_ name: String) -> String {
+        let chars = Array(name)
+        let isWord = { (char: Character) in char.isLetter || char.isNumber }
+        var firsts: [Character] = []
+        for (index, char) in chars.enumerated() where isWord(char) {
+            guard index > 0 else {
+                firsts.append(char)
+                continue
+            }
+            let before = chars[index - 1]
+            if !isWord(before) || (before.isLowercase && char.isUppercase) { firsts.append(char) }
+        }
+        if firsts.count == 1 { firsts = Array(chars.filter(isWord).prefix(2)) }
+        return firsts.isEmpty ? CanvasTicket.defaultPrefix : String(firsts.prefix(3)).uppercased()
+    }
+}
+
+extension CanvasModel {
+    static let zoneMargin: CGFloat = 40
+    /// How far a domain made from cards keeps below its project's top
+    /// edge, clear of the project's label (a 26pt pill, 12pt in).
+    static let projectLabelBand: CGFloat = 48
+    static let domainInset: CGFloat = 12
+
+    func zone(_ id: UUID) -> CanvasZone? {
+        zones.first { $0.id == id }
+    }
+
+    /// The zone a card at `cardFrame` is in: the domain holding its
+    /// centre, else the project, else none.
+    func zone(for cardFrame: CGRect) -> UUID? {
+        let centre = CGPoint(x: cardFrame.midX, y: cardFrame.midY)
+        let holding = zones.filter { $0.frame.contains(centre) }
+        return (holding.first { $0.parent != nil } ?? holding.first)?.id
+    }
+
+    /// The cards in zone `id`; a project's include its domains'.
+    func members(of id: UUID) -> Set<UUID> {
+        let within = Set([id] + zones.filter { $0.parent == id }.map(\.id))
+        return Set(cards.filter { zone(for: $0.frame).map(within.contains) == true }.map(\.id))
+    }
+
+    /// Adds `zone`, unless it breaks the rules or its id is taken.
+    @discardableResult
+    mutating func addZone(_ zone: CanvasZone) -> Bool {
+        guard self.zone(zone.id) == nil else { return false }
+        return adopt(zones + [zone], checking: zone.id)
+    }
+
+    /// Adds saved zones in any order: each project before its domains.
+    mutating func addZones(_ saved: [CanvasZone]) {
+        for zone in saved.filter({ $0.parent == nil }) + saved.filter({ $0.parent != nil }) { addZone(zone) }
+    }
+
+    /// Moves zone `id` by `delta` with everything in it: a project's
+    /// domains, and the cards it held before the move. The cards moved;
+    /// nil, and nothing moves, when its new frame breaks the rules.
+    @discardableResult
+    mutating func moveZone(_ id: UUID, by delta: CGSize) -> Set<UUID>? {
+        let held = members(of: id)
+        var moved = zones
+        for index in moved.indices where moved[index].id == id || moved[index].parent == id {
+            moved[index].frame = moved[index].frame.offsetBy(dx: delta.width, dy: delta.height)
+        }
+        guard adopt(moved, checking: id) else { return nil }
+        for index in cards.indices where held.contains(cards[index].id) {
+            cards[index].frame = Self.clamped(cards[index].frame.offsetBy(dx: delta.width, dy: delta.height))
+        }
+        return held
+    }
+
+    /// Resizes zone `id` alone: its cards and domains stay put. False, and
+    /// nothing changes, when `frame` breaks the rules.
+    @discardableResult
+    mutating func setZoneFrame(_ frame: CGRect, of id: UUID) -> Bool {
+        var resized = zones
+        guard let index = resized.firstIndex(where: { $0.id == id }) else { return false }
+        resized[index].frame = frame
+        return adopt(resized, checking: id)
+    }
+
+    /// ⌘T in a full zone `id`: it grows to hold `spot` with `zoneMargin` to
+    /// spare, a domain's project first when it must. False, and nothing
+    /// changes, when it holds `spot` already or growing breaks the rules.
+    @discardableResult
+    mutating func growZone(_ id: UUID, toHold spot: CGRect) -> Bool {
+        guard let zone = zone(id), !zone.frame.contains(spot) else { return false }
+        let grown = zone.frame.union(spot.insetBy(dx: -Self.zoneMargin, dy: -Self.zoneMargin))
+        var next = self
+        if let parent = zone.parent, let project = self.zone(parent)?.frame, !project.contains(grown) {
+            let room = project.union(grown.insetBy(dx: -Self.domainInset, dy: -Self.domainInset))
+            guard next.setZoneFrame(room, of: parent) else { return false }
+        }
+        guard next.setZoneFrame(grown, of: id) else { return false }
+        self = next
+        return true
+    }
+
+    /// Changes zone `id`'s name, color, folder, brief or key prefix. False,
+    /// and nothing changes, when `change` moves it or gives it another
+    /// project: only `moveZone` and `setZoneFrame` do that, under the rules.
+    @discardableResult
+    mutating func updateZone(_ id: UUID, _ change: (inout CanvasZone) -> Void) -> Bool {
+        guard let index = zones.firstIndex(where: { $0.id == id }) else { return false }
+        var zone = zones[index]
+        change(&zone)
+        guard zone.frame == zones[index].frame, zone.parent == zones[index].parent else { return false }
+        zones[index] = zone
+        return true
+    }
+
+    /// Where a terminal made in zone `id` starts: a domain's subfolder of
+    /// its project's folder, else the project's folder. nil when its
+    /// project has none.
+    func startFolder(ofZone id: UUID) -> String? {
+        guard let zone = zone(id) else { return nil }
+        let project = zone.parent.flatMap { self.zone($0) } ?? zone
+        guard let base = project.folder.flatMap(Self.nonEmpty) else { return nil }
+        let root = (base as NSString).expandingTildeInPath
+        guard zone.parent != nil, let sub = zone.folder.flatMap(Self.nonEmpty) else { return root }
+        return ((root as NSString).appendingPathComponent(sub) as NSString).standardizingPath
+    }
+
+    /// `path` relative to `folder`, as a domain stores its subfolder: ""
+    /// for the folder itself, nil outside it.
+    static func subfolder(_ path: String, of folder: String) -> String? {
+        let root = ((folder as NSString).expandingTildeInPath as NSString).standardizingPath
+        let inner = ((path as NSString).expandingTildeInPath as NSString).standardizingPath
+        if inner == root { return "" }
+        let prefix = root.hasSuffix("/") ? root : root + "/"
+        return inner.hasPrefix(prefix) ? String(inner.dropFirst(prefix.count)) : nil
+    }
+
+    private static func nonEmpty(_ text: String) -> String? {
+        let trimmed = text.trimmingCharacters(in: .whitespaces)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    /// Removes zone `id` and its domains, returning their ids; the cards in
+    /// them stay.
+    @discardableResult
+    mutating func removeZone(_ id: UUID) -> Set<UUID> {
+        let gone = Set(zones.filter { $0.id == id || $0.parent == id }.map(\.id))
+        zones.removeAll { gone.contains($0.id) }
+        return gone
+    }
+
+    /// The zones, the frames of cards `ids` and the zones of `tickets`, as
+    /// they are now: what Undo puts back after a zone edit.
+    func zoneSnapshot(cards ids: Set<UUID> = [], tickets: [CanvasTicket] = []) -> CanvasZoneSnapshot {
+        CanvasZoneSnapshot(
+            zones: zones,
+            frames: Dictionary(uniqueKeysWithValues: cards.filter { ids.contains($0.id) }.map { ($0.id, $0.frame) }),
+            ticketZones: Dictionary(tickets.compactMap { ticket in ticket.key.map { ($0, ticket.zone) } }) { first, _ in first })
+    }
+
+    /// The zones and the cards still here back as `snapshot` had them.
+    mutating func restore(_ snapshot: CanvasZoneSnapshot) {
+        zones = snapshot.zones
+        for (id, frame) in snapshot.frames { setFrame(frame, of: id) }
+    }
+
+    /// The zones whose tickets a panel in zone `id` lists: a project's
+    /// and its domains', or a domain's own; nil, for every ticket, outside
+    /// every zone.
+    func ticketZones(shownIn id: UUID?) -> Set<UUID>? {
+        guard let id else { return nil }
+        return Set([id] + zones.filter { $0.parent == id }.map(\.id))
+    }
+
+    /// The domain `ticket` is tagged with in a panel in zone `id`: in a
+    /// project's panel, a domain's ticket is.
+    func ticketTag(_ ticket: CanvasTicket, shownIn id: UUID?) -> CanvasZone? {
+        guard let id, zone(id)?.parent == nil, let domain = ticket.zone.flatMap({ zone($0) }),
+              domain.parent == id else { return nil }
+        return domain
+    }
+
+    /// The key prefix of a ticket made in zone `id`: its project's, or LT
+    /// in no zone.
+    func ticketPrefix(ofZone id: UUID?) -> String {
+        guard let zone = id.flatMap({ self.zone($0) }) else { return CanvasTicket.defaultPrefix }
+        return (zone.parent.flatMap { self.zone($0) } ?? zone).ticketPrefix
+    }
+
+    /// Zone from Selection: a frame round cards `ids` with `zoneMargin` to
+    /// spare, kept in the document. When every card's centre is in one
+    /// project, a domain of it, kept inside it and below its label. nil
+    /// without cards, or when the zone would break the rules.
+    func zoneAround(_ ids: Set<UUID>) -> (frame: CGRect, parent: UUID?)? {
+        let chosen = cards.filter { ids.contains($0.id) }
+        guard !chosen.isEmpty else { return nil }
+        let projects = Set(chosen.map { card in
+            zone(for: card.frame).flatMap { self.zone($0) }.map { $0.parent ?? $0.id }
+        })
+        let parent = projects.count == 1 ? projects.first ?? nil : nil
+        let bounds = parent.flatMap { zone($0)?.frame }.map { project in
+            CGRect(
+                x: project.minX + Self.domainInset, y: project.minY + Self.projectLabelBand,
+                width: project.width - 2 * Self.domainInset,
+                height: project.height - Self.projectLabelBand - Self.domainInset)
+        } ?? CGRect(x: 0, y: 0, width: Self.size, height: Self.size)
+        let frame = chosen.reduce(CGRect.null) { $0.union($1.frame) }
+            .insetBy(dx: -Self.zoneMargin, dy: -Self.zoneMargin)
+            .intersection(bounds)
+        guard Self.allows(CanvasZone(id: UUID(), frame: frame, parent: parent), among: zones) else { return nil }
+        return (frame, parent)
+    }
+
+    /// A new zone at `frame`: "Zone N" for a project, "Domain N" for a
+    /// domain of `parent`, N one past the zones there are, in the next color.
+    func newZone(_ frame: CGRect, parent: UUID?) -> CanvasZone {
+        let number = zones.count + 1
+        return CanvasZone(
+            id: UUID(), frame: frame, name: parent == nil ? "Zone \(number)" : "Domain \(number)",
+            color: nextColor(parent: parent), parent: parent)
+    }
+
+    /// The project wholly holding `frame`, which a zone drawn there is a
+    /// domain of.
+    func project(holding frame: CGRect) -> UUID? {
+        zones.first { $0.parent == nil && $0.frame.contains(frame) }?.id
+    }
+
+    /// The color a new zone takes: the first in order that no other
+    /// project uses, for a project; that neither `parent` nor its domains
+    /// use, for a domain. Round again once all are taken.
+    func nextColor(parent: UUID?) -> CanvasZone.Color {
+        let group = zones.filter { parent == nil ? $0.parent == nil : $0.id == parent || $0.parent == parent }
+        let used = Set(group.map(\.color))
+        let all = CanvasZone.Color.allCases
+        return all.first { !used.contains($0) } ?? all[group.count % all.count]
+    }
+
+    /// `zones` becomes `candidate` when zone `id` keeps the rules there.
+    private mutating func adopt(_ candidate: [CanvasZone], checking id: UUID) -> Bool {
+        guard let zone = candidate.first(where: { $0.id == id }), Self.allows(zone, among: candidate) else { return false }
+        zones = candidate
+        return true
+    }
+
+    /// The one rule every zone change keeps: `zone` inside the document and
+    /// at least a card's minimum size. A project overlaps no other project
+    /// (sharing an edge is fine) and holds all its domains. A domain's
+    /// parent is a project that holds it and is bigger, and it overlaps no
+    /// sibling.
+    private static func allows(_ zone: CanvasZone, among zones: [CanvasZone]) -> Bool {
+        let frame = zone.frame
+        guard CGRect(x: 0, y: 0, width: size, height: size).contains(frame),
+              frame.width >= minimumCardSize.width, frame.height >= minimumCardSize.height else { return false }
+        let others = zones.filter { $0.id != zone.id }
+        guard let parent = zone.parent else {
+            return !others.contains { other in
+                other.parent == nil ? overlap(other.frame, frame) : other.parent == zone.id && !frame.contains(other.frame)
+            }
+        }
+        guard let project = others.first(where: { $0.id == parent }), project.parent == nil,
+              project.frame.contains(frame), project.frame != frame else { return false }
+        return !others.contains { $0.parent == parent && overlap($0.frame, frame) }
+    }
+}
+
+/// The zones before an edit, with the cards a move took along and the
+/// tickets a removal took out of their zones (`CanvasModel.zoneSnapshot`).
+struct CanvasZoneSnapshot: Equatable {
+    var zones: [CanvasZone]
+    var frames: [UUID: CGRect]
+    /// By ticket key.
+    var ticketZones: [String: UUID?]
+
+    func restoring(_ tickets: [CanvasTicket]) -> [CanvasTicket] {
+        tickets.map { ticket in
+            guard let key = ticket.key, let zone = ticketZones[key] else { return ticket }
+            var restored = ticket
+            restored.zone = zone
+            return restored
+        }
+    }
+}
+
 /// The canvas's zoom: its limits, and what a zoom shows.
 enum CanvasZoom {
     static let minimum: CGFloat = 0.25
@@ -350,9 +668,67 @@ struct CanvasWaits: Equatable {
     }
 }
 
+/// What a zone's label says beside its name (zones spec §3): a project's
+/// folder and its counts across it and its domains; a domain's brief's
+/// first line.
+struct CanvasZoneCaption: Equatable {
+    enum Member {
+        case terminal(panes: [UUID])
+        case tickets
+    }
+
+    struct Count: Equatable {
+        enum Kind { case terminals, ticketPanels, working, waiting }
+
+        var kind: Kind
+        var value: Int
+
+        var text: String {
+            switch kind {
+            case .terminals: "\(value) terminal\(value == 1 ? "" : "s")"
+            case .ticketPanels: "\(value) ticket panel\(value == 1 ? "" : "s")"
+            case .working: "\(value) working"
+            case .waiting: "\(value) waiting"
+            }
+        }
+    }
+
+    /// A project's folder, tilde-abbreviated, or a domain's brief's first
+    /// line; nil when it has none.
+    var note: String?
+    /// A project's counts, leaving out each zero but the terminals of an
+    /// empty zone. A domain has none.
+    var counts: [Count] = []
+
+    var text: String { counts.map(\.text).joined(separator: " · ") }
+
+    /// `working` and `waiting` are panes; one waiting on you counts only as
+    /// waiting.
+    init(_ zone: CanvasZone, folder: String?, members: [Member], working: Set<UUID>, waiting: Set<UUID>) {
+        guard zone.parent == nil else {
+            note = zone.brief.trimmingCharacters(in: .whitespacesAndNewlines)
+                .split(whereSeparator: \.isNewline).first
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+            return
+        }
+        note = folder.map { ($0 as NSString).abbreviatingWithTildeInPath }
+        let panes = Set(members.flatMap { member -> [UUID] in
+            if case .terminal(let panes) = member { panes } else { [] }
+        })
+        let terminals = members.count(where: { if case .terminal = $0 { true } else { false } })
+        let all = [
+            Count(kind: .terminals, value: terminals),
+            Count(kind: .ticketPanels, value: members.count - terminals),
+            Count(kind: .working, value: panes.intersection(working.subtracting(waiting)).count),
+            Count(kind: .waiting, value: panes.intersection(waiting).count),
+        ]
+        counts = members.isEmpty ? [Count(kind: .terminals, value: 0)] : all.filter { $0.value > 0 }
+    }
+}
+
 /// What the canvas keeps across Restart to Update and relaunches: whether
-/// it's shown, the view, each terminal card back to front, and the
-/// tickets with their panel. Generic over the split tree, so tests can
+/// it's shown, the view, each terminal card back to front, the tickets
+/// with their panels, and the zones. Generic over the split tree, so tests can
 /// save plain values.
 struct CanvasSaved<Tree: Codable>: Codable {
     struct Card: Codable {
@@ -375,31 +751,42 @@ struct CanvasSaved<Tree: Codable>: Codable {
         var stack: Int
     }
 
-    /// The tickets, and their panel while it's open.
     struct Board: Codable, Equatable {
+        struct Panel: Codable, Equatable {
+            var frame: CGRect
+            var stack: Int
+            var draft: CanvasTicket?
+        }
+
         var tickets: [CanvasTicket]
-        /// The panel's frame and place among every card, back to front;
-        /// nil while it's closed.
-        var frame: CGRect?
-        var stack: Int?
-        /// The new ticket's sheet, open with what's typed in it.
+        var panels: [Panel]
+        /// A new ticket's sheet left open in a panel since closed: the next
+        /// panel opened takes it.
         var draft: CanvasTicket?
 
-        init(tickets: [CanvasTicket], frame: CGRect? = nil, stack: Int? = nil, draft: CanvasTicket? = nil) {
+        init(tickets: [CanvasTicket], panels: [Panel] = [], draft: CanvasTicket? = nil) {
             self.tickets = tickets
-            self.frame = frame
-            self.stack = stack
+            self.panels = panels
             self.draft = draft
         }
 
-        /// A ticket that can't be read is left out, never the rest.
+        /// A ticket or panel that can't be read is left out, never the rest.
+        /// A canvas saved with one panel (its frame and stack beside the
+        /// tickets) comes back with it, the sheet in it.
         init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             tickets = c.decodeEach(CanvasTicket.self, forKey: .tickets) ?? []
-            frame = try? c.decodeIfPresent(CGRect.self, forKey: .frame)
-            stack = try? c.decodeIfPresent(Int.self, forKey: .stack)
+            panels = c.decodeEach(Panel.self, forKey: .panels) ?? []
             draft = try? c.decodeIfPresent(CanvasTicket.self, forKey: .draft)
+            let one = try decoder.container(keyedBy: OnePanel.self)
+            if !c.contains(.panels), let frame = try? one.decodeIfPresent(CGRect.self, forKey: .frame) {
+                let stack = (try? one.decodeIfPresent(Int.self, forKey: .stack)) ?? Int.max
+                panels = [Panel(frame: frame, stack: stack, draft: draft)]
+                draft = nil
+            }
         }
+
+        private enum OnePanel: String, CodingKey { case frame, stack }
     }
 
     var visible: Bool
@@ -411,22 +798,29 @@ struct CanvasSaved<Tree: Codable>: Codable {
     var tickets: [Ticket]?
     /// Missing from a canvas saved before the panel.
     var board: Board?
+    var zones: [CanvasZone]
 
     /// Whether there's anything to bring back.
     var isEmpty: Bool {
         cards.isEmpty && (tickets ?? []).isEmpty && (board?.tickets ?? []).isEmpty && board?.draft == nil
+            && (board?.panels ?? []).allSatisfy { $0.draft == nil } && zones.isEmpty
     }
 
-    init(visible: Bool, center: CGPoint, zoom: CGFloat, cards: [Card], tickets: [Ticket]? = nil, board: Board? = nil) {
+    init(
+        visible: Bool, center: CGPoint, zoom: CGFloat, cards: [Card], tickets: [Ticket]? = nil, board: Board? = nil,
+        zones: [CanvasZone] = []
+    ) {
         self.visible = visible
         self.center = center
         self.zoom = zoom
         self.cards = cards
         self.tickets = tickets
         self.board = board
+        self.zones = zones
     }
 
-    /// Tickets that can't be read are left out, never the canvas with them.
+    /// Tickets and zones that can't be read are left out, never the canvas
+    /// with them.
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         visible = try c.decode(Bool.self, forKey: .visible)
@@ -435,6 +829,7 @@ struct CanvasSaved<Tree: Codable>: Codable {
         cards = try c.decode([Card].self, forKey: .cards)
         tickets = c.decodeEach(Ticket.self, forKey: .tickets)
         board = try? c.decodeIfPresent(Board.self, forKey: .board)
+        zones = c.decodeEach(CanvasZone.self, forKey: .zones) ?? []
     }
 }
 

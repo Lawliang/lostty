@@ -392,6 +392,7 @@ class AppDelegate: NSObject,
         // The context handoff (beta): before the restart resume's hook
         // reinstall, which brings in the handoff's hook events.
         ContextHandoffWiring.start()
+        ClaudeRuntime.shared.messageKeptInside = { CanvasController.shared?.messageKeptInside(pane: $0, target: $1) }
         // Restart to Update: put back what window restoration doesn't
         // (Claude's state, Stay Awake, the window setting, hooks). Before
         // Stay Awake's crash restore, the hooks check and the Claude sync.
@@ -914,7 +915,8 @@ class AppDelegate: NSObject,
         let onCard = MainActor.assumeIsolated {
             guard let surface = notification.object as? Ghostty.SurfaceView,
                   let canvas = CanvasController.shared, canvas.card(holding: surface) != nil else { return false }
-            NewWindowChoice.ask(canvas.newCard(baseConfig: config), config: config)
+            let made = canvas.newCard(baseConfig: config)
+            NewWindowChoice.ask(made.card, config: made.config)
             return true
         }
         if onCard { return }
@@ -931,7 +933,8 @@ class AppDelegate: NSObject,
         let onCard = MainActor.assumeIsolated {
             guard let canvas = CanvasController.shared, let card = canvas.card(holding: surfaceView) else { return false }
             let config = notification.userInfo?[Ghostty.Notification.NewSurfaceConfigKey] as? Ghostty.SurfaceConfiguration
-            NewWindowChoice.ask(canvas.newCard(beside: card, baseConfig: config), config: config)
+            let made = canvas.newCard(beside: card, baseConfig: config)
+            NewWindowChoice.ask(made.card, config: made.config)
             return true
         }
         if onCard { return }
@@ -1176,7 +1179,8 @@ class AppDelegate: NSObject,
             let config = canvas.focusedCard?.focusedSurface?.surface.map {
                 Ghostty.SurfaceConfiguration(from: ghostty_surface_inherited_config($0, GHOSTTY_SURFACE_CONTEXT_WINDOW))
             }
-            NewWindowChoice.ask(canvas.newCard(baseConfig: config), config: config)
+            let made = canvas.newCard(baseConfig: config)
+            NewWindowChoice.ask(made.card, config: made.config)
             return
         }
         // Lostty: starts where the focused terminal is, as ⌘N from the
@@ -1199,7 +1203,8 @@ class AppDelegate: NSObject,
             let config = card.focusedSurface?.surface.map {
                 Ghostty.SurfaceConfiguration(from: ghostty_surface_inherited_config($0, GHOSTTY_SURFACE_CONTEXT_TAB))
             }
-            NewWindowChoice.ask(canvas.newCard(beside: card, baseConfig: config), config: config)
+            let made = canvas.newCard(beside: card, baseConfig: config)
+            NewWindowChoice.ask(made.card, config: made.config)
             return
         }
         _ = TerminalController.newTab(

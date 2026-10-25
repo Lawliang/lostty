@@ -17,6 +17,19 @@ struct TicketListTests {
         #expect(list.selected == "LT-3")
     }
 
+    @Test func aPanelInAZoneListsOnlyItsZonesTickets() {
+        let mine = UUID(), theirs = UUID()
+        var tickets = [ticket(1), ticket(2), ticket(3, .done)]
+        tickets[0].zone = mine
+        tickets[1].zone = theirs
+        tickets[2].zone = mine
+        let list = TicketList(tickets: tickets, zones: [mine], selected: "LT-2", folded: [])
+        #expect(list.shown == ["LT-1", "LT-3"])
+        #expect(list.count(.toDo) == 1)
+        #expect(list.selected == nil)
+        #expect(TicketList(tickets: tickets, zones: nil, selected: "LT-2", folded: []).shown == ["LT-1", "LT-2", "LT-3"])
+    }
+
     @Test func upNextIsHighestPriorityFirstThenOldest() {
         let list = TicketList(tickets: [ticket(1, .toDo, .low), ticket(2, .toDo, .highest), ticket(3, .toDo, .low)])
         #expect(list.tickets(in: .toDo).compactMap(\.key) == ["LT-2", "LT-1", "LT-3"])

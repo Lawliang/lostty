@@ -57,8 +57,9 @@ final class CanvasScrollView: NSScrollView {
 
 /// The canvas itself: the cards are its subviews, framed in document
 /// points, y down. Draws nothing. Takes the keyboard when no card has it,
-/// so keys go nowhere but ⌘A, which selects every card, and Escape, which
-/// deselects them. Dragging on it between the cards draws a marquee.
+/// so keys go nowhere but ⌘A, which selects every card, Escape, which
+/// deselects them, and ⌘Z and ⇧⌘Z, which undo and redo. Dragging on it
+/// between the cards draws a marquee.
 final class CanvasDocumentView: NSView {
     /// A click between the cards (CanvasController.canvasClicked), with ⇧
     /// or not.
@@ -72,6 +73,19 @@ final class CanvasDocumentView: NSView {
 
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { true }
+
+    /// Back to front: the zones, the cards in `stackIndex` order, the
+    /// zones' labels. Reorders without taking views out of the window, so
+    /// the focused pane keeps keyboard focus.
+    func restack() {
+        sortSubviews({ a, b, _ in
+            func depth(_ view: NSView) -> Int {
+                view is CanvasZoneLabelLayer ? Int.max : (view as? CanvasStacked)?.stackIndex ?? Int.min
+            }
+            let left = depth(a), right = depth(b)
+            return left < right ? .orderedAscending : left > right ? .orderedDescending : .orderedSame
+        }, context: nil)
+    }
 
     override func mouseDown(with event: NSEvent) {
         start = convert(event.locationInWindow, from: nil)
@@ -93,6 +107,18 @@ final class CanvasDocumentView: NSView {
 
     override func selectAll(_ sender: Any?) {
         selectedAll?()
+    }
+
+    /// The Edit menu's Undo has no shortcut: a pane's ⌘Z is its own
+    /// keybinding, so with no pane focused nothing else would take it.
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        guard window?.firstResponder === self, event.charactersIgnoringModifiers?.lowercased() == "z",
+              mods == .command || mods == [.command, .shift], let undo = window?.undoManager else {
+            return super.performKeyEquivalent(with: event)
+        }
+        if mods.contains(.shift) { undo.redo() } else { undo.undo() }
+        return true
     }
 
     /// Pointer moves anywhere on the canvas, over the cards too, so the
@@ -241,6 +267,7 @@ final class CanvasSurfaceView: NSView {
     let selection = CanvasSelectionView()
     let selectionBar = CanvasSelectionBarView(rootView: CanvasSelectionBar())
     let addMenu = CanvasAddMenuView()
+    let zones = CanvasZoneLayer(frame: NSRect(x: 0, y: 0, width: CanvasModel.size, height: CanvasModel.size))
     private let grid = CanvasGridView(frame: .zero)
     private let notifications = CanvasNotificationsView(rootView: NotificationStackView())
 
@@ -249,6 +276,8 @@ final class CanvasSurfaceView: NSView {
         grid.scrollView = scrollView
         addSubview(grid)
         addSubview(scrollView)
+        scrollView.document.addSubview(zones)
+        scrollView.document.addSubview(zones.labels)
         selection.document = scrollView.document
         addSubview(selection)
         selectionBar.isHidden = true
@@ -293,9 +322,11 @@ final class CanvasSurfaceView: NSView {
     }
 
     /// Whether a click at `point` (in the window) is on what floats over
-    /// the cards: the + menu, the selection's bar, or a notification.
+    /// the cards: the + menu, the selection's bar, a notification, or a
+    /// zone's label.
     func floats(at point: NSPoint) -> Bool {
         addMenu.covers(point) || selectionBar.covers(point) || notifications.hitTest(convert(point, from: nil)) != nil
+            || zones.labels.hitTest(scrollView.document.convert(point, from: nil)) != nil
     }
 }
 

@@ -27,6 +27,41 @@ struct CanvasTicketTests {
         #expect(CanvasTicket.number(of: "LT-") == nil)
     }
 
+    @Test func aProjectsTicketsNumberApartFromLT() {
+        #expect(CanvasTicket.nextKey(prefix: "TB", after: ["LT-4", "TB-2"]) == "TB-3")
+        #expect(CanvasTicket.number(of: "TB-2", prefix: "TB") == 2)
+        #expect(CanvasTicket.number(of: "LT-2", prefix: "TB") == nil)
+    }
+
+    @Test func eachPrefixKeepsItsOwnCountAndLTContinuesFromItsStoredOne() throws {
+        let suite = "CanvasTicketTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(7, forKey: "LosttyCanvasLastTicketNumber")
+        #expect(CanvasTicket.nextKey(prefix: "LT", after: [], defaults: defaults) == "LT-8")
+        #expect(CanvasTicket.nextKey(prefix: "LT", after: [], defaults: defaults, take: true) == "LT-8")
+        #expect(CanvasTicket.nextKey(prefix: "TB", after: [], defaults: defaults, take: true) == "TB-1")
+        #expect(CanvasTicket.nextKey(prefix: "TB", after: [], defaults: defaults, take: true) == "TB-2")
+        #expect(CanvasTicket.nextKey(prefix: "LT", after: [], defaults: defaults, take: true) == "LT-9")
+        #expect(defaults.integer(forKey: "LosttyCanvasLastTicketNumber") == 9)
+    }
+
+    @Test func aTicketsZoneComesBackAndAnOldTicketHasNone() throws {
+        let zone = UUID()
+        let ticket = CanvasTicket(key: "TB-1", summary: "Sign up", zone: zone)
+        #expect(try JSONDecoder().decode(CanvasTicket.self, from: JSONEncoder().encode(ticket)) == ticket)
+        let old = try JSONDecoder().decode(CanvasTicket.self, from: Data(#"{"key":"LT-1","summary":"Old"}"#.utf8))
+        #expect(old.zone == nil)
+    }
+
+    @Test func aTicketInARemovedZoneIsInNoneAndKeepsItsKey() {
+        let gone = UUID(), kept = UUID()
+        let ticket = CanvasTicket(key: "TB-3", summary: "Sign up", zone: gone)
+        #expect(ticket.leaving([gone]).zone == nil)
+        #expect(ticket.leaving([gone]).key == "TB-3")
+        #expect(CanvasTicket(key: "TB-4", zone: kept).leaving([gone]).zone == kept)
+    }
+
     @Test func aTicketNeedsASummary() {
         #expect(!CanvasTicket().canSave)
         #expect(!CanvasTicket(summary: "  \n ").canSave)
