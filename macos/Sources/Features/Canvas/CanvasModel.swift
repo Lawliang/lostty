@@ -449,6 +449,21 @@ extension CanvasModel {
         return gone
     }
 
+    /// The zones, the frames of cards `ids` and the zones of `tickets`, as
+    /// they are now: what Undo puts back after a zone edit.
+    func zoneSnapshot(cards ids: Set<UUID> = [], tickets: [CanvasTicket] = []) -> CanvasZoneSnapshot {
+        CanvasZoneSnapshot(
+            zones: zones,
+            frames: Dictionary(uniqueKeysWithValues: cards.filter { ids.contains($0.id) }.map { ($0.id, $0.frame) }),
+            ticketZones: Dictionary(tickets.compactMap { ticket in ticket.key.map { ($0, ticket.zone) } }) { first, _ in first })
+    }
+
+    /// The zones and the cards still here back as `snapshot` had them.
+    mutating func restore(_ snapshot: CanvasZoneSnapshot) {
+        zones = snapshot.zones
+        for (id, frame) in snapshot.frames { setFrame(frame, of: id) }
+    }
+
     /// The zones whose tickets a panel in zone `id` lists: a project's
     /// and its domains', or a domain's own; nil, for every ticket, outside
     /// every zone.
@@ -546,6 +561,25 @@ extension CanvasModel {
         guard let project = others.first(where: { $0.id == parent }), project.parent == nil,
               project.frame.contains(frame), project.frame != frame else { return false }
         return !others.contains { $0.parent == parent && overlap($0.frame, frame) }
+    }
+}
+
+/// The zones before an edit, with the cards a move took along and the
+/// tickets a removal took out of their zones (`CanvasModel.zoneSnapshot`).
+struct CanvasZoneSnapshot: Equatable {
+    var zones: [CanvasZone]
+    var frames: [UUID: CGRect]
+    /// By ticket key.
+    var ticketZones: [String: UUID?]
+
+    /// `tickets` with the zones this snapshot had them in.
+    func restoring(_ tickets: [CanvasTicket]) -> [CanvasTicket] {
+        tickets.map { ticket in
+            guard let key = ticket.key, let zone = ticketZones[key] else { return ticket }
+            var restored = ticket
+            restored.zone = zone
+            return restored
+        }
     }
 }
 

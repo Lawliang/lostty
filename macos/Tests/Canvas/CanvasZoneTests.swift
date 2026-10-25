@@ -167,6 +167,42 @@ struct CanvasZoneTests {
         #expect(model.zone(for: CGRect(x: 100, y: 100, width: 400, height: 300)) == nil)
     }
 
+    @Test func undoingAMovePutsTheZonesAndTheirCardsBack() {
+        var model = CanvasModel()
+        model.addZone(zone(project, CGRect(x: 0, y: 0, width: 2000, height: 1000)))
+        model.addZone(zone(domain, CGRect(x: 0, y: 0, width: 800, height: 600), in: project))
+        model.add(a, frame: CGRect(x: 100, y: 100, width: 400, height: 300))
+        model.add(b, frame: CGRect(x: 3000, y: 0, width: 400, height: 300))
+        let original = model
+        let before = model.zoneSnapshot(cards: model.members(of: project))
+        model.moveZone(project, by: CGSize(width: 100, height: 200))
+        let after = model.zoneSnapshot(cards: Set(before.frames.keys))
+        model.restore(before)
+        #expect(model == original)
+        model.restore(after)
+        #expect(model.zone(project)?.frame == CGRect(x: 100, y: 200, width: 2000, height: 1000))
+        #expect(model.card(a)?.frame == CGRect(x: 200, y: 300, width: 400, height: 300))
+    }
+
+    @Test func undoingARemovalPutsItsTicketsBackInTheirZones() {
+        var model = CanvasModel()
+        model.addZone(zone(project, CGRect(x: 0, y: 0, width: 2000, height: 1000)))
+        model.addZone(zone(domain, CGRect(x: 0, y: 0, width: 800, height: 600), in: project))
+        let zones = model.zones
+        let tickets = [
+            CanvasTicket(key: "LT-1", zone: domain), CanvasTicket(key: "LT-2", zone: other), CanvasTicket(key: "LT-3"),
+        ]
+        let gone = model.removeZone(project)
+        var before = model.zoneSnapshot(tickets: tickets.filter { $0.zone.map(gone.contains) == true })
+        before.zones = zones
+        let left = tickets.map { $0.leaving(gone) }
+        // Made after the removal: Undo leaves it as it is.
+        let later = CanvasTicket(key: "LT-4")
+        model.restore(before)
+        #expect(model.zones == zones)
+        #expect(before.restoring(left + [later]) == tickets + [later])
+    }
+
     @Test func aZoneFromCardsInAProjectIsADomainOfIt() {
         var model = CanvasModel()
         model.addZone(zone(project, CGRect(x: 0, y: 0, width: 2000, height: 1000)))

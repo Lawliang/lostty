@@ -74,7 +74,7 @@ final class CanvasZoneView: NSView {
                 edges: edges,
                 frame: { [weak canvas] in canvas?.model.zone(id)?.frame },
                 resize: { [weak canvas] frame in canvas?.setZoneFrame(frame, of: id) },
-                hold: { [weak canvas] holding in if !holding { canvas?.cardFrameDidSettle() } })
+                hold: { [weak canvas] holding in canvas?.holdZoneResize(holding) })
             handles.append(handle)
             addSubview(handle)
         }

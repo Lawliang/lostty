@@ -71,6 +71,8 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     var overGroup = false
     /// Cards whose panes are moving to a window: gone for good, not for Undo.
     private var moving: Set<UUID> = []
+    /// The zones as a zone resize under way found them, for its Undo.
+    private var zoneResizeStart: CanvasZoneSnapshot?
     /// Each pane's zone and the zones as they were, when last worked out.
     private var membership = (panes: CanvasPaneZones(), model: CanvasModel())
     /// The zone file last written for each pane in a zone.
@@ -445,7 +447,9 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     /// Adds a zone at `frame`, a domain of `parent` or a project, unless
     /// it breaks the rules.
     func addZone(_ frame: CGRect, parent: UUID?) {
+        let before = model.zoneSnapshot()
         guard model.addZone(model.newZone(frame, parent: parent)) else { return }
+        registerZoneUndo("New Zone", before)
         zonesDidChange()
     }
 
@@ -485,7 +489,8 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     /// where it was when the move breaks the rules.
     func moveZone(_ id: UUID, by delta: CGSize) {
         let held = model.members(of: id)
-        model.moveZone(id, by: delta)
+        let before = model.zoneSnapshot(cards: held)
+        if delta != .zero, model.moveZone(id, by: delta) != nil { registerZoneUndo("Move Zone", before) }
         for card in held { if let frame = model.card(card)?.frame { view(card)?.frame = frame } }
         zonesDidChange()
         updateSelectionOutline()
@@ -498,12 +503,50 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         zonesDidChange(settled: false)
     }
 
+    /// A zone resize began, or ended: one Undo for the whole drag.
+    func holdZoneResize(_ holding: Bool) {
+        if holding {
+            zoneResizeStart = model.zoneSnapshot()
+            return
+        }
+        if let start = zoneResizeStart, start.zones != model.zones { registerZoneUndo("Resize Zone", start) }
+        zoneResizeStart = nil
+        cardFrameDidSettle()
+    }
+
     /// Removes zone `id` and its domains; the cards stay, and the tickets
     /// made in them are in no zone, keeping their keys.
     func removeZone(_ id: UUID) {
+        let zones = model.zones
         let gone = model.removeZone(id)
+        guard !gone.isEmpty else { return }
+        var before = model.zoneSnapshot(tickets: tickets.filter { $0.zone.map(gone.contains) == true })
+        before.zones = zones
+        registerZoneUndo("Remove Zone", before)
         setTickets(tickets.map { $0.leaving(gone) })
         zonesDidChange()
+    }
+
+    /// Undo `action` puts the zones back as `before` had them, and Redo
+    /// puts them back as they are now.
+    private func registerZoneUndo(_ action: String, _ before: CanvasZoneSnapshot) {
+        guard let manager = (NSApp.delegate as? AppDelegate)?.undoManager else { return }
+        manager.setActionName(action)
+        manager.registerUndo(withTarget: self, expiresAfter: ghostty.config.undoTimeout) { canvas in
+            canvas.restoreZones(before, action)
+        }
+    }
+
+    private func restoreZones(_ snapshot: CanvasZoneSnapshot, _ action: String) {
+        let now = model.zoneSnapshot(
+            cards: Set(snapshot.frames.keys), tickets: tickets.filter { $0.key.map(snapshot.ticketZones.keys.contains) == true })
+        registerZoneUndo(action, now)
+        model.restore(snapshot)
+        for card in snapshot.frames.keys { if let frame = model.card(card)?.frame { view(card)?.frame = frame } }
+        setTickets(snapshot.restoring(tickets))
+        zonesDidChange()
+        updateSelectionOutline()
+        cardFrameDidSettle()
     }
 
     /// Zone `id`'s name, color, folder, brief or key prefix, from its
