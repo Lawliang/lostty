@@ -167,7 +167,6 @@ fn agents(alloc: Allocator) []const zone.Agent {
     return list.items;
 }
 
-/// `$CLAUDE_CONFIG_DIR/sessions`, else `~/.claude/sessions`.
 fn sessionsDir(alloc: Allocator) ?[]const u8 {
     if (std.posix.getenv("CLAUDE_CONFIG_DIR")) |config| if (config.len > 0)
         return std.fs.path.join(alloc, &.{ config, "sessions" }) catch null;

@@ -15,9 +15,7 @@ struct CanvasZoneTests {
         var model = CanvasModel()
         model.addZone(zone(project, CGRect(x: 0, y: 0, width: 2000, height: 1000)))
         #expect(model.zone(for: CGRect(x: 100, y: 100, width: 400, height: 300)) == project)
-        // Hanging out past the edge, centre (1900, 500) still inside.
         #expect(model.zone(for: CGRect(x: 1700, y: 350, width: 400, height: 300)) == project)
-        // Partly inside, centre (2050, 500) outside.
         #expect(model.zone(for: CGRect(x: 1800, y: 350, width: 500, height: 300)) == nil)
     }
 
@@ -27,11 +25,9 @@ struct CanvasZoneTests {
         model.addZone(zone(project, CGRect(x: 0, y: 0, width: 2000, height: 1000)))
         model.add(a, frame: CGRect(x: 700, y: 500, width: 600, height: 400))
         model.add(b, frame: CGRect(x: 1300, y: 500, width: 600, height: 400))
-        // Right is taken and below leaves the zone: left.
         #expect(model.placement(beside: a) == CGRect(x: 100, y: 500, width: 600, height: 400))
         model.add(c, frame: CGRect(x: 100, y: 500, width: 600, height: 400))
         #expect(model.placement(beside: a) == CGRect(x: 700, y: 100, width: 600, height: 400))
-        // No side inside the zone is free: below, as outside zones.
         model.add(d, frame: CGRect(x: 700, y: 100, width: 600, height: 400))
         #expect(model.placement(beside: a) == CGRect(x: 700, y: 900, width: 600, height: 400))
     }
@@ -145,7 +141,6 @@ struct CanvasZoneTests {
         let beside = model.addZone(zone(sibling, CGRect(x: 1000, y: 0, width: 1000, height: 600), in: project))
         let movedOut = model.moveZone(sibling, by: CGSize(width: 100, height: 0))
         let movedOver = model.moveZone(sibling, by: CGSize(width: -100, height: 0))
-        // No third level, and no domain without its project.
         let thirdLevel = model.addZone(zone(other, CGRect(x: 100, y: 100, width: 400, height: 300), in: domain))
         let orphan = model.addZone(zone(other, CGRect(x: 5000, y: 0, width: 400, height: 300), in: UUID()))
         #expect(inside)
@@ -197,7 +192,6 @@ struct CanvasZoneTests {
         #expect(model.card(a)?.frame == CGRect(x: 200, y: 300, width: 400, height: 300))
         #expect(model.card(b)?.frame == CGRect(x: 1300, y: 400, width: 400, height: 300))
         #expect(model.card(c)?.frame == CGRect(x: 3000, y: 0, width: 400, height: 300))
-        // A domain takes only its own cards.
         let movedWithDomain = model.moveZone(domain, by: CGSize(width: 100, height: 0))
         #expect(movedWithDomain == [a])
         #expect(model.card(a)?.frame == CGRect(x: 300, y: 300, width: 400, height: 300))
@@ -245,7 +239,6 @@ struct CanvasZoneTests {
         var before = model.zoneSnapshot(tickets: tickets.filter { $0.zone.map(gone.contains) == true })
         before.zones = zones
         let left = tickets.map { $0.leaving(gone) }
-        // Made after the removal: Undo leaves it as it is.
         let later = CanvasTicket(key: "LT-4")
         model.restore(before)
         #expect(model.zones == zones)
@@ -263,9 +256,7 @@ struct CanvasZoneTests {
         let around = model.zoneAround([a, b])
         #expect(around?.frame == CGRect(x: 60, y: 60, width: 980, height: 380))
         #expect(around?.parent == project)
-        // Clipped 12 inside the project's bottom edge.
         #expect(model.zoneAround([c])?.frame == CGRect(x: 1460, y: 760, width: 480, height: 228))
-        // Clipped 12 inside its left edge and 48 below its top, clear of its label.
         #expect(model.zoneAround([d])?.frame == CGRect(x: 12, y: 48, width: 428, height: 292))
     }
 
@@ -275,7 +266,6 @@ struct CanvasZoneTests {
         let around = model.zoneAround([a])
         let added = around.map { model.addZone(zone(project, $0.frame)) }
         #expect(added == true)
-        // The project is (60, 60, 480, 380).
         let domain = model.zoneAround([a])
         #expect(domain?.frame == CGRect(x: 72, y: 108, width: 456, height: 320))
         #expect(domain?.parent == project)
@@ -287,7 +277,6 @@ struct CanvasZoneTests {
         model.add(a, frame: CGRect(x: 3000, y: 0, width: 400, height: 300))
         model.add(b, frame: CGRect(x: 3500, y: 500, width: 400, height: 300))
         let around = model.zoneAround([a, b])
-        // Clipped to the document's top edge.
         #expect(around?.frame == CGRect(x: 2960, y: 0, width: 980, height: 840))
         #expect(around.map { $0.parent == nil } == true)
     }
@@ -307,7 +296,6 @@ struct CanvasZoneTests {
         model.addZone(CanvasZone(id: project, frame: CGRect(x: 0, y: 0, width: 8000, height: 1000), color: .blue))
         #expect(model.nextColor(parent: nil) == .green)
         model.addZone(CanvasZone(id: other, frame: CGRect(x: 0, y: 2000, width: 1000, height: 1000), color: .green))
-        // Another project's green is free for a domain.
         #expect(model.nextColor(parent: project) == .green)
         for index in 0..<7 {
             let color = model.nextColor(parent: project)
@@ -317,7 +305,6 @@ struct CanvasZoneTests {
         }
         let colors = model.zones.filter { $0.id == project || $0.parent == project }.map(\.color)
         #expect(Set(colors).count == CanvasZone.Color.allCases.count)
-        // All eight taken: round again from the first.
         #expect(model.nextColor(parent: project) == .blue)
     }
 
@@ -353,7 +340,6 @@ struct CanvasZoneTests {
         let grew = model.setZoneFrame(wider, of: project)
         #expect(grew)
         #expect(model.zone(project)?.frame == CGRect(x: 0, y: 0, width: 4500, height: 2100))
-        // Shrinking past the domain is refused; the last allowed frame stays.
         let past = CanvasModel.resized(wider, edges: .right, by: CGSize(width: -4000, height: 0))
         let shrank = model.setZoneFrame(past, of: project)
         #expect(!shrank)

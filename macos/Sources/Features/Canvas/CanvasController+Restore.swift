@@ -22,25 +22,25 @@ extension CanvasController {
             visible: window?.isVisible ?? false, center: view.0, zoom: view.1, cards: saved, board: board, zones: model.zones))
     }
 
+    private static var otherLosttyRunning: Bool {
+        NSWorkspace.shared.runningApplications.contains { app in
+            app.processIdentifier != ProcessInfo.processInfo.processIdentifier
+                && ["com.lawliang.lostty", "com.lawliang.lostty.debug"].contains(app.bundleIdentifier ?? "")
+        }
+    }
+
     /// Rebuilds the canvas at launch; shown only if it was.
     static func restore(_ ghostty: Ghostty.App, state: CanvasRestorableState) {
         guard !state.saved.isEmpty else { return }
         let canvas = shared ?? CanvasController(ghostty)
         shared = canvas
-        // Zones first: a pane restored into its zone hasn't moved there.
         canvas.addZones(state.saved.zones)
         for card in state.saved.cards {
             let focused = card.focused.flatMap { id in card.tree.first { $0.id.uuidString == id } }
             canvas.addCard(tree: card.tree, frame: card.frame, focused: focused)
         }
         canvas.restoreTickets(state.saved)
-        // A Lostty running beside this one (a Debug build and the
-        // installed app) shares the zone files' folder: its panes' aren't stale.
-        let alone = !NSWorkspace.shared.runningApplications.contains { app in
-            app.processIdentifier != ProcessInfo.processInfo.processIdentifier
-                && ["com.lawliang.lostty", "com.lawliang.lostty.debug"].contains(app.bundleIdentifier ?? "")
-        }
-        if alone { canvas.zoneStore.sweep(keeping: Set(canvas.cards.flatMap { $0.surfaceTree.map(\.id) })) }
+        if !otherLosttyRunning { canvas.zoneStore.sweep(keeping: Set(canvas.cards.flatMap { $0.surfaceTree.map(\.id) })) }
         canvas.pendingView = (state.saved.center, state.saved.zoom)
         // The front card was the focused one: it takes keyboard focus when
         // the canvas is next key, not now (that would pull it forward).

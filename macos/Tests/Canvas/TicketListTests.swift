@@ -26,7 +26,6 @@ struct TicketListTests {
         let list = TicketList(tickets: tickets, zones: [mine], selected: "LT-2", folded: [])
         #expect(list.shown == ["LT-1", "LT-3"])
         #expect(list.count(.toDo) == 1)
-        // Selected in another panel's zone: not selected in this one.
         #expect(list.selected == nil)
         #expect(TicketList(tickets: tickets, zones: nil, selected: "LT-2", folded: []).shown == ["LT-1", "LT-2", "LT-3"])
     }

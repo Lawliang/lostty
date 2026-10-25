@@ -50,17 +50,14 @@ final class CanvasZoneLayer: NSView {
         if labels.subviews != shown.map(\.title) { labels.subviews = shown.map(\.title) }
     }
 
-    /// Opens zone `id`'s settings, as a click on its label does.
     func showSettings(_ id: UUID) {
         titles[id]?.label.showSettings()
     }
 
-    /// What each zone's label says beside its name.
     func showCaptions(_ captions: [UUID: CanvasZoneCaption]) {
         for (id, caption) in captions { titles[id]?.caption.show(caption) }
     }
 
-    /// The edges as thick on screen as the zoom has changed.
     func updateEdges() {
         for view in views.values { view.updateEdge(zoom: zoom) }
     }
@@ -79,8 +76,6 @@ final class CanvasZoneLabelLayer: NSView {
     }
 }
 
-/// One zone: a rounded area with a faint fill of its color, a solid edge,
-/// and handles along its edges that resize it.
 final class CanvasZoneView: NSView {
     private var handles: [CardEdgeHandle] = []
     private var isDomain = false
@@ -123,7 +118,6 @@ final class CanvasZoneView: NSView {
         needsLayout = true
     }
 
-    /// 2pt on screen for a project, 1.5pt for a domain, at every zoom.
     func updateEdge(zoom: CGFloat) {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
@@ -244,9 +238,8 @@ final class CanvasZoneLabel: NSView {
     override func mouseDragged(with event: NSEvent) {
         guard let canvas, var drag, let point = documentPoint(event) else { return }
         let delta = CGSize(width: point.x - drag.start.x, height: point.y - drag.start.y)
-        // A click that wobbles isn't a drag.
         let zoom = enclosingScrollView?.magnification ?? 1
-        guard drag.moved || hypot(delta.width, delta.height) * zoom >= 3 else { return }
+        guard drag.moved || hypot(delta.width, delta.height) * zoom >= CanvasController.clickWobble else { return }
         drag.moved = true
         NSCursor.closedHand.set()
         if canvas.previewZoneMove(id, by: delta) { drag.allowed = delta }
@@ -405,7 +398,6 @@ extension CanvasZone.Color {
         }
     }
 
-    /// The zone's fill and edge, faded.
     var tint: NSColor {
         switch self {
         case .blue: Self.rgb(90, 150, 250)

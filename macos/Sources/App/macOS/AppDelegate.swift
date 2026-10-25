@@ -392,7 +392,6 @@ class AppDelegate: NSObject,
         // The context handoff (beta): before the restart resume's hook
         // reinstall, which brings in the handoff's hook events.
         ContextHandoffWiring.start()
-        // Zones: a message the hook kept inside a zone, on the canvas.
         ClaudeRuntime.shared.messageKeptInside = { CanvasController.shared?.messageKeptInside(pane: $0, target: $1) }
         // Restart to Update: put back what window restoration doesn't
         // (Claude's state, Stay Awake, the window setting, hooks). Before

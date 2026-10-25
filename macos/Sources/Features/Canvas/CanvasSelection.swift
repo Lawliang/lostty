@@ -286,8 +286,6 @@ extension CanvasController {
         if let window { updateGroupHover(at: window.mouseLocationOutsideOfEventStream) }
     }
 
-    /// The bar shows the selection's count, Tidy Up's layout, and Zone from
-    /// Selection when a zone fits round the selected cards.
     func updateSelectionBar() {
         surface.selectionBar.rootView = CanvasSelectionBar(
             count: selection.count,

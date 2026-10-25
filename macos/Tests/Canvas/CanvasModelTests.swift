@@ -406,7 +406,6 @@ struct CanvasSavedTests {
         let saved = CanvasSaved<String>(visible: true, center: .zero, zoom: 1, cards: [], zones: [project, domain])
         let back = try JSONDecoder().decode(CanvasSaved<String>.self, from: JSONEncoder().encode(saved))
         #expect(back.zones == [project, domain])
-        // Zones alone are worth bringing back.
         #expect(!back.isEmpty)
     }
 

@@ -37,7 +37,6 @@ struct CanvasTicketTests {
         let suite = "CanvasTicketTests.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
-        // Saved before prefixes: LT-7 was the last handed out.
         defaults.set(7, forKey: "LosttyCanvasLastTicketNumber")
         #expect(CanvasTicket.nextKey(prefix: "LT", after: [], defaults: defaults) == "LT-8")
         #expect(CanvasTicket.nextKey(prefix: "LT", after: [], defaults: defaults, take: true) == "LT-8")

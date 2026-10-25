@@ -317,7 +317,6 @@ final class CardTerminalHost: NSHostingView<CardTerminal> {
 /// resizes it by dragging.
 final class CardEdgeHandle: NSView {
     let edges: CanvasModel.Edges
-    /// Where it is when a drag starts.
     private let currentFrame: () -> CGRect?
     private let resize: (CGRect) -> Void
     /// Told when a drag starts and ends (a terminal card holds its grids).

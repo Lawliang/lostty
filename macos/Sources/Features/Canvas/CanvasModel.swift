@@ -306,8 +306,6 @@ struct CanvasZone: Equatable, Identifiable, Codable {
     /// A project's ticket key prefix as set; `ticketPrefix` is the one used.
     var keyPrefix: String?
 
-    /// A project's tickets' key prefix: the one set, in capitals, else the
-    /// default for its name.
     var ticketPrefix: String {
         let set = (keyPrefix ?? "").filter { $0.isLetter || $0.isNumber }.uppercased()
         return set.isEmpty ? Self.defaultTicketPrefix(name) : set
@@ -335,12 +333,10 @@ struct CanvasZone: Equatable, Identifiable, Codable {
 }
 
 extension CanvasModel {
-    /// The room left round the cards in a zone made from them.
     static let zoneMargin: CGFloat = 40
     /// How far a domain made from cards keeps below its project's top
     /// edge, clear of the project's label (a 26pt pill, 12pt in).
     static let projectLabelBand: CGFloat = 48
-    /// How far it keeps from the project's other edges.
     static let domainInset: CGFloat = 12
 
     func zone(_ id: UUID) -> CanvasZone? {
@@ -589,7 +585,6 @@ struct CanvasZoneSnapshot: Equatable {
     /// By ticket key.
     var ticketZones: [String: UUID?]
 
-    /// `tickets` with the zones this snapshot had them in.
     func restoring(_ tickets: [CanvasTicket]) -> [CanvasTicket] {
         tickets.map { ticket in
             guard let key = ticket.key, let zone = ticketZones[key] else { return ticket }
@@ -677,7 +672,6 @@ struct CanvasWaits: Equatable {
 /// folder and its counts across it and its domains; a domain's brief's
 /// first line.
 struct CanvasZoneCaption: Equatable {
-    /// A card in the zone.
     enum Member {
         case terminal(panes: [UUID])
         case tickets
@@ -757,10 +751,7 @@ struct CanvasSaved<Tree: Codable>: Codable {
         var stack: Int
     }
 
-    /// The tickets, and their open panels.
     struct Board: Codable, Equatable {
-        /// A tickets panel: its frame, its place among every card, back to
-        /// front, and its new ticket's sheet, open with what's typed in it.
         struct Panel: Codable, Equatable {
             var frame: CGRect
             var stack: Int

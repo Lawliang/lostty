@@ -907,7 +907,6 @@ test "guard catalog: a zone's folder is the limit for writes" {
     try std.testing.expect(std.mem.endsWith(u8, out.why, "outside the zone's folder"));
     try std.testing.expectEqual(Group.outside, (try write(zoned, p, .{ .text = try std.fs.path.join(a, &.{ repo, "README.md" }), .dynamic = false })).?.group);
     try std.testing.expect((try run(plain, p, "echo x > ../README.md")) == null);
-    // The repo's settings still apply inside the zone.
     try std.testing.expectEqual(Group.leaving, (try run(zoned, p, "deploy.sh")).?.group);
 }
 

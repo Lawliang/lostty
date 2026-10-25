@@ -12,6 +12,8 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     /// The app's one canvas, made the first time it's opened or restored.
     /// Set only by `show(_:freshCard:)` and `restore(_:state:)`.
     static var shared: CanvasController?
+    /// Screen points a press may move and still be a click.
+    static let clickWobble: CGFloat = 3
 
     /// The canvas while it's the key window: where ⌘N makes a card.
     static var key: CanvasController? {
@@ -59,7 +61,6 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     /// What a marquee under way adds to: the selection it started with
     /// under ⇧, else nothing.
     var marqueeBase: Set<UUID>?
-    /// New Zone was chosen: the next marquee draws a zone instead.
     var drawsZone = false {
         didSet { if drawsZone != oldValue { updateGroupHover(at: window?.mouseLocationOutsideOfEventStream ?? .zero) } }
     }
@@ -73,15 +74,10 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     var ownsCursor = false
     /// Cards whose panes are moving to a window: gone for good, not for Undo.
     private var moving: Set<UUID> = []
-    /// The zones as a zone resize under way found them, for its Undo.
     private var zoneResizeStart: CanvasZoneSnapshot?
-    /// Each pane's zone and the zones as they were, when last worked out.
     private var membership = (panes: CanvasPaneZones(), model: CanvasModel())
-    /// The zone file last written for each pane in a zone.
     private var zoneFiles: [UUID: CanvasZoneFile] = [:]
     let zoneStore = CanvasZoneStore.standard
-    /// Lostty's tmux sessions as last listed: which pane each one shows,
-    /// for the zone files' members.
     private var tmuxSessions: [TmuxSession] = []
     /// The zoom the terminals last rendered at.
     var settledZoom: CGFloat = 1
@@ -93,7 +89,6 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     private var working: Set<UUID> = []
     /// The view to show when the window first opens (a restored canvas's).
     var pendingView: (center: CGPoint, zoom: CGFloat)?
-    /// No cards of either kind, and no zones.
     var isEmpty: Bool { model.cards.isEmpty && model.zones.isEmpty }
     /// Whether the view was set the first time the window showed.
     private(set) var placed = false
@@ -428,15 +423,12 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         if selection.contains(id) { updateSelectionOutline() }
     }
 
-    /// A drag or resize ended, of a card or a zone.
     func cardFrameDidSettle() {
         relistTickets()
         updateVisibility()
         saveSoon()
         zoneMembershipDidChange()
     }
-
-    // MARK: Zones
 
     /// The zones' views follow `model.zones`, and Zone from Selection
     /// whether it can make one. Membership waits for a resize to settle.
@@ -457,20 +449,17 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         zonesDidChange()
     }
 
-    /// Saved zones back on the canvas.
     func addZones(_ saved: [CanvasZone]) {
         model.addZones(saved)
+        membership.panes = CanvasPaneZones()
         zonesDidChange()
     }
 
-    /// A zone round the selected cards.
     func zoneFromSelection() {
         guard let around = model.zoneAround(selection) else { return }
         addZone(around.frame, parent: around.parent)
     }
 
-    /// New Zone: the next drag on the canvas between the cards draws one;
-    /// Escape cancels.
     func startDrawingZone() {
         canvasClicked()
         selection = []
@@ -556,14 +545,11 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         cardFrameDidSettle()
     }
 
-    /// Zone `id`'s name, color, folder, brief or key prefix, from its
-    /// settings.
     func updateZone(_ id: UUID, _ change: (inout CanvasZone) -> Void) {
         guard model.updateZone(id, change) else { return }
         zonesDidChange()
     }
 
-    /// Zoom to Zone: zone `id` in view, with a margin.
     func zoomToZone(_ id: UUID) {
         guard let frame = model.zone(id)?.frame else { return }
         zoomToFit(frame.insetBy(dx: -CanvasModel.fitMargin, dy: -CanvasModel.fitMargin))
@@ -635,7 +621,6 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         updateZoneCaptions()
     }
 
-    /// Each zone's label says what's in it now (zones spec §3).
     private func updateZoneCaptions() {
         let waiting = Set(waits.since.keys)
         let captions = model.zones.map { zone in
@@ -684,7 +669,6 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
             persistent: true))
     }
 
-    /// Zone `id` in view in the front window, its settings open.
     private func showZoneSettings(_ id: UUID) {
         window?.makeKeyAndOrderFront(nil)
         zoomToZone(id)
@@ -798,7 +782,6 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         updateZoneCaptions()
     }
 
-    /// The canvas's tickets are now `new`: every panel lists them.
     func setTickets(_ new: [CanvasTicket]) {
         guard new != tickets else { return }
         relistTickets()
@@ -806,8 +789,6 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         saveSoon()
     }
 
-    /// Every panel lists its tickets again: they, the zone it's in, or
-    /// that zone's domains changed.
     private func relistTickets() {
         for panel in ticketPanels.values { panel.board.objectWillChange.send() }
     }
@@ -867,8 +848,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         }
         let point = scrollView.document.convert(event.locationInWindow, from: nil)
         let delta = CGSize(width: point.x - drag.point.x, height: point.y - drag.point.y)
-        // A click that wobbles isn't a drag.
-        guard drag.moved || hypot(delta.width, delta.height) * scrollView.magnification >= 3 else { return true }
+        guard drag.moved || hypot(delta.width, delta.height) * scrollView.magnification >= Self.clickWobble else { return true }
         drag.moved = true
         groupDrag = drag
         NSCursor.closedHand.set()
@@ -925,7 +905,6 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         ticketWillFocus(id)
     }
 
-    /// The zone ticket panel `id` is in, where it is now.
     func ticketZone(of id: UUID) -> UUID? {
         model.card(id).flatMap { model.zone(for: $0.frame) }
     }

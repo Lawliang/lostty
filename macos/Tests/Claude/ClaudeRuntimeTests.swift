@@ -60,7 +60,6 @@ struct ClaudeRuntimeTests {
         runtime.messageKeptInside = { kept.append(($0, $1)) }
         runtime.userVarChanged(pane, name: "LOSTTY_CLAUDE", value: action("Reading Foo.swift"))
         #expect(kept.isEmpty)
-        // Exact JSON `+claude-state tool` encodes for a denied SendMessage (see protocol.zig).
         runtime.userVarChanged(
             pane, name: "LOSTTY_CLAUDE", value: #"{"v":1,"state":"tool","action":"SendMessage","denied":"lostty-a9"}"#)
         #expect(kept.map(\.0) == [pane])

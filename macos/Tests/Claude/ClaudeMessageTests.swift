@@ -35,7 +35,6 @@ struct ClaudeMessageTests {
     }
 
     @Test func readsAMessageKeptInsideTheZone() {
-        // Exact JSON `+claude-state tool` encodes for a denied SendMessage (see protocol.zig).
         let kept = #"{"v":1,"state":"tool","action":"SendMessage","denied":"lostty-a9"}"#
         #expect(ClaudeMessage.denied(kept) == "lostty-a9")
         #expect(ClaudeMessage.action(kept) == "SendMessage")

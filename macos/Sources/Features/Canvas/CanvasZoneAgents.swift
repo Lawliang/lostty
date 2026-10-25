@@ -13,7 +13,6 @@ struct CanvasPaneZones: Equatable {
 
     /// Every pane, in a zone or not.
     var panes: Set<UUID> = []
-    /// The zone of each pane in one.
     var zones: [UUID: UUID] = [:]
 
     /// The panes in both whose zone changed, in pane order. A pane new in
@@ -63,14 +62,11 @@ extension CanvasModel {
         return (["Lostty zone: \(title)\(folder)."] + briefLines(id)).joined(separator: "\n")
     }
 
-    /// What a running session is told when its pane moves into zone `id`.
     func zoneMovedIn(_ id: UUID) -> String? {
         guard let title = zoneTitle(id) else { return nil }
         return (["You're now in zone \(title)."] + briefLines(id)).joined(separator: "\n")
     }
 
-    /// What a running session is told when its pane leaves the zone
-    /// titled `title` for no zone.
     static func zoneMovedOut(of title: String) -> String {
         "You've left zone \(title)."
     }

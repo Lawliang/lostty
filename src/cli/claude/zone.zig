@@ -168,7 +168,6 @@ pub fn othersLine(alloc: Allocator, names: []const []const u8) Allocator.Error!?
     return try std.fmt.allocPrint(alloc, "Other agents in this zone: {s}.", .{list});
 }
 
-/// A hook input's `session_id`.
 pub fn sessionId(alloc: Allocator, input: []const u8) ?[]const u8 {
     const Input = struct { session_id: ?[]const u8 = null };
     const parsed = std.json.parseFromSliceLeaky(Input, alloc, input, .{
