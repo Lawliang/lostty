@@ -491,12 +491,19 @@ extension CanvasModel {
         return Set([id] + zones.filter { $0.parent == id }.map(\.id))
     }
 
-    /// The domain `ticket` is tagged with in a panel in zone `id`: in a
-    /// project's panel, a domain's ticket is.
-    func ticketTag(_ ticket: CanvasTicket, shownIn id: UUID?) -> CanvasZone? {
-        guard let id, zone(id)?.parent == nil, let domain = ticket.zone.flatMap({ zone($0) }),
-              domain.parent == id else { return nil }
-        return domain
+    /// The sections of a panel in zone `id`: a domain's own feature; a
+    /// project's domains, then To assign; outside every zone, every
+    /// domain, then To assign.
+    func ticketSections(shownIn id: UUID?) -> [TicketSection] {
+        if let id, zone(id)?.parent != nil { return [.feature(id)] }
+        return zones.filter { $0.parent != nil && (id == nil || $0.parent == id) }.map { .feature($0.id) } + [.toAssign]
+    }
+
+    /// The features a ticket in zone `id` can be assigned to: its
+    /// project's domains, or every domain for a ticket in no zone.
+    func features(forTicketIn id: UUID?) -> [CanvasZone] {
+        let project = id.flatMap(projectZone)
+        return zones.filter { $0.parent != nil && (project == nil || $0.parent == project) }
     }
 
     /// The key prefix of a ticket made in zone `id`: its project's, or LT

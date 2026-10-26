@@ -40,6 +40,10 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     /// The open tickets panels' cards. They share `model` with the terminal
     /// cards, so they stack, block clicks and fit to view alike.
     private(set) var ticketPanels: [UUID: TicketBoardView] = [:]
+    /// Queued tickets the owner pressed Start on, or sent back: they go in
+    /// when their agent is free, auto-start or not. Not saved. Written by
+    /// CanvasController+Board alone.
+    var startedByHand: Set<String> = []
     /// A new ticket's sheet left open in a panel since closed: the next
     /// panel opened takes it.
     var parkedDraft: CanvasTicket? {
@@ -789,7 +793,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         saveSoon()
     }
 
-    private func relistTickets() {
+    func relistTickets() {
         for panel in ticketPanels.values { panel.board.objectWillChange.send() }
     }
 

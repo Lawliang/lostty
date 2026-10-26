@@ -137,8 +137,8 @@ final class TicketBoardView: NSView, CanvasStacked {
         case 115: board.list.moveToEnd(last: false)
         case 119: board.list.moveToEnd(last: true)
         case 123:
-            guard let state = selected.flatMap(board.list.ticket)?.state else { return false }
-            withAnimation(TicketBoard.motion) { board.list.fold(state) }
+            guard let ticket = selected.flatMap(board.list.ticket) else { return false }
+            withAnimation(TicketBoard.motion) { board.list.fold(board.list.section(of: ticket)) }
         case 124: withAnimation(TicketBoard.motion) { board.list.folded = [] }
         case 36, 76:
             guard selected != nil else { return false }
@@ -166,6 +166,7 @@ final class TicketBoardView: NSView, CanvasStacked {
         case "d":
             guard selected != nil else { return false }
             board.focusRequest = .details
+        case "f": board.pick(.feature)
         case "p": board.pick(.priority)
         case "t": board.pick(.kind)
         case "a": board.pick(.assignee)

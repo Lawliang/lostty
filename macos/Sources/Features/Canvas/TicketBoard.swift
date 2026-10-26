@@ -9,10 +9,10 @@ import SwiftUI
 @MainActor
 final class TicketBoard: ObservableObject {
     /// The fields the keyboard can be sent to.
-    enum Field: Hashable { case summary, details, assignee, newSummary, newDetails, newAssignee }
+    enum Field: Hashable { case summary, details, assignee, newSummary, newDetails, newAssignee, sendBack }
 
     /// What a menu picks.
-    enum Property: Hashable { case state, priority, kind, assignee }
+    enum Property: Hashable { case state, feature, priority, kind, assignee }
 
     /// A property's row in the inspector, or its chip on the new ticket.
     struct Anchor: Hashable {
@@ -28,15 +28,18 @@ final class TicketBoard: ObservableObject {
     /// The panel's card on the canvas.
     let id = UUID()
     @Published private var selected: String?
-    @Published private var folded: Set<CanvasTicket.State> = []
+    @Published private var folded: Set<TicketSection> = []
 
     /// The canvas's tickets, as this panel lists them: those of the zone
-    /// it's in (with its domains'), or every one outside every zone. Each
-    /// panel has its own selection and folds; the tickets are the canvas's.
+    /// it's in (with its domains'), or every one outside every zone, in a
+    /// section for each feature. Each panel has its own selection and
+    /// folds; the tickets are the canvas's.
     var list: TicketList {
         get {
-            let zones = canvas.flatMap { $0.model.ticketZones(shownIn: $0.ticketZone(of: id)) }
-            return TicketList(tickets: canvas?.tickets ?? [], zones: zones, selected: selected, folded: folded)
+            let zone = canvas?.ticketZone(of: id)
+            return TicketList(
+                tickets: canvas?.tickets ?? [], zones: canvas?.model.ticketZones(shownIn: zone),
+                sections: canvas?.model.ticketSections(shownIn: zone) ?? [.toAssign], selected: selected, folded: folded)
         }
         set {
             if selected != newValue.selected { selected = newValue.selected }
@@ -44,6 +47,9 @@ final class TicketBoard: ObservableObject {
             canvas?.setTickets(newValue.tickets)
         }
     }
+
+    /// The ticket whose Send back note is being written, under its row.
+    @Published var sendingBack: String?
 
     /// The new ticket's sheet while it's open, with what's typed in it.
     @Published var draft: CanvasTicket? {
@@ -80,9 +86,41 @@ final class TicketBoard: ObservableObject {
         list.selected.flatMap(list.ticket)
     }
 
-    /// The domain `ticket`'s row is tagged with, in a project's panel.
-    func tag(of ticket: CanvasTicket) -> CanvasZone? {
-        canvas.flatMap { $0.model.ticketTag(ticket, shownIn: $0.ticketZone(of: id)) }
+    /// A section's header: its feature's name (with its project's,
+    /// outside every zone), or To assign; just Tickets when it's the only
+    /// section.
+    func title(of section: TicketSection) -> String {
+        guard case .feature(let domain) = section else { return list.sections.count == 1 ? "Tickets" : "To assign" }
+        guard let canvas else { return "" }
+        let name = canvas.ticketZone(of: id) == nil ? canvas.model.zoneTitle(domain) : canvas.model.zone(domain)?.name
+        return name ?? ""
+    }
+
+    func zone(of section: TicketSection) -> CanvasZone? {
+        guard case .feature(let domain) = section else { return nil }
+        return canvas?.model.zone(domain)
+    }
+
+    /// The feature `ticket` is in, or To assign, for the inspector.
+    func featureTitle(of ticket: CanvasTicket) -> String {
+        let section = list.section(of: ticket)
+        return section == .toAssign ? "To assign" : title(of: section)
+    }
+
+    /// The agent's card title while `ticket` is working.
+    func agentName(of ticket: CanvasTicket) -> String? {
+        guard ticket.state == .working, let pane = ticket.agentPane else { return nil }
+        return canvas?.agentTitle(pane)
+    }
+
+    /// How a queued ticket starts: by itself, once Start was pressed, or
+    /// waiting for Start.
+    enum Start { case automatic, started, waiting }
+
+    func start(of ticket: CanvasTicket) -> Start? {
+        guard ticket.state == .queued, list.section(of: ticket) != .toAssign, let canvas else { return nil }
+        if canvas.autoStarts(ticket) { return .automatic }
+        return ticket.key.map(canvas.startedByHand.contains) == true ? .started : .waiting
     }
 
     /// The names tickets are assigned to, for the assignee menus.
@@ -109,8 +147,8 @@ final class TicketBoard: ObservableObject {
         list.move(by: delta)
     }
 
-    func toggleFold(_ state: CanvasTicket.State) {
-        withAnimation(Self.motion) { list.fold(state, !list.folded.contains(state)) }
+    func toggleFold(_ section: TicketSection) {
+        withAnimation(Self.motion) { list.fold(section, !list.folded.contains(section)) }
     }
 
     func setState(_ state: CanvasTicket.State, of key: String) {
@@ -123,11 +161,51 @@ final class TicketBoard: ObservableObject {
         setState(ticket.state.next, of: key)
     }
 
+    func start(_ key: String) {
+        canvas?.start(key)
+    }
+
+    func done(_ key: String) {
+        setState(.done, of: key)
+    }
+
+    /// Send back: a note field opens under the row, taking the keyboard.
+    func beginSendBack(_ key: String) {
+        list.selected = key
+        sendingBack = key
+        focusRequest = .sendBack
+    }
+
+    func sendBack(_ key: String, note: String) {
+        sendingBack = nil
+        flash(key)
+        canvas?.sendBack(key, note: note.trimmingCharacters(in: .whitespacesAndNewlines))
+        focusList?()
+    }
+
+    func cancelSendBack() {
+        sendingBack = nil
+        focusList?()
+    }
+
+    /// The Feature menu: into `zone`, at the back of its queue. Undo puts
+    /// back its feature and state.
+    func assign(_ key: String, to zone: UUID?) {
+        guard let old = list.ticket(key) else { return }
+        withAnimation(Self.motion) { list.assign(key, to: zone) }
+        guard let new = list.ticket(key), new != old else { return }
+        flash(key)
+        registerUndo("Move Ticket") { board in
+            guard let now = board.list.ticket(key) else { return }
+            board.change(now.reverting(new, to: old), "Move Ticket")
+        }
+    }
+
     /// A change from a menu or the list, which Undo takes back.
     func change(_ ticket: CanvasTicket, _ action: String) {
         guard let key = ticket.key, let old = list.ticket(key), old != ticket else { return }
         withAnimation(Self.motion) { list.update(ticket) }
-        if old.state != ticket.state { flash(key) }
+        if old.state != ticket.state || old.zone != ticket.zone { flash(key) }
         // Only what this changed goes back, not typing since.
         registerUndo(action) { board in
             guard let now = board.list.ticket(key) else { return }
@@ -173,10 +251,11 @@ final class TicketBoard: ObservableObject {
 
     /// C, the + in a section's header, or New Ticket: the sheet opens (with
     /// what was typed before, if it was left open), its summary taking the
-    /// keyboard.
-    func newTicket() {
+    /// keyboard. From a feature's header, the ticket goes in that feature.
+    func newTicket(in section: TicketSection = .toAssign) {
         if draft == nil {
-            withAnimation(.easeOut(duration: 0.18)) { draft = CanvasTicket() }
+            let feature: UUID? = if case .feature(let domain) = section { domain } else { nil }
+            withAnimation(.easeOut(duration: 0.18)) { draft = CanvasTicket(zone: feature) }
         }
         needsSummary = false
         focusRequest = .newSummary
@@ -188,9 +267,10 @@ final class TicketBoard: ObservableObject {
         focusList?()
     }
 
-    /// The new ticket gets the zone the panel is in and its next key, and
-    /// joins the list, selected. With Create More on the sheet stays, for
-    /// another of the same kind.
+    /// The new ticket gets its feature, else the zone the panel is in, and
+    /// its next key, and joins the list, selected, at the back of its
+    /// queue. With Create More on the sheet stays, for another of the same
+    /// kind.
     func create() {
         guard var ticket = draft else { return }
         guard ticket.canSave else {
@@ -198,7 +278,8 @@ final class TicketBoard: ObservableObject {
             focusRequest = .newSummary
             return
         }
-        ticket.zone = canvas?.ticketZone(of: id)
+        let feature = ticket.zone
+        ticket.zone = feature ?? canvas?.ticketZone(of: id)
         let key = canvas?.nextTicketKey(in: ticket.zone, take: true) ?? nextKey
         ticket.key = key
         ticket.summary = ticket.summary.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -208,7 +289,7 @@ final class TicketBoard: ObservableObject {
         registerUndo("New Ticket") { $0.delete(key, "New Ticket") }
         needsSummary = false
         if createMore {
-            draft = CanvasTicket(kind: ticket.kind, priority: ticket.priority, assignee: ticket.assignee)
+            draft = CanvasTicket(kind: ticket.kind, priority: ticket.priority, assignee: ticket.assignee, zone: feature)
             focusRequest = .newSummary
         } else {
             withAnimation(.easeOut(duration: 0.15)) { draft = nil }
@@ -241,6 +322,8 @@ final class TicketBoard: ObservableObject {
             for (index, state) in CanvasTicket.State.byOwner.enumerated() {
                 add(state.title, state.menuImage, on: ticket.state == state, key: "\(index + 1)") { $0.move(to: state, by: .owner) }
             }
+        case .feature:
+            addFeatures(for: ticket, to: menu)
         case .priority:
             for (index, priority) in CanvasTicket.Priority.allCases.enumerated() {
                 add(priority.title, priority.menuImage, on: ticket.priority == priority, key: "\(index + 1)") { $0.priority = priority }
@@ -263,6 +346,29 @@ final class TicketBoard: ObservableObject {
             menu.addItem(other)
         }
         return menu
+    }
+
+    /// The Feature menu: To assign, then the features the ticket can go
+    /// in, the one it's in checked.
+    private func addFeatures(for ticket: CanvasTicket, to menu: NSMenu) {
+        guard let canvas, let key = ticket.key else { return }
+        let model = canvas.model
+        let outside = canvas.ticketZone(of: id) == nil
+        let current = list.section(of: ticket)
+        func add(_ title: String, _ image: NSImage?, _ section: TicketSection, zone: UUID?) {
+            let item = TicketMenuItem(title: title, keyEquivalent: "") { [weak self] in self?.assign(key, to: zone) }
+            item.image = image
+            item.state = current == section ? .on : .off
+            menu.addItem(item)
+        }
+        add("To assign", NSImage(systemSymbolName: "tray", accessibilityDescription: nil), .toAssign,
+            zone: ticket.zone.flatMap(model.projectZone))
+        let features = model.features(forTicketIn: ticket.zone)
+        if !features.isEmpty { menu.addItem(.separator()) }
+        for zone in features {
+            add((outside ? model.zoneTitle(zone.id) : nil) ?? zone.name,
+                NSImage.ticketSymbol("circle.fill", color: Color(nsColor: zone.color.pill)), .feature(zone.id), zone: zone.id)
+        }
     }
 
     private func apply(_ set: (inout CanvasTicket) -> Void, new: Bool, _ property: Property) {

@@ -257,6 +257,17 @@ extension CanvasTicket.State {
         }
     }
 
+    /// Where it sits in its feature's section, top first.
+    var rank: Int {
+        switch self {
+        case .working: 0
+        case .queued: 1
+        case .review: 2
+        case .blocked: 3
+        case .done: 4
+        }
+    }
+
     /// The states the owner can move a ticket to, for the keys and menus.
     static let byOwner = allCases.filter { next in allCases.contains { $0.allows(next, by: .owner) } }
 
