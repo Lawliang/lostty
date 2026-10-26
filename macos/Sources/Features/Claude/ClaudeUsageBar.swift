@@ -90,7 +90,9 @@ struct ClaudeUsageBar: View {
                 .onAppear { width = geo.size.width }
                 .onChange(of: geo.size.width) { width = $0 }
         })
-        .background(Color(nsColor: chrome))
+        .background {
+            if style.isMockup { MockupBarGlass(color: chrome) } else { Color(nsColor: chrome) }
+        }
         .overlay(alignment: .top) {
             if style.isMockup {
                 Rectangle().fill(Color(nsColor: LosttyWindowStyle.hairline(on: chrome))).frame(height: 0.5)

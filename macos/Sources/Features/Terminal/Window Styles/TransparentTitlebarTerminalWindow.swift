@@ -13,6 +13,12 @@ class TransparentTitlebarTerminalWindow: TerminalWindow {
     private var titlebarHairline: NSView?
     private var centeredTitle: NSTextField?
     private var mockupButtons: CardWindowButtons?
+    private var mockupGlass: PassthroughHostingView<MockupBarGlass>?
+
+    /// Lostty: clear in the Mockup window style, under its glass.
+    private var titlebarColor: CGColor? {
+        LosttyWindowStyle.isMockup ? NSColor.clear.cgColor : preferredBackgroundColor?.cgColor
+    }
 
     override var title: String {
         didSet { centeredTitle?.stringValue = title }
@@ -107,7 +113,7 @@ class TransparentTitlebarTerminalWindow: TerminalWindow {
 
             titlebarView.layer?.backgroundColor = (isGlassStyle && isTransparentTitlebar)
                 ? NSColor.clear.cgColor
-                : preferredBackgroundColor.map(LosttyWindowStyle.bar(over:))?.cgColor // Lostty: the window style's bar
+                : titlebarColor
             syncMockupTitlebar(in: titlebarView)
         }
 
@@ -122,7 +128,7 @@ class TransparentTitlebarTerminalWindow: TerminalWindow {
 
         // Setup the titlebar background color to match ours
         titlebarContainer.wantsLayer = true
-        titlebarContainer.layer?.backgroundColor = preferredBackgroundColor.map(LosttyWindowStyle.bar(over:))?.cgColor // Lostty
+        titlebarContainer.layer?.backgroundColor = titlebarColor
         syncMockupTitlebar(in: titlebarContainer)
 
         // See the docs for the function that sets this to true on why
@@ -132,8 +138,8 @@ class TransparentTitlebarTerminalWindow: TerminalWindow {
         titlebarAppearsTransparent = true
     }
 
-    /// Lostty: in the Mockup window style, the mockup's flat 12pt window
-    /// buttons in place of the system's, the title centered at 12pt in the
+    /// Lostty: in the Mockup window style, glass for the bar, the mockup's
+    /// flat 12pt window buttons in place of the system's, the title centered at 12pt in the
     /// terminal's text color, and a hairline along the title bar's bottom.
     private func syncMockupTitlebar(in titlebar: NSView) {
         let mockup = LosttyWindowStyle.isMockup
@@ -142,11 +148,21 @@ class TransparentTitlebarTerminalWindow: TerminalWindow {
         }
         titleVisibility = mockup ? .hidden : .visible
         guard mockup, let background = preferredBackgroundColor else {
-            for view in [titlebarHairline, centeredTitle, mockupButtons] as [NSView?] { view?.removeFromSuperview() }
-            (titlebarHairline, centeredTitle, mockupButtons) = (nil, nil, nil)
+            for view in [titlebarHairline, centeredTitle, mockupButtons, mockupGlass] as [NSView?] { view?.removeFromSuperview() }
+            (titlebarHairline, centeredTitle, mockupButtons, mockupGlass) = (nil, nil, nil, nil)
             return
         }
         let bar = LosttyWindowStyle.bar(over: background)
+
+        if mockupGlass?.superview !== titlebar {
+            mockupGlass?.removeFromSuperview()
+            let glass = PassthroughHostingView(rootView: MockupBarGlass(color: bar))
+            glass.frame = titlebar.bounds
+            glass.autoresizingMask = [.width, .height]
+            titlebar.addSubview(glass, positioned: .below, relativeTo: nil)
+            mockupGlass = glass
+        }
+        mockupGlass?.rootView = MockupBarGlass(color: bar)
 
         if mockupButtons?.superview !== titlebar {
             mockupButtons?.removeFromSuperview()

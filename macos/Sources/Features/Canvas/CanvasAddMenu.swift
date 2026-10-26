@@ -205,16 +205,17 @@ struct CanvasAddLitGlass<S: InsettableShape>: ViewModifier {
 
 /// The glass's body: Liquid Glass on macOS 26, which bends the cards
 /// behind it and casts its own shadow; before that, the thinnest
-/// material with one.
-private struct CanvasAddGlass<S: Shape>: ViewModifier {
+/// material with one. A window bar's is tinted its own color.
+struct CanvasAddGlass<S: Shape>: ViewModifier {
     let shape: S
     let dark: Bool
     let interactive: Bool
+    var tint: Color?
 
     func body(content: Content) -> some View {
         if #available(macOS 26, *) {
             content.glassEffect(
-                .regular.tint(dark ? .black.opacity(0.35) : .white.opacity(0.35)).interactive(interactive),
+                .regular.tint(tint ?? (dark ? .black.opacity(0.35) : .white.opacity(0.35))).interactive(interactive),
                 in: shape)
         } else {
             content.background(
@@ -225,7 +226,7 @@ private struct CanvasAddGlass<S: Shape>: ViewModifier {
 }
 
 /// The glass's edge: brightest at the top left, where the light falls.
-private struct CanvasAddRim<S: InsettableShape>: View {
+struct CanvasAddRim<S: InsettableShape>: View {
     let shape: S
     let dark: Bool
     let lit: Bool
@@ -246,13 +247,16 @@ private struct CanvasAddRim<S: InsettableShape>: View {
 /// warm fringe. Brighter on dark glass, where it adds light. The arcs are
 /// stops of one gradient round the center, so they hug any shape's edge,
 /// and turning the gradient moves the light without turning the shape.
-private struct CanvasAddPrism<S: InsettableShape>: View {
+/// A long, thin shape passes its own `stops`, as its corners sit at other
+/// angles.
+struct CanvasAddPrism<S: InsettableShape>: View {
     let shape: S
     let dark: Bool
     let turn: Angle
+    var stops = Self.stops
 
     var body: some View {
-        let gradient = AngularGradient(stops: Self.stops, center: .center,
+        let gradient = AngularGradient(stops: stops, center: .center,
                                        startAngle: turn, endAngle: turn + .degrees(360))
         ZStack {
             // A soft bloom under a sharp line.
@@ -269,14 +273,15 @@ private struct CanvasAddPrism<S: InsettableShape>: View {
 
     /// Clear but for the two arcs. The gradient runs clockwise from the
     /// right: 0.75 is the top.
+    static var indigo: Color { Color(red: 0.35, green: 0.25, blue: 0.95) }
+    static var ember: Color { Color(red: 1, green: 0.45, blue: 0.2) }
+
     private static var stops: [Gradient.Stop] {
-        let indigo = Color(red: 0.35, green: 0.25, blue: 0.95)
-        let ember = Color(red: 1, green: 0.45, blue: 0.2)
-        return arc(from: 0.27, to: 0.49, [.clear, ember, .white, .cyan, .blue, .clear])
+        arc(from: 0.27, to: 0.49, [.clear, ember, .white, .cyan, .blue, .clear])
             + arc(from: 0.77, to: 0.99, [.clear, .white, .cyan, .blue, indigo, .clear])
     }
 
-    private static func arc(from: Double, to: Double, _ colors: [Color]) -> [Gradient.Stop] {
+    static func arc(from: Double, to: Double, _ colors: [Color]) -> [Gradient.Stop] {
         colors.enumerated().map { index, color in
             Gradient.Stop(color: color, location: from + (to - from) * Double(index) / Double(colors.count - 1))
         }

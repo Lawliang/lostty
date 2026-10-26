@@ -1,6 +1,7 @@
 #if os(macOS)
 import AppKit
 import GhosttyKit
+import SwiftUI
 
 /// Lostty's two window styles. Classic: the title and bottom bars take
 /// the panes' color. Mockup, the canvas drag-select mockup's: a terminal
@@ -128,6 +129,52 @@ final class WindowStylePreferences: ObservableObject {
             item.state = WindowStylePreferences.shared.isMockup ? .on : .off
             return true
         }
+    }
+}
+
+/// The Mockup window style's title and bottom bars: the canvas + button's
+/// Liquid Glass tinted the bar's color, its rim, and its prism's two arcs
+/// at the bar's top-right and bottom-left corners. Nothing under it moves,
+/// so it draws again only when the bar does.
+struct MockupBarGlass: View {
+    let color: NSColor
+
+    var body: some View {
+        let dark = !color.isLightColor
+        GeometryReader { geo in
+            Color.clear
+                .modifier(CanvasAddGlass(
+                    shape: Rectangle(), dark: dark, interactive: false, tint: Color(nsColor: color).opacity(0.85)))
+                .overlay(CanvasAddPrism(
+                    shape: Rectangle(), dark: dark, turn: .zero, stops: Self.stops(for: geo.size)))
+                .overlay(CanvasAddRim(shape: Rectangle(), dark: dark, lit: false))
+        }
+        .allowsHitTesting(false)
+    }
+
+    /// Each arc runs from `reach` along the long edge to the corner and on
+    /// to the middle of the short edge. The gradient runs clockwise from
+    /// the right, so a wide bar's corners sit just short of 0.5 and 1.
+    static func stops(for size: CGSize) -> [Gradient.Stop] {
+        guard size.width > 0, size.height > 0 else { return [] }
+        let (halfWidth, halfHeight) = (size.width / 2, size.height / 2)
+        let reach = min(90, size.width / 3)
+        func location(_ x: CGFloat, _ y: CGFloat) -> Double {
+            let degrees = atan2(Double(y), Double(x)) * 180 / .pi
+            return (degrees < 0 ? degrees + 360 : degrees) / 360
+        }
+        func arc(_ start: Double, _ corner: Double, _ end: Double, _ colors: [Color]) -> [Gradient.Stop] {
+            CanvasAddPrism<Rectangle>.arc(from: start, to: corner, Array(colors.prefix(3)))
+                + CanvasAddPrism<Rectangle>.arc(from: corner, to: end, Array(colors.suffix(3))).dropFirst()
+        }
+        let prism = CanvasAddPrism<Rectangle>.self
+        let bottomLeft = arc(
+            location(-(halfWidth - reach), halfHeight), location(-halfWidth, halfHeight), location(-halfWidth, halfHeight * 0.1),
+            [.clear, prism.ember, .white, .white, .cyan, .clear])
+        let topRight = arc(
+            location(halfWidth - reach, -halfHeight), location(halfWidth, -halfHeight), location(halfWidth, -halfHeight * 0.1),
+            [.clear, .white, .cyan, .cyan, prism.indigo, .clear])
+        return bottomLeft + topRight
     }
 }
 #endif
