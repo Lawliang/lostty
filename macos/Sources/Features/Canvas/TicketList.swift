@@ -121,15 +121,9 @@ struct TicketList: Equatable {
     /// goes to the top of Completed; moved anywhere, its section unfolds,
     /// so it doesn't vanish.
     mutating func update(_ ticket: CanvasTicket) {
-        guard let key = ticket.key, let index = tickets.firstIndex(where: { $0.key == key }) else { return }
-        let moved = tickets[index].state != ticket.state
-        if moved, ticket.state == .done {
-            tickets.remove(at: index)
-            tickets.append(ticket)
-        } else {
-            tickets[index] = ticket
-        }
-        if moved { folded.remove(ticket.state) }
+        guard let key = ticket.key, let old = self.ticket(key) else { return }
+        tickets = TicketQueue.updating(ticket, in: tickets)
+        if old.state != ticket.state { folded.remove(ticket.state) }
     }
 
     /// Adds the created tickets it hasn't got a ticket with the same key

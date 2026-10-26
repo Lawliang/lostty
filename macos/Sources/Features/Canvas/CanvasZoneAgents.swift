@@ -88,6 +88,16 @@ extension CanvasModel {
         }
     }
 
+    /// Who pane `pane` is to the board, by where `panes` has it: its
+    /// project's manager while it sits inside the project, else the agent
+    /// of the domain it's in. nil in a project outside its domains, or in
+    /// no zone.
+    func ticketRole(of pane: UUID, panes: CanvasPaneZones) -> TicketActor? {
+        guard let id = panes.zones[pane], let zone = zone(id), let project = projectZone(id) else { return nil }
+        if self.zone(project)?.manager == pane { return .manager(project: project) }
+        return zone.parent == nil ? nil : .agent(domain: id)
+    }
+
     /// The project zone `id` is in: itself, or its domain's project.
     func projectZone(_ id: UUID) -> UUID? {
         zone(id).map { $0.parent ?? $0.id }
