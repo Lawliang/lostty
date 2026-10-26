@@ -8,8 +8,14 @@ class TransparentTitlebarTerminalWindow: TerminalWindow {
     /// visibility changes) can reset the titlebar appearance.
     private var lastSurfaceConfig: Ghostty.SurfaceView.DerivedConfig?
 
-    /// Lostty: the Mockup window style's line under the title bar.
+    /// Lostty: the Mockup window style's line under the title bar, and its
+    /// centered title in place of the system's leading one.
     private var titlebarHairline: NSView?
+    private var centeredTitle: NSTextField?
+
+    override var title: String {
+        didSet { centeredTitle?.stringValue = title }
+    }
 
     /// KVO observation for tab group window changes.
     private var tabGroupWindowsObservation: NSKeyValueObservation?
@@ -101,7 +107,7 @@ class TransparentTitlebarTerminalWindow: TerminalWindow {
             titlebarView.layer?.backgroundColor = (isGlassStyle && isTransparentTitlebar)
                 ? NSColor.clear.cgColor
                 : preferredBackgroundColor.map(LosttyWindowStyle.bar(over:))?.cgColor // Lostty: the window style's bar
-            syncTitlebarHairline(in: titlebarView)
+            syncMockupTitlebar(in: titlebarView)
         }
 
         // In all cases, we have to hide the background view since this has multiple subviews
@@ -116,7 +122,7 @@ class TransparentTitlebarTerminalWindow: TerminalWindow {
         // Setup the titlebar background color to match ours
         titlebarContainer.wantsLayer = true
         titlebarContainer.layer?.backgroundColor = preferredBackgroundColor.map(LosttyWindowStyle.bar(over:))?.cgColor // Lostty
-        syncTitlebarHairline(in: titlebarContainer)
+        syncMockupTitlebar(in: titlebarContainer)
 
         // See the docs for the function that sets this to true on why
         effectViewIsHidden = false
@@ -126,12 +132,33 @@ class TransparentTitlebarTerminalWindow: TerminalWindow {
     }
 
     /// Lostty: in the Mockup window style, a hairline along the title bar's
-    /// bottom edge.
-    private func syncTitlebarHairline(in titlebar: NSView) {
+    /// bottom edge, and the title centered at 12pt.
+    private func syncMockupTitlebar(in titlebar: NSView) {
         guard LosttyWindowStyle.isMockup, let background = preferredBackgroundColor else {
             titlebarHairline?.removeFromSuperview()
             titlebarHairline = nil
+            centeredTitle?.removeFromSuperview()
+            centeredTitle = nil
+            titleVisibility = .visible
             return
+        }
+        titleVisibility = .hidden
+        if centeredTitle?.superview !== titlebar {
+            centeredTitle?.removeFromSuperview()
+            let label = NSTextField(labelWithString: title)
+            label.font = .systemFont(ofSize: 12, weight: .semibold)
+            label.textColor = .secondaryLabelColor
+            label.lineBreakMode = .byTruncatingMiddle
+            label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+            label.translatesAutoresizingMaskIntoConstraints = false
+            titlebar.addSubview(label)
+            NSLayoutConstraint.activate([
+                label.centerXAnchor.constraint(equalTo: titlebar.centerXAnchor),
+                label.centerYAnchor.constraint(equalTo: titlebar.centerYAnchor),
+                // Clear of the window buttons and the project pill.
+                label.widthAnchor.constraint(lessThanOrEqualTo: titlebar.widthAnchor, constant: -360),
+            ])
+            centeredTitle = label
         }
         let line = titlebarHairline ?? NSView()
         if line.superview !== titlebar {
