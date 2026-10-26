@@ -21,17 +21,18 @@ struct TicketKindBadge: View {
     }
 }
 
-/// A ticket's status: an empty ring, half filled, or checked.
-struct TicketStatusIcon: View {
-    let status: CanvasTicket.Status
+/// A ticket's state: an empty ring, half filled, an eye, a check, or a
+/// warning.
+struct TicketStateIcon: View {
+    let state: CanvasTicket.State
     var size: CGFloat = 15
 
     var body: some View {
-        Image(systemName: status.symbol)
+        Image(systemName: state.symbol)
             .font(.system(size: size, weight: .medium))
-            .foregroundStyle(status.color)
+            .foregroundStyle(state.color)
             .frame(width: 16, height: 16)
-            .accessibilityLabel(status.title)
+            .accessibilityLabel(state.title)
     }
 }
 
@@ -161,20 +162,24 @@ extension CanvasTicket.Priority {
     var menuImage: NSImage? { NSImage.ticketSymbol(symbol, color: color) }
 }
 
-extension CanvasTicket.Status {
+extension CanvasTicket.State {
     var symbol: String {
         switch self {
-        case .toDo: "circle"
-        case .inProgress: "circle.lefthalf.filled"
+        case .queued: "circle"
+        case .working: "circle.lefthalf.filled"
+        case .review: "eye.circle.fill"
         case .done: "checkmark.circle.fill"
+        case .blocked: "exclamationmark.circle.fill"
         }
     }
 
     var color: Color {
         switch self {
-        case .toDo: Color(light: 0x8E8E96, dark: 0x8E8E96)
-        case .inProgress: Color(light: 0xDDA000, dark: 0xF2B800)
+        case .queued: Color(light: 0x8E8E96, dark: 0x8E8E96)
+        case .working: Color(light: 0xDDA000, dark: 0xF2B800)
+        case .review: Color(light: 0x2D7FF9, dark: 0x4C9AFF)
         case .done: Color(light: 0x5E5CE6, dark: 0x7D7AFF)
+        case .blocked: Color(light: 0xE5493A, dark: 0xF0634F)
         }
     }
 

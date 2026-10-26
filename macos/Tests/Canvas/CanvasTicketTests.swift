@@ -82,17 +82,100 @@ struct CanvasTicketTests {
     }
 
     @Test func aTicketComesBackAsItWas() throws {
-        let ticket = CanvasTicket(key: "LT-3", summary: "Fix login", kind: .story, priority: .lowest, status: .done,
-                                  assignee: "Sam", details: "Drops after 8s")
+        var ticket = CanvasTicket(key: "LT-3", summary: "Fix login", kind: .story, priority: .lowest,
+                                  assignee: "Sam", details: "Drops after 8s", zone: UUID())
+        ticket.move(to: .working, by: .lostty(agent: UUID()))
+        ticket.move(to: .blocked, note: "Needs the API key", by: .owner)
         #expect(try JSONDecoder().decode(CanvasTicket.self, from: JSONEncoder().encode(ticket)) == ticket)
     }
 
     @Test func whatANewerBuildSavedComesBackWithDefaults() throws {
-        // A status, type and priority this build doesn't know, a field it
+        // A state, type and priority this build doesn't know, a field it
         // doesn't have, and the rest missing.
-        let json = #"{"key":"LT-9","summary":"Later","kind":"epic","priority":"urgent","status":"inReview","sprint":4}"#
+        let json = #"{"key":"LT-9","summary":"Later","kind":"epic","priority":"urgent","state":"parked","sprint":4}"#
         let ticket = try JSONDecoder().decode(CanvasTicket.self, from: Data(json.utf8))
         #expect(ticket == CanvasTicket(key: "LT-9", summary: "Later"))
+    }
+
+    @Test func aTicketSavedBeforeTheBoardTakesItsStateFromItsStatus() throws {
+        func state(_ status: String) throws -> CanvasTicket.State {
+            let json = #"{"key":"LT-1","summary":"Old","status":"\#(status)"}"#
+            return try JSONDecoder().decode(CanvasTicket.self, from: Data(json.utf8)).state
+        }
+        #expect(try state("toDo") == .queued)
+        #expect(try state("inProgress") == .working)
+        #expect(try state("done") == .done)
+        #expect(try state("inReview") == .queued)
+    }
+
+    @Test func anOlderBuildReadsTheStatusAFinishedTicketIsSavedWith() throws {
+        func status(_ state: CanvasTicket.State) throws -> String? {
+            let data = try JSONEncoder().encode(CanvasTicket(key: "LT-1").moved(to: state))
+            return (try JSONSerialization.jsonObject(with: data) as? [String: Any])?["status"] as? String
+        }
+        #expect(try status(.done) == "done")
+        #expect(try status(.working) == "inProgress")
+        #expect(try status(.queued) == "toDo")
+        #expect(try status(.review) == "toDo")
+        #expect(try status(.blocked) == "toDo")
+    }
+
+    @Test func eachActorMovesOnlyWhatTheLifecycleAllows() {
+        let pane = UUID(), domain = UUID(), project = UUID()
+        let moves = CanvasTicket.State.allCases.flatMap { from in CanvasTicket.State.allCases.map { (from, $0) } }
+        func allowed(_ actor: TicketActor) -> [String] {
+            moves.filter { $0.0.allows($0.1, by: actor) }.map { "\($0.0)>\($0.1)" }
+        }
+        #expect(allowed(.lostty(agent: pane)) == ["queued>working"])
+        #expect(allowed(.agent(domain: domain)) == ["working>review", "working>blocked"])
+        #expect(allowed(.manager(project: project)).isEmpty)
+        // The owner moves anything anywhere but to working, which only
+        // Lostty typing the ticket does: 25 moves less 5 to the same state
+        // and 4 to working.
+        let owner = allowed(.owner)
+        #expect(owner.count == 16)
+        #expect(!owner.contains { $0.hasSuffix(">working") })
+    }
+
+    @Test func anAgentMovesOnlyATicketInItsOwnDomain() {
+        let login = UUID(), onboarding = UUID(), pane = UUID()
+        var ticket = CanvasTicket(key: "TB-7", zone: login)
+        let typed = ticket.move(to: .working, by: .lostty(agent: pane))
+        #expect(typed)
+        #expect(ticket.agentPane == pane)
+        let elsewhere = ticket.move(to: .review, note: "Done", by: .agent(domain: onboarding))
+        #expect(!elsewhere)
+        #expect(ticket.state == .working)
+        let reviewed = ticket.move(to: .review, note: "Added the button", by: .agent(domain: login))
+        #expect(reviewed)
+        #expect(ticket.note == "Added the button")
+        // Said again, it changes nothing.
+        let again = ticket.move(to: .review, note: "Again", by: .agent(domain: login))
+        #expect(!again)
+        #expect(ticket.note == "Added the button")
+    }
+
+    @Test func undoPutsBackTheStateNoteAndFeature() {
+        let login = UUID(), onboarding = UUID()
+        let before = CanvasTicket(key: "TB-7", zone: login).moved(to: .review)
+        var after = before
+        after.move(to: .done, by: .owner)
+        after.zone = onboarding
+        var now = after
+        now.summary = "Renamed"
+        let undone = now.reverting(after, to: before)
+        #expect(undone.state == .review)
+        #expect(undone.zone == login)
+        #expect(undone.summary == "Renamed")
+    }
+}
+
+extension CanvasTicket {
+    /// This ticket in `state`, moved there as the board and Lostty would.
+    func moved(to state: State) -> CanvasTicket {
+        var ticket = self
+        ticket.move(to: state, by: state == .working ? .lostty(agent: UUID()) : .owner)
+        return ticket
     }
 }
 #endif

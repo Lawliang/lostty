@@ -305,6 +305,12 @@ struct CanvasZone: Equatable, Identifiable, Codable {
     var brief = ""
     /// A project's ticket key prefix as set; `ticketPrefix` is the one used.
     var keyPrefix: String?
+    /// A project's "Start tickets automatically". Optional, as every field
+    /// added later must be: the synthesized decoder drops a zone saved
+    /// without a non-optional one.
+    var autoStart: Bool?
+    /// The pane that is a project's manager (board spec §7).
+    var manager: UUID?
 
     var ticketPrefix: String {
         let set = (keyPrefix ?? "").filter { $0.isLetter || $0.isNumber }.uppercased()

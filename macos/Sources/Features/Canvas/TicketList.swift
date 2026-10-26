@@ -2,19 +2,19 @@
 import Foundation
 
 /// A tickets panel's list: the tickets of the zones it shows, in sections
-/// by status, the one selected, and the sections folded away. Pure; each
+/// by state, the one selected, and the sections folded away. Pure; each
 /// panel's TicketBoard makes one from the canvas's tickets and its own
 /// zones, selection and folds.
 struct TicketList: Equatable {
     /// The sections top to bottom: what's under way, what's next, what's done.
-    static let sections: [CanvasTicket.Status] = [.inProgress, .toDo, .done]
+    static let sections: [CanvasTicket.State] = [.working, .queued, .review, .blocked, .done]
 
     /// Every ticket, each created (it has a key), oldest first, but for
     /// one moved to Done, which goes last: Completed shows the latest first.
     private(set) var tickets: [CanvasTicket] = []
     /// The selected ticket's key.
     var selected: String?
-    var folded: Set<CanvasTicket.Status> = []
+    var folded: Set<CanvasTicket.State> = []
     /// The zones whose tickets show; nil for every ticket.
     private(set) var zones: Set<UUID>?
 
@@ -24,7 +24,7 @@ struct TicketList: Equatable {
 
     /// `tickets` as they are, created and in order, showing those of
     /// `zones`. A selected ticket that doesn't show isn't selected.
-    init(tickets: [CanvasTicket], zones: Set<UUID>?, selected: String?, folded: Set<CanvasTicket.Status>) {
+    init(tickets: [CanvasTicket], zones: Set<UUID>?, selected: String?, folded: Set<CanvasTicket.State>) {
         self.tickets = tickets
         self.zones = zones
         self.folded = folded
@@ -40,15 +40,15 @@ struct TicketList: Equatable {
         tickets.first { $0.key == key }
     }
 
-    func count(_ status: CanvasTicket.Status) -> Int {
-        tickets.filter { $0.status == status && shows($0) }.count
+    func count(_ state: CanvasTicket.State) -> Int {
+        tickets.filter { $0.state == state && shows($0) }.count
     }
 
-    /// A section's tickets top to bottom: In Progress and Up Next highest
-    /// priority first, then oldest first; Completed latest first.
-    func tickets(in status: CanvasTicket.Status) -> [CanvasTicket] {
-        let these = tickets.filter { $0.status == status && shows($0) }
-        guard status != .done else { return these.reversed() }
+    /// A section's tickets top to bottom: Done latest first, the rest
+    /// highest priority first, then oldest first.
+    func tickets(in state: CanvasTicket.State) -> [CanvasTicket] {
+        let these = tickets.filter { $0.state == state && shows($0) }
+        guard state != .done else { return these.reversed() }
         let rank = { (ticket: CanvasTicket) in CanvasTicket.Priority.allCases.firstIndex(of: ticket.priority) ?? 0 }
         return these.enumerated()
             .sorted { (rank($0.element), $0.offset) < (rank($1.element), $1.offset) }
@@ -79,14 +79,14 @@ struct TicketList: Equatable {
 
     /// Folds or unfolds a section. A selected ticket folded away hands the
     /// selection to the first row after its section, or else the last row.
-    mutating func fold(_ status: CanvasTicket.Status, _ fold: Bool = true) {
+    mutating func fold(_ state: CanvasTicket.State, _ fold: Bool = true) {
         if fold {
-            folded.insert(status)
+            folded.insert(state)
         } else {
-            folded.remove(status)
+            folded.remove(state)
         }
-        guard fold, let selected, ticket(selected)?.status == status else { return }
-        let after = Self.sections.drop { $0 != status }.dropFirst().filter { !folded.contains($0) }
+        guard fold, let selected, ticket(selected)?.state == state else { return }
+        let after = Self.sections.drop { $0 != state }.dropFirst().filter { !folded.contains($0) }
         for section in after {
             if let key = tickets(in: section).first?.key {
                 self.selected = key
@@ -101,7 +101,7 @@ struct TicketList: Equatable {
     mutating func add(_ ticket: CanvasTicket, at index: Int? = nil) {
         guard let key = ticket.key, self.ticket(key) == nil else { return }
         tickets.insert(ticket, at: min(index ?? tickets.count, tickets.count))
-        folded.remove(ticket.status)
+        folded.remove(ticket.state)
         selected = key
     }
 
@@ -122,14 +122,14 @@ struct TicketList: Equatable {
     /// so it doesn't vanish.
     mutating func update(_ ticket: CanvasTicket) {
         guard let key = ticket.key, let index = tickets.firstIndex(where: { $0.key == key }) else { return }
-        let moved = tickets[index].status != ticket.status
-        if moved, ticket.status == .done {
+        let moved = tickets[index].state != ticket.state
+        if moved, ticket.state == .done {
             tickets.remove(at: index)
             tickets.append(ticket)
         } else {
             tickets[index] = ticket
         }
-        if moved { folded.remove(ticket.status) }
+        if moved { folded.remove(ticket.state) }
     }
 
     /// Adds the created tickets it hasn't got a ticket with the same key

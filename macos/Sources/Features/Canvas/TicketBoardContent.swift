@@ -64,30 +64,30 @@ private extension View {
 
 // MARK: The list
 
-/// The tickets in their sections, In Progress, Up Next and Completed, one
+/// The tickets in their sections, working, queued, in review, blocked and done, one
 /// flat stack so a ticket changing section slides to its new place.
 private struct TicketListView: View {
     @ObservedObject var board: TicketBoard
 
     private enum Item: Identifiable {
-        case header(CanvasTicket.Status)
+        case header(CanvasTicket.State)
         case row(CanvasTicket)
-        case empty(CanvasTicket.Status)
+        case empty(CanvasTicket.State)
 
         var id: String {
             switch self {
-            case .header(let status): "header-\(status.rawValue)"
+            case .header(let state): "header-\(state.rawValue)"
             case .row(let ticket): ticket.key ?? ""
-            case .empty(let status): "empty-\(status.rawValue)"
+            case .empty(let state): "empty-\(state.rawValue)"
             }
         }
     }
 
     private var items: [Item] {
-        TicketList.sections.flatMap { status -> [Item] in
-            guard !board.list.folded.contains(status) else { return [.header(status)] }
-            let tickets = board.list.tickets(in: status)
-            return [.header(status)] + (tickets.isEmpty ? [.empty(status)] : tickets.map(Item.row))
+        TicketList.sections.flatMap { state -> [Item] in
+            guard !board.list.folded.contains(state) else { return [.header(state)] }
+            let tickets = board.list.tickets(in: state)
+            return [.header(state)] + (tickets.isEmpty ? [.empty(state)] : tickets.map(Item.row))
         }
     }
 
@@ -97,13 +97,13 @@ private struct TicketListView: View {
                 VStack(spacing: 0) {
                     ForEach(items) { item in
                         switch item {
-                        case .header(let status):
-                            TicketSectionHeader(board: board, status: status)
-                                .padding(.top, status == TicketList.sections.first ? 0 : 2)
+                        case .header(let state):
+                            TicketSectionHeader(board: board, state: state)
+                                .padding(.top, state == TicketList.sections.first ? 0 : 2)
                         case .row(let ticket):
                             TicketRow(board: board, ticket: ticket)
-                        case .empty(let status):
-                            Text(Self.emptyText(status))
+                        case .empty(let state):
+                            Text(Self.emptyText(state))
                                 .font(.system(size: 12))
                                 .foregroundStyle(.tertiary)
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -122,11 +122,13 @@ private struct TicketListView: View {
         .background(Color(nsColor: .controlBackgroundColor))
     }
 
-    private static func emptyText(_ status: CanvasTicket.Status) -> String {
-        switch status {
-        case .inProgress: "Nothing in progress. Press 2 on a ticket to start it."
-        case .toDo: "Nothing up next. Press C to add a ticket."
-        case .done: "Nothing completed yet."
+    private static func emptyText(_ state: CanvasTicket.State) -> String {
+        switch state {
+        case .working: "No agent is working on a ticket."
+        case .queued: "Nothing queued. Press C to add a ticket."
+        case .review: "Nothing to review."
+        case .blocked: "Nothing blocked."
+        case .done: "Nothing done yet."
         }
     }
 }
@@ -134,24 +136,24 @@ private struct TicketListView: View {
 /// A section's header: fold it, see how many, or add a ticket to it.
 private struct TicketSectionHeader: View {
     @ObservedObject var board: TicketBoard
-    let status: CanvasTicket.Status
+    let state: CanvasTicket.State
     @State private var hovering = false
     @State private var hoveringToggle = false
 
     var body: some View {
-        let folded = board.list.folded.contains(status)
+        let folded = board.list.folded.contains(state)
         HStack(spacing: 4) {
-            Button { board.toggleFold(status) } label: {
+            Button { board.toggleFold(state) } label: {
                 HStack(spacing: 7) {
                     Image(systemName: "chevron.right")
                         .font(.system(size: 9, weight: .bold))
                         .foregroundStyle(.tertiary)
                         .rotationEffect(.degrees(folded ? 0 : 90))
                         .frame(width: 10)
-                    TicketStatusIcon(status: status)
-                    Text(status.sectionTitle)
+                    TicketStateIcon(state: state)
+                    Text(state.title)
                         .font(.system(size: 12, weight: .semibold))
-                    Text("\(board.list.count(status))")
+                    Text("\(board.list.count(state))")
                         .font(.system(size: 12))
                         .monospacedDigit()
                         .foregroundStyle(.tertiary)
@@ -164,8 +166,8 @@ private struct TicketSectionHeader: View {
             }
             .buttonStyle(.plain)
             .onHover { hoveringToggle = $0 }
-            .accessibilityLabel("\(status.sectionTitle), \(board.list.count(status)) tickets, \(folded ? "folded" : "unfolded")")
-            Button { board.newTicket(in: status) } label: {
+            .accessibilityLabel("\(state.title), \(board.list.count(state)) tickets, \(folded ? "folded" : "unfolded")")
+            Button { board.newTicket() } label: {
                 Image(systemName: "plus")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.secondary)
@@ -174,7 +176,7 @@ private struct TicketSectionHeader: View {
             }
             .buttonStyle(.plain)
             .opacity(hovering ? 1 : 0)
-            .help("New Ticket in \(status.sectionTitle)")
+            .help("New Ticket in \(state.title)")
         }
         .padding(.leading, 8)
         .padding(.trailing, 10)
@@ -183,7 +185,7 @@ private struct TicketSectionHeader: View {
     }
 }
 
-/// A ticket in the list: its type, key, status (click for the next one),
+/// A ticket in the list: its type, key, state (click for the next one),
 /// summary, its domain in a project's panel, priority and assignee. Click to select it, double-click to
 /// edit its summary.
 private struct TicketRow: View {
@@ -200,15 +202,15 @@ private struct TicketRow: View {
                 .foregroundStyle(.tertiary)
                 .lineLimit(1)
                 .frame(width: 52, alignment: .leading)
-            Button { board.cycleStatus(of: key) } label: {
-                TicketStatusIcon(status: ticket.status)
+            Button { board.cycleState(of: key) } label: {
+                TicketStateIcon(state: ticket.state)
                     .contentShape(Circle())
             }
             .buttonStyle(.plain)
-            .help("\(ticket.status.title): click for \(ticket.status.next.title) (S)")
+            .help("\(ticket.state.title): click for \(ticket.state.next.title) (S)")
             Text(ticket.summary)
                 .font(.system(size: 13))
-                .foregroundStyle(ticket.status == .done ? .secondary : .primary)
+                .foregroundStyle(ticket.state == .done ? .secondary : .primary)
                 .lineLimit(1)
                 .truncationMode(.tail)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -241,9 +243,9 @@ private struct TicketRow: View {
         }
         .onHover { hovering = $0 }
         .contextMenu {
-            ForEach(CanvasTicket.Status.allCases, id: \.self) { status in
-                Button("Move to \(status.sectionTitle)") { board.setStatus(status, of: key) }
-                    .disabled(ticket.status == status)
+            ForEach(CanvasTicket.State.byOwner, id: \.self) { state in
+                Button("Move to \(state.title)") { board.setState(state, of: key) }
+                    .disabled(!ticket.state.allows(state, by: .owner))
             }
             Divider()
             Button("Copy Key") {
@@ -272,7 +274,7 @@ private struct TicketHints: View {
     var body: some View {
         HStack(spacing: 14) {
             hint(["↑", "↓"], "Move")
-            hint(["1", "2", "3"], "Set status")
+            hint(["1", "2", "3", "4"], "Set state")
             hint(["S"], "Cycle")
             hint(["↵"], "Edit")
             hint(["C"], "New")
@@ -391,9 +393,9 @@ private struct TicketInspectorBody: View {
                 .onChange(of: ticket.assignee) { _, new in if focus.wrappedValue != .assignee { assignee = new } }
 
             VStack(spacing: 1) {
-                propertyRow(.status, "Status", "S") {
-                    TicketStatusIcon(status: ticket.status)
-                    Text(ticket.status.title)
+                propertyRow(.state, "State", "S") {
+                    TicketStateIcon(state: ticket.state)
+                    Text(ticket.state.title)
                 }
                 propertyRow(.priority, "Priority", "P") {
                     TicketPriorityIcon(priority: ticket.priority)
@@ -617,10 +619,6 @@ private struct TicketComposer: View {
                 chip(.priority) {
                     TicketPriorityIcon(priority: draft.wrappedValue.priority)
                     Text(draft.wrappedValue.priority.title)
-                }
-                chip(.status) {
-                    TicketStatusIcon(status: draft.wrappedValue.status, size: 13)
-                    Text(draft.wrappedValue.status.title)
                 }
                 assigneeChip
             }

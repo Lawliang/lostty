@@ -12,7 +12,7 @@ final class TicketBoard: ObservableObject {
     enum Field: Hashable { case summary, details, assignee, newSummary, newDetails, newAssignee }
 
     /// What a menu picks.
-    enum Property: Hashable { case status, priority, kind, assignee }
+    enum Property: Hashable { case state, priority, kind, assignee }
 
     /// A property's row in the inspector, or its chip on the new ticket.
     struct Anchor: Hashable {
@@ -28,7 +28,7 @@ final class TicketBoard: ObservableObject {
     /// The panel's card on the canvas.
     let id = UUID()
     @Published private var selected: String?
-    @Published private var folded: Set<CanvasTicket.Status> = []
+    @Published private var folded: Set<CanvasTicket.State> = []
 
     /// The canvas's tickets, as this panel lists them: those of the zone
     /// it's in (with its domains'), or every one outside every zone. Each
@@ -109,26 +109,25 @@ final class TicketBoard: ObservableObject {
         list.move(by: delta)
     }
 
-    func toggleFold(_ status: CanvasTicket.Status) {
-        withAnimation(Self.motion) { list.fold(status, !list.folded.contains(status)) }
+    func toggleFold(_ state: CanvasTicket.State) {
+        withAnimation(Self.motion) { list.fold(state, !list.folded.contains(state)) }
     }
 
-    func setStatus(_ status: CanvasTicket.Status, of key: String) {
-        guard var ticket = list.ticket(key) else { return }
-        ticket.status = status
+    func setState(_ state: CanvasTicket.State, of key: String) {
+        guard var ticket = list.ticket(key), ticket.move(to: state, by: .owner) else { return }
         change(ticket, "Move Ticket")
     }
 
-    func cycleStatus(of key: String) {
+    func cycleState(of key: String) {
         guard let ticket = list.ticket(key) else { return }
-        setStatus(ticket.status.next, of: key)
+        setState(ticket.state.next, of: key)
     }
 
     /// A change from a menu or the list, which Undo takes back.
     func change(_ ticket: CanvasTicket, _ action: String) {
         guard let key = ticket.key, let old = list.ticket(key), old != ticket else { return }
         withAnimation(Self.motion) { list.update(ticket) }
-        if old.status != ticket.status { flash(key) }
+        if old.state != ticket.state { flash(key) }
         // Only what this changed goes back, not typing since.
         registerUndo(action) { board in
             guard let now = board.list.ticket(key) else { return }
@@ -175,9 +174,9 @@ final class TicketBoard: ObservableObject {
     /// C, the + in a section's header, or New Ticket: the sheet opens (with
     /// what was typed before, if it was left open), its summary taking the
     /// keyboard.
-    func newTicket(in status: CanvasTicket.Status = .toDo) {
+    func newTicket() {
         if draft == nil {
-            withAnimation(.easeOut(duration: 0.18)) { draft = CanvasTicket(status: status) }
+            withAnimation(.easeOut(duration: 0.18)) { draft = CanvasTicket() }
         }
         needsSummary = false
         focusRequest = .newSummary
@@ -209,7 +208,7 @@ final class TicketBoard: ObservableObject {
         registerUndo("New Ticket") { $0.delete(key, "New Ticket") }
         needsSummary = false
         if createMore {
-            draft = CanvasTicket(kind: ticket.kind, priority: ticket.priority, status: ticket.status, assignee: ticket.assignee)
+            draft = CanvasTicket(kind: ticket.kind, priority: ticket.priority, assignee: ticket.assignee)
             focusRequest = .newSummary
         } else {
             withAnimation(.easeOut(duration: 0.15)) { draft = nil }
@@ -238,9 +237,9 @@ final class TicketBoard: ObservableObject {
             menu.addItem(item)
         }
         switch property {
-        case .status:
-            for (index, status) in CanvasTicket.Status.allCases.enumerated() {
-                add(status.title, status.menuImage, on: ticket.status == status, key: "\(index + 1)") { $0.status = status }
+        case .state:
+            for (index, state) in CanvasTicket.State.byOwner.enumerated() {
+                add(state.title, state.menuImage, on: ticket.state == state, key: "\(index + 1)") { $0.move(to: state, by: .owner) }
             }
         case .priority:
             for (index, priority) in CanvasTicket.Priority.allCases.enumerated() {
@@ -276,7 +275,7 @@ final class TicketBoard: ObservableObject {
         }
         guard var ticket = selectedTicket else { return }
         set(&ticket)
-        change(ticket, property == .status ? "Move Ticket" : "Change Ticket")
+        change(ticket, property == .state ? "Move Ticket" : "Change Ticket")
     }
 
     private func registerUndo(_ action: String, _ undo: @escaping (TicketBoard) -> Void) {

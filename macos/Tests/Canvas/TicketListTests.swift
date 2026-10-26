@@ -5,13 +5,13 @@ import Testing
 
 struct TicketListTests {
     private func ticket(
-        _ number: Int, _ status: CanvasTicket.Status = .toDo, _ priority: CanvasTicket.Priority = .medium
+        _ number: Int, _ state: CanvasTicket.State = .queued, _ priority: CanvasTicket.Priority = .medium
     ) -> CanvasTicket {
-        CanvasTicket(key: "LT-\(number)", summary: "Ticket \(number)", priority: priority, status: status)
+        CanvasTicket(key: "LT-\(number)", summary: "Ticket \(number)", priority: priority).moved(to: state)
     }
 
-    @Test func sectionsGoInProgressThenUpNextThenCompleted() {
-        let list = TicketList(tickets: [ticket(1, .done), ticket(2, .toDo), ticket(3, .inProgress)])
+    @Test func sectionsGoWorkingThenQueuedThenDone() {
+        let list = TicketList(tickets: [ticket(1, .done), ticket(2, .queued), ticket(3, .working)])
         #expect(list.shown == ["LT-3", "LT-2", "LT-1"])
         // The first row is selected.
         #expect(list.selected == "LT-3")
@@ -25,18 +25,18 @@ struct TicketListTests {
         tickets[2].zone = mine
         let list = TicketList(tickets: tickets, zones: [mine], selected: "LT-2", folded: [])
         #expect(list.shown == ["LT-1", "LT-3"])
-        #expect(list.count(.toDo) == 1)
+        #expect(list.count(.queued) == 1)
         #expect(list.selected == nil)
         #expect(TicketList(tickets: tickets, zones: nil, selected: "LT-2", folded: []).shown == ["LT-1", "LT-2", "LT-3"])
     }
 
     @Test func upNextIsHighestPriorityFirstThenOldest() {
-        let list = TicketList(tickets: [ticket(1, .toDo, .low), ticket(2, .toDo, .highest), ticket(3, .toDo, .low)])
-        #expect(list.tickets(in: .toDo).compactMap(\.key) == ["LT-2", "LT-1", "LT-3"])
+        let list = TicketList(tickets: [ticket(1, .queued, .low), ticket(2, .queued, .highest), ticket(3, .queued, .low)])
+        #expect(list.tickets(in: .queued).compactMap(\.key) == ["LT-2", "LT-1", "LT-3"])
     }
 
     @Test func completedIsLatestDoneFirst() {
-        var list = TicketList(tickets: [ticket(1, .done), ticket(2, .toDo), ticket(3, .done)])
+        var list = TicketList(tickets: [ticket(1, .done), ticket(2, .queued), ticket(3, .done)])
         list.update(ticket(2, .done))
         #expect(list.tickets(in: .done).compactMap(\.key) == ["LT-2", "LT-3", "LT-1"])
     }
@@ -56,15 +56,15 @@ struct TicketListTests {
     }
 
     @Test func movingSkipsFoldedSections() {
-        var list = TicketList(tickets: [ticket(1, .inProgress), ticket(2, .toDo), ticket(3, .done)])
-        list.fold(.toDo)
+        var list = TicketList(tickets: [ticket(1, .working), ticket(2, .queued), ticket(3, .done)])
+        list.fold(.queued)
         list.move(by: 1)
         #expect(list.selected == "LT-3")
     }
 
     @Test func foldingTheSelectedTicketsSectionSelectsTheNextSectionsFirst() {
-        var list = TicketList(tickets: [ticket(1, .inProgress), ticket(2, .toDo), ticket(3, .done)])
-        list.fold(.inProgress)
+        var list = TicketList(tickets: [ticket(1, .working), ticket(2, .queued), ticket(3, .done)])
+        list.fold(.working)
         #expect(list.selected == "LT-2")
         // Nothing after it: the last row showing.
         list.selected = "LT-3"
@@ -73,7 +73,7 @@ struct TicketListTests {
     }
 
     @Test func aMovedTicketStaysSelectedAndItsSectionUnfolds() {
-        var list = TicketList(tickets: [ticket(1, .toDo), ticket(2, .toDo)])
+        var list = TicketList(tickets: [ticket(1, .queued), ticket(2, .queued)])
         list.fold(.done)
         list.selected = "LT-1"
         list.update(ticket(1, .done))
@@ -112,14 +112,16 @@ struct TicketListTests {
         #expect(list.tickets.map(\.summary) == ["Ticket 1", "Ticket 2"])
     }
 
-    @Test func statusesCycleRound() {
-        #expect(CanvasTicket.Status.toDo.next == .inProgress)
-        #expect(CanvasTicket.Status.inProgress.next == .done)
-        #expect(CanvasTicket.Status.done.next == .toDo)
+    @Test func statesCycleRoundWhatTheOwnerCanSet() {
+        #expect(CanvasTicket.State.queued.next == .review)
+        #expect(CanvasTicket.State.review.next == .done)
+        #expect(CanvasTicket.State.done.next == .blocked)
+        #expect(CanvasTicket.State.blocked.next == .queued)
+        #expect(CanvasTicket.State.working.next == .queued)
     }
 
     @Test func undoingAChangeLeavesWhatChangedSince() {
-        let before = ticket(1, .toDo, .low)
+        let before = ticket(1, .queued, .low)
         var after = before
         after.priority = .high
         // Renamed after the priority changed.
