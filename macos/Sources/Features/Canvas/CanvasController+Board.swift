@@ -2,14 +2,21 @@
 import AppKit
 
 /// The zone board's side of the canvas: Start and Send back from the
-/// tickets panels. What decides is TicketQueue's; this writes through
-/// `setTickets`.
+/// tickets panels, and typing each feature's next ticket into its agent.
+/// What decides is TicketQueue's and TicketDelivery's; this reads the
+/// panes and writes through `setTickets`.
 extension CanvasController {
+    /// How often Lostty looks again while a ticket may start and no pane
+    /// can take it: a Claude just started, or input typed and cleared,
+    /// sends no signal.
+    static let deliveryRetry: TimeInterval = 2
+
     /// Start on a queued ticket: it goes in when its feature's agent is
     /// free, auto-start or not. Not undoable: it types into a terminal.
     func start(_ key: String) {
         guard startedByHand.insert(key).inserted else { return }
         relistTickets()
+        deliverSoon()
     }
 
     /// Send back on a ticket in review or blocked: queued at the front of
@@ -29,6 +36,50 @@ extension CanvasController {
     /// The title of the card holding pane `pane`, as its header shows it.
     func agentTitle(_ pane: UUID) -> String? {
         cards.first { $0.surfaceTree.contains { $0.id == pane } }?.title
+    }
+
+    /// One delivery attempt `delay` from now, never inside the caller's
+    /// turn: a delivery's own `setTickets` asks for the next. A later call
+    /// replaces one still waiting.
+    func deliverSoon(after delay: TimeInterval = 0) {
+        deliveryWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in MainActor.assumeIsolated { self?.deliverReadyTickets() } }
+        deliveryWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+    }
+
+    /// For each feature, the ticket that may start (TicketQueue.next) goes
+    /// to the first of its panes, in card order and not the project's
+    /// manager, whose Claude is off and whose screen shows an empty input
+    /// box. It's typed first and marked working only once typing took, in
+    /// this one turn; with nothing typed it stays queued and Lostty looks
+    /// again.
+    func deliverReadyTickets() {
+        deliveryWork = nil
+        startedByHand = startedByHand.filter { key in tickets.contains { $0.key == key && $0.state == .queued } }
+        let panes = cards.flatMap { Array($0.surfaceTree) }
+        var next = tickets
+        var waiting = false
+        for domain in model.zones {
+            guard let parent = domain.parent, let project = model.zone(parent),
+                  let ticket = TicketQueue.next(
+                    in: domain.id, of: next, autoStart: project.autoStart == true, startedByHand: startedByHand),
+                  let key = ticket.key else { continue }
+            let agent = panes.first { pane in
+                membership.panes.zones[pane.id] == domain.id && pane.id != project.manager
+                    && ClaudeRuntime.shared.phase(pane.id).isOff
+                    && TicketDelivery.input(in: TicketDelivery.screen(of: pane)) == .empty
+            }
+            guard let agent, let delivered = TicketQueue.delivering(key, into: agent.id, in: next),
+                  TicketDelivery.type(TicketDelivery.prompt(for: ticket, feature: domain.name), into: agent) else {
+                waiting = true
+                continue
+            }
+            next = delivered
+            startedByHand.remove(key)
+        }
+        setTickets(next)
+        if waiting, deliveryWork == nil { deliverSoon(after: Self.deliveryRetry) }
     }
 }
 #endif

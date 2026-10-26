@@ -44,6 +44,8 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     /// when their agent is free, auto-start or not. Not saved. Written by
     /// CanvasController+Board alone.
     var startedByHand: Set<String> = []
+    /// The delivery attempt waiting to run (CanvasController+Board).
+    var deliveryWork: DispatchWorkItem?
     /// A new ticket's sheet left open in a panel since closed: the next
     /// panel opened takes it.
     var parkedDraft: CanvasTicket? {
@@ -79,7 +81,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     /// Cards whose panes are moving to a window: gone for good, not for Undo.
     private var moving: Set<UUID> = []
     private var zoneResizeStart: CanvasZoneSnapshot?
-    private var membership = (panes: CanvasPaneZones(), model: CanvasModel())
+    private(set) var membership = (panes: CanvasPaneZones(), model: CanvasModel())
     private var zoneFiles: [UUID: CanvasZoneFile] = [:]
     let zoneStore = CanvasZoneStore.standard
     private var tmuxSessions: [TmuxSession] = []
@@ -216,6 +218,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
             .sink { [weak self] working in
                 self?.working = working
                 self?.updateZoneCaptions()
+                self?.deliverSoon()
             }
             .store(in: &cancellables)
         NotificationCenter.default.publisher(for: .losttySessionsChanged)
@@ -442,6 +445,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         updateSelectionBar()
         saveSoon()
         if settled { zoneMembershipDidChange() }
+        deliverSoon()
     }
 
     /// Adds a zone at `frame`, a domain of `parent` or a project, unless
@@ -623,6 +627,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
                 detail: move.to.flatMap(model.zoneTitle).map { "Now in \($0)." } ?? "It's in no zone now."))
         }
         updateZoneCaptions()
+        deliverSoon()
     }
 
     private func updateZoneCaptions() {
@@ -791,6 +796,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         relistTickets()
         tickets = new
         saveSoon()
+        deliverSoon()
     }
 
     func relistTickets() {
