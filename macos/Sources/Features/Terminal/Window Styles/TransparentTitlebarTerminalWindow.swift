@@ -8,10 +8,11 @@ class TransparentTitlebarTerminalWindow: TerminalWindow {
     /// visibility changes) can reset the titlebar appearance.
     private var lastSurfaceConfig: Ghostty.SurfaceView.DerivedConfig?
 
-    /// Lostty: the Mockup window style's line under the title bar, and its
-    /// centered title in place of the system's leading one.
+    /// Lostty: the Mockup window style's line under the title bar, its
+    /// centered title in place of the system's leading one, and its buttons.
     private var titlebarHairline: NSView?
     private var centeredTitle: NSTextField?
+    private var mockupButtons: CardWindowButtons?
 
     override var title: String {
         didSet { centeredTitle?.stringValue = title }
@@ -131,23 +132,45 @@ class TransparentTitlebarTerminalWindow: TerminalWindow {
         titlebarAppearsTransparent = true
     }
 
-    /// Lostty: in the Mockup window style, a hairline along the title bar's
-    /// bottom edge, and the title centered at 12pt.
+    /// Lostty: in the Mockup window style, the mockup's flat 12pt window
+    /// buttons in place of the system's, the title centered at 12pt in the
+    /// terminal's text color, and a hairline along the title bar's bottom.
     private func syncMockupTitlebar(in titlebar: NSView) {
-        guard LosttyWindowStyle.isMockup, let background = preferredBackgroundColor else {
-            titlebarHairline?.removeFromSuperview()
-            titlebarHairline = nil
-            centeredTitle?.removeFromSuperview()
-            centeredTitle = nil
-            titleVisibility = .visible
+        let mockup = LosttyWindowStyle.isMockup
+        for kind in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] {
+            standardWindowButton(kind)?.isHidden = mockup
+        }
+        titleVisibility = mockup ? .hidden : .visible
+        guard mockup, let background = preferredBackgroundColor else {
+            for view in [titlebarHairline, centeredTitle, mockupButtons] as [NSView?] { view?.removeFromSuperview() }
+            (titlebarHairline, centeredTitle, mockupButtons) = (nil, nil, nil)
             return
         }
-        titleVisibility = .hidden
+        let bar = LosttyWindowStyle.bar(over: background)
+
+        if mockupButtons?.superview !== titlebar {
+            mockupButtons?.removeFromSuperview()
+            let buttons = CardWindowButtons { [weak self] button in
+                switch button {
+                case .close: self?.performClose(nil)
+                case .minimize: self?.performMiniaturize(nil)
+                case .zoom: self?.toggleFullScreen(nil)
+                }
+            }
+            buttons.translatesAutoresizingMaskIntoConstraints = false
+            titlebar.addSubview(buttons)
+            NSLayoutConstraint.activate([
+                buttons.leadingAnchor.constraint(equalTo: titlebar.leadingAnchor, constant: CardWindowButtons.inset),
+                buttons.centerYAnchor.constraint(equalTo: titlebar.centerYAnchor),
+            ])
+            mockupButtons = buttons
+        }
+        mockupButtons?.needsDisplay = true
+
         if centeredTitle?.superview !== titlebar {
             centeredTitle?.removeFromSuperview()
             let label = NSTextField(labelWithString: title)
             label.font = .systemFont(ofSize: 12, weight: .semibold)
-            label.textColor = .secondaryLabelColor
             label.lineBreakMode = .byTruncatingMiddle
             label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
             label.translatesAutoresizingMaskIntoConstraints = false
@@ -160,8 +183,12 @@ class TransparentTitlebarTerminalWindow: TerminalWindow {
             ])
             centeredTitle = label
         }
-        let line = titlebarHairline ?? NSView()
-        if line.superview !== titlebar {
+        let skin = terminalController?.focusedSurface.flatMap { SkinsRuntime.shared.manager.effectiveSkin($0.id) }
+        centeredTitle?.textColor = LosttyWindowStyle.titleColor(skin: skin, bar: bar)
+
+        if titlebarHairline?.superview !== titlebar {
+            titlebarHairline?.removeFromSuperview()
+            let line = NSView()
             line.wantsLayer = true
             let flipped = titlebar.isFlipped
             line.autoresizingMask = [.width, flipped ? .minYMargin : .maxYMargin]
@@ -169,7 +196,7 @@ class TransparentTitlebarTerminalWindow: TerminalWindow {
             titlebar.addSubview(line)
             titlebarHairline = line
         }
-        line.layer?.backgroundColor = LosttyWindowStyle.hairline(on: LosttyWindowStyle.bar(over: background)).cgColor
+        titlebarHairline?.layer?.backgroundColor = LosttyWindowStyle.hairline(on: bar).cgColor
     }
 
     // MARK: View Finders

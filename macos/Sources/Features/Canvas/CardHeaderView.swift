@@ -60,7 +60,8 @@ final class CardHeaderView: NSView {
         content.frame = bounds
         hairline.frame = NSRect(x: 0, y: bounds.height - 0.5, width: bounds.width, height: 0.5)
         let size = buttons.intrinsicContentSize
-        buttons.frame = NSRect(x: 12, y: (bounds.height - size.height) / 2, width: size.width, height: size.height)
+        buttons.frame = NSRect(
+            x: CardWindowButtons.inset, y: (bounds.height - size.height) / 2, width: size.width, height: size.height)
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -122,6 +123,8 @@ final class CardWindowButtons: NSView {
 
     static let diameter: CGFloat = 12
     static let spacing: CGFloat = 8
+    /// From the title bar's leading edge: the mockup's 10pt, or 12.
+    static var inset: CGFloat { LosttyWindowStyle.isMockup ? 10 : 12 }
     static var width: CGFloat {
         let count = CGFloat(Button.allCases.count)
         return count * diameter + (count - 1) * spacing
@@ -182,9 +185,12 @@ final class CardWindowButtons: NSView {
             let (fill, stroke) = colors(button, dark: dark)
             fill.setFill()
             circle.fill()
-            stroke.setStroke()
-            circle.lineWidth = 0.5
-            circle.stroke()
+            // The mockup's buttons are flat.
+            if !LosttyWindowStyle.isMockup {
+                stroke.setStroke()
+                circle.lineWidth = 0.5
+                circle.stroke()
+            }
             if hovering, lit { drawSymbol(button) }
         }
     }
@@ -252,7 +258,7 @@ final class CardWindowButtons: NSView {
 /// outside a repo). The Mockup window style centers the title.
 struct CardHeaderContent: View {
     /// Clear of the close, minimize and zoom buttons.
-    static let titleInset: CGFloat = 12 + CardWindowButtons.width + 14
+    static var titleInset: CGFloat { CardWindowButtons.inset + CardWindowButtons.width + 14 }
 
     @ObservedObject var card: CardController
     @ObservedObject private var sidebar: ExtensionSidebarModel
@@ -275,7 +281,7 @@ struct CardHeaderContent: View {
             if style.isMockup {
                 // The title centered on the card, clear of the buttons and pill.
                 ZStack {
-                    title(size: 12, opacity: 0.6)
+                    title(size: 12, color: mockupTitleColor)
                         .padding(.horizontal, max(Self.titleInset, pillWidth + 16))
                     HStack {
                         Spacer(minLength: 0)
@@ -286,7 +292,7 @@ struct CardHeaderContent: View {
                 }
             } else {
                 HStack(spacing: 6) {
-                    title(size: 13, opacity: 0.8)
+                    title(size: 13, color: .primary.opacity(0.8))
                     Spacer(minLength: 8)
                     ProjectPill(model: card.sidebar)
                 }
@@ -298,12 +304,17 @@ struct CardHeaderContent: View {
         .coordinateSpace(name: Self.space)
     }
 
-    private func title(size: CGFloat, opacity: Double) -> some View {
+    private var mockupTitleColor: Color {
+        let skin = sidebar.focusedSurfaceID.flatMap { SkinsRuntime.shared.manager.effectiveSkin($0) }
+        return Color(nsColor: LosttyWindowStyle.titleColor(skin: skin, bar: sidebar.chromeColor ?? .windowBackgroundColor))
+    }
+
+    private func title(size: CGFloat, color: Color) -> some View {
         HStack(spacing: 6) {
             if let pane = focusedPane { CardFolderIcon(pane: pane) }
             Text(card.title)
                 .font(.system(size: size, weight: .semibold))
-                .foregroundStyle(.primary.opacity(opacity))
+                .foregroundStyle(color)
                 .lineLimit(1)
                 .truncationMode(.middle)
             Color.clear

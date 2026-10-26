@@ -14,17 +14,46 @@ enum LosttyWindowStyle {
     /// Read from any thread (a config reload).
     static var isMockup: Bool { UserDefaults.ghostty.bool(forKey: key) }
 
-    /// The title and bottom bars' color over panes of `background`.
+    /// The mockup's terminal, title bar and text.
+    static let mockupBackground = RGB(r: 0x1B, g: 0x18, b: 0x20)
+    static let mockupBar = RGB(r: 0x2C, g: 0x28, b: 0x32)
+    static let mockupText = RGB(r: 0xA4, g: 0x9D, b: 0xAE)
+
+    /// A card's title bar and bottom bar: the mockup's 28pt, or a standard
+    /// title bar's.
+    static var barHeight: CGFloat {
+        isMockup ? 28 : NSWindow.frameRect(forContentRect: .zero, styleMask: [.titled]).height
+    }
+
+    /// The title and bottom bars' color over panes of `background`: the
+    /// mockup's own over its terminal, else as much lighter (darker over a
+    /// light pane).
     static func bar(over background: NSColor) -> NSColor {
-        guard isMockup else { return background }
-        let toward: NSColor = background.isLightColor ? .black : .white
-        let mixed = background.usingColorSpace(.sRGB)?.blended(withFraction: 0.07, of: toward) ?? background
-        return mixed.withAlphaComponent(background.alphaComponent)
+        guard isMockup, let rgb = background.usingColorSpace(.sRGB) else { return background }
+        let alpha = background.alphaComponent
+        let components = [rgb.redComponent, rgb.greenComponent, rgb.blueComponent]
+        if components.map({ UInt8(($0 * 255).rounded()) }) == [mockupBackground.r, mockupBackground.g, mockupBackground.b] {
+            return nsColor(mockupBar).withAlphaComponent(alpha)
+        }
+        let toward: CGFloat = background.isLightColor ? 0 : 1
+        let mixed = components.map { $0 + (toward - $0) * 0.075 }
+        return NSColor(srgbRed: mixed[0], green: mixed[1], blue: mixed[2], alpha: alpha)
     }
 
     /// The line under a title bar and over a bottom bar of `bar`.
     static func hairline(on bar: NSColor) -> NSColor {
         (bar.isLightColor ? NSColor.black : NSColor.white).withAlphaComponent(0.1)
+    }
+
+    /// A title over panes showing `skin`, in the terminal's text color as
+    /// the mockup's is.
+    static func titleColor(skin: Skin?, bar: NSColor) -> NSColor {
+        if let foreground = skin?.foreground { return nsColor(foreground) }
+        return bar.isLightColor ? NSColor(white: 0.2, alpha: 1) : nsColor(mockupText)
+    }
+
+    static func nsColor(_ rgb: RGB) -> NSColor {
+        NSColor(srgbRed: CGFloat(rgb.r) / 255, green: CGFloat(rgb.g) / 255, blue: CGFloat(rgb.b) / 255, alpha: 1)
     }
 
     /// Loads the mockup's colors before the user's config, so the config

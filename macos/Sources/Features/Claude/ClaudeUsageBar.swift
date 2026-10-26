@@ -19,8 +19,8 @@ import SwiftUI
 /// then shortens the meters (`ClaudeUsageFit`), so every window still
 /// shows how it's doing.
 struct ClaudeUsageBar: View {
-    /// A standard title bar's height.
-    static let height: CGFloat = NSWindow.frameRect(forContentRect: .zero, styleMask: [.titled]).height
+    /// A standard title bar's height, or the Mockup window style's 28pt.
+    static var height: CGFloat { LosttyWindowStyle.barHeight }
 
     @ObservedObject var model: ExtensionSidebarModel
     @ObservedObject private var usage = ClaudeUsageRuntime.shared

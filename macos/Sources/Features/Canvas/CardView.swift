@@ -11,10 +11,10 @@ import SwiftUI
 /// its card's controller in the responder chain, so menu actions reach the
 /// card.
 final class CardView: NSView, CanvasStacked {
-    /// A standard title bar's height.
-    static let headerHeight = ClaudeUsageBar.height
+    /// A standard title bar's height, or the Mockup window style's.
+    static var headerHeight: CGFloat { ClaudeUsageBar.height }
     /// The header and bottom bar: a card's height past its panes'.
-    static let chromeHeight = headerHeight + ClaudeUsageBar.height
+    static var chromeHeight: CGFloat { headerHeight + ClaudeUsageBar.height }
     static let cornerRadius: CGFloat = 10
 
     /// Live: the terminals draw. Hidden: out of view or the canvas is; the
