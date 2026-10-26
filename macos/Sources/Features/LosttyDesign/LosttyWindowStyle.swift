@@ -133,8 +133,8 @@ final class WindowStylePreferences: ObservableObject {
 }
 
 /// The Mockup window style's title and bottom bars: the canvas + button's
-/// Liquid Glass tinted the bar's color, its rim, and its prism's two arcs
-/// at the bar's top-right and bottom-left corners. Nothing under it moves,
+/// Liquid Glass tinted the bar's color, and its prism's two arcs at the
+/// bar's top-right and bottom-left corners. Nothing under it moves,
 /// so it draws again only when the bar does.
 struct MockupBarGlass: View {
     let color: NSColor
@@ -147,7 +147,6 @@ struct MockupBarGlass: View {
                     shape: Rectangle(), dark: dark, interactive: false, tint: Color(nsColor: color).opacity(0.85)))
                 .overlay(CanvasAddPrism(
                     shape: Rectangle(), dark: dark, turn: .zero, stops: Self.stops(for: geo.size)))
-                .overlay(CanvasAddRim(shape: Rectangle(), dark: dark, lit: false))
         }
         .allowsHitTesting(false)
     }

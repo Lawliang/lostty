@@ -226,7 +226,7 @@ struct CanvasAddGlass<S: Shape>: ViewModifier {
 }
 
 /// The glass's edge: brightest at the top left, where the light falls.
-struct CanvasAddRim<S: InsettableShape>: View {
+private struct CanvasAddRim<S: InsettableShape>: View {
     let shape: S
     let dark: Bool
     let lit: Bool
