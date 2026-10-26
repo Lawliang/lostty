@@ -3,9 +3,9 @@ import AppKit
 import SwiftUI
 
 /// A zone's settings, in a popover from its label: name, color, folder,
-/// brief, a project's ticket key prefix, what's inside and the boundary's
-/// rules. Edits apply as they're
-/// made.
+/// brief, a project's ticket key prefix and whether its tickets start
+/// by themselves, what's inside and the boundary's rules. Edits apply as
+/// they're made.
 struct CanvasZoneSettings: View {
     /// A domain's project; nil for a project.
     let project: CanvasZone?
@@ -20,6 +20,7 @@ struct CanvasZoneSettings: View {
     @State private var folder: String
     @State private var brief: String
     @State private var keyPrefix: String
+    @State private var autoStart: Bool
     @State private var pickedOutside = false
 
     init(
@@ -37,6 +38,7 @@ struct CanvasZoneSettings: View {
         _folder = State(initialValue: zone.folder ?? "")
         _brief = State(initialValue: zone.brief)
         _keyPrefix = State(initialValue: zone.keyPrefix ?? "")
+        _autoStart = State(initialValue: zone.autoStart == true)
     }
 
     private var isDomain: Bool { project != nil }
@@ -75,6 +77,14 @@ struct CanvasZoneSettings: View {
                         .textFieldStyle(.roundedBorder)
                     note("Tickets made here and in its domains: \(prefix)-1, \(prefix)-2…")
                 }
+                section("Tickets") {
+                    Toggle("Start tickets automatically", isOn: $autoStart)
+                        .toggleStyle(.switch)
+                        .controlSize(.small)
+                    note(autoStart
+                        ? "A queued ticket is typed into its domain's Claude as soon as that Claude is free."
+                        : "A queued ticket waits for Start on the board.")
+                }
             }
             section("Inside") { inside }
             section("Boundary") { note(boundary) }
@@ -95,6 +105,7 @@ struct CanvasZoneSettings: View {
             update { $0.folder = trimmed.isEmpty ? nil : trimmed }
         }
         .onChange(of: brief) { _, value in update { $0.brief = value } }
+        .onChange(of: autoStart) { _, value in update { $0.autoStart = value } }
         .onChange(of: keyPrefix) { _, value in
             let trimmed = value.trimmingCharacters(in: .whitespaces)
             update { $0.keyPrefix = trimmed.isEmpty ? nil : trimmed }

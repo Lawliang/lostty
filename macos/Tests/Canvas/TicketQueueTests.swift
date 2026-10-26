@@ -21,6 +21,19 @@ struct TicketQueueTests {
         #expect(TicketQueue.next(in: login, of: tickets, autoStart: true, startedByHand: [])?.key == "TB-2")
     }
 
+    @Test func withAutoStartOnAFeaturesQueueGoesInOneAtATimeAcrossReviews() throws {
+        var tickets = [ticket(1), ticket(2)]
+        for key in ["TB-1", "TB-2"] {
+            let next = try #require(TicketQueue.next(in: login, of: tickets, autoStart: true, startedByHand: []))
+            #expect(next.key == key)
+            tickets = try #require(TicketQueue.delivering(key, into: pane, in: tickets))
+            #expect(TicketQueue.next(in: login, of: tickets, autoStart: true, startedByHand: []) == nil)
+            tickets = try #require(TicketQueue.applying(.review(key: key, note: "Done"), from: .agent(domain: login), to: tickets))
+        }
+        #expect(tickets.map(\.state) == [.review, .review])
+        #expect(TicketQueue.next(in: login, of: tickets, autoStart: true, startedByHand: []) == nil)
+    }
+
     @Test func anotherFeaturesWorkDoesntHoldUpThisOne() {
         let tickets = [ticket(1, .working, in: onboarding), ticket(2)]
         #expect(TicketQueue.next(in: login, of: tickets, autoStart: true, startedByHand: [])?.key == "TB-2")
