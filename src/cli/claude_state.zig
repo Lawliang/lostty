@@ -4,6 +4,7 @@ const Action = @import("ghostty.zig").Action;
 const protocol = @import("claude/protocol.zig");
 const speak = @import("claude/speak.zig");
 const zone = @import("claude/zone.zig");
+const peers = @import("peers.zig");
 const wire = @import("guard/wire.zig");
 
 pub const Options = struct {
@@ -128,7 +129,7 @@ fn keepInside(alloc: Allocator, pane: []const u8, input: []const u8) ?[]const u8
     const to = zone.sendTarget(alloc, input) orelse return null;
     const file = zoneFile(alloc, pane) orelse return null;
     const members = file.members orelse return null;
-    if (zone.decide(to, members, agents(alloc)) == .allow) return null;
+    if (zone.decide(to, members, agents(alloc), worktrees(alloc)) == .allow) return null;
     if (allowedOnce(alloc, pane, to)) return null;
     const reason = zone.denyReason(alloc, to, file.zone) catch return null;
     const out = wire.claudeJson(alloc, "deny", reason) catch return null;
@@ -149,6 +150,13 @@ fn zoneFile(alloc: Allocator, pane: []const u8) ?zone.File {
     const path = paneFile(alloc, pane, .zone) orelse return null;
     const json = std.fs.cwd().readFileAlloc(alloc, path, speak.text_max) catch return null;
     return zone.parse(alloc, json);
+}
+
+/// The worktrees of the repo Claude runs in; none outside a repo.
+fn worktrees(alloc: Allocator) []const peers.Worktree {
+    const cwd = std.process.getCwdAlloc(alloc) catch return &.{};
+    const listed = peers.git(alloc, cwd, &.{ "worktree", "list", "--porcelain" }) orelse return &.{};
+    return peers.parseWorktrees(alloc, listed) catch &.{};
 }
 
 /// Claude Code's running sessions, from its session files.
