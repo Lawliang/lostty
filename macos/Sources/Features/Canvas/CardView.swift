@@ -75,6 +75,7 @@ final class CardView: NSView, CanvasStacked {
             self?.header.needsDisplay = true
             self?.header.buttons.needsDisplay = true
             self?.needsDisplay = true
+            self?.needsLayout = true
             // Behind the panes: fills any sliver a held or zoomed grid leaves.
             self?.content.layer?.backgroundColor = color?.cgColor
         }
@@ -105,9 +106,19 @@ final class CardView: NSView, CanvasStacked {
     }
 
     /// A Mac window's hairline edge, white on the active card, and its
-    /// shadow: deeper on the active one.
+    /// shadow: deeper on the active one. The Mockup window style's: a faint
+    /// edge and a long soft shadow, the same on every card.
     static func updateWindowLook(_ card: NSView, content: NSView, focused: Bool) {
         let dark = card.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        if LosttyWindowStyle.isMockup {
+            content.layer?.borderColor = NSColor(white: dark ? 1 : 0, alpha: 0.1).cgColor
+            content.layer?.borderWidth = 0.5
+            card.layer?.shadowOffset = CGSize(width: 0, height: -18)
+            card.layer?.shadowOpacity = 0.7
+            card.layer?.shadowRadius = 22
+            return
+        }
+        card.layer?.shadowOffset = CGSize(width: 0, height: -6)
         let edge = focused ? NSColor.white : dark ? NSColor(white: 1, alpha: 0.18) : NSColor(white: 0, alpha: 0.22)
         content.layer?.borderColor = edge.cgColor
         content.layer?.borderWidth = 0.5
@@ -118,7 +129,9 @@ final class CardView: NSView, CanvasStacked {
     override func layout() {
         super.layout()
         content.frame = bounds
-        layer?.shadowPath = CGPath(roundedRect: bounds, cornerWidth: Self.cornerRadius, cornerHeight: Self.cornerRadius, transform: nil)
+        // The mockup's shadow starts inside the card, so it shows below it.
+        let shadow = LosttyWindowStyle.isMockup ? bounds.insetBy(dx: 12, dy: 12) : bounds
+        layer?.shadowPath = CGPath(roundedRect: shadow, cornerWidth: Self.cornerRadius, cornerHeight: Self.cornerRadius, transform: nil)
         header.frame = NSRect(x: 0, y: 0, width: bounds.width, height: Self.headerHeight)
         terminal.frame = NSRect(x: 0, y: Self.headerHeight, width: bounds.width, height: max(0, bounds.height - Self.headerHeight))
         for handle in handles { handle.frame = CanvasModel.handleFrame(for: handle.edges, in: bounds) }

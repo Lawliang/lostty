@@ -14,6 +14,8 @@ final class CardHeaderView: NSView {
     private let content: PassthroughHostingView<CardHeaderContent>
     let buttons: CardWindowButtons
     private let rename: CardRenameButton
+    /// The Mockup window style's line along the bottom.
+    private let hairline = NSView()
     /// Where a drag started, and where the cards it moves were then.
     private var start: (point: CGPoint, origins: [UUID: CGPoint])?
 
@@ -33,9 +35,11 @@ final class CardHeaderView: NSView {
         }
         super.init(frame: .zero)
         wantsLayer = true
+        hairline.wantsLayer = true
         addSubview(content)
         addSubview(buttons)
         addSubview(rename)
+        addSubview(hairline)
     }
 
     @available(*, unavailable)
@@ -45,12 +49,16 @@ final class CardHeaderView: NSView {
     override var wantsUpdateLayer: Bool { true }
 
     override func updateLayer() {
-        layer?.backgroundColor = (card.sidebar.chromeColor ?? .windowBackgroundColor).cgColor
+        let chrome = card.sidebar.chromeColor ?? .windowBackgroundColor
+        layer?.backgroundColor = chrome.cgColor
+        hairline.isHidden = !LosttyWindowStyle.isMockup
+        hairline.layer?.backgroundColor = LosttyWindowStyle.hairline(on: chrome).cgColor
     }
 
     override func layout() {
         super.layout()
         content.frame = bounds
+        hairline.frame = NSRect(x: 0, y: bounds.height - 0.5, width: bounds.width, height: 0.5)
         let size = buttons.intrinsicContentSize
         buttons.frame = NSRect(x: 12, y: (bounds.height - size.height) / 2, width: size.width, height: size.height)
     }
@@ -241,13 +249,15 @@ final class CardWindowButtons: NSView {
 /// buttons, the focused pane's folder icon, the card's title and room for
 /// its rename pencil (`pencilMoved` places it); at the
 /// right, the focused pane's project pill (its repo and branch, hidden
-/// outside a repo).
+/// outside a repo). The Mockup window style centers the title.
 struct CardHeaderContent: View {
     /// Clear of the close, minimize and zoom buttons.
     static let titleInset: CGFloat = 12 + CardWindowButtons.width + 14
 
     @ObservedObject var card: CardController
     @ObservedObject private var sidebar: ExtensionSidebarModel
+    @ObservedObject private var style = WindowStylePreferences.shared
+    @State private var pillWidth: CGFloat = 0
     let pencilMoved: (CGRect) -> Void
 
     init(card: CardController, pencilMoved: @escaping (CGRect) -> Void) {
@@ -261,23 +271,45 @@ struct CardHeaderContent: View {
     }
 
     var body: some View {
+        Group {
+            if style.isMockup {
+                // The title centered on the card, clear of the buttons and pill.
+                ZStack {
+                    title(size: 12, opacity: 0.6)
+                        .padding(.horizontal, max(Self.titleInset, pillWidth + 16))
+                    HStack {
+                        Spacer(minLength: 0)
+                        ProjectPill(model: card.sidebar)
+                            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { pillWidth = $0 }
+                    }
+                    .padding(.trailing, 8)
+                }
+            } else {
+                HStack(spacing: 6) {
+                    title(size: 13, opacity: 0.8)
+                    Spacer(minLength: 8)
+                    ProjectPill(model: card.sidebar)
+                }
+                .padding(.leading, Self.titleInset)
+                .padding(.trailing, 8)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .coordinateSpace(name: Self.space)
+    }
+
+    private func title(size: CGFloat, opacity: Double) -> some View {
         HStack(spacing: 6) {
             if let pane = focusedPane { CardFolderIcon(pane: pane) }
             Text(card.title)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.primary.opacity(0.8))
+                .font(.system(size: size, weight: .semibold))
+                .foregroundStyle(.primary.opacity(opacity))
                 .lineLimit(1)
                 .truncationMode(.middle)
             Color.clear
                 .frame(width: CardRenameButton.size, height: CardRenameButton.size)
                 .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.space)) } action: { pencilMoved($0) }
-            Spacer(minLength: 8)
-            ProjectPill(model: card.sidebar)
         }
-        .padding(.leading, Self.titleInset)
-        .padding(.trailing, 8)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .coordinateSpace(name: Self.space)
     }
 
     private static let space = "CardHeaderContent"

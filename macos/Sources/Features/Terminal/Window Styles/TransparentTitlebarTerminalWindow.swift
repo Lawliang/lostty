@@ -8,6 +8,9 @@ class TransparentTitlebarTerminalWindow: TerminalWindow {
     /// visibility changes) can reset the titlebar appearance.
     private var lastSurfaceConfig: Ghostty.SurfaceView.DerivedConfig?
 
+    /// Lostty: the Mockup window style's line under the title bar.
+    private var titlebarHairline: NSView?
+
     /// KVO observation for tab group window changes.
     private var tabGroupWindowsObservation: NSKeyValueObservation?
     private var tabBarVisibleObservation: NSKeyValueObservation?
@@ -97,7 +100,8 @@ class TransparentTitlebarTerminalWindow: TerminalWindow {
 
             titlebarView.layer?.backgroundColor = (isGlassStyle && isTransparentTitlebar)
                 ? NSColor.clear.cgColor
-                : preferredBackgroundColor?.cgColor
+                : preferredBackgroundColor.map(LosttyWindowStyle.bar(over:))?.cgColor // Lostty: the window style's bar
+            syncTitlebarHairline(in: titlebarView)
         }
 
         // In all cases, we have to hide the background view since this has multiple subviews
@@ -111,13 +115,34 @@ class TransparentTitlebarTerminalWindow: TerminalWindow {
 
         // Setup the titlebar background color to match ours
         titlebarContainer.wantsLayer = true
-        titlebarContainer.layer?.backgroundColor = preferredBackgroundColor?.cgColor
+        titlebarContainer.layer?.backgroundColor = preferredBackgroundColor.map(LosttyWindowStyle.bar(over:))?.cgColor // Lostty
+        syncTitlebarHairline(in: titlebarContainer)
 
         // See the docs for the function that sets this to true on why
         effectViewIsHidden = false
 
         // Necessary to not draw the border around the title
         titlebarAppearsTransparent = true
+    }
+
+    /// Lostty: in the Mockup window style, a hairline along the title bar's
+    /// bottom edge.
+    private func syncTitlebarHairline(in titlebar: NSView) {
+        guard LosttyWindowStyle.isMockup, let background = preferredBackgroundColor else {
+            titlebarHairline?.removeFromSuperview()
+            titlebarHairline = nil
+            return
+        }
+        let line = titlebarHairline ?? NSView()
+        if line.superview !== titlebar {
+            line.wantsLayer = true
+            let flipped = titlebar.isFlipped
+            line.autoresizingMask = [.width, flipped ? .minYMargin : .maxYMargin]
+            line.frame = NSRect(x: 0, y: flipped ? titlebar.bounds.height - 0.5 : 0, width: titlebar.bounds.width, height: 0.5)
+            titlebar.addSubview(line)
+            titlebarHairline = line
+        }
+        line.layer?.backgroundColor = LosttyWindowStyle.hairline(on: LosttyWindowStyle.bar(over: background)).cgColor
     }
 
     // MARK: View Finders

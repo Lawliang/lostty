@@ -28,6 +28,7 @@ struct ClaudeUsageBar: View {
     @ObservedObject private var handoff = ContextHandoffCoordinator.shared
     @ObservedObject private var handoffSettings = ContextHandoffPreferences.shared
     @ObservedObject private var monitor = PaneResourceMonitor.shared
+    @ObservedObject private var style = WindowStylePreferences.shared
     @State private var showingDetails = false
     @State private var showingHandoff = false
     @State private var hovered: Part?
@@ -90,6 +91,11 @@ struct ClaudeUsageBar: View {
                 .onChange(of: geo.size.width) { width = $0 }
         })
         .background(Color(nsColor: chrome))
+        .overlay(alignment: .top) {
+            if style.isMockup {
+                Rectangle().fill(Color(nsColor: LosttyWindowStyle.hairline(on: chrome))).frame(height: 0.5)
+            }
+        }
     }
 
     private var modelName: String { pane.flatMap { usage.models[$0] } ?? "" }
