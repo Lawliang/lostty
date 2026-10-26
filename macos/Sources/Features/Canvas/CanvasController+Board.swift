@@ -28,6 +28,22 @@ extension CanvasController {
         setTickets(sent)
     }
 
+    /// A user var from pane `pane`: a `lostty +ticket` report, parsed here,
+    /// at the boundary. Anything else, or a report that doesn't parse, is
+    /// ignored.
+    static func userVarChanged(_ pane: UUID, name: String, value: String) {
+        guard name == TicketReport.userVar, let report = TicketReport(json: value) else { return }
+        shared?.ticketReported(report, from: pane)
+    }
+
+    /// Applied when the pane's role may make it (`TicketQueue.applying`);
+    /// else dropped without a word, since the CLI can't hear back.
+    func ticketReported(_ report: TicketReport, from pane: UUID) {
+        guard let actor = model.ticketRole(of: pane, panes: membership.panes),
+              let reported = TicketQueue.applying(report, from: actor, to: tickets) else { return }
+        setTickets(reported)
+    }
+
     /// Whether `ticket`'s project starts its tickets without Start.
     func autoStarts(_ ticket: CanvasTicket) -> Bool {
         ticket.zone.flatMap(model.projectZone).flatMap { model.zone($0)?.autoStart } ?? false

@@ -105,6 +105,12 @@ struct TicketQueueTests {
         #expect(TicketReport(json: "review TB-7 Done") == nil)
     }
 
+    /// The value src/cli/ticket.zig's test expects `+ticket` to send.
+    @Test func aReportReadsWhatTheCLISends() {
+        let sent = #"["review","TB-7","Added the \"Continue\" button\nand the callback"]"#
+        #expect(TicketReport(json: sent) == .review(key: "TB-7", note: "Added the \"Continue\" button\nand the callback"))
+    }
+
     @Test func aPaneIsItsDomainsAgentOrItsProjectsManager() {
         var model = CanvasModel()
         model.addZone(CanvasZone(id: project, frame: CGRect(x: 0, y: 0, width: 4000, height: 2000)))

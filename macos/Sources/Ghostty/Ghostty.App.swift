@@ -1781,11 +1781,12 @@ extension Ghostty {
                   let value = String(cString: valuePtr, encoding: .utf8) else { return }
             // Ghostty Skins: requests from the `skins` CLI arrive as a user var.
             // Lostty Claude trace: hook reports arrive the same way, and
-            // so does the status line's usage report.
+            // so do the status line's usage report and `+ticket` reports.
             MainActor.assumeIsolated {
                 SkinsRuntime.shared.userVarChanged(surfaceView, name: name, value: value)
                 ClaudeRuntime.shared.userVarChanged(surfaceView.id, name: name, value: value)
                 ClaudeUsageRuntime.shared.userVarChanged(surfaceView.id, name: name, value: value)
+                CanvasController.userVarChanged(surfaceView.id, name: name, value: value)
             }
         }
 
