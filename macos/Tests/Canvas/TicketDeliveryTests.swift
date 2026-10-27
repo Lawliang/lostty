@@ -22,6 +22,20 @@ struct TicketDeliveryTests {
         #expect(TicketDelivery.input(in: claude(above: ["╰───╯"], box: ["❯\u{00A0}Try \"refactor <filepath>\""])) == .empty)
     }
 
+    @Test func theFaintSuggestionAfterATurnCountsAsEmpty() {
+        let rule = "\u{1B}[38;5;244m\(Self.rule)\u{1B}[39m"
+        let screen = ["⏺ Moved TB-7 to review.", "", rule, "\u{1B}[39m❯ \u{1B}[2mretry the ticket review\u{1B}[0m", rule]
+        #expect(TicketDelivery.input(in: screen.joined(separator: "\n")) == .empty)
+        #expect(TicketDelivery.input(in: claude(box: ["\u{1B}[39m❯ \u{1B}[2mretry the ticket review and then", "  keep going\u{1B}[0m"]))
+            == .empty)
+    }
+
+    @Test func typedTextIsTypedWhateverItsColor() {
+        #expect(TicketDelivery.input(in: claude(box: ["\u{1B}[39m❯ retry the ticket review\u{1B}[0m"])) == .typed)
+        #expect(TicketDelivery.input(in: claude(box: ["\u{1B}[38;2;2;2;2m❯ \u{1B}[38;5;2mok"])) == .typed)
+        #expect(TicketDelivery.input(in: claude(box: ["❯ \u{1B}[2mretry\u{1B}[22m the review"])) == .typed)
+    }
+
     @Test func halfAThoughtIsTyped() {
         #expect(TicketDelivery.input(in: claude(box: ["❯ ok, keep go"])) == .typed)
     }

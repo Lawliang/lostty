@@ -87,6 +87,7 @@ extension CanvasController {
         let panes = cards.flatMap { Array($0.surfaceTree) }
         var next = tickets
         var waiting = false
+        let pid = ProcessInfo.processInfo.processIdentifier
         for domain in model.zones {
             guard let parent = domain.parent, let project = model.zone(parent),
                   let ticket = TicketQueue.next(
@@ -95,7 +96,8 @@ extension CanvasController {
             let agent = panes.first { pane in
                 membership.panes.zones[pane.id] == domain.id && pane.id != project.manager
                     && ClaudeRuntime.shared.phase(pane.id).isOff
-                    && TicketDelivery.input(in: TicketDelivery.screen(of: pane)) == .empty
+                    && TicketDelivery.input(in: TicketDelivery.screen(
+                        of: pane, session: TmuxOwnership.showing(pane.id, ownedBy: pid, in: tmuxSessions).first?.id)) == .empty
             }
             guard let agent, let delivered = TicketQueue.delivering(key, into: agent.id, in: next),
                   TicketDelivery.type(TicketDelivery.prompt(for: ticket, feature: domain.name), into: agent) else {

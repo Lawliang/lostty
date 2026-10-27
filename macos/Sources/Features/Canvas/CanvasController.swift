@@ -84,7 +84,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     private(set) var membership = (panes: CanvasPaneZones(), model: CanvasModel())
     private var zoneFiles: [UUID: CanvasZoneFile] = [:]
     let zoneStore = CanvasZoneStore.standard
-    private var tmuxSessions: [TmuxSession] = []
+    private(set) var tmuxSessions: [TmuxSession] = []
     /// The zoom the terminals last rendered at.
     var settledZoom: CGFloat = 1
     var settleWork: DispatchWorkItem?

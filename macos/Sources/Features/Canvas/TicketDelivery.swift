@@ -45,21 +45,70 @@ enum TicketDelivery {
         return "text:" + escaped
     }
 
-    /// Reads a pane's visible text, bottom last. Claude's input box is the
-    /// last line starting with `❯` right under a rule of `─`; a shell
-    /// prompt ending in `❯` has no rule above it. It's empty when nothing
-    /// follows the `❯` but a fresh session's `Try "…"` suggestion, and the
-    /// line below is the box's closing rule. A spinner line just above the
-    /// box (`✻ Stewing… (`) means Claude is working.
+    /// Reads a pane's screen, bottom last, plain or with SGR escapes as
+    /// tmux `capture-pane -e` writes it. Claude's input box is the last
+    /// line starting with `❯` right under a rule of `─`; a shell prompt
+    /// ending in `❯` has no rule above it. It's empty when nothing up to
+    /// the box's closing rule follows the `❯` but faint text (the
+    /// suggestion Claude shows after a turn) or a fresh session's
+    /// `Try "…"`. A spinner line just above the box (`✻ Stewing… (`)
+    /// means Claude is working.
     static func input(in screen: String) -> Input {
-        let lines = screen.components(separatedBy: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
-        guard let row = lines.indices.last(where: { $0 > 0 && lines[$0].hasPrefix("❯") && isRule(lines[$0 - 1]) }) else {
-            return .none
+        let lines = Self.lines(of: screen)
+        guard let row = lines.indices.last(where: {
+            $0 > 0 && lines[$0].text.hasPrefix("❯") && isRule(lines[$0 - 1].text)
+        }) else { return .none }
+        if lines[..<(row - 1)].suffix(3).contains(where: { isSpinner($0.text) }) { return .none }
+        guard let close = lines[(row + 1)...].firstIndex(where: { isRule($0.text) }) else { return .typed }
+        let bright = lines[row].bright
+        let typed = (bright.hasPrefix("❯") ? bright.dropFirst() : Substring(bright))
+            .trimmingCharacters(in: .whitespaces)
+        let below = lines[(row + 1)..<close].contains { !$0.bright.isEmpty }
+        return !below && (typed.isEmpty || typed.hasPrefix("Try \"")) ? .empty : .typed
+    }
+
+    /// `screen`'s lines, trimmed, without escapes: all their text, and
+    /// only the text not drawn faint (SGR 2 until 22 or a reset). Style
+    /// carries over from one line to the next, as tmux writes it.
+    private static func lines(of screen: String) -> [(text: String, bright: String)] {
+        var lines: [(text: String, bright: String)] = [("", "")]
+        var faint = false
+        var rest = Substring(screen)
+        while let char = rest.popFirst() {
+            switch char {
+            case "\n":
+                lines.append(("", ""))
+            case "\u{1B}" where rest.first == "[":
+                rest = rest.dropFirst()
+                let end = rest.firstIndex { $0.asciiValue.map { (0x40...0x7E).contains($0) } ?? false } ?? rest.endIndex
+                if rest[end...].first == "m" { faint = isFaint(after: rest[..<end], was: faint) }
+                rest = rest[end...].dropFirst()
+            case "\u{1B}" where rest.first == "]":
+                while let next = rest.popFirst(), next != "\u{07}" {
+                    if next == "\u{1B}" { rest = rest.dropFirst(); break }
+                }
+            case "\u{1B}":
+                rest = rest.dropFirst()
+            default:
+                lines[lines.count - 1].text.append(char)
+                if !faint { lines[lines.count - 1].bright.append(char) }
+            }
         }
-        if lines[..<(row - 1)].suffix(3).contains(where: isSpinner) { return .none }
-        let typed = lines[row].dropFirst().trimmingCharacters(in: .whitespaces)
-        guard row + 1 < lines.count, isRule(lines[row + 1]) else { return .typed }
-        return typed.isEmpty || typed.hasPrefix("Try \"") ? .empty : .typed
+        return lines.map { ($0.text.trimmingCharacters(in: .whitespaces), $0.bright.trimmingCharacters(in: .whitespaces)) }
+    }
+
+    private static func isFaint(after params: Substring, was faint: Bool) -> Bool {
+        var faint = faint
+        var codes = params.split(separator: ";", omittingEmptySubsequences: false).map { $0.isEmpty ? 0 : Int($0) ?? -1 }[...]
+        while let code = codes.popFirst() {
+            switch code {
+            case 0, 22: faint = false
+            case 2: faint = true
+            case 38, 48, 58: codes = codes.dropFirst(codes.first == 5 ? 2 : 4)
+            default: break
+            }
+        }
+        return faint
     }
 
     private static func isRule(_ line: String) -> Bool {
@@ -86,6 +135,14 @@ enum TicketDelivery {
         guard ghostty_surface_read_text(surface, selection, &text) else { return "" }
         defer { ghostty_surface_free_text(surface, &text) }
         return String(cString: text.text)
+    }
+
+    /// The pane's screen with styles, from the tmux session `session`
+    /// (an id) it shows, so a faint suggestion isn't taken for typed text.
+    /// Its plain text when it shows none or tmux doesn't answer.
+    @MainActor
+    static func screen(of view: Ghostty.SurfaceView, session: String?) -> String {
+        session.flatMap { TmuxClient(timeout: 0.5).run(["capture-pane", "-e", "-p", "-t", $0]) } ?? screen(of: view)
     }
 
     /// Types `text` into the pane as keys, not `sendText`'s bracketed
