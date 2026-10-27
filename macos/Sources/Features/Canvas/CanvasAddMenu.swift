@@ -205,17 +205,16 @@ struct CanvasAddLitGlass<S: InsettableShape>: ViewModifier {
 
 /// The glass's body: Liquid Glass on macOS 26, which bends the cards
 /// behind it and casts its own shadow; before that, the thinnest
-/// material with one. A window bar's is tinted its own color.
-struct CanvasAddGlass<S: Shape>: ViewModifier {
+/// material with one.
+private struct CanvasAddGlass<S: Shape>: ViewModifier {
     let shape: S
     let dark: Bool
     let interactive: Bool
-    var tint: Color?
 
     func body(content: Content) -> some View {
         if #available(macOS 26, *) {
             content.glassEffect(
-                .regular.tint(tint ?? (dark ? .black.opacity(0.35) : .white.opacity(0.35))).interactive(interactive),
+                .regular.tint(dark ? .black.opacity(0.35) : .white.opacity(0.35)).interactive(interactive),
                 in: shape)
         } else {
             content.background(

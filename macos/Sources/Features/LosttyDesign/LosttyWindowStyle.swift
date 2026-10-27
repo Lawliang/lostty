@@ -132,19 +132,25 @@ final class WindowStylePreferences: ObservableObject {
     }
 }
 
-/// The Mockup window style's title and bottom bars: the canvas + button's
-/// Liquid Glass tinted the bar's color, and its prism's two arcs at the
-/// bar's top-right and bottom-left corners. Nothing under it moves,
-/// so it draws again only when the bar does.
+/// Glass in any color, for the Mockup window style's title and bottom
+/// bars: `color` itself, lit from above as Liquid Glass is, with the canvas
+/// + button's prism arcs at the top-right and bottom-left corners. Apple's
+/// glass can't take an exact color (it grays what's under it and its tint
+/// keys off brightness), so this draws its own.
 struct MockupBarGlass: View {
     let color: NSColor
 
     var body: some View {
         let dark = !color.isLightColor
         GeometryReader { geo in
-            Color.clear
-                .modifier(CanvasAddGlass(
-                    shape: Rectangle(), dark: dark, interactive: false, tint: Color(nsColor: color).opacity(0.85)))
+            Color(nsColor: color)
+                .overlay(LinearGradient(
+                    stops: [
+                        .init(color: .white.opacity(dark ? 0.07 : 0.3), location: 0),
+                        .init(color: .white.opacity(0), location: 0.55),
+                        .init(color: .black.opacity(dark ? 0.12 : 0.05), location: 1),
+                    ],
+                    startPoint: .top, endPoint: .bottom))
                 .overlay(CanvasAddPrism(
                     shape: Rectangle(), dark: dark, turn: .zero, stops: Self.stops(for: geo.size)))
         }

@@ -53,7 +53,7 @@ final class CardHeaderView: NSView {
     override func updateLayer() {
         let chrome = card.sidebar.chromeColor ?? .windowBackgroundColor
         let mockup = LosttyWindowStyle.isMockup
-        layer?.backgroundColor = mockup ? nil : chrome.cgColor
+        layer?.backgroundColor = chrome.cgColor
         glass.isHidden = !mockup
         if mockup { glass.rootView = MockupBarGlass(color: chrome) }
         hairline.isHidden = !mockup
