@@ -14,8 +14,7 @@ final class CardHeaderView: NSView {
     private let content: PassthroughHostingView<CardHeaderContent>
     let buttons: CardWindowButtons
     private let rename: CardRenameButton
-    /// The Mockup window style's glass, and its line along the bottom.
-    private let glass = PassthroughHostingView(rootView: MockupBarGlass(color: .windowBackgroundColor))
+    /// The Mockup window style's line along the bottom.
     private let hairline = NSView()
     /// Where a drag started, and where the cards it moves were then.
     private var start: (point: CGPoint, origins: [UUID: CGPoint])?
@@ -37,7 +36,6 @@ final class CardHeaderView: NSView {
         super.init(frame: .zero)
         wantsLayer = true
         hairline.wantsLayer = true
-        addSubview(glass)
         addSubview(content)
         addSubview(buttons)
         addSubview(rename)
@@ -52,18 +50,14 @@ final class CardHeaderView: NSView {
 
     override func updateLayer() {
         let chrome = card.sidebar.chromeColor ?? .windowBackgroundColor
-        let mockup = LosttyWindowStyle.isMockup
-        layer?.backgroundColor = mockup ? nil : chrome.cgColor
-        glass.isHidden = !mockup
-        if mockup { glass.rootView = MockupBarGlass(color: chrome) }
-        hairline.isHidden = !mockup
+        layer?.backgroundColor = chrome.cgColor
+        hairline.isHidden = !LosttyWindowStyle.isMockup
         hairline.layer?.backgroundColor = LosttyWindowStyle.hairline(on: chrome).cgColor
     }
 
     override func layout() {
         super.layout()
         content.frame = bounds
-        glass.frame = bounds
         hairline.frame = NSRect(x: 0, y: bounds.height - 0.5, width: bounds.width, height: 0.5)
         let size = buttons.intrinsicContentSize
         buttons.frame = NSRect(
