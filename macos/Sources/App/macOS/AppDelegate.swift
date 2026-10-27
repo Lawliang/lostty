@@ -395,6 +395,8 @@ class AppDelegate: NSObject,
         // reinstall, which brings in the handoff's hook events.
         ContextHandoffWiring.start()
         ClaudeRuntime.shared.messageKeptInside = { CanvasController.shared?.messageKeptInside(pane: $0, target: $1) }
+        // Each request's end: gold coins and what it cost, in the pane's corner.
+        ClaudeRuntime.shared.requestEnded = { GoldDropRuntime.shared.requestEnded(pane: $0, path: $1, since: $2) }
         // Restart to Update: put back what window restoration doesn't
         // (Claude's state, Stay Awake, the window setting, hooks). Before
         // Stay Awake's crash restore, the hooks check and the Claude sync.
@@ -456,6 +458,11 @@ class AppDelegate: NSObject,
             item.target = self
             menu.insertItem(item, at: menu.index(of: anchor) + 2)
 
+            // Lostty gold drop: the focused pane's coins, with a made-up count.
+            let goldDrop = NSMenuItem(title: "Preview Gold Drop", action: #selector(previewGoldDrop(_:)), keyEquivalent: "")
+            goldDrop.target = self
+            menu.insertItem(goldDrop, at: menu.index(of: item) + 1)
+
             // Lostty Mobile: open a session over SSH to localhost.
             RemoteDebugUI.installMenuItems(after: item)
 
@@ -472,6 +479,12 @@ class AppDelegate: NSObject,
         guard let controller = NSApp.keyWindow?.windowController as? BaseTerminalController,
               let surface = controller.focusedSurface else { return }
         MainActor.assumeIsolated { ClaudeRuntime.shared.debugCycle(surface.id) }
+    }
+
+    @objc private func previewGoldDrop(_ sender: Any?) {
+        guard let controller = NSApp.keyWindow?.windowController as? BaseTerminalController,
+              let surface = controller.focusedSurface else { return }
+        MainActor.assumeIsolated { GoldDropRuntime.shared.drops.send(GoldDrop(pane: surface.id, tokens: 222_000)) }
     }
 
     @objc private func showPhoneAccessGallery(_ sender: Any?) {
