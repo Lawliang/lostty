@@ -476,6 +476,29 @@ struct ClaudeRuntimeTests {
         #expect(signals == [.prompted])
     }
 
+    @Test func aStopEndsTheRequestThatBeganAtItsPrompt() {
+        let runtime = makeRuntime()
+        var ended: [(UUID, String, Date)] = []
+        runtime.requestEnded = { ended.append(($0, $1, $2)) }
+        let began = harness.clock
+        runtime.userVarChanged(pane, name: ClaudeConstants.userVarName, value: payload("busy"))
+        harness.clock += 30
+        runtime.userVarChanged(pane, name: ClaudeConstants.userVarName, value: action("Editing Foo.swift"))
+        harness.clock += 30
+        runtime.userVarChanged(pane, name: ClaudeConstants.userVarName,
+                               value: #"{"v":1,"state":"idle","permission":true,"transcript":"/t.jsonl"}"#)
+        #expect(ended.isEmpty)
+        harness.clock += 30
+        runtime.userVarChanged(pane, name: ClaudeConstants.userVarName,
+                               value: #"{"v":1,"state":"idle","transcript":"/t.jsonl"}"#)
+        #expect(ended.map(\.0) == [pane])
+        #expect(ended.map(\.1) == ["/t.jsonl"])
+        #expect(ended.map(\.2) == [began])
+        runtime.userVarChanged(pane, name: ClaudeConstants.userVarName,
+                               value: #"{"v":1,"state":"idle","transcript":"/t.jsonl"}"#)
+        #expect(ended.count == 1)
+    }
+
     // Claude carries on after you approve a tool with no new prompt, and the
     // approved call can be its last: its Stop still ends the turn.
     @Test func theStopAfterAnApprovedToolIsAHandoffStop() {
