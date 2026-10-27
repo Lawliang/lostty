@@ -93,7 +93,9 @@ struct ClaudeUsageBar: View {
         .background(Color(nsColor: chrome))
         .overlay(alignment: .top) {
             if style.isMockup {
+                // Stops at the window's edge rather than crossing it.
                 Rectangle().fill(Color(nsColor: LosttyWindowStyle.hairline(on: chrome))).frame(height: 0.5)
+                    .padding(.horizontal, 1)
             }
         }
     }

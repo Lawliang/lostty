@@ -27,8 +27,18 @@ enum LosttyWindowStyle {
     /// brighter (dimmer over a light pane) at the same hue and saturation,
     /// so each skin's bars stay its color. Mixing in white grayed them.
     static func bar(over background: NSColor) -> NSColor {
-        guard isMockup, let hsb = background.usingColorSpace(.sRGB) else { return background }
-        let step: CGFloat = background.isLightColor ? -0.07 : 0.07
+        isMockup ? stepped(background) : background
+    }
+
+    /// A card's edge around bars of `bar`: a step past them, as a ticket
+    /// panel's faint edge is a step past its gray.
+    static func edge(on bar: NSColor) -> NSColor {
+        stepped(bar)
+    }
+
+    private static func stepped(_ color: NSColor) -> NSColor {
+        guard let hsb = color.usingColorSpace(.sRGB) else { return color }
+        let step: CGFloat = color.isLightColor ? -0.07 : 0.07
         return NSColor(
             colorSpace: .sRGB, hue: hsb.hueComponent, saturation: hsb.saturationComponent,
             brightness: min(1, max(0, hsb.brightnessComponent + step)), alpha: hsb.alphaComponent)

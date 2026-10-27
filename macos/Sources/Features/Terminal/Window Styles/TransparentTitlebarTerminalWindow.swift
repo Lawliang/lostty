@@ -208,7 +208,9 @@ class TransparentTitlebarTerminalWindow: TerminalWindow {
             line.wantsLayer = true
             let flipped = titlebar.isFlipped
             line.autoresizingMask = [.width, flipped ? .minYMargin : .maxYMargin]
-            line.frame = NSRect(x: 0, y: flipped ? titlebar.bounds.height - 0.5 : 0, width: titlebar.bounds.width, height: 0.5)
+            // Stops at the window's edge rather than crossing it.
+            line.frame = NSRect(
+                x: 1, y: flipped ? titlebar.bounds.height - 0.5 : 0, width: max(0, titlebar.bounds.width - 2), height: 0.5)
             titlebar.addSubview(line)
             titlebarHairline = line
         }

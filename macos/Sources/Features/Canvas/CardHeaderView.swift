@@ -58,7 +58,8 @@ final class CardHeaderView: NSView {
     override func layout() {
         super.layout()
         content.frame = bounds
-        hairline.frame = NSRect(x: 0, y: bounds.height - 0.5, width: bounds.width, height: 0.5)
+        // Stops at the card's edge rather than crossing it.
+        hairline.frame = NSRect(x: 0.5, y: bounds.height - 0.5, width: max(0, bounds.width - 1), height: 0.5)
         let size = buttons.intrinsicContentSize
         buttons.frame = NSRect(
             x: CardWindowButtons.inset, y: (bounds.height - size.height) / 2, width: size.width, height: size.height)

@@ -88,7 +88,8 @@ final class CardView: NSView, CanvasStacked {
     override var wantsUpdateLayer: Bool { true }
 
     override func updateLayer() {
-        Self.updateWindowLook(self, content: content, focused: isFocusedCard)
+        Self.updateWindowLook(
+            self, content: content, focused: isFocusedCard, edge: card.sidebar.chromeColor.map(LosttyWindowStyle.edge(on:)))
         updateRing()
     }
 
@@ -106,12 +107,13 @@ final class CardView: NSView, CanvasStacked {
     }
 
     /// A Mac window's hairline edge, white on the active card, and its
-    /// shadow: deeper on the active one. The Mockup window style's: a faint
-    /// edge and a long soft shadow, the same on every card.
-    static func updateWindowLook(_ card: NSView, content: NSView, focused: Bool) {
+    /// shadow: deeper on the active one. The Mockup window style's: an edge
+    /// of `edge` (else a faint line) and a long soft shadow, the same on
+    /// every card.
+    static func updateWindowLook(_ card: NSView, content: NSView, focused: Bool, edge: NSColor? = nil) {
         let dark = card.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
         if LosttyWindowStyle.isMockup {
-            content.layer?.borderColor = NSColor(white: dark ? 1 : 0, alpha: 0.1).cgColor
+            content.layer?.borderColor = (edge ?? NSColor(white: dark ? 1 : 0, alpha: 0.1)).cgColor
             content.layer?.borderWidth = 0.5
             card.layer?.shadowOffset = CGSize(width: 0, height: -18)
             card.layer?.shadowOpacity = 0.7
