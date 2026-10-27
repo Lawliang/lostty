@@ -255,7 +255,7 @@ final class CardWindowButtons: NSView {
 /// buttons, the focused pane's folder icon, the card's title and room for
 /// its rename pencil (`pencilMoved` places it); at the
 /// right, the focused pane's project pill (its repo and branch, hidden
-/// outside a repo). The Mockup window style centers the title.
+/// outside a repo).
 struct CardHeaderContent: View {
     /// Clear of the close, minimize and zoom buttons.
     static var titleInset: CGFloat { CardWindowButtons.inset + CardWindowButtons.width + 14 }
@@ -263,7 +263,6 @@ struct CardHeaderContent: View {
     @ObservedObject var card: CardController
     @ObservedObject private var sidebar: ExtensionSidebarModel
     @ObservedObject private var style = WindowStylePreferences.shared
-    @State private var pillWidth: CGFloat = 0
     let pencilMoved: (CGRect) -> Void
 
     init(card: CardController, pencilMoved: @escaping (CGRect) -> Void) {
@@ -277,29 +276,17 @@ struct CardHeaderContent: View {
     }
 
     var body: some View {
-        Group {
+        HStack(spacing: 6) {
             if style.isMockup {
-                // The title centered on the card, clear of the buttons and pill.
-                ZStack {
-                    title(size: 12, color: mockupTitleColor)
-                        .padding(.horizontal, max(Self.titleInset, pillWidth + 16))
-                    HStack {
-                        Spacer(minLength: 0)
-                        ProjectPill(model: card.sidebar)
-                            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { pillWidth = $0 }
-                    }
-                    .padding(.trailing, 8)
-                }
+                title(size: 12, color: mockupTitleColor)
             } else {
-                HStack(spacing: 6) {
-                    title(size: 13, color: .primary.opacity(0.8))
-                    Spacer(minLength: 8)
-                    ProjectPill(model: card.sidebar)
-                }
-                .padding(.leading, Self.titleInset)
-                .padding(.trailing, 8)
+                title(size: 13, color: .primary.opacity(0.8))
             }
+            Spacer(minLength: 8)
+            ProjectPill(model: card.sidebar)
         }
+        .padding(.leading, Self.titleInset)
+        .padding(.trailing, 8)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .coordinateSpace(name: Self.space)
     }
