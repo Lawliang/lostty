@@ -6,15 +6,20 @@ import Testing
 struct RequestTokensTests {
     let start = Date() - 600
 
-    /// One line of a reply: 1 input, 10 cache writes, 100 cache reads and
+    /// One line of a reply: 1 input, 8 cache writes, 100 cache reads and
     /// `output` output tokens, so the sum names which replies counted.
-    func reply(_ id: String, at: Date? = nil, output: Int = 1000, content: String = "text") -> String {
+    func reply(
+        _ id: String, at: Date? = nil, output: Int = 1000, content: String = "text", model: String = "claude-opus-5-5"
+    ) -> String {
         let at = (at ?? start + 60).formatted(Date.ISO8601FormatStyle(includingFractionalSeconds: true))
         return #"{"type":"assistant","timestamp":"\#(at)","requestId":"req-\#(id)","#
-            + #""message":{"id":"msg-\#(id)","model":"claude-opus-5-5","content":[{"type":"\#(content)"}],"#
-            + #""usage":{"input_tokens":1,"output_tokens":\#(output),"cache_creation_input_tokens":10,"#
+            + #""message":{"id":"msg-\#(id)","model":"\#(model)","content":[{"type":"\#(content)"}],"#
+            + #""usage":{"input_tokens":1,"output_tokens":\#(output),"cache_creation_input_tokens":8,"#
             + #""cache_read_input_tokens":100}}}"#
     }
+
+    /// An Opus reply's weight: 1 + 8 × 1.25 + 100 × 0.1 + 5 per output token.
+    func weight(_ output: Int = 1000) -> Int { 21 + 5 * output }
 
     /// Claude Code's record that the request's Stop hooks ran.
     var stop: String {
@@ -53,7 +58,14 @@ struct RequestTokensTests {
         try FileManager.default.createDirectory(at: subagents, withIntermediateDirectories: true)
         try write([reply("sub", output: 4000)], to: subagents.appendingPathComponent("agent-1.jsonl"))
         let total = await counter().total(file, since: start)
-        #expect(total == 1111 + 2111 + 4111)
+        #expect(total == weight() + weight(2000) + weight(4000))
+    }
+
+    @Test func otherModelsWeighByTheirPriceNextToOpus() async throws {
+        let file = try conversation()
+        try write([reply("h", output: 999, model: "claude-haiku-5-5"), stop], to: file)
+        // Haiku weighs a fifth of Opus: (21 + 5 × 999) / 5.
+        #expect(await counter().total(file, since: start) == 1003)
     }
 
     @Test func repliesWrittenAfterTheStopHookStartedStillCount() async throws {
@@ -63,22 +75,22 @@ struct RequestTokensTests {
         let total = Task { await counter.total(file, since: start) }
         try await Task.sleep(for: .milliseconds(100))
         try append([reply("a", output: 2000), stop], to: file)
-        #expect(await total.value == 2111)
+        #expect(await total.value == weight(2000))
     }
 
     @Test func withoutAStopRecordItCountsWhatIsThereAfterAFewTries() async throws {
         let file = try conversation()
         try write([reply("a")], to: file)
-        #expect(await RequestTokens(settle: .milliseconds(1), tries: 3).total(file, since: start) == 1111)
+        #expect(await RequestTokens(settle: .milliseconds(1), tries: 3).total(file, since: start) == weight())
     }
 
     @Test func theNextRequestCountsOnlyWhatWasAdded() async throws {
         let file = try conversation()
         try write([reply("a"), stop], to: file)
         let counter = RequestTokens(settle: .milliseconds(1), tries: 3)
-        #expect(await counter.total(file, since: start) == 1111)
+        #expect(await counter.total(file, since: start) == weight())
         try append([prompt, reply("b", output: 2000), stop], to: file)
-        #expect(await counter.total(file, since: start) == 2111)
+        #expect(await counter.total(file, since: start) == weight(2000))
         #expect(await counter.total(file, since: start) == 0)
     }
 
@@ -88,24 +100,24 @@ struct RequestTokensTests {
         let ending = last + "\n" + stop
         try write([reply("a"), reply("b", output: 2000), ending], to: file)
         // Reaches back past the last reply into the middle of the one before.
-        #expect(await counter(tail: UInt64(ending.utf8.count + 20)).total(file, since: start) == 3111)
+        #expect(await counter(tail: UInt64(ending.utf8.count + 20)).total(file, since: start) == weight(3000))
         // Exactly the last reply and what follows it: that reply still counts.
-        #expect(await counter(tail: UInt64(ending.utf8.count + 1)).total(file, since: start) == 3111)
+        #expect(await counter(tail: UInt64(ending.utf8.count + 1)).total(file, since: start) == weight(3000))
     }
 
     @Test func aFileThatShrankStartsOver() async throws {
         let file = try conversation()
         try write([reply("a"), reply("b"), reply("c"), stop], to: file)
         let counter = self.counter()
-        #expect(await counter.total(file, since: start) == 3 * 1111)
+        #expect(await counter.total(file, since: start) == 3 * weight())
         try write([reply("d", output: 4000), stop], to: file)
-        #expect(await counter.total(file, since: start) == 4111)
+        #expect(await counter.total(file, since: start) == weight(4000))
     }
 
     @Test func aSmallChunkSizeCountsTheSame() async throws {
         let file = try conversation()
         try write((0..<20).map { reply("r\($0)") } + [prompt, stop], to: file)
-        #expect(await counter(chunk: 37).total(file, since: start) == 20 * 1111)
+        #expect(await counter(chunk: 37).total(file, since: start) == 20 * weight())
     }
 }
 #endif

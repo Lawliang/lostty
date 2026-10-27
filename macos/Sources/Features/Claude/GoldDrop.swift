@@ -11,7 +11,7 @@ struct GoldDrop: Identifiable, Equatable {
     var tokens: Int
 }
 
-/// App-wide: when a Claude request ends in a pane, counts its tokens and
+/// App-wide: when a Claude request ends in a pane, weighs its tokens and
 /// drops gold coins in that pane's corner (`GoldDropOverlay`).
 @MainActor
 final class GoldDropRuntime {

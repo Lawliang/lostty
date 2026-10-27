@@ -1,8 +1,9 @@
 #if os(macOS)
 import Foundation
 
-/// Sums one request's tokens, unweighted: every reply in a conversation
-/// file and its subagents' files since the request began. An actor, so
+/// Sums one request's weighted tokens, in Opus input tokens
+/// (`UsageWeights.opusInputs`): every reply in a conversation file and its
+/// subagents' files since the request began. An actor, so
 /// reading runs off the main thread; it remembers how far it read each
 /// file, so the next request reads only what was added.
 actor RequestTokens {
@@ -29,22 +30,23 @@ actor RequestTokens {
     /// read until that line, for a few seconds at most.
     func total(_ conversation: URL, since: Date) async -> Int {
         var seen: Set<String> = []
-        var tokens = 0
+        var tokens = 0.0
         for attempt in 0...tries {
             if attempt > 0 { try? await Task.sleep(for: settle) }
             let pass = read(conversation, since: since, seen: &seen)
             tokens += pass.tokens
             if pass.stopped { break }
         }
-        return UsageCounter.withSubagents(conversation).dropFirst().reduce(tokens) {
+        let total = UsageCounter.withSubagents(conversation).dropFirst().reduce(tokens) {
             $0 + read($1, since: since, seen: &seen).tokens
         }
+        return Int(total.rounded())
     }
 
     /// The tokens of the replies since `since` in what `file` added, whole
     /// lines only, each reply once by its key in `seen`, and whether a Stop
     /// since then was recorded.
-    private func read(_ file: URL, since: Date, seen: inout Set<String>) -> (tokens: Int, stopped: Bool) {
+    private func read(_ file: URL, since: Date, seen: inout Set<String>) -> (tokens: Double, stopped: Bool) {
         // Regular files only: a FIFO named *.jsonl would block the read.
         guard let attributes = try? FileManager.default.attributesOfItem(atPath: file.path),
               attributes[.type] as? FileAttributeType == .typeRegular,
@@ -69,7 +71,7 @@ actor RequestTokens {
         defer { try? handle.close() }
         guard (try? handle.seek(toOffset: offset)) != nil else { return (0, false) }
         let newline = UInt8(ascii: "\n")
-        var tokens = 0
+        var tokens = 0.0
         var stopped = false
         var pending = Data()
         while let data = try? handle.read(upToCount: chunk), !data.isEmpty {
@@ -86,7 +88,7 @@ actor RequestTokens {
                 if !stopped, Self.isStop(line, since: since) { stopped = true }
                 guard let reply = AssistantReply(line), reply.at >= since, seen.insert(reply.key).inserted
                 else { continue }
-                tokens += reply.tokens.total
+                tokens += UsageWeights.opusInputs(reply.tokens, model: reply.model)
             }
             offset += UInt64(lines.count)
             pending = Data(pending[pending.index(after: end)...])

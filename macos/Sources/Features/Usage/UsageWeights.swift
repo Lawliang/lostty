@@ -7,8 +7,6 @@ struct TokenCounts: Codable, Equatable, Sendable {
     var output = 0
     var cacheWrite = 0
     var cacheRead = 0
-
-    var total: Int { input + output + cacheWrite + cacheRead }
 }
 
 /// How fast tokens use up a plan limit, relative to each other (usage
@@ -35,6 +33,11 @@ enum UsageWeights {
         let raw = Double(tokens.input) * input + Double(tokens.output) * output
             + Double(tokens.cacheWrite) * cacheWrite + Double(tokens.cacheRead) * cacheRead
         return raw * model(id)
+    }
+
+    /// The same weight in Opus input tokens, each of which weighs 1.
+    static func opusInputs(_ tokens: TokenCounts, model id: String) -> Double {
+        weight(tokens, model: id) / model("opus")
     }
 }
 #endif
