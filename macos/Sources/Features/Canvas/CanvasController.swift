@@ -553,9 +553,16 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         cardFrameDidSettle()
     }
 
+    /// A pane picked as a project's manager is told its brief once, with
+    /// its next prompt; its zone file starts with it from then on.
     func updateZone(_ id: UUID, _ change: (inout CanvasZone) -> Void) {
+        let manager = model.zone(id)?.manager
         guard model.updateZone(id, change) else { return }
         zonesDidChange()
+        if let picked = model.zone(id)?.manager, picked != manager,
+           let brief = model.managerBrief(id, panes: membership.panes, sessions: paneSessions()) {
+            zoneStore.appendSay(picked, brief)
+        }
     }
 
     func zoomToZone(_ id: UUID) {
@@ -569,6 +576,21 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         let members = model.members(of: id)
         return model.cards.filter { members.contains($0.id) }.compactMap { entry in
             ticketPanels[entry.id] != nil ? "Tickets" : cards.first { $0.id == entry.id }?.title
+        }
+    }
+
+    /// The terminals in project `id` and its domains, in card order, for
+    /// its Manager menu: each pane with its card's title, and its domain's
+    /// name.
+    func projectTerminals(of id: UUID) -> [CanvasZoneSettings.Terminal] {
+        cards.flatMap { card in
+            let panes = Array(card.surfaceTree)
+            return panes.enumerated().compactMap { index, pane -> CanvasZoneSettings.Terminal? in
+                guard let zone = membership.panes.zones[pane.id], model.projectZone(zone) == id else { return nil }
+                let split = panes.count > 1 ? " · pane \(index + 1)" : ""
+                let domain = zone == id ? "" : " (\(model.zone(zone)?.name ?? ""))"
+                return CanvasZoneSettings.Terminal(pane: pane.id, title: card.title + split + domain)
+            }
         }
     }
 
@@ -622,15 +644,20 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         deliverSoon()
     }
 
+    /// The tmux session showing each pane in a zone, where one does.
+    func paneSessions() -> [UUID: String] {
+        let pid = ProcessInfo.processInfo.processIdentifier
+        return membership.panes.zones.keys.reduce(into: [UUID: String]()) { names, pane in
+            names[pane] = TmuxOwnership.showing(pane, ownedBy: pid, in: tmuxSessions).first?.name
+        }
+    }
+
     /// Each pane in a zone has its zone file, written when it changed.
     private func writeZoneFiles() {
         let panes = membership.panes
-        let pid = ProcessInfo.processInfo.processIdentifier
-        let sessions = panes.zones.keys.reduce(into: [UUID: String]()) { names, pane in
-            names[pane] = TmuxOwnership.showing(pane, ownedBy: pid, in: tmuxSessions).first?.name
-        }
+        let sessions = paneSessions()
         for (pane, zone) in panes.zones {
-            guard let file = model.zoneFile(zone, panes: panes, sessions: sessions, tickets: tickets),
+            guard let file = model.zoneFile(zone, pane: pane, panes: panes, sessions: sessions, tickets: tickets),
                   zoneFiles[pane] != file else { continue }
             zoneStore.writeZone(pane, file)
             zoneFiles[pane] = file
@@ -801,6 +828,9 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     func setTickets(_ new: [CanvasTicket]) {
         guard new != tickets else { return }
         relistTickets()
+        for note in model.blockedNotes(from: tickets, to: new, panes: membership.panes) {
+            zoneStore.appendSay(note.manager, note.text)
+        }
         tickets = new
         saveSoon()
         writeZoneFiles()

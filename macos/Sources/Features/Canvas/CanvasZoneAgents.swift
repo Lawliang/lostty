@@ -142,6 +142,47 @@ extension CanvasModel {
         return (["\(project.name) tickets, \(starts)"] + lines).joined(separator: "\n")
     }
 
+    /// What project `id`'s manager is told (board spec §7): a feature line
+    /// for each domain, with its brief's first line and the tmux sessions
+    /// (`sessions`, by pane) of its panes as `panes` has them.
+    ///
+    ///     You're the manager of Textberry. You don't write code.
+    ///     …
+    ///     Features:
+    ///       Login: the landing and login pages, end to end (textberry-3f)
+    func managerBrief(_ id: UUID, panes: CanvasPaneZones, sessions: [UUID: String]) -> String? {
+        guard let project = zone(id), project.parent == nil else { return nil }
+        let features = zones.filter { $0.parent == id }.map { domain in
+            let brief = domain.brief.split(whereSeparator: \.isNewline).first.map { $0.trimmingCharacters(in: .whitespaces) }
+            let agents = Set(panes.zones.compactMap { pane, zone in
+                zone == domain.id && pane != project.manager ? sessions[pane] : nil
+            })
+            return "  \(domain.name)" + (brief.map { $0.isEmpty ? "" : ": \($0)" } ?? "")
+                + (agents.isEmpty ? "" : " (\(agents.sorted().joined(separator: ", ")))")
+        }
+        return ([
+            "You're the manager of \(project.name). You don't write code.",
+            "Turn the owner's requests into tickets, one per feature, with "
+                + "lostty +ticket add \"<feature>\" \"<summary>\" \"<details>\".",
+            "Move a queued ticket to another feature with lostty +ticket assign <key> \"<feature>\".",
+            features.isEmpty ? "Features: none yet." : "Features:",
+        ] + features + ["Check lostty +ticket list first, so you don't repeat a ticket."]).joined(separator: "\n")
+    }
+
+    /// What each project's manager is told of the tickets that became
+    /// blocked between `old` and `new`, when it sits inside its project as
+    /// `panes` has it: "TB-8 · Onboarding is blocked: <reason>".
+    func blockedNotes(from old: [CanvasTicket], to new: [CanvasTicket], panes: CanvasPaneZones) -> [(manager: UUID, text: String)] {
+        new.compactMap { ticket in
+            guard ticket.state == .blocked, let key = ticket.key,
+                  let before = old.first(where: { $0.key == key }), before.state != .blocked,
+                  let id = ticket.zone, let feature = zone(id), let project = projectZone(id),
+                  let manager = zone(project)?.manager, panes.zones[manager].flatMap(projectZone) == project else { return nil }
+            let reason = (ticket.note ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            return (manager, "\(key) · \(feature.name) is blocked" + (reason.isEmpty ? "." : ": \(reason)"))
+        }
+    }
+
     /// The project zone `id` is in: itself, or its domain's project.
     func projectZone(_ id: UUID) -> UUID? {
         zone(id).map { $0.parent ?? $0.id }
@@ -150,17 +191,19 @@ extension CanvasModel {
     /// The zone file of a pane in zone `id`. Its members are the tmux
     /// sessions (`sessions`, by pane) of every pane in the same project as
     /// `panes` has them, domains included; a pane with none is left out.
-    /// Its board is the project's `tickets` (`boardText`).
+    /// Its board is the project's `tickets` (`boardText`). The project's
+    /// manager, `pane`, starts with its brief too.
     func zoneFile(
-        _ id: UUID, panes: CanvasPaneZones, sessions: [UUID: String], tickets: [CanvasTicket]
+        _ id: UUID, pane: UUID, panes: CanvasPaneZones, sessions: [UUID: String], tickets: [CanvasTicket]
     ) -> CanvasZoneFile? {
         guard let title = zoneTitle(id), let start = zoneStart(id), let project = projectZone(id) else { return nil }
         let members = Set(panes.zones.compactMap { pane, zone in
             projectZone(zone) == project ? sessions[pane] : nil
         })
+        let brief = zone(project)?.manager == pane ? managerBrief(project, panes: panes, sessions: sessions) : nil
         return CanvasZoneFile(
-            start: start, zone: title, folder: startFolder(ofZone: id), members: members.sorted(),
-            board: boardText(project, tickets: tickets))
+            start: [start, brief].compactMap { $0 }.joined(separator: "\n"), zone: title,
+            folder: startFolder(ofZone: id), members: members.sorted(), board: boardText(project, tickets: tickets))
     }
 }
 
