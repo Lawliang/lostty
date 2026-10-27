@@ -332,6 +332,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         updateVisibility()
         saveSoon()
         for surface in card.surfaceTree { surface.canvasZoomDidSettle(settledZoom) }
+        showTicketKeys()
         zoneMembershipDidChange()
     }
 
@@ -834,6 +835,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         tickets = new
         saveSoon()
         writeZoneFiles()
+        showTicketKeys()
         deliverSoon()
     }
 

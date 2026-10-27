@@ -238,7 +238,8 @@ final class CardWindowButtons: NSView {
 }
 
 /// What a card's title bar shows, laid out as a Lostty window's: after the
-/// buttons, the focused pane's folder icon, the card's title and room for
+/// buttons, the focused pane's folder icon, the key of the ticket working
+/// in it, the card's title and room for
 /// its rename pencil (`pencilMoved` places it); at the
 /// right, the focused pane's project pill (its repo and branch, hidden
 /// outside a repo).
@@ -263,6 +264,15 @@ struct CardHeaderContent: View {
     var body: some View {
         HStack(spacing: 6) {
             if let pane = focusedPane { CardFolderIcon(pane: pane) }
+            if let key = card.ticketKey {
+                Text(key)
+                    .font(.system(size: 11.5, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 1)
+                    .background(Color.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 4))
+                    .help("Working on \(key)")
+            }
             Text(card.title)
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(.primary.opacity(0.8))

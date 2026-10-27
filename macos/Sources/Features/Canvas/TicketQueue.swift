@@ -53,6 +53,14 @@ enum TicketQueue {
         }
     }
 
+    /// The key of the ticket working in each pane Lostty typed one into.
+    static func working(_ tickets: [CanvasTicket]) -> [UUID: String] {
+        tickets.reduce(into: [:]) { keys, ticket in
+            guard ticket.state == .working, let pane = ticket.agentPane, let key = ticket.key else { return }
+            keys[pane] = keys[pane] ?? key
+        }
+    }
+
     /// Ticket `key` typed into `pane`: working there. nil unless it was
     /// queued.
     static func delivering(_ key: String, into pane: UUID, in tickets: [CanvasTicket]) -> [CanvasTicket]? {

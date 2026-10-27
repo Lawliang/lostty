@@ -50,6 +50,16 @@ extension CanvasController {
         ticket.zone.flatMap(model.projectZone).flatMap { model.zone($0)?.autoStart } ?? false
     }
 
+    /// Each terminal card's title bar shows the key of the ticket working
+    /// in one of its panes.
+    func showTicketKeys() {
+        let working = TicketQueue.working(tickets)
+        for card in cards {
+            let key = card.surfaceTree.lazy.compactMap { working[$0.id] }.first
+            if card.ticketKey != key { card.ticketKey = key }
+        }
+    }
+
     /// The title of the card holding pane `pane`, as its header shows it.
     func agentTitle(_ pane: UUID) -> String? {
         cards.first { $0.surfaceTree.contains { $0.id == pane } }?.title

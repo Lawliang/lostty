@@ -111,6 +111,9 @@ final class CardController: BaseTerminalController {
     /// The card's own title bar shows its title; only the focused card
     /// titles the canvas window.
     @Published private(set) var title = "Lostty"
+    /// The key of the board ticket working in one of its panes, shown
+    /// before the title. Set by CanvasController.showTicketKeys alone.
+    @Published var ticketKey: String?
 
     override func applyTitleToWindow() {
         title = windowTitle

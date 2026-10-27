@@ -71,6 +71,15 @@ struct TicketQueueTests {
         #expect(TicketQueue.delivering("TB-1", into: pane, in: delivered) == nil)
     }
 
+    @Test func aPaneShowsTheKeyOfTheTicketWorkingInItUntilItLeavesWorking() throws {
+        let other = UUID()
+        let tickets = try #require(TicketQueue.delivering("TB-1", into: pane, in: [ticket(1), ticket(2, .queued, in: onboarding)]))
+        let both = try #require(TicketQueue.delivering("TB-2", into: other, in: tickets))
+        #expect(TicketQueue.working(both) == [pane: "TB-1", other: "TB-2"])
+        let reviewed = try #require(apply(.review(key: "TB-1", note: "Done"), from: .agent(domain: login), to: both))
+        #expect(TicketQueue.working(reviewed) == [other: "TB-2"])
+    }
+
     @Test func sendBackPutsTheTicketInFrontOfItsFeaturesQueueWithTheNote() throws {
         let tickets = [ticket(1, .queued, in: onboarding), ticket(2), ticket(3), ticket(4, .review)]
         let sent = try #require(TicketQueue.sendingBack("TB-4", note: "Use the brand blue", in: tickets))
