@@ -2,7 +2,8 @@
 import AppKit
 import Combine
 
-/// After the Mac restarts (or Lostty quits), "Continue your last session?":
+/// After the Mac restarts (or Lostty ends other than by your quitting it),
+/// "Continue your last session?":
 /// Continue rebuilds every window and the canvas from `LastSession`, each
 /// pane starting a new session in its folder, and types `claude --resume`
 /// (or `codex resume`) into the panes that had a conversation. Nothing is
