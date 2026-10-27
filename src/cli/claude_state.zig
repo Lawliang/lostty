@@ -146,7 +146,7 @@ fn allowedOnce(alloc: Allocator, pane: []const u8, to: []const u8) bool {
     return zone.allows(taken, to);
 }
 
-fn zoneFile(alloc: Allocator, pane: []const u8) ?zone.File {
+pub fn zoneFile(alloc: Allocator, pane: []const u8) ?zone.File {
     const path = paneFile(alloc, pane, .zone) orelse return null;
     const json = std.fs.cwd().readFileAlloc(alloc, path, speak.text_max) catch return null;
     return zone.parse(alloc, json);

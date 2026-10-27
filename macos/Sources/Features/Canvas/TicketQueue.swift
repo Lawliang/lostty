@@ -8,25 +8,29 @@ import Foundation
 enum TicketReport: Equatable {
     case review(key: String, note: String)
     case blocked(key: String, reason: String)
+    /// A new ticket for the feature (a domain) named `feature`.
+    case add(feature: String, summary: String, details: String)
+    case assign(key: String, feature: String)
 
     static let userVar = "LOSTTY_TICKET"
 
-    /// nil for anything but a known verb with its arguments and a key.
+    /// nil for anything but a known verb with its arguments, the first
+    /// of them not empty, and an add's summary or an assign's feature not
+    /// empty either.
     init?(json: String) {
         guard let arguments = try? JSONDecoder().decode([String].self, from: Data(json.utf8)) else { return nil }
         let words = arguments.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-        guard words.count == 3, !words[1].isEmpty else { return nil }
-        let key = words[1].uppercased()
-        switch words[0] {
-        case "review": self = .review(key: key, note: words[2])
-        case "blocked": self = .blocked(key: key, reason: words[2])
+        guard words.count >= 3, !words[1].isEmpty else { return nil }
+        switch (words[0], words.count) {
+        case ("review", 3): self = .review(key: words[1].uppercased(), note: words[2])
+        case ("blocked", 3): self = .blocked(key: words[1].uppercased(), reason: words[2])
+        case ("add", 3), ("add", 4):
+            guard !words[2].isEmpty else { return nil }
+            self = .add(feature: words[1], summary: words[2], details: words.count == 4 ? words[3] : "")
+        case ("assign", 3):
+            guard !words[2].isEmpty else { return nil }
+            self = .assign(key: words[1].uppercased(), feature: words[2])
         default: return nil
-        }
-    }
-
-    var key: String {
-        switch self {
-        case .review(let key, _), .blocked(let key, _): key
         }
     }
 }
@@ -75,8 +79,7 @@ enum TicketQueue {
     static func assigning(_ key: String, to zone: UUID?, in tickets: [CanvasTicket]) -> [CanvasTicket]? {
         guard let index = tickets.firstIndex(where: { $0.key == key }) else { return nil }
         var ticket = tickets[index]
-        ticket.zone = zone
-        ticket.move(to: .queued, by: .owner)
+        ticket.assign(to: zone)
         guard ticket != tickets[index] else { return nil }
         var result = tickets
         result.remove(at: index)
@@ -101,12 +104,32 @@ enum TicketQueue {
     /// The tickets after `report` from a pane acting as `actor`; nil when
     /// the lifecycle refuses it, as for a pane outside the ticket's
     /// feature, or when it changes nothing, as a repeated report doesn't.
-    static func applying(_ report: TicketReport, from actor: TicketActor, to tickets: [CanvasTicket]) -> [CanvasTicket]? {
-        changing(report.key, in: tickets) { ticket in
-            switch report {
-            case .review(_, let note): ticket.move(to: .review, note: note.isEmpty ? nil : note, by: actor)
-            case .blocked(_, let reason): ticket.move(to: .blocked, note: reason.isEmpty ? nil : reason, by: actor)
-            }
+    /// Only a project's manager adds and assigns, and only in its project
+    /// (`model`), where a feature is named, case aside: an add for a
+    /// feature that isn't there waits in To assign with a note saying so,
+    /// and an assign moves only a queued ticket. `newKey` hands out the
+    /// key of a ticket made in a zone, and is called only for an add.
+    static func applying(
+        _ report: TicketReport, from actor: TicketActor, to tickets: [CanvasTicket],
+        in model: CanvasModel, newKey: (UUID) -> String
+    ) -> [CanvasTicket]? {
+        switch report {
+        case .review(let key, let note):
+            return changing(key, in: tickets) { $0.move(to: .review, note: note.isEmpty ? nil : note, by: actor) }
+        case .blocked(let key, let reason):
+            return changing(key, in: tickets) { $0.move(to: .blocked, note: reason.isEmpty ? nil : reason, by: actor) }
+        case .add(let name, let summary, let details):
+            guard case .manager(let project) = actor, let zone = model.zone(project), zone.parent == nil else { return nil }
+            let projectName = zone.name
+            let feature = model.feature(named: name, in: project)
+            return tickets + [CanvasTicket(
+                key: newKey(feature ?? project), summary: summary, details: details, zone: feature ?? project,
+                note: feature == nil ? "No feature named \(name) in \(projectName), so it waits here." : nil)]
+        case .assign(let key, let name):
+            guard case .manager(let project) = actor, let feature = model.feature(named: name, in: project),
+                  let ticket = tickets.first(where: { $0.key == key }), ticket.state == .queued,
+                  ticket.zone.flatMap(model.projectZone) == project else { return nil }
+            return assigning(key, to: feature, in: tickets)
         }
     }
 

@@ -30,6 +30,9 @@ pub const File = struct {
     /// that didn't write them, or with none known: then nothing is kept
     /// inside.
     members: ?[]const []const u8 = null,
+    /// The project's tickets, as `+ticket list` prints them. Null in a
+    /// file from an app that didn't write them.
+    board: ?[]const u8 = null,
 };
 
 /// The zone file `json`; null when it isn't one. An empty `start` or
@@ -208,6 +211,10 @@ test "claude zone: the file's brief, title and members" {
     try testing.expect(parse(a,
         \\{"start":""}
     ).?.start == null);
+    try testing.expectEqualStrings("Textberry tickets\nLogin\n  none", parse(a,
+        \\{"zone":"Textberry","board":"Textberry tickets\nLogin\n  none"}
+    ).?.board.?);
+    try testing.expect(file.board == null);
     try testing.expect(parse(a,
         \\{"start":7}
     ) == null);

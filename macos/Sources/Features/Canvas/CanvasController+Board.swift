@@ -40,7 +40,8 @@ extension CanvasController {
     /// else dropped without a word, since the CLI can't hear back.
     func ticketReported(_ report: TicketReport, from pane: UUID) {
         guard let actor = model.ticketRole(of: pane, panes: membership.panes),
-              let reported = TicketQueue.applying(report, from: actor, to: tickets) else { return }
+              let reported = TicketQueue.applying(
+                report, from: actor, to: tickets, in: model, newKey: { nextTicketKey(in: $0, take: true) }) else { return }
         setTickets(reported)
     }
 

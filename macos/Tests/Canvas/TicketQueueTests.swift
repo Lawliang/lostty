@@ -14,10 +14,27 @@ struct TicketQueueTests {
         tickets?.compactMap(\.key) ?? []
     }
 
+    /// Textberry, with features Login and Onboarding.
+    private var textberry: CanvasModel {
+        var model = CanvasModel()
+        model.addZone(CanvasZone(id: project, frame: CGRect(x: 0, y: 0, width: 4000, height: 2000), name: "Textberry"))
+        model.addZone(CanvasZone(
+            id: login, frame: CGRect(x: 100, y: 100, width: 1000, height: 1000), name: "Login", parent: project))
+        model.addZone(CanvasZone(
+            id: onboarding, frame: CGRect(x: 1200, y: 100, width: 1000, height: 1000), name: "Onboarding",
+            parent: project))
+        return model
+    }
+
+    /// `TicketQueue.applying` in Textberry, a new ticket keyed TB-20.
+    private func apply(_ report: TicketReport, from actor: TicketActor, to tickets: [CanvasTicket]) -> [CanvasTicket]? {
+        TicketQueue.applying(report, from: actor, to: tickets, in: textberry, newKey: { _ in "TB-20" })
+    }
+
     @Test func aFeatureHasOneTicketInFlightAndTheNextStartsOnceItLeavesWorking() throws {
         var tickets = [ticket(1, .working), ticket(2), ticket(3)]
         #expect(TicketQueue.next(in: login, of: tickets, autoStart: true, startedByHand: []) == nil)
-        tickets = try #require(TicketQueue.applying(.review(key: "TB-1", note: "Done"), from: .agent(domain: login), to: tickets))
+        tickets = try #require(apply(.review(key: "TB-1", note: "Done"), from: .agent(domain: login), to: tickets))
         #expect(TicketQueue.next(in: login, of: tickets, autoStart: true, startedByHand: [])?.key == "TB-2")
     }
 
@@ -28,7 +45,7 @@ struct TicketQueueTests {
             #expect(next.key == key)
             tickets = try #require(TicketQueue.delivering(key, into: pane, in: tickets))
             #expect(TicketQueue.next(in: login, of: tickets, autoStart: true, startedByHand: []) == nil)
-            tickets = try #require(TicketQueue.applying(.review(key: key, note: "Done"), from: .agent(domain: login), to: tickets))
+            tickets = try #require(apply(.review(key: key, note: "Done"), from: .agent(domain: login), to: tickets))
         }
         #expect(tickets.map(\.state) == [.review, .review])
         #expect(TicketQueue.next(in: login, of: tickets, autoStart: true, startedByHand: []) == nil)
@@ -93,10 +110,10 @@ struct TicketQueueTests {
     @Test func onlyAnAgentInTheTicketsFeatureMayReportOnIt() throws {
         let tickets = [ticket(1, .working)]
         let review = TicketReport.review(key: "TB-1", note: "Added the button")
-        #expect(TicketQueue.applying(review, from: .agent(domain: onboarding), to: tickets) == nil)
-        #expect(TicketQueue.applying(review, from: .manager(project: project), to: tickets) == nil)
-        #expect(TicketQueue.applying(review, from: .agent(domain: login), to: [ticket(1)]) == nil)
-        let blocked = try #require(TicketQueue.applying(
+        #expect(apply(review, from: .agent(domain: onboarding), to: tickets) == nil)
+        #expect(apply(review, from: .manager(project: project), to: tickets) == nil)
+        #expect(apply(review, from: .agent(domain: login), to: [ticket(1)]) == nil)
+        let blocked = try #require(apply(
             .blocked(key: "TB-1", reason: "Needs GOOGLE_CLIENT_ID"), from: .agent(domain: login), to: tickets))
         #expect(blocked[0].state == .blocked)
         #expect(blocked[0].note == "Needs GOOGLE_CLIENT_ID")
@@ -104,9 +121,52 @@ struct TicketQueueTests {
 
     @Test func aRepeatedReportChangesNothing() throws {
         let review = TicketReport.review(key: "TB-1", note: "Added the button")
-        let once = try #require(TicketQueue.applying(review, from: .agent(domain: login), to: [ticket(1, .working)]))
-        #expect(TicketQueue.applying(review, from: .agent(domain: login), to: once) == nil)
-        #expect(TicketQueue.applying(.review(key: "TB-9", note: ""), from: .agent(domain: login), to: once) == nil)
+        let once = try #require(apply(review, from: .agent(domain: login), to: [ticket(1, .working)]))
+        #expect(apply(review, from: .agent(domain: login), to: once) == nil)
+        #expect(apply(.review(key: "TB-9", note: ""), from: .agent(domain: login), to: once) == nil)
+    }
+
+    @Test func theManagerAddsATicketToTheBackOfTheFeatureItNames() throws {
+        var zones: [UUID] = []
+        let tickets = [ticket(1), ticket(2, .queued, in: onboarding)]
+        let added = try #require(TicketQueue.applying(
+            .add(feature: " login ", summary: "Continue with Google", details: "At /auth/google"),
+            from: .manager(project: project), to: tickets, in: textberry, newKey: { zone in
+                zones.append(zone)
+                return "TB-3"
+            }))
+        #expect(keys(added) == ["TB-1", "TB-2", "TB-3"])
+        #expect(added[2].zone == login)
+        #expect(added[2].state == .queued)
+        #expect(added[2].summary == "Continue with Google")
+        #expect(added[2].details == "At /auth/google")
+        #expect(zones == [login])
+        #expect(TicketQueue.next(in: login, of: added, autoStart: true, startedByHand: [])?.key == "TB-1")
+    }
+
+    @Test func anAddForAFeatureThatIsntThereWaitsInToAssignWithANote() throws {
+        let added = try #require(apply(.add(feature: "Billing", summary: "Invoices", details: ""), from: .manager(project: project), to: []))
+        #expect(added[0].zone == project)
+        #expect(added[0].note == "No feature named Billing in Textberry, so it waits here.")
+        let assigned = try #require(apply(.assign(key: "TB-20", feature: "Login"), from: .manager(project: project), to: added))
+        #expect(assigned[0].zone == login)
+        #expect(assigned[0].note == nil)
+    }
+
+    @Test func onlyTheManagerAddsAndAssignsAndOnlyQueuedTicketsInItsProject() throws {
+        let add = TicketReport.add(feature: "Login", summary: "Continue with Google", details: "")
+        #expect(apply(add, from: .agent(domain: login), to: []) == nil)
+        #expect(apply(add, from: .manager(project: login), to: []) == nil)
+        let tickets = [ticket(1), ticket(2, .working), ticket(3, .queued, in: UUID())]
+        let manager = TicketActor.manager(project: project)
+        #expect(apply(.assign(key: "TB-1", feature: "Onboarding"), from: .agent(domain: login), to: tickets) == nil)
+        #expect(apply(.assign(key: "TB-2", feature: "Onboarding"), from: manager, to: tickets) == nil)
+        #expect(apply(.assign(key: "TB-3", feature: "Onboarding"), from: manager, to: tickets) == nil)
+        #expect(apply(.assign(key: "TB-1", feature: "Billing"), from: manager, to: tickets) == nil)
+        #expect(apply(.assign(key: "TB-1", feature: "Login"), from: manager, to: tickets) == nil)
+        let assigned = try #require(apply(.assign(key: "TB-1", feature: "onboarding"), from: manager, to: tickets))
+        #expect(keys(assigned) == ["TB-2", "TB-3", "TB-1"])
+        #expect(assigned[2].zone == onboarding)
     }
 
     @Test func aReportIsReadFromItsArguments() {
@@ -116,6 +176,14 @@ struct TicketQueueTests {
         #expect(TicketReport(json: #"["review"," ","Done"]"#) == nil)
         #expect(TicketReport(json: #"["done","TB-7","Done"]"#) == nil)
         #expect(TicketReport(json: "review TB-7 Done") == nil)
+        #expect(TicketReport(json: #"["add","Main app","Settings page"]"#)
+            == .add(feature: "Main app", summary: "Settings page", details: ""))
+        #expect(TicketReport(json: #"["add","Login","Google button","At /auth/google"]"#)
+            == .add(feature: "Login", summary: "Google button", details: "At /auth/google"))
+        #expect(TicketReport(json: #"["add","Login"," "]"#) == nil)
+        #expect(TicketReport(json: #"["assign","tb-7","Login"]"#) == .assign(key: "TB-7", feature: "Login"))
+        #expect(TicketReport(json: #"["assign","TB-7"," "]"#) == nil)
+        #expect(TicketReport(json: #"["list"]"#) == nil)
     }
 
     /// The value src/cli/ticket.zig's test expects `+ticket` to send.

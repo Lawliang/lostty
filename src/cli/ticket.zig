@@ -21,26 +21,35 @@ pub const Options = struct {
     }
 };
 
-/// Each verb, with how many arguments follow it. The app checks who may
-/// use it; this checks only the shape.
-const verbs = [_]struct { name: []const u8, args: usize }{
-    .{ .name = "review", .args = 2 },
-    .{ .name = "blocked", .args = 2 },
+/// Each verb, with how many arguments may follow it. The app checks who
+/// may use it; this checks only the shape.
+const verbs = [_]struct { name: []const u8, min: usize, max: usize }{
+    .{ .name = "review", .min = 2, .max = 2 },
+    .{ .name = "blocked", .min = 2, .max = 2 },
+    .{ .name = "add", .min = 2, .max = 3 },
+    .{ .name = "assign", .min = 2, .max = 2 },
+    .{ .name = "list", .min = 0, .max = 0 },
 };
 
 const usage =
     \\usage: lostty +ticket review <key> "<one line on what changed>"
     \\       lostty +ticket blocked <key> "<why>"
+    \\       lostty +ticket add "<feature>" "<summary>" ["<details>"]
+    \\       lostty +ticket assign <key> "<feature>"
+    \\       lostty +ticket list
     \\
 ;
 
-/// The `ticket` command is run by a feature's agent in a Lostty pane to
-/// report on the ticket Lostty typed into it (zone board spec §6):
-/// `+ticket review TB-7 "what changed"` or `+ticket blocked TB-7 "why"`.
-/// It writes its arguments to the pane's terminal as the LOSTTY_TICKET
+/// The `ticket` command is run in a Lostty pane to work the zone board
+/// (zone board spec §6). A feature's agent reports on the ticket Lostty
+/// typed into it: `+ticket review TB-7 "what changed"` or `+ticket blocked
+/// TB-7 "why"`. A project's manager adds a ticket to a feature, `+ticket add
+/// Login "summary" "details"`, or moves one, `+ticket assign TB-7 Login`.
+/// These write their arguments to the pane's terminal as the LOSTTY_TICKET
 /// user var, as +claude-state does, so the app knows which pane sent it,
-/// and prints "sent". The app applies it only if that pane may: the report
-/// is one-way, so it can't say. A bad call prints usage and exits 1.
+/// and print "sent". The app applies one only if that pane may: the
+/// report is one-way, so it can't say. `list` prints the project's tickets
+/// from the pane's zone file. A bad call prints usage and exits 1.
 pub fn run(gpa: Allocator) !u8 {
     var arena_state = std.heap.ArenaAllocator.init(gpa);
     defer arena_state.deinit();
@@ -60,9 +69,18 @@ pub fn run(gpa: Allocator) !u8 {
         try err.writeAll(usage);
         return 1;
     };
-    if (std.posix.getenv(protocol.surface_env) == null) {
+    const pane = std.posix.getenv(protocol.surface_env) orelse {
         try err.writeAll("ticket: run this in a Lostty terminal\n");
         return 1;
+    };
+    if (std.mem.eql(u8, args[0], "list")) {
+        const board = if (claude_state.zoneFile(alloc, pane)) |file| file.board else null;
+        try out.writeAll(board orelse {
+            try err.writeAll("ticket: this terminal isn't in a project zone\n");
+            return 1;
+        });
+        try out.writeAll("\n");
+        return 0;
     }
     const seq = try protocol.encodeUserVar(alloc, user_var_name, try json(alloc, args), std.posix.getenv("TMUX") != null);
     const tty = claude_state.openTerminal(alloc) orelse {
@@ -81,13 +99,13 @@ fn argsAfter(argv: []const []const u8) []const []const u8 {
     return &.{};
 }
 
-/// `args` when they're a verb with its arguments, none of them empty.
+/// `args` when they're a verb with its arguments, none it needs empty.
 pub fn parse(args: []const []const u8) ?[]const []const u8 {
     if (args.len == 0) return null;
     for (verbs) |verb| {
         if (!std.mem.eql(u8, args[0], verb.name)) continue;
-        if (args.len != verb.args + 1) return null;
-        for (args) |arg| if (std.mem.trim(u8, arg, " \t\r\n").len == 0) return null;
+        if (args.len < verb.min + 1 or args.len > verb.max + 1) return null;
+        for (args[0 .. verb.min + 1]) |arg| if (std.mem.trim(u8, arg, " \t\r\n").len == 0) return null;
         return args;
     }
     return null;
@@ -146,6 +164,16 @@ test "ticket: parse takes each verb with its arguments only" {
     try t.expect(parse(&.{ "review", " ", "Added the button" }) == null);
     try t.expect(parse(&.{ "done", "TB-7", "Added the button" }) == null);
     try t.expect(parse(&.{}) == null);
+    try t.expect(parse(&.{ "add", "Login", "Continue with Google" }) != null);
+    try t.expect(parse(&.{ "add", "Main app", "Continue with Google", "At /auth/google" }) != null);
+    try t.expect(parse(&.{ "add", "Login", "Continue with Google", "" }) != null);
+    try t.expect(parse(&.{ "add", "Login", " " }) == null);
+    try t.expect(parse(&.{ "add", "Login" }) == null);
+    try t.expect(parse(&.{ "add", "Login", "Summary", "Details", "More" }) == null);
+    try t.expect(parse(&.{ "assign", "TB-7", "Onboarding" }) != null);
+    try t.expect(parse(&.{ "assign", "TB-7" }) == null);
+    try t.expect(parse(&.{"list"}) != null);
+    try t.expect(parse(&.{ "list", "Login" }) == null);
 }
 
 test "ticket: argsAfter skips the program and the action" {

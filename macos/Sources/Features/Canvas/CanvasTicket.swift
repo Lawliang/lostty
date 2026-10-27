@@ -101,6 +101,14 @@ struct CanvasTicket: Codable, Equatable {
         return true
     }
 
+    /// Into `zone`, queued: a note on its work in the zone it left goes
+    /// with it, as a move to queued drops one.
+    mutating func assign(to zone: UUID?) {
+        if zone != self.zone { note = nil }
+        self.zone = zone
+        move(to: .queued, by: .owner)
+    }
+
     /// This ticket in no zone if its zone is one of `zones`, as when they're
     /// removed.
     func leaving(_ zones: Set<UUID>) -> CanvasTicket {
@@ -138,7 +146,7 @@ struct CanvasTicket: Codable, Equatable {
 
     init(
         key: String? = nil, summary: String = "", kind: Kind = .task, priority: Priority = .medium,
-        assignee: String = "", details: String = "", zone: UUID? = nil
+        assignee: String = "", details: String = "", zone: UUID? = nil, note: String? = nil
     ) {
         self.key = key
         self.summary = summary
@@ -147,6 +155,7 @@ struct CanvasTicket: Codable, Equatable {
         self.assignee = assignee
         self.details = details
         self.zone = zone
+        self.note = note
     }
 
     /// `status` is what builds before the board saved, and still write

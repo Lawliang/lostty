@@ -602,15 +602,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
             zoneFiles[pane] = nil
         }
         for pane in before.panes.panes.subtracting(now.panes) { zoneStore.removeSay(pane) }
-        let pid = ProcessInfo.processInfo.processIdentifier
-        let sessions = now.zones.keys.reduce(into: [UUID: String]()) { names, pane in
-            names[pane] = TmuxOwnership.showing(pane, ownedBy: pid, in: tmuxSessions).first?.name
-        }
-        for (pane, zone) in now.zones {
-            guard let file = model.zoneFile(zone, panes: now, sessions: sessions), zoneFiles[pane] != file else { continue }
-            zoneStore.writeZone(pane, file)
-            zoneFiles[pane] = file
-        }
+        writeZoneFiles()
 
         var noticed: Set<UUID> = []
         for move in before.panes.moves(to: now) {
@@ -628,6 +620,21 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         }
         updateZoneCaptions()
         deliverSoon()
+    }
+
+    /// Each pane in a zone has its zone file, written when it changed.
+    private func writeZoneFiles() {
+        let panes = membership.panes
+        let pid = ProcessInfo.processInfo.processIdentifier
+        let sessions = panes.zones.keys.reduce(into: [UUID: String]()) { names, pane in
+            names[pane] = TmuxOwnership.showing(pane, ownedBy: pid, in: tmuxSessions).first?.name
+        }
+        for (pane, zone) in panes.zones {
+            guard let file = model.zoneFile(zone, panes: panes, sessions: sessions, tickets: tickets),
+                  zoneFiles[pane] != file else { continue }
+            zoneStore.writeZone(pane, file)
+            zoneFiles[pane] = file
+        }
     }
 
     private func updateZoneCaptions() {
@@ -796,6 +803,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         relistTickets()
         tickets = new
         saveSoon()
+        writeZoneFiles()
         deliverSoon()
     }
 

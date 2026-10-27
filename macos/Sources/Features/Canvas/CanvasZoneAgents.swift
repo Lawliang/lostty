@@ -98,6 +98,50 @@ extension CanvasModel {
         return zone.parent == nil ? nil : .agent(domain: id)
     }
 
+    /// Project `project`'s feature named `name`, case and spaces at its
+    /// ends aside; the first of two with one name.
+    func feature(named name: String, in project: UUID) -> UUID? {
+        let wanted = name.trimmingCharacters(in: .whitespaces)
+        return zones.first { zone in
+            zone.parent == project && zone.name.trimmingCharacters(in: .whitespaces).caseInsensitiveCompare(wanted) == .orderedSame
+        }?.id
+    }
+
+    /// What `lostty +ticket list` prints in project `id`: each feature's
+    /// tickets as its section on the board lists them, then To assign:
+    ///
+    ///     Textberry tickets, started when their feature's Claude is free
+    ///     Login
+    ///       TB-7  working  Add a "Continue with Google" button
+    ///       TB-5  review   Sign-in copy · Changed the hero text
+    ///     Onboarding
+    ///       none
+    ///     To assign
+    ///       TB-11 queued   Dark mode
+    func boardText(_ id: UUID, tickets: [CanvasTicket]) -> String? {
+        guard let project = zone(id), project.parent == nil else { return nil }
+        let list = TicketList(
+            tickets: tickets, zones: ticketZones(shownIn: id), sections: ticketSections(shownIn: id), selected: nil,
+            folded: [])
+        let width = list.tickets.filter(list.shows).compactMap { $0.key?.count }.max() ?? 0
+        let lines = list.sections.flatMap { section -> [String] in
+            let title = switch section {
+            case .feature(let feature): zone(feature)?.name ?? ""
+            case .toAssign: "To assign"
+            }
+            let rows = list.tickets(in: section).map { ticket in
+                let note = (ticket.note ?? "").split(whereSeparator: \.isNewline).joined(separator: " ")
+                let key = (ticket.key ?? "").padding(toLength: width, withPad: " ", startingAt: 0)
+                let state = ticket.state.rawValue.padding(toLength: 7, withPad: " ", startingAt: 0)
+                return "  \(key)  \(state)  \(ticket.summary)" + (note.isEmpty ? "" : " · \(note)")
+            }
+            return [title] + (rows.isEmpty ? ["  none"] : rows)
+        }
+        let starts = project.autoStart == true
+            ? "started when their feature's Claude is free" : "started by the owner's Start on the board"
+        return (["\(project.name) tickets, \(starts)"] + lines).joined(separator: "\n")
+    }
+
     /// The project zone `id` is in: itself, or its domain's project.
     func projectZone(_ id: UUID) -> UUID? {
         zone(id).map { $0.parent ?? $0.id }
@@ -106,25 +150,32 @@ extension CanvasModel {
     /// The zone file of a pane in zone `id`. Its members are the tmux
     /// sessions (`sessions`, by pane) of every pane in the same project as
     /// `panes` has them, domains included; a pane with none is left out.
-    func zoneFile(_ id: UUID, panes: CanvasPaneZones, sessions: [UUID: String]) -> CanvasZoneFile? {
+    /// Its board is the project's `tickets` (`boardText`).
+    func zoneFile(
+        _ id: UUID, panes: CanvasPaneZones, sessions: [UUID: String], tickets: [CanvasTicket]
+    ) -> CanvasZoneFile? {
         guard let title = zoneTitle(id), let start = zoneStart(id), let project = projectZone(id) else { return nil }
         let members = Set(panes.zones.compactMap { pane, zone in
             projectZone(zone) == project ? sessions[pane] : nil
         })
-        return CanvasZoneFile(start: start, zone: title, folder: startFolder(ofZone: id), members: members.sorted())
+        return CanvasZoneFile(
+            start: start, zone: title, folder: startFolder(ofZone: id), members: members.sorted(),
+            board: boardText(project, tickets: tickets))
     }
 }
 
 /// `<PANE>.zone.json`: what the hooks know of a pane's zone (zones spec
 /// §7). `+claude-state start` prints `start`; `+claude-state tool` and
-/// `+peers` keep to `members`, tmux session names on Lostty's socket.
+/// `+peers` keep to `members`, tmux session names on Lostty's socket;
+/// `+ticket list` prints `board`.
 struct CanvasZoneFile: Equatable, Encodable {
     let start: String
     let zone: String
     let folder: String?
     var members: [String] = []
+    var board: String?
 
-    private enum CodingKeys: String, CodingKey { case start, zone, folder, members }
+    private enum CodingKeys: String, CodingKey { case start, zone, folder, members, board }
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
@@ -132,6 +183,7 @@ struct CanvasZoneFile: Equatable, Encodable {
         try container.encode(zone, forKey: .zone)
         try container.encode(folder, forKey: .folder)
         try container.encode(members, forKey: .members)
+        try container.encodeIfPresent(board, forKey: .board)
     }
 }
 
