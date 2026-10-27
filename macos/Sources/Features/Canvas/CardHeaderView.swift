@@ -14,6 +14,8 @@ final class CardHeaderView: NSView {
     private let content: PassthroughHostingView<CardHeaderContent>
     let buttons: CardWindowButtons
     private let rename: CardRenameButton
+    /// The Mockup window style's line along the bottom.
+    private let hairline = NSView()
     /// Where a drag started, and where the cards it moves were then.
     private var start: (point: CGPoint, origins: [UUID: CGPoint])?
 
@@ -33,9 +35,11 @@ final class CardHeaderView: NSView {
         }
         super.init(frame: .zero)
         wantsLayer = true
+        hairline.wantsLayer = true
         addSubview(content)
         addSubview(buttons)
         addSubview(rename)
+        addSubview(hairline)
     }
 
     @available(*, unavailable)
@@ -45,14 +49,20 @@ final class CardHeaderView: NSView {
     override var wantsUpdateLayer: Bool { true }
 
     override func updateLayer() {
-        layer?.backgroundColor = (card.sidebar.chromeColor ?? .windowBackgroundColor).cgColor
+        let chrome = card.sidebar.chromeColor ?? .windowBackgroundColor
+        layer?.backgroundColor = chrome.cgColor
+        hairline.isHidden = !LosttyWindowStyle.isMockup
+        hairline.layer?.backgroundColor = LosttyWindowStyle.hairline(on: chrome).cgColor
     }
 
     override func layout() {
         super.layout()
         content.frame = bounds
+        // Stops at the card's edge rather than crossing it.
+        hairline.frame = NSRect(x: 0.5, y: bounds.height - 0.5, width: max(0, bounds.width - 1), height: 0.5)
         let size = buttons.intrinsicContentSize
-        buttons.frame = NSRect(x: 12, y: (bounds.height - size.height) / 2, width: size.width, height: size.height)
+        buttons.frame = NSRect(
+            x: CardWindowButtons.inset, y: (bounds.height - size.height) / 2, width: size.width, height: size.height)
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -114,6 +124,8 @@ final class CardWindowButtons: NSView {
 
     static let diameter: CGFloat = 12
     static let spacing: CGFloat = 8
+    /// From the title bar's leading edge: the mockup's 10pt, or 12.
+    static var inset: CGFloat { LosttyWindowStyle.isMockup ? 10 : 12 }
     static var width: CGFloat {
         let count = CGFloat(Button.allCases.count)
         return count * diameter + (count - 1) * spacing
@@ -174,9 +186,12 @@ final class CardWindowButtons: NSView {
             let (fill, stroke) = colors(button, dark: dark)
             fill.setFill()
             circle.fill()
-            stroke.setStroke()
-            circle.lineWidth = 0.5
-            circle.stroke()
+            // The mockup's buttons are flat.
+            if !LosttyWindowStyle.isMockup {
+                stroke.setStroke()
+                circle.lineWidth = 0.5
+                circle.stroke()
+            }
             if hovering, lit { drawSymbol(button) }
         }
     }
@@ -244,10 +259,11 @@ final class CardWindowButtons: NSView {
 /// outside a repo).
 struct CardHeaderContent: View {
     /// Clear of the close, minimize and zoom buttons.
-    static let titleInset: CGFloat = 12 + CardWindowButtons.width + 14
+    static var titleInset: CGFloat { CardWindowButtons.inset + CardWindowButtons.width + 14 }
 
     @ObservedObject var card: CardController
     @ObservedObject private var sidebar: ExtensionSidebarModel
+    @ObservedObject private var style = WindowStylePreferences.shared
     let pencilMoved: (CGRect) -> Void
 
     init(card: CardController, pencilMoved: @escaping (CGRect) -> Void) {
@@ -262,15 +278,11 @@ struct CardHeaderContent: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            if let pane = focusedPane { CardFolderIcon(pane: pane) }
-            Text(card.title)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.primary.opacity(0.8))
-                .lineLimit(1)
-                .truncationMode(.middle)
-            Color.clear
-                .frame(width: CardRenameButton.size, height: CardRenameButton.size)
-                .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.space)) } action: { pencilMoved($0) }
+            if style.isMockup {
+                title(size: 12, color: mockupTitleColor)
+            } else {
+                title(size: 13, color: .primary.opacity(0.8))
+            }
             Spacer(minLength: 8)
             ProjectPill(model: card.sidebar)
         }
@@ -278,6 +290,25 @@ struct CardHeaderContent: View {
         .padding(.trailing, 8)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .coordinateSpace(name: Self.space)
+    }
+
+    private var mockupTitleColor: Color {
+        let skin = sidebar.focusedSurfaceID.flatMap { SkinsRuntime.shared.manager.effectiveSkin($0) }
+        return Color(nsColor: LosttyWindowStyle.titleColor(skin: skin, bar: sidebar.chromeColor ?? .windowBackgroundColor))
+    }
+
+    private func title(size: CGFloat, color: Color) -> some View {
+        HStack(spacing: 6) {
+            if let pane = focusedPane { CardFolderIcon(pane: pane) }
+            Text(card.title)
+                .font(.system(size: size, weight: .semibold))
+                .foregroundStyle(color)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Color.clear
+                .frame(width: CardRenameButton.size, height: CardRenameButton.size)
+                .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.space)) } action: { pencilMoved($0) }
+        }
     }
 
     private static let space = "CardHeaderContent"

@@ -11,10 +11,10 @@ import SwiftUI
 /// its card's controller in the responder chain, so menu actions reach the
 /// card.
 final class CardView: NSView, CanvasStacked {
-    /// A standard title bar's height.
-    static let headerHeight = ClaudeUsageBar.height
+    /// A standard title bar's height, or the Mockup window style's.
+    static var headerHeight: CGFloat { ClaudeUsageBar.height }
     /// The header and bottom bar: a card's height past its panes'.
-    static let chromeHeight = headerHeight + ClaudeUsageBar.height
+    static var chromeHeight: CGFloat { headerHeight + ClaudeUsageBar.height }
     static let cornerRadius: CGFloat = 10
 
     /// Live: the terminals draw. Hidden: out of view or the canvas is; the
@@ -75,6 +75,7 @@ final class CardView: NSView, CanvasStacked {
             self?.header.needsDisplay = true
             self?.header.buttons.needsDisplay = true
             self?.needsDisplay = true
+            self?.needsLayout = true
             // Behind the panes: fills any sliver a held or zoomed grid leaves.
             self?.content.layer?.backgroundColor = color?.cgColor
         }
@@ -87,7 +88,8 @@ final class CardView: NSView, CanvasStacked {
     override var wantsUpdateLayer: Bool { true }
 
     override func updateLayer() {
-        Self.updateWindowLook(self, content: content, focused: isFocusedCard)
+        Self.updateWindowLook(
+            self, content: content, focused: isFocusedCard, edge: card.sidebar.chromeColor.map(LosttyWindowStyle.edge(on:)))
         updateRing()
     }
 
@@ -105,9 +107,20 @@ final class CardView: NSView, CanvasStacked {
     }
 
     /// A Mac window's hairline edge, white on the active card, and its
-    /// shadow: deeper on the active one.
-    static func updateWindowLook(_ card: NSView, content: NSView, focused: Bool) {
+    /// shadow: deeper on the active one. The Mockup window style's: an edge
+    /// of `edge` (else a faint line) and a long soft shadow, the same on
+    /// every card.
+    static func updateWindowLook(_ card: NSView, content: NSView, focused: Bool, edge: NSColor? = nil) {
         let dark = card.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        if LosttyWindowStyle.isMockup {
+            content.layer?.borderColor = (edge ?? NSColor(white: dark ? 1 : 0, alpha: 0.1)).cgColor
+            content.layer?.borderWidth = 0.5
+            card.layer?.shadowOffset = CGSize(width: 0, height: -18)
+            card.layer?.shadowOpacity = 0.7
+            card.layer?.shadowRadius = 22
+            return
+        }
+        card.layer?.shadowOffset = CGSize(width: 0, height: -6)
         let edge = focused ? NSColor.white : dark ? NSColor(white: 1, alpha: 0.18) : NSColor(white: 0, alpha: 0.22)
         content.layer?.borderColor = edge.cgColor
         content.layer?.borderWidth = 0.5
@@ -118,7 +131,9 @@ final class CardView: NSView, CanvasStacked {
     override func layout() {
         super.layout()
         content.frame = bounds
-        layer?.shadowPath = CGPath(roundedRect: bounds, cornerWidth: Self.cornerRadius, cornerHeight: Self.cornerRadius, transform: nil)
+        // The mockup's shadow starts inside the card, so it shows below it.
+        let shadow = LosttyWindowStyle.isMockup ? bounds.insetBy(dx: 12, dy: 12) : bounds
+        layer?.shadowPath = CGPath(roundedRect: shadow, cornerWidth: Self.cornerRadius, cornerHeight: Self.cornerRadius, transform: nil)
         header.frame = NSRect(x: 0, y: 0, width: bounds.width, height: Self.headerHeight)
         terminal.frame = NSRect(x: 0, y: Self.headerHeight, width: bounds.width, height: max(0, bounds.height - Self.headerHeight))
         for handle in handles { handle.frame = CanvasModel.handleFrame(for: handle.edges, in: bounds) }

@@ -19,8 +19,8 @@ import SwiftUI
 /// then shortens the meters (`ClaudeUsageFit`), so every window still
 /// shows how it's doing.
 struct ClaudeUsageBar: View {
-    /// A standard title bar's height.
-    static let height: CGFloat = NSWindow.frameRect(forContentRect: .zero, styleMask: [.titled]).height
+    /// A standard title bar's height, or the Mockup window style's 28pt.
+    static var height: CGFloat { LosttyWindowStyle.barHeight }
 
     @ObservedObject var model: ExtensionSidebarModel
     @ObservedObject private var usage = ClaudeUsageRuntime.shared
@@ -28,6 +28,7 @@ struct ClaudeUsageBar: View {
     @ObservedObject private var handoff = ContextHandoffCoordinator.shared
     @ObservedObject private var handoffSettings = ContextHandoffPreferences.shared
     @ObservedObject private var monitor = PaneResourceMonitor.shared
+    @ObservedObject private var style = WindowStylePreferences.shared
     @State private var showingDetails = false
     @State private var showingHandoff = false
     @State private var hovered: Part?
@@ -90,6 +91,13 @@ struct ClaudeUsageBar: View {
                 .onChange(of: geo.size.width) { width = $0 }
         })
         .background(Color(nsColor: chrome))
+        .overlay(alignment: .top) {
+            if style.isMockup {
+                // Stops at the window's edge rather than crossing it.
+                Rectangle().fill(Color(nsColor: LosttyWindowStyle.hairline(on: chrome))).frame(height: 0.5)
+                    .padding(.horizontal, 1)
+            }
+        }
     }
 
     private var modelName: String { pane.flatMap { usage.models[$0] } ?? "" }

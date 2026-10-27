@@ -48,6 +48,7 @@ final class GhosttySkinApplier {
         guard let cfg = ghostty_config_new() else { return true }
         defer { ghostty_config_free(cfg) }
 
+        LosttyWindowStyle.loadBaseConfig(cfg)
         ghostty_config_load_default_files(cfg)
         if !isRunningInXcode() { ghostty_config_load_cli_args(cfg) }
         ghostty_config_load_recursive_files(cfg)

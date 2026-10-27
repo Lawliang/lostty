@@ -64,6 +64,8 @@ extension Ghostty {
             // We only do this on macOS because other Apple platforms do not have the
             // same filesystem concept.
 #if os(macOS)
+            // Lostty: the window style's colors, under the user's config.
+            LosttyWindowStyle.loadBaseConfig(cfg)
             if let path {
                 ghostty_config_load_file(cfg, path)
             } else {

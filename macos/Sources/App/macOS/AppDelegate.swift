@@ -378,6 +378,8 @@ class AppDelegate: NSObject,
         RestartUI.installMenuItem(after: menuOpenConfig)
         // Lostty Beta: the canvas, in the Window menu.
         CanvasMenu.install(before: menuBringAllToFront)
+        // View → Mockup Window Style, over the font sizes.
+        WindowStylePreferences.installMenuItem(before: menuResetFontSize)
         // File → Reopen from History, under Close All Windows.
         SessionHistoryMenu.install(after: menuCloseAllWindows)
         // Each turn's end, from the agent hooks: the usage breakdown, and

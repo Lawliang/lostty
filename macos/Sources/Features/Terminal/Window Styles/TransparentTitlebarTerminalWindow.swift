@@ -8,6 +8,23 @@ class TransparentTitlebarTerminalWindow: TerminalWindow {
     /// visibility changes) can reset the titlebar appearance.
     private var lastSurfaceConfig: Ghostty.SurfaceView.DerivedConfig?
 
+    /// Lostty: the Mockup window style's line under the title bar, its
+    /// title in place of the system's, and its buttons.
+    private var titlebarHairline: NSView?
+    private var mockupTitle: NSTextField?
+    /// Lostty: the folder's own Finder icon before the title, as the
+    /// system's title shows it.
+    private var mockupFolder: NSImageView?
+    private var mockupButtons: CardWindowButtons?
+
+    override var title: String {
+        didSet { mockupTitle?.stringValue = title }
+    }
+
+    override var representedURL: URL? {
+        didSet { syncMockupFolder() }
+    }
+
     /// KVO observation for tab group window changes.
     private var tabGroupWindowsObservation: NSKeyValueObservation?
     private var tabBarVisibleObservation: NSKeyValueObservation?
@@ -97,7 +114,8 @@ class TransparentTitlebarTerminalWindow: TerminalWindow {
 
             titlebarView.layer?.backgroundColor = (isGlassStyle && isTransparentTitlebar)
                 ? NSColor.clear.cgColor
-                : preferredBackgroundColor?.cgColor
+                : preferredBackgroundColor.map(LosttyWindowStyle.bar(over:))?.cgColor // Lostty: the window style's bar
+            syncMockupTitlebar(in: titlebarView)
         }
 
         // In all cases, we have to hide the background view since this has multiple subviews
@@ -111,13 +129,100 @@ class TransparentTitlebarTerminalWindow: TerminalWindow {
 
         // Setup the titlebar background color to match ours
         titlebarContainer.wantsLayer = true
-        titlebarContainer.layer?.backgroundColor = preferredBackgroundColor?.cgColor
+        titlebarContainer.layer?.backgroundColor = preferredBackgroundColor.map(LosttyWindowStyle.bar(over:))?.cgColor // Lostty
+        syncMockupTitlebar(in: titlebarContainer)
 
         // See the docs for the function that sets this to true on why
         effectViewIsHidden = false
 
         // Necessary to not draw the border around the title
         titlebarAppearsTransparent = true
+    }
+
+    /// Lostty: in the Mockup window style, the mockup's flat 12pt window
+    /// buttons in place of the system's, the title after them at 12pt in the
+    /// terminal's text color, and a hairline along the title bar's bottom.
+    private func syncMockupTitlebar(in titlebar: NSView) {
+        let mockup = LosttyWindowStyle.isMockup
+        for kind in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] {
+            standardWindowButton(kind)?.isHidden = mockup
+        }
+        titleVisibility = mockup ? .hidden : .visible
+        guard mockup, let background = preferredBackgroundColor else {
+            for view in [titlebarHairline, mockupTitle?.superview, mockupButtons] as [NSView?] { view?.removeFromSuperview() }
+            (titlebarHairline, mockupTitle, mockupFolder, mockupButtons) = (nil, nil, nil, nil)
+            return
+        }
+        let bar = LosttyWindowStyle.bar(over: background)
+
+        if mockupButtons?.superview !== titlebar {
+            mockupButtons?.removeFromSuperview()
+            let buttons = CardWindowButtons { [weak self] button in
+                switch button {
+                case .close: self?.performClose(nil)
+                case .minimize: self?.performMiniaturize(nil)
+                case .zoom: self?.toggleFullScreen(nil)
+                }
+            }
+            buttons.translatesAutoresizingMaskIntoConstraints = false
+            titlebar.addSubview(buttons)
+            NSLayoutConstraint.activate([
+                buttons.leadingAnchor.constraint(equalTo: titlebar.leadingAnchor, constant: CardWindowButtons.inset),
+                buttons.centerYAnchor.constraint(equalTo: titlebar.centerYAnchor),
+            ])
+            mockupButtons = buttons
+        }
+        mockupButtons?.needsDisplay = true
+
+        if mockupTitle?.superview?.superview !== titlebar {
+            mockupTitle?.superview?.removeFromSuperview()
+            let folder = NSImageView()
+            folder.imageScaling = .scaleProportionallyUpOrDown
+            folder.widthAnchor.constraint(equalToConstant: 16).isActive = true
+            folder.heightAnchor.constraint(equalToConstant: 16).isActive = true
+            let label = NSTextField(labelWithString: title)
+            label.font = .systemFont(ofSize: 12, weight: .semibold)
+            label.lineBreakMode = .byTruncatingMiddle
+            label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+            // A stack, so the title closes up when there's no folder.
+            let row = NSStackView(views: [folder, label])
+            row.spacing = 6
+            row.translatesAutoresizingMaskIntoConstraints = false
+            titlebar.addSubview(row)
+            NSLayoutConstraint.activate([
+                row.leadingAnchor.constraint(equalTo: titlebar.leadingAnchor, constant: CardHeaderContent.titleInset),
+                row.centerYAnchor.constraint(equalTo: titlebar.centerYAnchor),
+                // Clear of the project pill.
+                row.trailingAnchor.constraint(lessThanOrEqualTo: titlebar.trailingAnchor, constant: -220),
+            ])
+            mockupTitle = label
+            mockupFolder = folder
+            syncMockupFolder()
+        }
+        let skin = terminalController?.focusedSurface.flatMap { SkinsRuntime.shared.manager.effectiveSkin($0.id) }
+        mockupTitle?.textColor = LosttyWindowStyle.titleColor(skin: skin, bar: bar)
+
+        if titlebarHairline?.superview !== titlebar {
+            titlebarHairline?.removeFromSuperview()
+            let line = NSView()
+            line.wantsLayer = true
+            let flipped = titlebar.isFlipped
+            line.autoresizingMask = [.width, flipped ? .minYMargin : .maxYMargin]
+            // Stops at the window's edge rather than crossing it.
+            line.frame = NSRect(
+                x: 1, y: flipped ? titlebar.bounds.height - 0.5 : 0, width: max(0, titlebar.bounds.width - 2), height: 0.5)
+            titlebar.addSubview(line)
+            titlebarHairline = line
+        }
+        titlebarHairline?.layer?.backgroundColor = LosttyWindowStyle.hairline(on: bar).cgColor
+    }
+
+    /// Lostty: the Mockup title's folder icon, hidden outside a folder.
+    private func syncMockupFolder() {
+        guard let mockupFolder else { return }
+        mockupFolder.image = representedURL.map { NSWorkspace.shared.icon(forFile: $0.path) }
+        mockupFolder.isHidden = mockupFolder.image == nil
+        mockupFolder.toolTip = representedURL?.path
     }
 
     // MARK: View Finders

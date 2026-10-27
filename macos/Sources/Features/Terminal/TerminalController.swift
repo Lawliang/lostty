@@ -604,7 +604,7 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
         terminalViewContainer?.ghosttyConfigDidChange(ghostty.config, preferredBackgroundColor: window.preferredBackgroundColor)
 
         // Lostty: the extensions sidebar matches the title bar's color.
-        window.extensionSidebarModel.chromeColor = window.preferredBackgroundColor
+        window.extensionSidebarModel.chromeColor = window.preferredBackgroundColor.map(LosttyWindowStyle.bar(over:))
     }
 
     /// Adjusts the given frame for the configured window position.
