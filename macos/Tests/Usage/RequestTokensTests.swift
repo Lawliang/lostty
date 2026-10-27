@@ -18,8 +18,8 @@ struct RequestTokensTests {
             + #""cache_read_input_tokens":100}}}"#
     }
 
-    /// An Opus reply's weight: 1 + 8 × 1.25 + 100 × 0.1 + 5 per output token.
-    func weight(_ output: Int = 1000) -> Int { 21 + 5 * output }
+    /// An Opus 5.5 reply's weight: 1 + 8 × 2 + 100 × 0.05 + 5 per output token.
+    func weight(_ output: Int = 1000) -> Int { 22 + 5 * output }
 
     /// Claude Code's record that the request's Stop hooks ran.
     var stop: String {
@@ -63,9 +63,9 @@ struct RequestTokensTests {
 
     @Test func otherModelsWeighByTheirPriceNextToOpus() async throws {
         let file = try conversation()
-        try write([reply("h", output: 999, model: "claude-haiku-5-5"), stop], to: file)
-        // Haiku weighs a fifth of Opus: (21 + 5 × 999) / 5.
-        #expect(await counter().total(file, since: start) == 1003)
+        try write([reply("h", output: 999, model: "claude-sonnet-5-5"), stop], to: file)
+        // Sonnet 5.5 costs half of Opus 5.5, and reads its cache at 0.1: (1 + 16 + 10 + 5 × 999) / 2.
+        #expect(await counter().total(file, since: start) == 2511)
     }
 
     @Test func repliesWrittenAfterTheStopHookStartedStillCount() async throws {
