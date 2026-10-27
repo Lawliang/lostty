@@ -14,9 +14,7 @@ enum LosttyWindowStyle {
     /// Read from any thread (a config reload).
     static var isMockup: Bool { UserDefaults.ghostty.bool(forKey: key) }
 
-    /// The mockup's terminal, title bar and text.
-    static let mockupBackground = RGB(r: 0x1B, g: 0x18, b: 0x20)
-    static let mockupBar = RGB(r: 0x2C, g: 0x28, b: 0x32)
+    /// The mockup's terminal text.
     static let mockupText = RGB(r: 0xA4, g: 0x9D, b: 0xAE)
 
     /// A card's title bar and bottom bar: the mockup's 28pt, or a standard
@@ -25,19 +23,15 @@ enum LosttyWindowStyle {
         isMockup ? 28 : NSWindow.frameRect(forContentRect: .zero, styleMask: [.titled]).height
     }
 
-    /// The title and bottom bars' color over panes of `background`: the
-    /// mockup's own over its terminal, else as much lighter (darker over a
-    /// light pane).
+    /// The title and bottom bars' color over panes of `background`: a step
+    /// brighter (dimmer over a light pane) at the same hue and saturation,
+    /// so each skin's bars stay its color. Mixing in white grayed them.
     static func bar(over background: NSColor) -> NSColor {
-        guard isMockup, let rgb = background.usingColorSpace(.sRGB) else { return background }
-        let alpha = background.alphaComponent
-        let components = [rgb.redComponent, rgb.greenComponent, rgb.blueComponent]
-        if components.map({ UInt8(($0 * 255).rounded()) }) == [mockupBackground.r, mockupBackground.g, mockupBackground.b] {
-            return nsColor(mockupBar).withAlphaComponent(alpha)
-        }
-        let toward: CGFloat = background.isLightColor ? 0 : 1
-        let mixed = components.map { $0 + (toward - $0) * 0.075 }
-        return NSColor(srgbRed: mixed[0], green: mixed[1], blue: mixed[2], alpha: alpha)
+        guard isMockup, let hsb = background.usingColorSpace(.sRGB) else { return background }
+        let step: CGFloat = background.isLightColor ? -0.07 : 0.07
+        return NSColor(
+            colorSpace: .sRGB, hue: hsb.hueComponent, saturation: hsb.saturationComponent,
+            brightness: min(1, max(0, hsb.brightnessComponent + step)), alpha: hsb.alphaComponent)
     }
 
     /// The line under a title bar and over a bottom bar of `bar`.
