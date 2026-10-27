@@ -93,6 +93,10 @@ class AppDelegate: NSObject,
     /// seconds since the process was launched.
     private var applicationLaunchTime: TimeInterval = 0
 
+    /// Lostty: you quit it yourself (⌘Q, the menu, a script), not the Mac
+    /// shutting down, restarting or logging out. Set when the quit begins.
+    private var quitIsDeliberate = false
+
     /// This is the current configuration from the Ghostty configuration that we need.
     private var derivedConfig: DerivedConfig = DerivedConfig()
 
@@ -531,6 +535,7 @@ class AppDelegate: NSObject,
             LosttyRestart.restart(reason: .sparkle)
         }
         if LosttyRestart.isRestarting { return .terminateNow }
+        quitIsDeliberate = !Self.systemIsEnding()
 
         // Lostty Mobile: quitting ends Stay Awake for Phone and this Mac's
         // sessions; one confirmation covers both. Never on shutdown.
@@ -627,7 +632,7 @@ class AppDelegate: NSObject,
 
     func applicationWillTerminate(_ notification: Notification) {
         // Lostty: the session as it is, for "Continue your last session?".
-        LastSessionStore.shared.saveForQuit()
+        LastSessionStore.shared.saveForQuit(deliberate: quitIsDeliberate && !LosttyRestart.isRestarting)
 
         // We have no notifications we want to persist after death,
         // so remove them all now. In the future we may want to be

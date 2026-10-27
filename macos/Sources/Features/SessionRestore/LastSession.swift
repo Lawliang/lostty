@@ -44,8 +44,10 @@ struct PaneConversation: Codable, Equatable {
 /// Lostty as it last was: every window and the canvas (`WindowSnapshot`),
 /// each pane's id, and the conversation each agent pane was in. Kept up to
 /// date while Lostty runs (`LastSessionStore`); when the Mac restarts (or
-/// Lostty quits) and the panes' tmux sessions end with it, the next Lostty
-/// offers to continue it (`SessionRestore`). One file per build (bundle id).
+/// Lostty ends other than by your quitting it) and the panes' tmux sessions
+/// end with it, the next Lostty offers to continue it (`SessionRestore`).
+/// Quitting it yourself leaves it in the history only. One file per build
+/// (bundle id).
 struct LastSession: Codable, Equatable {
     var at: Date
     var windows: WindowSnapshot
