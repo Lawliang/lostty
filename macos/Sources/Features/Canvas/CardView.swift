@@ -115,9 +115,10 @@ final class CardView: NSView, CanvasStacked {
         if LosttyWindowStyle.isMockup {
             content.layer?.borderColor = (edge ?? NSColor(white: dark ? 1 : 0, alpha: 0.1)).cgColor
             content.layer?.borderWidth = 0.5
-            card.layer?.shadowOffset = CGSize(width: 0, height: -18)
-            card.layer?.shadowOpacity = 0.7
-            card.layer?.shadowRadius = 22
+            // The mockup's `0 22px 50px -16px rgba(0, 0, 0, .75)`.
+            card.layer?.shadowOffset = CGSize(width: 0, height: -22)
+            card.layer?.shadowOpacity = 0.75
+            card.layer?.shadowRadius = 25
             return
         }
         card.layer?.shadowOffset = CGSize(width: 0, height: -6)
@@ -132,8 +133,10 @@ final class CardView: NSView, CanvasStacked {
         super.layout()
         content.frame = bounds
         // The mockup's shadow starts inside the card, so it shows below it.
-        let shadow = LosttyWindowStyle.isMockup ? bounds.insetBy(dx: 12, dy: 12) : bounds
-        layer?.shadowPath = CGPath(roundedRect: shadow, cornerWidth: Self.cornerRadius, cornerHeight: Self.cornerRadius, transform: nil)
+        let spread: CGFloat = LosttyWindowStyle.isMockup ? 16 : 0
+        let radius = max(0, Self.cornerRadius - spread)
+        layer?.shadowPath = CGPath(
+            roundedRect: bounds.insetBy(dx: spread, dy: spread), cornerWidth: radius, cornerHeight: radius, transform: nil)
         header.frame = NSRect(x: 0, y: 0, width: bounds.width, height: Self.headerHeight)
         terminal.frame = NSRect(x: 0, y: Self.headerHeight, width: bounds.width, height: max(0, bounds.height - Self.headerHeight))
         for handle in handles { handle.frame = CanvasModel.handleFrame(for: handle.edges, in: bounds) }
