@@ -2,17 +2,16 @@
 import AppKit
 import GhosttyKit
 
-/// Lostty's two window styles. Classic: the title and bottom bars take
-/// the panes' color. Mockup, the canvas drag-select mockup's: a terminal
-/// with no skin is its dark purple-gray, the bars are a step lighter than
-/// the panes with a hairline between, and a card's title is centered over
-/// a faint edge and a long soft shadow. View → Mockup Window Style switches
-/// between them.
+/// Lostty's two window styles. Mockup, the canvas drag-select mockup's and
+/// the default: a terminal with no skin is its dark purple-gray, the bars
+/// are a step lighter than the panes with a hairline between, and a card
+/// has a faint edge and a long soft shadow. Classic: the title and bottom
+/// bars take the panes' color. View → Classic Window Style switches to it.
 enum LosttyWindowStyle {
-    static let key = "LosttyMockupWindowStyle"
+    static let key = "LosttyClassicWindowStyle"
 
     /// Read from any thread (a config reload).
-    static var isMockup: Bool { UserDefaults.ghostty.bool(forKey: key) }
+    static var isMockup: Bool { !UserDefaults.ghostty.bool(forKey: key) }
 
     /// The mockup's terminal text.
     static let mockupText = RGB(r: 0xA4, g: 0x9D, b: 0xAE)
@@ -100,7 +99,7 @@ enum LosttyWindowStyle {
         """
 }
 
-/// View → Mockup Window Style.
+/// View → Classic Window Style.
 @MainActor
 final class WindowStylePreferences: ObservableObject {
     static let shared = WindowStylePreferences()
@@ -108,14 +107,14 @@ final class WindowStylePreferences: ObservableObject {
     @Published var isMockup = LosttyWindowStyle.isMockup {
         didSet {
             guard isMockup != oldValue else { return }
-            UserDefaults.ghostty.set(isMockup, forKey: LosttyWindowStyle.key)
+            UserDefaults.ghostty.set(!isMockup, forKey: LosttyWindowStyle.key)
             (NSApp.delegate as? AppDelegate)?.ghostty.reloadConfig()
         }
     }
 
     static func installMenuItem(before anchor: NSMenuItem?) {
         guard let anchor, let menu = anchor.menu else { return }
-        let item = NSMenuItem(title: "Mockup Window Style", action: #selector(MenuTarget.toggle(_:)), keyEquivalent: "")
+        let item = NSMenuItem(title: "Classic Window Style", action: #selector(MenuTarget.toggle(_:)), keyEquivalent: "")
         item.target = MenuTarget.shared
         let index = menu.index(of: anchor)
         menu.insertItem(item, at: index)
@@ -129,7 +128,7 @@ final class WindowStylePreferences: ObservableObject {
         @objc func toggle(_ sender: Any?) { WindowStylePreferences.shared.isMockup.toggle() }
 
         func validateMenuItem(_ item: NSMenuItem) -> Bool {
-            item.state = WindowStylePreferences.shared.isMockup ? .on : .off
+            item.state = WindowStylePreferences.shared.isMockup ? .off : .on
             return true
         }
     }
