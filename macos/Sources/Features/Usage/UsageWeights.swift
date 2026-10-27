@@ -7,6 +7,8 @@ struct TokenCounts: Codable, Equatable, Sendable {
     var output = 0
     var cacheWrite = 0
     var cacheRead = 0
+
+    var total: Int { input + output + cacheWrite + cacheRead }
 }
 
 /// How fast tokens use up a plan limit, relative to each other (usage
