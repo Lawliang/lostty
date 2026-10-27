@@ -28,6 +28,9 @@ final class CardView: NSView, CanvasStacked {
     private let content = CardContentView()
     private let header: CardHeaderView
     private let terminal: CardTerminalHost
+    /// Behind the panes alone in the Mockup window style, whose glass bars
+    /// show the canvas behind the card.
+    private let panesBackground = NSView()
     private var handles: [CardEdgeHandle] = []
     private lazy var ring = CanvasSelectionRing(on: self)
     private var rename: CardRenameOverlay?
@@ -61,6 +64,8 @@ final class CardView: NSView, CanvasStacked {
         super.init(frame: .zero)
         Self.setUpWindowLook(self, content: content)
         addSubview(content)
+        panesBackground.wantsLayer = true
+        content.addSubview(panesBackground)
         content.addSubview(terminal)
         content.addSubview(header)
         header.buttons.isActive = false
@@ -77,7 +82,10 @@ final class CardView: NSView, CanvasStacked {
             self?.needsDisplay = true
             self?.needsLayout = true
             // Behind the panes: fills any sliver a held or zoomed grid leaves.
-            self?.content.layer?.backgroundColor = color?.cgColor
+            // The Mockup style's glass bars show the canvas behind the card.
+            let mockup = LosttyWindowStyle.isMockup
+            self?.content.layer?.backgroundColor = mockup ? nil : color?.cgColor
+            self?.panesBackground.layer?.backgroundColor = mockup ? color?.cgColor : nil
         }
     }
 
@@ -134,6 +142,8 @@ final class CardView: NSView, CanvasStacked {
         layer?.shadowPath = CGPath(roundedRect: shadow, cornerWidth: Self.cornerRadius, cornerHeight: Self.cornerRadius, transform: nil)
         header.frame = NSRect(x: 0, y: 0, width: bounds.width, height: Self.headerHeight)
         terminal.frame = NSRect(x: 0, y: Self.headerHeight, width: bounds.width, height: max(0, bounds.height - Self.headerHeight))
+        panesBackground.frame = NSRect(
+            x: 0, y: Self.headerHeight, width: bounds.width, height: max(0, bounds.height - Self.chromeHeight))
         for handle in handles { handle.frame = CanvasModel.handleFrame(for: handle.edges, in: bounds) }
         rename?.frame = bounds
         updateRing()

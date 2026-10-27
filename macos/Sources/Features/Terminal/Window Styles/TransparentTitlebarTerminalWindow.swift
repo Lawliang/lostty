@@ -15,6 +15,11 @@ class TransparentTitlebarTerminalWindow: TerminalWindow {
     private var mockupButtons: CardWindowButtons?
     private var mockupGlass: PassthroughHostingView<MockupBarGlass>?
 
+    /// Lostty: clear in the Mockup window style, under its glass.
+    private var titlebarColor: CGColor? {
+        LosttyWindowStyle.isMockup ? NSColor.clear.cgColor : preferredBackgroundColor?.cgColor
+    }
+
     override var title: String {
         didSet { centeredTitle?.stringValue = title }
     }
@@ -108,7 +113,7 @@ class TransparentTitlebarTerminalWindow: TerminalWindow {
 
             titlebarView.layer?.backgroundColor = (isGlassStyle && isTransparentTitlebar)
                 ? NSColor.clear.cgColor
-                : preferredBackgroundColor.map(LosttyWindowStyle.bar(over:))?.cgColor // Lostty: the window style's bar
+                : titlebarColor
             syncMockupTitlebar(in: titlebarView)
         }
 
@@ -123,7 +128,7 @@ class TransparentTitlebarTerminalWindow: TerminalWindow {
 
         // Setup the titlebar background color to match ours
         titlebarContainer.wantsLayer = true
-        titlebarContainer.layer?.backgroundColor = preferredBackgroundColor.map(LosttyWindowStyle.bar(over:))?.cgColor // Lostty
+        titlebarContainer.layer?.backgroundColor = titlebarColor
         syncMockupTitlebar(in: titlebarContainer)
 
         // See the docs for the function that sets this to true on why
