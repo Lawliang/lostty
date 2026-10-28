@@ -686,7 +686,9 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         }
     }
 
-    /// Each pane in a zone has its zone file, written when it changed.
+    /// Each pane in a zone has its zone file, written when it changed. A
+    /// pane whose project's features changed is told with its next prompt,
+    /// which brings the other agents' features.
     private func writeZoneFiles() {
         let panes = membership.panes
         let sessions = paneSessions()
@@ -694,6 +696,9 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
             guard let file = model.zoneFile(zone, pane: pane, panes: panes, sessions: sessions, tickets: tickets),
                   zoneFiles[pane] != file else { continue }
             zoneStore.writeZone(pane, file)
+            if let old = zoneFiles[pane], old.features != file.features {
+                zoneStore.appendSay(pane, "The features in zone \(file.zone) changed.")
+            }
             zoneFiles[pane] = file
         }
     }
