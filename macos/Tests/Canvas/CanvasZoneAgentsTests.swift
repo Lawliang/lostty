@@ -41,6 +41,7 @@ struct CanvasZoneAgentsTests {
             Textberry: An SMS app.
             Onboarding: Sign-up flow.
             """)
+        #expect(model.zoneMovedIn(project) == "You're now in zone Textberry.\nTextberry: An SMS app.\n" + CanvasModel.claimBrief)
         #expect(CanvasModel.zoneMovedOut(of: "Textberry") == "You've left zone Textberry.")
     }
 
@@ -106,6 +107,19 @@ struct CanvasZoneAgentsTests {
         #expect(model.zoneFile(project, pane: p2, panes: panes, sessions: sessions, tickets: [])?.members == ["tb-api", "tb-onboarding"])
         #expect(model.zoneFile(elsewhere, pane: p3, panes: panes, sessions: sessions, tickets: [])?.members == ["lostty"])
         #expect(model.zoneFile(domain, pane: p1, panes: panes, sessions: [:], tickets: [])?.members == [])
+    }
+
+    @Test func aMembersFeatureIsItsDomainElseWhatItClaimed() throws {
+        let model = textberry()
+        let p4 = UUID()
+        let panes = CanvasPaneZones(panes: [p1, p2, p3, p4], zones: [p1: domain, p2: project, p3: project, p4: project])
+        let sessions = [p1: "tb-onboarding", p2: "tb-api", p3: "tb-notes", p4: "tb-api"]
+        let claims = [p1: "Something else", p2: "API"]
+        let file = try #require(model.zoneFile(project, pane: p3, panes: panes, sessions: sessions, claims: claims, tickets: []))
+        #expect(file.features == ["tb-onboarding": "Onboarding", "tb-api": "API"])
+        #expect(file.start == (model.zoneStart(project) ?? "") + "\n" + CanvasModel.claimBrief)
+        #expect(model.zoneFile(domain, pane: p1, panes: panes, sessions: sessions, claims: claims, tickets: [])?.start
+            == model.zoneStart(domain))
     }
 
     @Test func theBoardListsEachFeaturesTicketsAsTheBoardDoesThenToAssign() throws {
@@ -194,6 +208,8 @@ struct CanvasZoneAgentsTests {
         store.replaceSay(pane, "You've left zone Onboarding.")
         store.replaceSay(pane, "You're now in zone Textberry.")
         store.writeAllow(pane, target: "lostty-a9")
+        store.writeClaim(pane, "Karaoke")
+        #expect(store.claims() == [pane: "Karaoke"])
 
         let url = handoff.panes.appendingPathComponent("\(pane.uuidString).zone.json")
         let json = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
