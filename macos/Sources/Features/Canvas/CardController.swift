@@ -109,28 +109,22 @@ final class CardController: BaseTerminalController {
     }
 
     /// The card's own title bar shows its title; only the focused card
-    /// titles the canvas window. It starts with the focused pane's tmux
-    /// session (`Self.title`) unless the card was renamed.
+    /// titles the canvas window.
     @Published private(set) var title = "Lostty"
+    /// The focused pane's Claude's name, as its agents call it, shown
+    /// before the title: Claude's own titles, after a handoff all alike,
+    /// don't say which terminal it is.
+    @Published private(set) var agentName: String?
     /// The key of the board ticket working in one of its panes, shown
     /// before the title. Set by CanvasController.showTicketKeys alone.
     @Published var ticketKey: String?
 
     override func applyTitleToWindow() {
-        let session = titleOverride == nil ? focusedSurface.flatMap { canvas?.sessionName(of: $0.id) } : nil
-        title = Self.title(windowTitle, session: session)
+        title = windowTitle
+        let name = focusedSurface.flatMap { canvas?.agentName(of: $0.id) }
+        if agentName != name { agentName = name }
         guard isFocusedCard else { return }
         super.applyTitleToWindow()
-    }
-
-    /// `terminal`, the title the terminal set, after `session`: the name
-    /// Lostty gave the pane's tmux session, which ListAgents names its agent
-    /// by and which Claude Code's own titles (after a handoff, all alike)
-    /// never change. Once only, when the terminal's title already starts
-    /// with it.
-    static func title(_ terminal: String, session: String?) -> String {
-        guard let session, !session.isEmpty, !terminal.hasPrefix(session) else { return terminal }
-        return terminal.isEmpty ? session : "\(session) · \(terminal)"
     }
 
     override func pwdDidChange(to: URL?) {
