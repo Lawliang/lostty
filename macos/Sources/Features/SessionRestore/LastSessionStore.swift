@@ -65,6 +65,11 @@ final class LastSessionStore {
         noteChange()
     }
 
+    /// The agent in a pane, once it has finished a turn there.
+    func agent(in pane: UUID) -> HookAgent? {
+        conversations[pane].flatMap { HookAgent(rawValue: $0.agent) }
+    }
+
     /// A pane's agent exited, or the pane closed.
     func agentGone(_ pane: UUID) {
         guard conversations.removeValue(forKey: pane) != nil else { return }

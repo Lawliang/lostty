@@ -112,6 +112,10 @@ final class CardController: BaseTerminalController {
     /// titles the canvas window.
     @Published private(set) var title = "Lostty"
 
+    /// The trash button's check is asking this card's agents whether their
+    /// work is done (CanvasCloseCheck).
+    @Published var checkingClose = false
+
     override func applyTitleToWindow() {
         title = windowTitle
         guard isFocusedCard else { return }

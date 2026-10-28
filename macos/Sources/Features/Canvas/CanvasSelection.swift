@@ -384,8 +384,11 @@ extension CanvasController {
         alert.addButton(withTitle: "No")
         alert.addButton(withTitle: "Cancel")
         alert.beginSheetModal(for: window) { response in
-            guard response == .alertFirstButtonReturn || response == .alertSecondButtonReturn else { return }
-            for card in cards { card.closeCard(confirm: false) }
+            switch response {
+            case .alertFirstButtonReturn: CanvasCloseCheck.shared.run(cards, window: window)
+            case .alertSecondButtonReturn: for card in cards { card.closeCard(confirm: false) }
+            default: break
+            }
         }
     }
 }
