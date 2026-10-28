@@ -16,10 +16,14 @@ struct TmuxHooksTests {
         }
     }
 
-    @Test func confLinesSignalTheChannelKeepTheServerAndDontSaveClears() {
+    @Test func confLinesSignalTheChannelKeepTheServerDontSaveClearsAndClickLeavesCopyMode() {
         #expect(TmuxHooks.confLines.first == "set-hook -g session-created 'wait-for -S lostty-changed'")
-        #expect(TmuxHooks.confLines.suffix(2) == ["set -s exit-empty off", "set -g scroll-on-clear off"])
-        #expect(TmuxHooks.confLines.count == 7)
+        #expect(TmuxHooks.confLines.suffix(4) == [
+            "set -s exit-empty off", "set -g scroll-on-clear off",
+            "bind-key -T copy-mode MouseUp1Pane send-keys -X cancel",
+            "bind-key -T copy-mode-vi MouseUp1Pane send-keys -X cancel",
+        ])
+        #expect(TmuxHooks.confLines.count == 9)
     }
 
     @Test func launchSetsTheSameSettingsInOneCall() {
@@ -31,7 +35,9 @@ struct TmuxHooksTests {
             "set-hook", "-g", "client-attached", signal, ";",
             "set-hook", "-g", "client-detached", signal, ";",
             "set-option", "-s", "exit-empty", "off", ";",
-            "set-option", "-g", "scroll-on-clear", "off",
+            "set-option", "-g", "scroll-on-clear", "off", ";",
+            "bind-key", "-T", "copy-mode", "MouseUp1Pane", "send-keys", "-X", "cancel", ";",
+            "bind-key", "-T", "copy-mode-vi", "MouseUp1Pane", "send-keys", "-X", "cancel",
         ])
     }
 
