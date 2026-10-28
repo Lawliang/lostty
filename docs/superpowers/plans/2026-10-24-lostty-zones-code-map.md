@@ -122,4 +122,8 @@ the `lostty` socket, so the tmux session name is the join key:
   at SessionStart from the members and the session files, so names are
   current without the app tracking them.
 - `+peers` with a zone file lists only rows whose tmux session is a
-  member.
+  member. Superseded 2026-10-25: the filter hid same-repo terminals a
+  merge check must ask. `+peers` now lists every row and labels each
+  with its zone, found through the session's `@lostty_surface`, and
+  the hook lets a SendMessage through to an agent whose session file's
+  `cwd` is in a worktree of the same repo.

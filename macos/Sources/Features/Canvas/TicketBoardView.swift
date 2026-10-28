@@ -137,8 +137,8 @@ final class TicketBoardView: NSView, CanvasStacked {
         case 115: board.list.moveToEnd(last: false)
         case 119: board.list.moveToEnd(last: true)
         case 123:
-            guard let status = selected.flatMap(board.list.ticket)?.status else { return false }
-            withAnimation(TicketBoard.motion) { board.list.fold(status) }
+            guard let ticket = selected.flatMap(board.list.ticket) else { return false }
+            withAnimation(TicketBoard.motion) { board.list.fold(board.list.section(of: ticket)) }
         case 124: withAnimation(TicketBoard.motion) { board.list.folded = [] }
         case 36, 76:
             guard selected != nil else { return false }
@@ -157,15 +157,16 @@ final class TicketBoardView: NSView, CanvasStacked {
         case "j": board.move(by: 1)
         case "k": board.move(by: -1)
         case "c": board.newTicket()
-        case "1", "2", "3":
+        case "1", "2", "3", "4":
             guard let selected, let index = Int(character) else { return false }
-            board.setStatus(CanvasTicket.Status.allCases[index - 1], of: selected)
+            board.setState(CanvasTicket.State.byOwner[index - 1], of: selected)
         case "s":
             guard let selected else { return false }
-            board.cycleStatus(of: selected)
+            board.cycleState(of: selected)
         case "d":
             guard selected != nil else { return false }
             board.focusRequest = .details
+        case "f": board.pick(.feature)
         case "p": board.pick(.priority)
         case "t": board.pick(.kind)
         case "a": board.pick(.assignee)
@@ -333,7 +334,7 @@ final class TicketNewButtonHost: NSHostingView<TicketNewButton> {
 }
 
 /// The title, in the middle of the title bar: "Tickets", then how many
-/// are in progress, up next and done.
+/// are working, queued and in review.
 struct TicketBoardTitle: View {
     @ObservedObject var board: TicketBoard
 
@@ -343,7 +344,7 @@ struct TicketBoardTitle: View {
             Text("Tickets")
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(.primary.opacity(0.8))
-            Text("\(list.count(.inProgress)) in progress · \(list.count(.toDo)) up next · \(list.count(.done)) done")
+            Text("\(list.count(.working)) working · \(list.count(.queued)) queued · \(list.count(.review)) in review")
                 .font(.system(size: 11.5))
                 .monospacedDigit()
                 .foregroundStyle(.secondary)
