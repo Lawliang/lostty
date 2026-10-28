@@ -21,9 +21,14 @@ enum TmuxHooks {
     /// Powerlevel10k's redraws at startup and after every resize.
     static let noScrollOnClear = "set -g scroll-on-clear off"
 
+    /// A click without a drag leaves copy mode. Without it a stray wheel tick
+    /// left the pane in copy mode, cursor hidden, and clicks did nothing.
+    static let copyModeTables = ["copy-mode", "copy-mode-vi"]
+
     /// As written in tmux.conf.
     static var confLines: [String] {
         events.map { "set-hook -g \($0) '\(command)'" } + [keepServer, noScrollOnClear]
+            + copyModeTables.map { "bind-key -T \($0) MouseUp1Pane send-keys -X cancel" }
     }
 
     /// One `tmux` call setting all of them.
@@ -32,6 +37,7 @@ enum TmuxHooks {
             (index == 0 ? [] : [";"]) + ["set-hook", "-g", event, command]
         }
         return hooks + [";", "set-option", "-s", "exit-empty", "off", ";", "set-option", "-g", "scroll-on-clear", "off"]
+            + copyModeTables.flatMap { [";", "bind-key", "-T", $0, "MouseUp1Pane", "send-keys", "-X", "cancel"] }
     }
 
     /// Wakes everything waiting on the channel. `-f /dev/null`: signalling
