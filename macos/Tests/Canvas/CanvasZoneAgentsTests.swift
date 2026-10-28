@@ -41,6 +41,7 @@ struct CanvasZoneAgentsTests {
             Textberry: An SMS app.
             Onboarding: Sign-up flow.
             """)
+        #expect(model.zoneMovedIn(project) == "You're now in zone Textberry.\nTextberry: An SMS app.\n" + CanvasModel.claimBrief)
         #expect(CanvasModel.zoneMovedOut(of: "Textberry") == "You've left zone Textberry.")
     }
 
@@ -101,9 +102,24 @@ struct CanvasZoneAgentsTests {
         let file = try #require(model.zoneFile(domain, pane: p1, panes: panes, sessions: sessions, tickets: []))
         #expect(file.zone == "Textberry › Onboarding")
         #expect(file.members == ["tb-api", "tb-onboarding"])
+        #expect(file.features == ["tb-onboarding": "Onboarding"])
+        #expect(model.zoneFile(elsewhere, pane: p3, panes: panes, sessions: sessions, tickets: [])?.features == [:])
         #expect(model.zoneFile(project, pane: p2, panes: panes, sessions: sessions, tickets: [])?.members == ["tb-api", "tb-onboarding"])
         #expect(model.zoneFile(elsewhere, pane: p3, panes: panes, sessions: sessions, tickets: [])?.members == ["lostty"])
         #expect(model.zoneFile(domain, pane: p1, panes: panes, sessions: [:], tickets: [])?.members == [])
+    }
+
+    @Test func aMembersFeatureIsItsDomainElseWhatItClaimed() throws {
+        let model = textberry()
+        let p4 = UUID()
+        let panes = CanvasPaneZones(panes: [p1, p2, p3, p4], zones: [p1: domain, p2: project, p3: project, p4: project])
+        let sessions = [p1: "tb-onboarding", p2: "tb-api", p3: "tb-notes", p4: "tb-api"]
+        let claims = [p1: "Something else", p2: "API"]
+        let file = try #require(model.zoneFile(project, pane: p3, panes: panes, sessions: sessions, claims: claims, tickets: []))
+        #expect(file.features == ["tb-onboarding": "Onboarding", "tb-api": "API"])
+        #expect(file.start == (model.zoneStart(project) ?? "") + "\n" + CanvasModel.claimBrief)
+        #expect(model.zoneFile(domain, pane: p1, panes: panes, sessions: sessions, claims: claims, tickets: [])?.start
+            == model.zoneStart(domain))
     }
 
     @Test func theBoardListsEachFeaturesTicketsAsTheBoardDoesThenToAssign() throws {
@@ -192,6 +208,8 @@ struct CanvasZoneAgentsTests {
         store.replaceSay(pane, "You've left zone Onboarding.")
         store.replaceSay(pane, "You're now in zone Textberry.")
         store.writeAllow(pane, target: "lostty-a9")
+        store.writeClaim(pane, "Karaoke")
+        #expect(store.claims() == [pane: "Karaoke"])
 
         let url = handoff.panes.appendingPathComponent("\(pane.uuidString).zone.json")
         let json = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
@@ -200,14 +218,20 @@ struct CanvasZoneAgentsTests {
         #expect(json["folder"] is NSNull)
         #expect(json["members"] as? [String] == ["tb-1", "tb-2"])
         #expect(json["board"] == nil)
+        #expect(json["features"] == nil)
         store.writeZone(pane, CanvasZoneFile(
-            start: "Lostty zone: Textberry.", zone: "Textberry", folder: nil, board: "Textberry tickets"))
+            start: "Lostty zone: Textberry.", zone: "Textberry", folder: nil, features: ["tb-1": "Onboarding"],
+            board: "Textberry tickets"))
         let boarded = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
         #expect(boarded["board"] as? String == "Textberry tickets")
+        #expect(boarded["features"] as? [String: String] == ["tb-1": "Onboarding"])
         let allow = handoff.panes.appendingPathComponent("\(pane.uuidString).zone.allow")
         #expect(try String(contentsOf: allow, encoding: .utf8) == "lostty-a9")
         let say = handoff.panes.appendingPathComponent("\(pane.uuidString).zone.say")
         #expect(try String(contentsOf: say, encoding: .utf8) == "You're now in zone Textberry.")
+        store.appendSay(pane, "You may retry your message to lostty-a9 once.")
+        #expect(try String(contentsOf: say, encoding: .utf8)
+            == "You're now in zone Textberry.\n\nYou may retry your message to lostty-a9 once.")
         store.appendSay(pane, "You may retry your message to lostty-a9 once.")
         #expect(try String(contentsOf: say, encoding: .utf8)
             == "You're now in zone Textberry.\n\nYou may retry your message to lostty-a9 once.")

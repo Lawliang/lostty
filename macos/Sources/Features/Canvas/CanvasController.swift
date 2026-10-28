@@ -83,6 +83,9 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     private var zoneResizeStart: CanvasZoneSnapshot?
     private(set) var membership = (panes: CanvasPaneZones(), model: CanvasModel())
     private var zoneFiles: [UUID: CanvasZoneFile] = [:]
+    /// What each pane outside its project's domains said it works on
+    /// (`lostty +ticket working`), kept in its zone folder across launches.
+    lazy var featureClaims: [UUID: String] = zoneStore.claims()
     let zoneStore = CanvasZoneStore.standard
     private(set) var tmuxSessions: [TmuxSession] = []
     /// Each tmux session's Claude's name (ClaudeSessionNames).
@@ -636,6 +639,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         for pane in zoneFiles.keys where now.zones[pane] == nil {
             zoneStore.removeZone(pane)
             zoneFiles[pane] = nil
+            featureClaims[pane] = nil
         }
         for pane in before.panes.panes.subtracting(now.panes) { zoneStore.removeSay(pane) }
         writeZoneFiles()
@@ -686,14 +690,20 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         }
     }
 
-    /// Each pane in a zone has its zone file, written when it changed.
-    private func writeZoneFiles() {
+    /// Each pane in a zone has its zone file, written when it changed. A
+    /// pane whose project's features changed is told with its next prompt,
+    /// which brings the other agents' features.
+    func writeZoneFiles() {
         let panes = membership.panes
         let sessions = paneSessions()
         for (pane, zone) in panes.zones {
-            guard let file = model.zoneFile(zone, pane: pane, panes: panes, sessions: sessions, tickets: tickets),
+            guard let file = model.zoneFile(
+                zone, pane: pane, panes: panes, sessions: sessions, claims: featureClaims, tickets: tickets),
                   zoneFiles[pane] != file else { continue }
             zoneStore.writeZone(pane, file)
+            if let old = zoneFiles[pane], old.features != file.features {
+                zoneStore.appendSay(pane, "The features in zone \(file.zone) changed.")
+            }
             zoneFiles[pane] = file
         }
     }

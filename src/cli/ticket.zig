@@ -29,6 +29,7 @@ const verbs = [_]struct { name: []const u8, min: usize, max: usize }{
     .{ .name = "add", .min = 2, .max = 3 },
     .{ .name = "assign", .min = 2, .max = 2 },
     .{ .name = "list", .min = 0, .max = 0 },
+    .{ .name = "working", .min = 1, .max = 1 },
 };
 
 const usage =
@@ -37,6 +38,7 @@ const usage =
     \\       lostty +ticket add "<feature>" "<summary>" ["<details>"]
     \\       lostty +ticket assign <key> "<feature>"
     \\       lostty +ticket list
+    \\       lostty +ticket working "<feature>"
     \\
 ;
 
@@ -45,6 +47,8 @@ const usage =
 /// typed into it: `+ticket review TB-7 "what changed"` or `+ticket blocked
 /// TB-7 "why"`. A project's manager adds a ticket to a feature, `+ticket add
 /// Login "summary" "details"`, or moves one, `+ticket assign TB-7 Login`.
+/// An agent outside the project's domains says what it works on, `+ticket
+/// working "Karaoke"`, so the zone's other agents know.
 /// These write their arguments to the pane's terminal as the LOSTTY_TICKET
 /// user var, as +claude-state does, so the app knows which pane sent it,
 /// and print "sent". The app applies one only if that pane may: the
@@ -160,6 +164,8 @@ test "ticket: parse takes each verb with its arguments only" {
     try t.expect(parse(&.{ "review", "TB-7", "Added the button" }) != null);
     try t.expect(parse(&.{ "blocked", "TB-7", "Needs GOOGLE_CLIENT_ID" }) != null);
     try t.expect(parse(&.{ "review", "TB-7" }) == null);
+    try t.expect(parse(&.{ "working", "Karaoke" }) != null);
+    try t.expect(parse(&.{"working"}) == null);
     try t.expect(parse(&.{ "review", "TB-7", "one", "two" }) == null);
     try t.expect(parse(&.{ "review", " ", "Added the button" }) == null);
     try t.expect(parse(&.{ "done", "TB-7", "Added the button" }) == null);

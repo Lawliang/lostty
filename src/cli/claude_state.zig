@@ -46,8 +46,13 @@ pub fn run(gpa: Allocator) !u8 {
     const pane = std.posix.getenv(protocol.surface_env) orelse return 0;
     var detail: protocol.Detail = .{};
     switch (state) {
-        // A prompt: give Claude what's queued for it, then say busy.
-        .busy => speakTexts(alloc, "UserPromptSubmit", &.{ take(alloc, pane, .say), take(alloc, pane, .zone_say) }),
+        // A prompt: give Claude what's queued for it, then say busy. A
+        // zone's note comes with the zone's other agents as they are now.
+        .busy => {
+            const note = take(alloc, pane, .zone_say);
+            const others = if (note != null) othersLine(alloc, pane, hookInput(alloc) orelse "{}") else null;
+            speakTexts(alloc, "UserPromptSubmit", &.{ take(alloc, pane, .say), note, others });
+        },
         // After a tool call: only speak the handoff's directive (Claude's
         // own calls, not a subagent's).
         .done => {
@@ -116,10 +121,17 @@ fn zoneBrief(alloc: Allocator, pane: []const u8, input: []const u8) ?[]const u8 
     if (paneFile(alloc, pane, .zone_say)) |path| std.fs.deleteFileAbsolute(path) catch {};
     const file = zoneFile(alloc, pane) orelse return null;
     const start = file.start orelse return null;
-    const members = file.members orelse return start;
-    const names = zone.others(alloc, members, agents(alloc), zone.sessionId(alloc, input), std.posix.getenv("TMUX_PANE")) catch return start;
-    const line = (zone.othersLine(alloc, names) catch return start) orelse return start;
+    const line = othersLine(alloc, pane, input) orelse return start;
     return std.fmt.allocPrint(alloc, "{s}\n{s}", .{ start, line }) catch start;
+}
+
+/// The line naming the pane's zone's other agents and their features;
+/// null with none.
+fn othersLine(alloc: Allocator, pane: []const u8, input: []const u8) ?[]const u8 {
+    const file = zoneFile(alloc, pane) orelse return null;
+    const members = file.members orelse return null;
+    const list = zone.others(alloc, members, file.features, agents(alloc), zone.sessionId(alloc, input), std.posix.getenv("TMUX_PANE")) catch return null;
+    return zone.othersLine(alloc, list) catch null;
 }
 
 /// A SendMessage to an agent outside the pane's zone: prints Claude
