@@ -101,6 +101,18 @@ final class TicketBoard: ObservableObject {
         return canvas?.model.zone(domain)
     }
 
+    /// The terminals a feature's tickets go to, by card title; nil for To
+    /// assign.
+    func agents(of section: TicketSection) -> [String]? {
+        guard case .feature(let domain) = section else { return nil }
+        return canvas?.featureTerminals(domain) ?? []
+    }
+
+    /// The project the panel is in, whose settings its settings change.
+    var project: UUID? {
+        canvas.flatMap { canvas in canvas.ticketZone(of: id).flatMap(canvas.model.projectZone) }
+    }
+
     /// The feature `ticket` is in, or To assign, for the inspector.
     func featureTitle(of ticket: CanvasTicket) -> String {
         let section = list.section(of: ticket)

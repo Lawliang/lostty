@@ -3,22 +3,14 @@ import AppKit
 import SwiftUI
 
 /// A zone's settings, in a popover from its label: name, color, folder,
-/// brief, a project's ticket key prefix, whether its tickets start by
-/// themselves and its manager, what's inside and the boundary's rules.
-/// Edits apply as they're made.
+/// brief, a project's ticket key prefix, what's inside and the boundary's
+/// rules. Edits apply as they're made. Its tickets' settings are on the
+/// tickets panel (TicketBoardSettings).
 struct CanvasZoneSettings: View {
-    /// A terminal pane a project's Manager menu offers.
-    struct Terminal: Hashable {
-        let pane: UUID
-        let title: String
-    }
-
     /// A domain's project; nil for a project.
     let project: CanvasZone?
     /// The titles of the cards inside, as their headers show them.
     let members: [String]
-    /// A project's terminals, its domains' included.
-    let terminals: [Terminal]
     let update: ((inout CanvasZone) -> Void) -> Void
     let zoomToZone: () -> Void
     let remove: () -> Void
@@ -28,18 +20,15 @@ struct CanvasZoneSettings: View {
     @State private var folder: String
     @State private var brief: String
     @State private var keyPrefix: String
-    @State private var autoStart: Bool
-    @State private var manager: UUID?
     @State private var pickedOutside = false
 
     init(
-        zone: CanvasZone, project: CanvasZone?, members: [String], terminals: [Terminal],
+        zone: CanvasZone, project: CanvasZone?, members: [String],
         update: @escaping ((inout CanvasZone) -> Void) -> Void,
         zoomToZone: @escaping () -> Void, remove: @escaping () -> Void
     ) {
         self.project = project
         self.members = members
-        self.terminals = terminals
         self.update = update
         self.zoomToZone = zoomToZone
         self.remove = remove
@@ -48,9 +37,6 @@ struct CanvasZoneSettings: View {
         _folder = State(initialValue: zone.folder ?? "")
         _brief = State(initialValue: zone.brief)
         _keyPrefix = State(initialValue: zone.keyPrefix ?? "")
-        _autoStart = State(initialValue: zone.autoStart == true)
-        // A manager that's left the project shows as None until another's picked.
-        _manager = State(initialValue: terminals.contains { $0.pane == zone.manager } ? zone.manager : nil)
     }
 
     private var isDomain: Bool { project != nil }
@@ -89,26 +75,6 @@ struct CanvasZoneSettings: View {
                         .textFieldStyle(.roundedBorder)
                     note("Tickets made here and in its domains: \(prefix)-1, \(prefix)-2…")
                 }
-                section("Tickets") {
-                    Toggle("Start tickets automatically", isOn: $autoStart)
-                        .toggleStyle(.switch)
-                        .controlSize(.small)
-                    note(autoStart
-                        ? "A queued ticket is typed into its domain's Claude as soon as that Claude is free."
-                        : "A queued ticket waits for Start on the board.")
-                }
-                section("Manager") {
-                    Picker("Manager", selection: $manager) {
-                        Text("None").tag(UUID?.none)
-                        ForEach(terminals, id: \.pane) { terminal in
-                            Text(terminal.title).tag(UUID?.some(terminal.pane))
-                        }
-                    }
-                    .labelsHidden()
-                    .controlSize(.small)
-                    note("Its Claude turns your requests into tickets with lostty +ticket add, and hears when one is "
-                        + "blocked. Lostty types no tickets into it.")
-                }
             }
             section("Inside") { inside }
             section("Boundary") { note(boundary) }
@@ -129,8 +95,6 @@ struct CanvasZoneSettings: View {
             update { $0.folder = trimmed.isEmpty ? nil : trimmed }
         }
         .onChange(of: brief) { _, value in update { $0.brief = value } }
-        .onChange(of: autoStart) { _, value in update { $0.autoStart = value } }
-        .onChange(of: manager) { _, value in update { $0.manager = value } }
         .onChange(of: keyPrefix) { _, value in
             let trimmed = value.trimmingCharacters(in: .whitespaces)
             update { $0.keyPrefix = trimmed.isEmpty ? nil : trimmed }

@@ -287,7 +287,6 @@ final class CanvasZoneLabel: NSView {
             zone: zone,
             project: zone.parent.flatMap { canvas.model.zone($0) },
             members: canvas.memberTitles(of: id),
-            terminals: zone.parent == nil ? canvas.projectTerminals(of: id) : [],
             update: { [weak canvas] change in canvas?.updateZone(id, change) },
             zoomToZone: { [weak self] in self?.zoomToZone() },
             remove: { [weak self] in self?.removeZone() }))

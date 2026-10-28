@@ -111,12 +111,18 @@ final class CardController: BaseTerminalController {
     /// The card's own title bar shows its title; only the focused card
     /// titles the canvas window.
     @Published private(set) var title = "Lostty"
+    /// The focused pane's Claude's name, as its agents call it, shown
+    /// before the title: Claude's own titles, after a handoff all alike,
+    /// don't say which terminal it is.
+    @Published private(set) var agentName: String?
     /// The key of the board ticket working in one of its panes, shown
     /// before the title. Set by CanvasController.showTicketKeys alone.
     @Published var ticketKey: String?
 
     override func applyTitleToWindow() {
         title = windowTitle
+        let name = focusedSurface.flatMap { canvas?.agentName(of: $0.id) }
+        if agentName != name { agentName = name }
         guard isFocusedCard else { return }
         super.applyTitleToWindow()
     }

@@ -232,14 +232,17 @@ final class TicketBoardHost: NSHostingView<TicketBoardContent> {
 }
 
 /// The panel's title bar, as a terminal card's: close, minimize and zoom
-/// buttons, "Tickets" and how many are in each section, and New Ticket at
-/// the right. Dragging it moves the panel; double-clicking zooms to it at
-/// 100%.
+/// buttons, "Tickets" and how many are in each section, and at the right
+/// the settings (TicketBoardSettings) and New Ticket. Dragging it moves the
+/// panel; double-clicking zooms to it at 100%.
 final class TicketBoardHeaderView: NSView {
     private let board: TicketBoard
     private weak var canvas: CanvasController?
     private let title: PassthroughHostingView<TicketBoardTitle>
     private let newButton: TicketNewButtonHost
+    /// AppKit, as the window buttons are, so it takes clicks at any zoom.
+    private let settingsButton: NSButton
+    private var settings: NSPopover?
     let buttons: CardWindowButtons
     /// Where a drag started, and where the cards it moves were then.
     private var start: (point: CGPoint, origins: [UUID: CGPoint])?
@@ -249,6 +252,9 @@ final class TicketBoardHeaderView: NSView {
         self.canvas = canvas
         title = PassthroughHostingView(rootView: TicketBoardTitle(board: board))
         newButton = TicketNewButtonHost(rootView: TicketNewButton(board: board))
+        settingsButton = NSButton(
+            image: NSImage(systemSymbolName: "slider.horizontal.3", accessibilityDescription: "Ticket Settings") ?? NSImage(),
+            target: nil, action: nil)
         buttons = CardWindowButtons { [weak board, weak canvas] button in
             guard let board, let canvas else { return }
             switch button {
@@ -261,7 +267,13 @@ final class TicketBoardHeaderView: NSView {
         wantsLayer = true
         addSubview(title)
         addSubview(newButton)
+        addSubview(settingsButton)
         addSubview(buttons)
+        settingsButton.isBordered = false
+        settingsButton.contentTintColor = .secondaryLabelColor
+        settingsButton.toolTip = "Ticket Settings"
+        settingsButton.target = self
+        settingsButton.action = #selector(showSettings)
     }
 
     @available(*, unavailable)
@@ -282,6 +294,30 @@ final class TicketBoardHeaderView: NSView {
         let new = newButton.fittingSize
         newButton.frame = NSRect(
             x: bounds.width - new.width - 8, y: (bounds.height - new.height) / 2, width: new.width, height: new.height)
+        let side: CGFloat = 24
+        settingsButton.frame = NSRect(
+            x: newButton.frame.minX - side - 2, y: (bounds.height - side) / 2, width: side, height: side)
+    }
+
+    @objc private func showSettings() {
+        guard let canvas else { return }
+        if let settings, settings.isShown {
+            settings.close()
+            return
+        }
+        let project = board.project
+        let popover = NSPopover()
+        popover.behavior = .transient
+        popover.contentViewController = {
+            let host = NSHostingController(rootView: TicketBoardSettings(
+                project: project.flatMap(canvas.model.zone),
+                terminals: project.map(canvas.projectTerminals) ?? [],
+                update: { [weak canvas] change in if let project { canvas?.updateZone(project, change) } }))
+            host.sizingOptions = [.preferredContentSize]
+            return host
+        }()
+        popover.show(relativeTo: settingsButton.bounds, of: settingsButton, preferredEdge: .maxY)
+        settings = popover
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -307,6 +343,7 @@ final class TicketBoardHeaderView: NSView {
     override func menu(for event: NSEvent) -> NSMenu? {
         let menu = NSMenu()
         menu.addItem(withTitle: "New Ticket", action: #selector(newTicket), keyEquivalent: "").target = self
+        menu.addItem(withTitle: "Ticket Settings…", action: #selector(showSettings), keyEquivalent: "").target = self
         menu.addItem(.separator())
         menu.addItem(withTitle: "Close Tickets", action: #selector(closeTickets), keyEquivalent: "").target = self
         return menu

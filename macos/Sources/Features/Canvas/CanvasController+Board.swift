@@ -60,9 +60,9 @@ extension CanvasController {
         }
     }
 
-    /// The title of the card holding pane `pane`, as its header shows it.
+    /// Pane `pane`'s Claude's name, else its card's title.
     func agentTitle(_ pane: UUID) -> String? {
-        cards.first { $0.surfaceTree.contains { $0.id == pane } }?.title
+        agentName(of: pane) ?? cards.first { $0.surfaceTree.contains { $0.id == pane } }?.title
     }
 
     /// One delivery attempt `delay` from now, never inside the caller's

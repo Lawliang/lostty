@@ -85,6 +85,8 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     private var zoneFiles: [UUID: CanvasZoneFile] = [:]
     let zoneStore = CanvasZoneStore.standard
     private(set) var tmuxSessions: [TmuxSession] = []
+    /// Each tmux session's Claude's name (ClaudeSessionNames).
+    private var agentNames: [String: String] = [:]
     /// The zoom the terminals last rendered at.
     var settledZoom: CGFloat = 1
     var settleWork: DispatchWorkItem?
@@ -219,6 +221,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
                 self?.working = working
                 self?.updateZoneCaptions()
                 self?.deliverSoon()
+                self?.readAgentNames()
             }
             .store(in: &cancellables)
         NotificationCenter.default.publisher(for: .losttySessionsChanged)
@@ -583,16 +586,26 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     /// The terminals in project `id` and its domains, in card order, for
     /// its Manager menu: each pane with its card's title, and its domain's
     /// name.
-    func projectTerminals(of id: UUID) -> [CanvasZoneSettings.Terminal] {
+    func projectTerminals(of id: UUID) -> [TicketBoardSettings.Terminal] {
         cards.flatMap { card in
             let panes = Array(card.surfaceTree)
-            return panes.enumerated().compactMap { index, pane -> CanvasZoneSettings.Terminal? in
+            return panes.enumerated().compactMap { index, pane -> TicketBoardSettings.Terminal? in
                 guard let zone = membership.panes.zones[pane.id], model.projectZone(zone) == id else { return nil }
                 let split = panes.count > 1 ? " · pane \(index + 1)" : ""
                 let domain = zone == id ? "" : " (\(model.zone(zone)?.name ?? ""))"
-                return CanvasZoneSettings.Terminal(pane: pane.id, title: card.title + split + domain)
+                let name = agentName(of: pane.id) ?? card.title + split
+                return TicketBoardSettings.Terminal(pane: pane.id, title: name + domain)
             }
         }
+    }
+
+    /// The names of the panes in feature `domain`, in card order: each
+    /// one's agent, else its card's title, once. Where its tickets go.
+    func featureTerminals(_ domain: UUID) -> [String] {
+        let names = cards.flatMap { card in
+            card.surfaceTree.filter { membership.panes.zones[$0.id] == domain }.map { agentName(of: $0.id) ?? card.title }
+        }
+        return names.reduce(into: []) { if !$0.contains($1) { $0.append($1) } }
     }
 
     /// A card's panes changed. With none left the card goes, kept a while
@@ -642,7 +655,27 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
                 detail: move.to.flatMap(model.zoneTitle).map { "Now in \($0)." } ?? "It's in no zone now."))
         }
         updateZoneCaptions()
+        relistTickets()
         deliverSoon()
+    }
+
+    /// The name of the Claude running in pane `pane`, as its agents call
+    /// it, where one runs.
+    func agentName(of pane: UUID) -> String? {
+        TmuxOwnership.showing(pane, ownedBy: ProcessInfo.processInfo.processIdentifier, in: tmuxSessions)
+            .lazy.compactMap { self.agentNames[$0.name] }.first
+    }
+
+    /// Reads Claude's session names again, off the main thread; the cards
+    /// show the ones that changed.
+    private func readAgentNames() {
+        Task { @MainActor [weak self] in
+            let names = await Task.detached(priority: .utility) { ClaudeSessionNames.read() }.value
+            guard let self, names != agentNames else { return }
+            agentNames = names
+            for card in cards { card.applyTitleToWindow() }
+            relistTickets()
+        }
     }
 
     /// The tmux session showing each pane in a zone, where one does.
@@ -686,6 +719,8 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
             let sessions = await Task.detached(priority: .utility) { TmuxClient().sessions() }.value
             guard let self else { return }
             tmuxSessions = sessions
+            for card in cards { card.applyTitleToWindow() }
+            readAgentNames()
             zoneMembershipDidChange()
         }
     }

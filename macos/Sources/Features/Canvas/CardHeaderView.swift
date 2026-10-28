@@ -252,12 +252,11 @@ final class CardWindowButtons: NSView {
     }
 }
 
-/// What a card's title bar shows, laid out as a Lostty window's: after the
-/// buttons, the focused pane's folder icon, the key of the ticket working
-/// in it, the card's title and room for
-/// its rename pencil (`pencilMoved` places it); at the
-/// right, the focused pane's project pill (its repo and branch, hidden
-/// outside a repo).
+/// What a card's title bar shows: after the buttons, the focused pane's
+/// project pill (its repo and branch, hidden outside a repo), folder icon,
+/// the key of the ticket working in it, its Claude's name, the card's title
+/// (dimmed after a name, and the first to shorten) and room for its rename
+/// pencil (`pencilMoved` places it).
 struct CardHeaderContent: View {
     /// Clear of the close, minimize and zoom buttons.
     static var titleInset: CGFloat { CardWindowButtons.inset + CardWindowButtons.width + 14 }
@@ -285,7 +284,6 @@ struct CardHeaderContent: View {
                 title(size: 13, color: .primary.opacity(0.8))
             }
             Spacer(minLength: 8)
-            ProjectPill(model: card.sidebar)
         }
         .padding(.leading, Self.titleInset)
         .padding(.trailing, 8)
@@ -300,6 +298,8 @@ struct CardHeaderContent: View {
 
     private func title(size: CGFloat, color: Color) -> some View {
         HStack(spacing: 6) {
+            ProjectPill(model: card.sidebar)
+                .layoutPriority(1)
             if let pane = focusedPane { CardFolderIcon(pane: pane) }
             if let key = card.ticketKey {
                 Text(key)
@@ -310,11 +310,17 @@ struct CardHeaderContent: View {
                     .background(Color.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 4))
                     .help("Working on \(key)")
             }
+            if let name = card.agentName {
+                Text(name)
+                    .font(.system(size: size, weight: .semibold))
+                    .foregroundStyle(color)
+                    .fixedSize()
+            }
             Text(card.title)
-                .font(.system(size: size, weight: .semibold))
-                .foregroundStyle(color)
+                .font(.system(size: size, weight: card.agentName == nil ? .semibold : .regular))
+                .foregroundStyle(card.agentName == nil ? AnyShapeStyle(color) : AnyShapeStyle(.secondary))
                 .lineLimit(1)
-                .truncationMode(.middle)
+                .truncationMode(.tail)
             Color.clear
                 .frame(width: CardRenameButton.size, height: CardRenameButton.size)
                 .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.space)) } action: { pencilMoved($0) }

@@ -81,7 +81,9 @@ else any pane in a domain is that domain's agent. Role checks live in one pure f
 
 ## Manager
 
-- Settings on the project zone: "Start tickets automatically" and "Manager" (a menu of the project's terminals).
+- Settings on the tickets panel (its title bar's settings button), for the project it's in: "Start tickets
+  automatically" and "Manager" (a menu of the project's terminals). Each feature's section header names the
+  terminals its tickets go to, or warns that it has none.
 - The manager's brief (spec §7) is added to its zone file's `start` text and said once through `zone.say`
   when it's picked. A blocked report appends `TB-8 · Onboarding is blocked: <reason>` to its `zone.say`.
 
