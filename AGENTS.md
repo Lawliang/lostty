@@ -39,10 +39,12 @@ worktree, and they share one installed app.
   `lostty +peers` from your worktree. It lists the other worktrees with a
   terminal in them, the files you both change, and where the installed
   build came from.
-- Message each peer it lists with the same files as yours, and wait for
-  its answer before you go on. Find the peer with
+- Each peer it lists ends in `clear`, `ask` or `conflict`. Skip `clear`
+  peers: no file changes on both sides. Message each `ask` or `conflict`
+  peer and wait for its answer before you go on. Find the peer with
   ListAgents: its tmux location matches the `terminal:` line. Ask whether
-  your install or merge would drop or clash with its work.
+  your install or merge would drop or clash with its work, and for a
+  `conflict`, agree who resolves it.
 - If `+peers` says an install would drop work the installed build has,
   don't install until that work is merged into your branch, or the user
   says to go ahead.
