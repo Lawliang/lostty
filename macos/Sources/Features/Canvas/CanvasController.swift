@@ -64,7 +64,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     var drawsZone = false {
         didSet { if drawsZone != oldValue { updateGroupHover(at: window?.mouseLocationOutsideOfEventStream ?? .zero) } }
     }
-    /// The layout Tidy Up uses, chosen on the selection's bar.
+    /// The layout Re-organize uses, chosen on the selection's bar.
     var tidyLayout = CanvasModel.Tidy.row
     /// A press on a group of selected cards under way: where it started,
     /// the card under it, where the cards were, and whether it has moved.

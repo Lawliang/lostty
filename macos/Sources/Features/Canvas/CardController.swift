@@ -150,11 +150,12 @@ final class CardController: BaseTerminalController {
         closeCard()
     }
 
-    /// Every pane, asking first when one runs something, as closing a window
-    /// does. Undo brings the card back.
-    func closeCard() {
+    /// Every pane, asking first when one runs something (unless `confirm`
+    /// is false: the trash already asked), as closing a window does. Undo
+    /// brings the card back.
+    func closeCard(confirm: Bool = true) {
         guard let root = surfaceTree.root else { return }
-        closeSurface(root, withConfirmation: surfaceTree.contains(where: { $0.needsConfirmQuit }))
+        closeSurface(root, withConfirmation: confirm && surfaceTree.contains(where: { $0.needsConfirmQuit }))
     }
 }
 #endif
