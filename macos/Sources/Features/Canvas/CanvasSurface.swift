@@ -260,13 +260,14 @@ final class CanvasGridView: NSView {
 }
 
 /// The grid with the scroll view over it, over that the selection's
-/// outline, and over that the + button, the selection's bar and the
-/// notification stack, pinned to the window's edges at every zoom.
+/// outline, and over that the + button, the selection's bar, the dock and
+/// the notification stack, pinned to the window's edges at every zoom.
 final class CanvasSurfaceView: NSView {
     let scrollView = CanvasScrollView(frame: .zero)
     let selection = CanvasSelectionView()
     let selectionBar = CanvasSelectionBarView(rootView: CanvasSelectionBar())
     let addMenu = CanvasAddMenuView()
+    let dock = CanvasDockView(rootView: CanvasDock())
     let zones = CanvasZoneLayer(frame: NSRect(x: 0, y: 0, width: CanvasModel.size, height: CanvasModel.size))
     private let grid = CanvasGridView(frame: .zero)
     private let notifications = CanvasNotificationsView(rootView: NotificationStackView())
@@ -283,6 +284,7 @@ final class CanvasSurfaceView: NSView {
         selectionBar.isHidden = true
         addSubview(selectionBar)
         addSubview(addMenu)
+        addSubview(dock)
         // As big as its bubbles, at the top right.
         notifications.sizingOptions = [.intrinsicContentSize]
         notifications.translatesAutoresizingMaskIntoConstraints = false
@@ -308,6 +310,7 @@ final class CanvasSurfaceView: NSView {
             selectionBar.frame = CanvasSelectionBarView.frame(
                 size: selectionBar.fittingSize, under: convert(picked, from: scrollView.document), in: bounds)
         }
+        dock.frame = CanvasDockView.frame(size: dock.fittingSize, in: bounds)
         // Its button `margin` in from the bottom right (the view is unflipped).
         let size = CanvasAddMenuView.size, room = CanvasAddMenuView.shadowRoom, margin = CanvasAddMenuView.margin
         addMenu.frame = NSRect(
@@ -322,10 +325,11 @@ final class CanvasSurfaceView: NSView {
     }
 
     /// Whether a click at `point` (in the window) is on what floats over
-    /// the cards: the + menu, the selection's bar, a notification, or a
-    /// zone's label.
+    /// the cards: the + menu, the selection's bar, the dock, a
+    /// notification, or a zone's label.
     func floats(at point: NSPoint) -> Bool {
-        addMenu.covers(point) || selectionBar.covers(point) || notifications.hitTest(convert(point, from: nil)) != nil
+        addMenu.covers(point) || selectionBar.covers(point) || dock.covers(point)
+            || notifications.hitTest(convert(point, from: nil)) != nil
             || zones.labels.hitTest(scrollView.document.convert(point, from: nil)) != nil
     }
 }
