@@ -652,6 +652,11 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         deliverSoon()
     }
 
+    /// The name of the tmux session showing pane `pane`, where one does.
+    func sessionName(of pane: UUID) -> String? {
+        TmuxOwnership.showing(pane, ownedBy: ProcessInfo.processInfo.processIdentifier, in: tmuxSessions).first?.name
+    }
+
     /// The tmux session showing each pane in a zone, where one does.
     func paneSessions() -> [UUID: String] {
         let pid = ProcessInfo.processInfo.processIdentifier
@@ -693,6 +698,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
             let sessions = await Task.detached(priority: .utility) { TmuxClient().sessions() }.value
             guard let self else { return }
             tmuxSessions = sessions
+            for card in cards { card.applyTitleToWindow() }
             zoneMembershipDidChange()
         }
     }
