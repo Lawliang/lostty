@@ -183,6 +183,7 @@ private struct TicketSectionHeader: View {
                         .font(.system(size: 12))
                         .monospacedDigit()
                         .foregroundStyle(.tertiary)
+                    if let agents = board.agents(of: section) { TicketSectionAgents(agents: agents) }
                     Spacer(minLength: 0)
                 }
                 .padding(.horizontal, 6)
@@ -208,6 +209,28 @@ private struct TicketSectionHeader: View {
         .padding(.trailing, 10)
         .frame(height: 32)
         .onHover { hovering = $0 }
+    }
+}
+
+/// Where a feature's tickets go, after its section's name: its terminals'
+/// card titles, or a warning that it has none, so they wait.
+private struct TicketSectionAgents: View {
+    let agents: [String]
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: agents.isEmpty ? "exclamationmark.triangle" : "terminal")
+                .font(.system(size: 10))
+            Text(agents.isEmpty ? "No terminal" : agents.joined(separator: ", "))
+                .font(.system(size: 11.5))
+                .lineLimit(1)
+                .truncationMode(.tail)
+        }
+        .foregroundStyle(agents.isEmpty ? AnyShapeStyle(.orange) : AnyShapeStyle(.secondary))
+        .padding(.leading, 6)
+        .help(agents.isEmpty
+            ? "Its tickets wait until a terminal running Claude sits in this feature's zone."
+            : "Its tickets go to the first free Claude in \(agents.joined(separator: ", ")).")
     }
 }
 

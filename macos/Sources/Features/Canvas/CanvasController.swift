@@ -583,16 +583,22 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     /// The terminals in project `id` and its domains, in card order, for
     /// its Manager menu: each pane with its card's title, and its domain's
     /// name.
-    func projectTerminals(of id: UUID) -> [CanvasZoneSettings.Terminal] {
+    func projectTerminals(of id: UUID) -> [TicketBoardSettings.Terminal] {
         cards.flatMap { card in
             let panes = Array(card.surfaceTree)
-            return panes.enumerated().compactMap { index, pane -> CanvasZoneSettings.Terminal? in
+            return panes.enumerated().compactMap { index, pane -> TicketBoardSettings.Terminal? in
                 guard let zone = membership.panes.zones[pane.id], model.projectZone(zone) == id else { return nil }
                 let split = panes.count > 1 ? " · pane \(index + 1)" : ""
                 let domain = zone == id ? "" : " (\(model.zone(zone)?.name ?? ""))"
-                return CanvasZoneSettings.Terminal(pane: pane.id, title: card.title + split + domain)
+                return TicketBoardSettings.Terminal(pane: pane.id, title: card.title + split + domain)
             }
         }
+    }
+
+    /// The titles of the terminal cards with a pane in feature `domain`, in
+    /// card order: where its tickets go.
+    func featureTerminals(_ domain: UUID) -> [String] {
+        cards.filter { $0.surfaceTree.contains { membership.panes.zones[$0.id] == domain } }.map(\.title)
     }
 
     /// A card's panes changed. With none left the card goes, kept a while
@@ -642,6 +648,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
                 detail: move.to.flatMap(model.zoneTitle).map { "Now in \($0)." } ?? "It's in no zone now."))
         }
         updateZoneCaptions()
+        relistTickets()
         deliverSoon()
     }
 
