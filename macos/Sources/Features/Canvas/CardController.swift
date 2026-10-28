@@ -119,6 +119,10 @@ final class CardController: BaseTerminalController {
     /// before the title. Set by CanvasController.showTicketKeys alone.
     @Published var ticketKey: String?
 
+    /// The trash button's check is asking this card's agents whether their
+    /// work is done (CanvasCloseCheck).
+    @Published var checkingClose = false
+
     override func applyTitleToWindow() {
         title = windowTitle
         let name = focusedSurface.flatMap { canvas?.agentName(of: $0.id) }
@@ -159,11 +163,12 @@ final class CardController: BaseTerminalController {
         closeCard()
     }
 
-    /// Every pane, asking first when one runs something, as closing a window
-    /// does. Undo brings the card back.
-    func closeCard() {
+    /// Every pane, asking first when one runs something (unless `confirm`
+    /// is false: the trash already asked), as closing a window does. Undo
+    /// brings the card back.
+    func closeCard(confirm: Bool = true) {
         guard let root = surfaceTree.root else { return }
-        closeSurface(root, withConfirmation: surfaceTree.contains(where: { $0.needsConfirmQuit }))
+        closeSurface(root, withConfirmation: confirm && surfaceTree.contains(where: { $0.needsConfirmQuit }))
     }
 }
 #endif

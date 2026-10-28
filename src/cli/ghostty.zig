@@ -23,6 +23,7 @@ const skins = @import("skins.zig");
 const claude_state = @import("claude_state.zig");
 const claude_hooks = @import("claude_hooks.zig");
 const claude_usage = @import("claude_usage.zig");
+const close_check = @import("close_check.zig");
 const guard = @import("guard.zig");
 const tmux_launch = @import("tmux_launch.zig");
 const tmux_rename = @import("tmux_rename.zig");
@@ -90,6 +91,10 @@ pub const Action = enum {
     // Lostty: Claude Code's status line command; reports context and plan
     // usage to this pane.
     @"claude-usage",
+
+    // Lostty: answer the canvas close check (run by the lostty-close-check
+    // skill).
+    @"close-check",
 
     // Lostty: the PreToolUse guard that stops critical agent actions
     // until you approve them (run by hooks).
@@ -192,6 +197,7 @@ pub const Action = enum {
             .@"claude-state" => try claude_state.run(alloc),
             .@"claude-hooks" => try claude_hooks.run(alloc),
             .@"claude-usage" => try claude_usage.run(alloc),
+            .@"close-check" => try close_check.run(alloc),
             .guard => try guard.run(alloc),
             .@"tmux-launch" => try tmux_launch.run(alloc),
             .@"tmux-rename" => try tmux_rename.run(alloc),
@@ -240,6 +246,7 @@ pub const Action = enum {
                 .@"claude-state" => claude_state.Options,
                 .@"claude-hooks" => claude_hooks.Options,
                 .@"claude-usage" => claude_usage.Options,
+                .@"close-check" => close_check.Options,
                 .guard => guard.Options,
                 .@"tmux-launch" => tmux_launch.Options,
                 .@"tmux-rename" => tmux_rename.Options,
@@ -365,6 +372,7 @@ test {
     _ = claude_state;
     _ = claude_hooks;
     _ = claude_usage;
+    _ = close_check;
     _ = guard;
     _ = @import("guard/wire.zig");
     _ = tmux_launch;

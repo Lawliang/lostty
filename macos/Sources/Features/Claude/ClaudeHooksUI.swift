@@ -18,10 +18,12 @@ enum ClaudeHooksUI {
         let alert = NSAlert()
         alert.messageText = update ? "Update Lostty's hooks?" : "Show a trace while Claude or Codex is working?"
         alert.informativeText = update
-            ? "Lostty's hooks are from an older Lostty, or Codex is missing them. Lostty will update its hooks in "
-                + "~/.claude/settings.json and ~/.codex/hooks.json (a backup is saved first)."
+            ? "Lostty's hooks or skills are from an older Lostty, or Codex is missing them. Lostty will update its "
+                + "hooks in ~/.claude/settings.json and ~/.codex/hooks.json (a backup is saved first), and its "
+                + "lostty-* skills in ~/.claude/skills and ~/.codex/skills."
             : "Lostty will add its hooks to ~/.claude/settings.json and, if you use Codex, ~/.codex/hooks.json "
-                + "(a backup is saved first). They do nothing outside Lostty. You can remove them from "
+                + "(a backup is saved first), and its lostty-* skills to ~/.claude/skills and ~/.codex/skills. "
+                + "They do nothing outside Lostty. You can remove them from "
                 + "Lostty → Claude Integration…"
         alert.addButton(withTitle: update ? "Update" : "Install")
         alert.addButton(withTitle: "Not now")

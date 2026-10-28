@@ -3,6 +3,8 @@ const Allocator = std.mem.Allocator;
 const Action = @import("ghostty.zig").Action;
 const hooks = @import("claude/hooks.zig");
 const guard_config = @import("guard/config.zig");
+const skills = @import("claude/skills.zig");
+const global_state = &@import("../global.zig").state;
 
 pub const Options = struct {
     pub fn deinit(self: Options) void {
@@ -27,7 +29,8 @@ pub const Outcome = union(enum) {
 
 const usage =
     \\usage: +claude-hooks install   add Lostty's hooks to ~/.claude/settings.json
-    \\                               (and ~/.codex/hooks.json when Codex is installed)
+    \\                               (and ~/.codex/hooks.json when Codex is installed),
+    \\                               and its lostty-* skills to the skills folder
     \\       +claude-hooks remove    take them out again
     \\       +claude-hooks status    installed | partial | not-installed | unreadable
     \\       +claude-hooks preview   print the JSON that install adds
@@ -42,6 +45,8 @@ const usage =
 /// `+claude-hooks remove`, `+claude-hooks status` or `+claude-hooks preview`.
 /// It backs each file up (`<file>.lostty-backup`) before changing it, never
 /// touches a file it cannot parse, and only edits Lostty's own entries.
+/// Lostty's skills go in and out with the hooks (`~/.claude/skills`,
+/// `~/.codex/skills`), and count toward the status.
 pub fn run(gpa: Allocator) !u8 {
     var arena_state = std.heap.ArenaAllocator.init(gpa);
     defer arena_state.deinit();
@@ -77,12 +82,27 @@ pub fn run(gpa: Allocator) !u8 {
     // With --agent, only that agent; otherwise Claude, plus Codex when
     // it is installed.
     if (args.agent == null or args.agent == .claude) {
-        try targets.append(alloc, .{ .agent = .claude, .path = try std.fs.path.join(alloc, &.{ home, ".claude", "settings.json" }) });
+        try targets.append(alloc, .{
+            .agent = .claude,
+            .path = try std.fs.path.join(alloc, &.{ home, ".claude", "settings.json" }),
+            .skills = try std.fs.path.join(alloc, &.{ home, ".claude", "skills" }),
+        });
     }
     const codex_dir = try std.fs.path.join(alloc, &.{ home, ".codex" });
     if (args.agent == .codex or (args.agent == null and if (std.fs.cwd().access(codex_dir, .{})) |_| true else |_| false)) {
-        try targets.append(alloc, .{ .agent = .codex, .path = try std.fs.path.join(alloc, &.{ codex_dir, "hooks.json" }) });
+        try targets.append(alloc, .{
+            .agent = .codex,
+            .path = try std.fs.path.join(alloc, &.{ codex_dir, "hooks.json" }),
+            .skills = try std.fs.path.join(alloc, &.{ codex_dir, "skills" }),
+        });
     }
+    // The app's bundled skills; without them (a bare CLI build) only the
+    // hooks are handled.
+    var source: ?std.fs.Dir = if (global_state.resources_dir.app()) |res| open: {
+        const path = try std.fs.path.join(alloc, &.{ res, skills.resources_subdir });
+        break :open std.fs.openDirAbsolute(path, .{ .iterate = true }) catch null;
+    } else null;
+    defer if (source) |*s| s.close();
 
     // One combined answer, so callers (the app's prompt) see a single state.
     if (chosen == .status) {
@@ -93,6 +113,7 @@ pub fn run(gpa: Allocator) !u8 {
                 else => unreachable,
             };
             combined = if (combined) |c| combine(c, s) else s;
+            if (source) |src| combined = combine(combined.?, skillsStatus(alloc, src, t.skills));
         }
         try stdout.print("{s}\n", .{combined.?.label()});
         return 0;
@@ -115,11 +136,41 @@ pub fn run(gpa: Allocator) !u8 {
             },
             .status, .preview => unreachable,
         }
+        if (source) |src| {
+            const changed = applySkills(alloc, src, t.skills, chosen) catch |err| {
+                try stderr.print("claude-hooks: {s} skills: cannot write {s} ({s})\n", .{ name, t.skills, @errorName(err) });
+                return 1;
+            };
+            try stdout.print("{s} skills: {s}\n", .{ name, switch (chosen) {
+                .install => if (changed) "installed" else "already installed",
+                else => if (changed) "removed" else "nothing to remove",
+            } });
+        }
     }
     return 0;
 }
 
-const Target = struct { agent: hooks.Agent, path: []const u8 };
+const Target = struct { agent: hooks.Agent, path: []const u8, skills: []const u8 };
+
+fn skillsStatus(alloc: Allocator, src: std.fs.Dir, path: []const u8) hooks.Status {
+    var dest = std.fs.openDirAbsolute(path, .{ .iterate = true }) catch return .not_installed;
+    defer dest.close();
+    return skills.status(alloc, src, dest) catch .unreadable;
+}
+
+fn applySkills(alloc: Allocator, src: std.fs.Dir, path: []const u8, op: Op) !bool {
+    if (op == .remove) {
+        var dest = std.fs.openDirAbsolute(path, .{ .iterate = true }) catch |err| switch (err) {
+            error.FileNotFound => return false,
+            else => return err,
+        };
+        defer dest.close();
+        return skills.remove(dest);
+    }
+    var dest = try std.fs.cwd().makeOpenPath(path, .{ .iterate = true });
+    defer dest.close();
+    return skills.install(alloc, src, dest);
+}
 
 pub const Args = struct { op: Op, agent: ?hooks.Agent };
 
@@ -400,4 +451,5 @@ test "claude hooks file: codex install writes hooks.json with its events" {
 
 test {
     _ = @import("claude/hooks.zig");
+    _ = @import("claude/skills.zig");
 }

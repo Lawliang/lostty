@@ -125,6 +125,16 @@ pub fn init(b: *std.Build, cfg: *const Config, deps: *const SharedDeps) !Ghostty
         try steps.append(b.allocator, &install_step.step);
     }
 
+    // Lostty's agent skills, which +claude-hooks installs
+    {
+        const install_step = b.addInstallDirectory(.{
+            .source_dir = b.path("skills"),
+            .install_dir = .{ .custom = "share" },
+            .install_subdir = b.pathJoin(&.{ "ghostty", "lostty-skills" }),
+        });
+        try steps.append(b.allocator, &install_step.step);
+    }
+
     // Themes
     if (cfg.emit_themes) {
         if (b.lazyDependency("iterm2_themes", .{})) |upstream| {
