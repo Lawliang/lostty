@@ -284,6 +284,15 @@ struct CardHeaderContent: View {
                 title(size: 13, color: .primary.opacity(0.8))
             }
             Spacer(minLength: 8)
+            if card.checkingClose {
+                Text("Checking…")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 2)
+                    .background(Capsule().fill(Color.primary.opacity(0.1)))
+                    .help("Asking the agent whether its work is done")
+            }
         }
         .padding(.leading, Self.titleInset)
         .padding(.trailing, 8)

@@ -206,10 +206,10 @@ struct CanvasModel: Equatable {
         Set(cards.filter { $0.frame.intersects(rect) }.map(\.id))
     }
 
-    /// The space Tidy Up leaves between cards.
+    /// The space Re-organize leaves between cards.
     static let tidyGap: CGFloat = 14
 
-    /// How Tidy Up lays the selection out.
+    /// How Re-organize lays the selection out.
     enum Tidy: CaseIterable {
         case row, grid, column
 
@@ -230,7 +230,7 @@ struct CanvasModel: Equatable {
         }
     }
 
-    /// Tidy Up: cards `ids` in rows of `layout.across` cards, `tidyGap`
+    /// Re-organize: cards `ids` in rows of `layout.across` cards, `tidyGap`
     /// apart, each row as tall as its tallest card, from the leftmost one's
     /// left edge and the highest one's top. A row takes them left to right
     /// as they were, a column top to bottom, a grid in reading order.

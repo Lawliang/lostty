@@ -269,6 +269,10 @@ final class ContextHandoffCoordinator: ObservableObject {
         startCountdown(pane, state)
     }
 
+    /// Keys were typed in the pane since its last prompt: its prompt may
+    /// hold half a message.
+    func hasTyped(_ pane: UUID) -> Bool { typed.contains(pane) }
+
     /// A key typed in a pane (the app forwards every terminal's).
     func keyTyped(_ pane: UUID) {
         typed.insert(pane)

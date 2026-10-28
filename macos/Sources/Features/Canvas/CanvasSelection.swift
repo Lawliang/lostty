@@ -97,7 +97,8 @@ final class CanvasSelectionRing {
 }
 
 /// The bar under the selected cards' outline while cards are selected: how
-/// many, Zoom to Selection, Tidy Up with the layout it uses, and Deselect.
+/// many, Zoom to Selection, Re-organize with the layout it uses, Deselect,
+/// and the trash.
 final class CanvasSelectionBarView: NSHostingView<CanvasSelectionBar> {
     /// Room round the bar for its shadow.
     nonisolated static let shadowRoom: CGFloat = 16
@@ -135,12 +136,16 @@ struct CanvasSelectionBar: View {
     var count = 0
     var layout = CanvasModel.Tidy.row
     var zoom: () -> Void = {}
+    /// Re-organize.
     var tidy: () -> Void = {}
     /// The layout button: the next layout.
     var nextLayout: () -> Void = {}
     /// Zone from Selection; nil when no zone fits round the cards.
     var makeZone: (() -> Void)?
     var deselect: () -> Void = {}
+    /// The trash: closes the selected terminals; nil when none are selected
+    /// (only the tickets panel).
+    var close: (() -> Void)?
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
@@ -153,16 +158,30 @@ struct CanvasSelectionBar: View {
                 .padding(.trailing, 8)
             separator
             CanvasSelectionButton(action: zoom) { Text("Zoom to Selection") }
-            CanvasSelectionButton(action: tidy) { Text("Tidy Up") }
-            CanvasSelectionButton(action: nextLayout) { CanvasTidyIcon(layout: layout) }
-                .help(layout.help)
-                .accessibilityLabel(layout.help)
+            // Re-organize and its layout, as one button.
+            HStack(spacing: 0) {
+                CanvasSelectionButton(corner: 0, action: tidy) { Text("Re-organize") }
+                Rectangle()
+                    .fill(Color.primary.opacity(0.15))
+                    .frame(width: 1, height: 26)
+                CanvasSelectionButton(corner: 0, action: nextLayout) { CanvasTidyIcon(layout: layout) }
+                    .help(layout.help)
+                    .accessibilityLabel(layout.help)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 7))
+            .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(Color.primary.opacity(0.15), lineWidth: 1))
             if let makeZone {
                 separator
                 CanvasSelectionButton(action: makeZone) { Text("Zone from Selection") }
             }
             separator
             CanvasSelectionButton(action: deselect) { Text("Deselect") }
+            if let close {
+                separator
+                CanvasSelectionButton(tint: .red, action: close) { Image(systemName: "trash") }
+                    .help("Close Selected Terminals")
+                    .accessibilityLabel("Close Selected Terminals")
+            }
         }
         .padding(4)
         .background(
@@ -184,6 +203,11 @@ struct CanvasSelectionBar: View {
 }
 
 private struct CanvasSelectionButton<Label: View>: View {
+    /// The hover highlight's corners; 0 inside a joined button, which
+    /// rounds its own.
+    var corner: CGFloat = 7
+    /// The label and highlight on hover.
+    var tint = Color.accentColor
     let action: () -> Void
     @ViewBuilder let label: Label
     @State private var hovering = false
@@ -192,10 +216,10 @@ private struct CanvasSelectionButton<Label: View>: View {
         Button(action: action) {
             label
                 .font(.system(size: 12))
-                .foregroundStyle(hovering ? Color.accentColor : Color.primary)
+                .foregroundStyle(hovering ? tint : Color.primary)
                 .padding(.horizontal, 10)
                 .frame(height: 26)
-                .background(Color.accentColor.opacity(hovering ? 0.12 : 0), in: RoundedRectangle(cornerRadius: 7))
+                .background(tint.opacity(hovering ? 0.12 : 0), in: RoundedRectangle(cornerRadius: corner))
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -203,7 +227,7 @@ private struct CanvasSelectionButton<Label: View>: View {
     }
 }
 
-/// Tidy Up's layout as blocks: three in a row, two by two, or three in a
+/// Re-organize's layout as blocks: three in a row, two by two, or three in a
 /// column.
 private struct CanvasTidyIcon: View {
     let layout: CanvasModel.Tidy
@@ -232,9 +256,9 @@ extension CanvasModel.Tidy {
     /// The layout button's tooltip.
     var help: String {
         switch self {
-        case .row: "Tidy Up into a row"
-        case .grid: "Tidy Up into a grid"
-        case .column: "Tidy Up into a column"
+        case .row: "Re-organize into a row"
+        case .grid: "Re-organize into a grid"
+        case .column: "Re-organize into a column"
         }
     }
 }
@@ -298,7 +322,8 @@ extension CanvasController {
                 updateSelectionBar()
             },
             makeZone: model.zoneAround(selection) == nil ? nil : { [weak self] in self?.zoneFromSelection() },
-            deselect: { [weak self] in self?.selection = [] })
+            deselect: { [weak self] in self?.selection = [] },
+            close: selectedTerminals.isEmpty ? nil : { [weak self] in self?.closeSelection() })
         surface.selectionBar.isHidden = selection.isEmpty
         surface.needsLayout = true
     }
@@ -336,6 +361,35 @@ extension CanvasController {
     func tidySelection() {
         for (id, frame) in model.tidied(selection, into: tidyLayout) { setFrame(frame, of: id) }
         cardFrameDidSettle()
+    }
+
+    // MARK: - Closing
+
+    /// The selected terminal cards: not the tickets panel.
+    var selectedTerminals: [CardController] {
+        selection.compactMap { views[$0]?.card }
+    }
+
+    /// The trash: asks whether to check the selected terminals' work first.
+    /// Yes will ask each one's agent (for now it closes them all, as No
+    /// does); No closes them all now, with no more asking; Cancel keeps
+    /// them.
+    func closeSelection() {
+        let cards = selectedTerminals
+        guard let window, !cards.isEmpty else { return }
+        let alert = NSAlert()
+        alert.messageText = "You are attempting to close \(cards.count == 1 ? "1 terminal" : "\(cards.count) terminals")"
+        alert.informativeText = "Would you like to check if the work is completed on all of them?"
+        alert.addButton(withTitle: "Yes")
+        alert.addButton(withTitle: "No")
+        alert.addButton(withTitle: "Cancel")
+        alert.beginSheetModal(for: window) { response in
+            switch response {
+            case .alertFirstButtonReturn: CanvasCloseCheck.shared.run(cards, window: window)
+            case .alertSecondButtonReturn: for card in cards { card.closeCard(confirm: false) }
+            default: break
+            }
+        }
     }
 }
 #endif
