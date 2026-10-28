@@ -93,6 +93,10 @@ class AppDelegate: NSObject,
     /// seconds since the process was launched.
     private var applicationLaunchTime: TimeInterval = 0
 
+    /// Lostty: you quit it yourself (⌘Q, the menu, a script), not the Mac
+    /// shutting down, restarting or logging out. Set when the quit begins.
+    private var quitIsDeliberate = false
+
     /// This is the current configuration from the Ghostty configuration that we need.
     private var derivedConfig: DerivedConfig = DerivedConfig()
 
@@ -395,6 +399,8 @@ class AppDelegate: NSObject,
         // reinstall, which brings in the handoff's hook events.
         ContextHandoffWiring.start()
         ClaudeRuntime.shared.messageKeptInside = { CanvasController.shared?.messageKeptInside(pane: $0, target: $1) }
+        // Each request's end: gold coins and what it cost, in the pane's corner.
+        ClaudeRuntime.shared.requestEnded = { GoldDropRuntime.shared.requestEnded(pane: $0, path: $1, since: $2) }
         // Restart to Update: put back what window restoration doesn't
         // (Claude's state, Stay Awake, the window setting, hooks). Before
         // Stay Awake's crash restore, the hooks check and the Claude sync.
@@ -456,6 +462,11 @@ class AppDelegate: NSObject,
             item.target = self
             menu.insertItem(item, at: menu.index(of: anchor) + 2)
 
+            // Lostty gold drop: the focused pane's coins, with a made-up count.
+            let goldDrop = NSMenuItem(title: "Preview Gold Drop", action: #selector(previewGoldDrop(_:)), keyEquivalent: "")
+            goldDrop.target = self
+            menu.insertItem(goldDrop, at: menu.index(of: item) + 1)
+
             // Lostty Mobile: open a session over SSH to localhost.
             RemoteDebugUI.installMenuItems(after: item)
 
@@ -472,6 +483,12 @@ class AppDelegate: NSObject,
         guard let controller = NSApp.keyWindow?.windowController as? BaseTerminalController,
               let surface = controller.focusedSurface else { return }
         MainActor.assumeIsolated { ClaudeRuntime.shared.debugCycle(surface.id) }
+    }
+
+    @objc private func previewGoldDrop(_ sender: Any?) {
+        guard let controller = NSApp.keyWindow?.windowController as? BaseTerminalController,
+              let surface = controller.focusedSurface else { return }
+        MainActor.assumeIsolated { GoldDropRuntime.shared.drops.send(GoldDrop(pane: surface.id, tokens: 222_000)) }
     }
 
     @objc private func showPhoneAccessGallery(_ sender: Any?) {
@@ -518,6 +535,7 @@ class AppDelegate: NSObject,
             LosttyRestart.restart(reason: .sparkle)
         }
         if LosttyRestart.isRestarting { return .terminateNow }
+        quitIsDeliberate = !Self.systemIsEnding()
 
         // Lostty Mobile: quitting ends Stay Awake for Phone and this Mac's
         // sessions; one confirmation covers both. Never on shutdown.
@@ -614,7 +632,7 @@ class AppDelegate: NSObject,
 
     func applicationWillTerminate(_ notification: Notification) {
         // Lostty: the session as it is, for "Continue your last session?".
-        LastSessionStore.shared.saveForQuit()
+        LastSessionStore.shared.saveForQuit(deliberate: quitIsDeliberate && !LosttyRestart.isRestarting)
 
         // We have no notifications we want to persist after death,
         // so remove them all now. In the future we may want to be

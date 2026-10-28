@@ -48,7 +48,7 @@ struct UsageCounterTests {
                    reply("b", input: 20)], to: file)
         let uses = await UsageCounter().count([file], since: since)
         #expect(uses.count == 2)
-        #expect(uses.map(\.weight).sorted() == [10, 20])
+        #expect(uses.map(\.weight).sorted() == [1, 2])
         #expect(uses.allSatisfy { $0.part == .claudeCode })
     }
 
@@ -80,7 +80,7 @@ struct UsageCounterTests {
         try write(["{}"], to: subagents.appendingPathComponent("agent-1.meta.json"))
         #expect(UsageCounter.withSubagents(file).map(\.lastPathComponent) == ["s.jsonl", "agent-1.jsonl"])
         let uses = await UsageCounter().count([file], since: since)
-        #expect(uses.map(\.weight).sorted() == [10, 30])
+        #expect(uses.map(\.weight).sorted() == [1, 20])
     }
 
     @Test func aHalfWrittenLineWaitsAndNothingCountsTwice() async throws {
@@ -107,7 +107,7 @@ struct UsageCounterTests {
         #expect(await counter.count([file], since: since).count == 3)
         try write([reply("d", input: 40)], to: file)
         let uses = await counter.count([file], since: since)
-        #expect(uses.map(\.weight) == [40])
+        #expect(uses.map(\.weight) == [4])
     }
 
     @Test func aFileUntouchedThisWeekIsSkipped() async throws {
@@ -132,7 +132,7 @@ struct UsageCounterTests {
             LosttyRun(at: since - 60, source: .branchSummary, tokens: ["claude-haiku-5-5": TokenCounts(input: 99)]),
         ]
         let uses = UsageCounter.uses(of: runs, since: since)
-        #expect(uses == [WeightedUse(at: now - 60, part: .lostty, weight: 13)])
+        #expect(uses == [WeightedUse(at: now - 60, part: .lostty, weight: 3)])
     }
 }
 #endif

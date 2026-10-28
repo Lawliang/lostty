@@ -114,25 +114,44 @@ actor UsageCounter {
 
     /// Adds the replies in complete `lines` to `replies`, once each.
     static func parse(_ lines: Data, into replies: inout [String: Reply], since: Date) {
-        let usageKey = Data(#""usage""#.utf8)
         for line in lines.split(separator: UInt8(ascii: "\n")) {
-            // Most lines are prompts and tool output: skip them before parsing.
-            guard line.range(of: usageKey) != nil,
-                  let object = (try? JSONSerialization.jsonObject(with: Data(line))) as? [String: Any],
-                  object["type"] as? String == "assistant",
-                  let message = object["message"] as? [String: Any],
-                  let usage = message["usage"] as? [String: Any],
-                  let id = message["id"] as? String ?? object["uuid"] as? String,
-                  let stamp = object["timestamp"] as? String, let at = date(stamp), at >= since
-            else { continue }
-            func int(_ key: String) -> Int { (usage[key] as? NSNumber)?.intValue ?? 0 }
-            let tokens = TokenCounts(
-                input: int("input_tokens"), output: int("output_tokens"),
-                cacheWrite: int("cache_creation_input_tokens"), cacheRead: int("cache_read_input_tokens"))
-            let weight = UsageWeights.weight(tokens, model: message["model"] as? String ?? "")
+            guard let reply = AssistantReply(line), reply.at >= since else { continue }
+            let weight = UsageWeights.weight(reply.tokens, model: reply.model)
             guard weight > 0 else { continue }
-            replies[id + "\n" + (object["requestId"] as? String ?? "")] = Reply(at: at, weight: weight)
+            replies[reply.key] = Reply(at: reply.at, weight: weight)
         }
     }
+}
+
+/// One line of an assistant reply in a Claude conversation file.
+struct AssistantReply: Equatable, Sendable {
+    /// By `message.id` and `requestId`: one reply is written on several
+    /// lines, each with the same id and tokens.
+    var key: String
+    var at: Date
+    var model: String
+    var tokens: TokenCounts
+
+    /// Nil for any other line.
+    init?(_ line: Data) {
+        // Most lines are prompts and tool output: skip them before parsing.
+        guard line.range(of: Self.usageKey) != nil,
+              let object = (try? JSONSerialization.jsonObject(with: Data(line))) as? [String: Any],
+              object["type"] as? String == "assistant",
+              let message = object["message"] as? [String: Any],
+              let usage = message["usage"] as? [String: Any],
+              let id = message["id"] as? String ?? object["uuid"] as? String,
+              let stamp = object["timestamp"] as? String, let at = UsageCounter.date(stamp)
+        else { return nil }
+        func int(_ key: String) -> Int { (usage[key] as? NSNumber)?.intValue ?? 0 }
+        self.key = id + "\n" + (object["requestId"] as? String ?? "")
+        self.at = at
+        self.model = message["model"] as? String ?? ""
+        self.tokens = TokenCounts(
+            input: int("input_tokens"), output: int("output_tokens"),
+            cacheWrite: int("cache_creation_input_tokens"), cacheRead: int("cache_read_input_tokens"))
+    }
+
+    private static let usageKey = Data(#""usage""#.utf8)
 }
 #endif

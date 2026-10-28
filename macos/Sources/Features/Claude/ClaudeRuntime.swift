@@ -41,6 +41,11 @@ final class ClaudeRuntime: ObservableObject {
     /// after /clear, and the pane's agent going away. Set at launch.
     var handoffSignal: @MainActor (UUID, ContextHandoffSignal) -> Void = { _, _ in }
 
+    /// A pane's request ended: Claude stopped (not to ask permission) after a
+    /// turn the hooks saw begin, naming its conversation file and when that
+    /// turn began. The gold drop's cue. Set at launch.
+    var requestEnded: @MainActor (UUID, String, Date) -> Void = { _, _, _ in }
+
     /// A pane's hook kept a SendMessage inside its zone, naming the agent
     /// it was for: the canvas's notice. Set at launch.
     var messageKeptInside: @MainActor (UUID, String) -> Void = { _, _ in }
@@ -56,8 +61,9 @@ final class ClaudeRuntime: ObservableObject {
     /// Panes whose hooks said a turn began (a prompt or a tool start) and no
     /// Stop has ended it: the handoff's turns. Not the trace: the title or
     /// working line stops that at a permission prompt, and Claude carries on
-    /// after you approve with no new prompt.
-    private var hookTurns: Set<UUID> = []
+    /// after you approve with no new prompt. Each with when its turn began,
+    /// for the request's end.
+    private var hookTurns: [UUID: Date] = [:]
 
     init(
         now: @escaping () -> Date = Date.init,
@@ -88,7 +94,7 @@ final class ClaudeRuntime: ObservableObject {
             // A tool starting means Claude works, even with no new prompt
             // (it carries on after a permission prompt without one).
             if phase(id).isOff { apply(.busy, to: id) }
-            hookTurns.insert(id)
+            hookTurns[id] = hookTurns[id] ?? now()
             setAction(action, for: id)
             agentSeen(id, ClaudeMessage.agentKind(value))
             return
@@ -105,9 +111,9 @@ final class ClaudeRuntime: ObservableObject {
         apply(state, to: id, permission: permission)
         switch state {
         case .busy:
-            hookTurns.insert(id)
+            hookTurns[id] = hookTurns[id] ?? now()
             handoffSignal(id, .prompted)
-        case .exit: hookTurns.remove(id)
+        case .exit: hookTurns[id] = nil
         default: break
         }
         if state == .exit { LastSessionStore.shared.agentGone(id) }
@@ -115,7 +121,10 @@ final class ClaudeRuntime: ObservableObject {
         // The conversation to resume after the Mac restarts.
         LastSessionStore.shared.conversation(id, transcript: path)
         if turnUnderWay { turnEnded(id, path) }
-        if !permission, hookTurns.remove(id) != nil { handoffSignal(id, .stopped(transcript: path)) }
+        if !permission, let start = hookTurns.removeValue(forKey: id) {
+            handoffSignal(id, .stopped(transcript: path))
+            requestEnded(id, path, start)
+        }
     }
 
     /// The pane's shell reported a command finished, so whatever ran there
@@ -124,7 +133,7 @@ final class ClaudeRuntime: ObservableObject {
         agentGone(id)
         LastSessionStore.shared.agentGone(id)
         apply(.exit, to: id)
-        hookTurns.remove(id)
+        hookTurns[id] = nil
         handoffSignal(id, .gone)
     }
 
@@ -136,7 +145,7 @@ final class ClaudeRuntime: ObservableObject {
         seen.remove(id)
         awaiting.remove(id)
         sawSpinner.remove(id)
-        hookTurns.remove(id)
+        hookTurns[id] = nil
         setAction(nil, for: id)
         handoffSignal(id, .gone)
     }
