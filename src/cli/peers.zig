@@ -22,11 +22,11 @@ pub const Options = struct {
 /// The `peers` command lists who else works on this repo, for an agent to
 /// check with before it installs a build or merges: each worktree with a
 /// Lostty terminal in it (its branch, uncommitted files, the commits this
-/// worktree doesn't have, the files both change, and its tmux session as
-/// Claude Code's ListAgents shows it, to message), any other worktree whose
-/// uncommitted work touches the same files, and where the installed Lostty
-/// was built (`macos/install.sh` records it). In a canvas zone it lists
-/// only the zone's terminals. It only reads.
+/// worktree doesn't have, and its tmux session as Claude Code's ListAgents
+/// shows it, to message), whether to ask it (`Clash`), any other worktree
+/// whose uncommitted work touches the same files, and where the installed
+/// Lostty was built (`macos/install.sh` records it). In a canvas zone it
+/// lists only the zone's terminals. It only reads.
 pub fn run(gpa: Allocator) !u8 {
     var arena_state = std.heap.ArenaAllocator.init(gpa);
     defer arena_state.deinit();
@@ -50,6 +50,9 @@ pub fn run(gpa: Allocator) !u8 {
     const here = owner(worktrees, root) orelse return 1;
     const me = std.posix.getenv("TMUX_PANE");
     const my_uncommitted = try uncommitted(alloc, root);
+    // Each side's own work is what it has and `main` doesn't: main's
+    // commits that one side hasn't merged yet are neither's.
+    const base: ?[]const u8 = if (git(alloc, root, &.{ "rev-parse", "--verify", "--quiet", "main^{commit}" }) != null) "main" else null;
 
     try out.print("You: {s} ({s}), {d} files uncommitted\n", .{
         std.fs.path.basename(root), try describeHead(alloc, worktrees[here]), my_uncommitted.len,
@@ -68,7 +71,7 @@ pub fn run(gpa: Allocator) !u8 {
         if (terminals.items.len == 0) {
             // No one's there: only its uncommitted work can be lost.
             if (theirs_uncommitted.len == 0) continue;
-            const mine = try join(alloc, try onlyIn(alloc, root, "HEAD", wt.head), my_uncommitted);
+            const mine = try join(alloc, try onlyIn(alloc, root, "HEAD", base orelse wt.head), my_uncommitted);
             const same = try overlap(alloc, mine, theirs_uncommitted);
             if (same.len == 0) continue;
             try out.print("\n{s} ({s}), no terminal, {d} files uncommitted\n", .{
@@ -89,9 +92,15 @@ pub fn run(gpa: Allocator) !u8 {
             std.fs.path.basename(wt.path), try describeHead(alloc, wt), theirs_uncommitted.len, ahead,
         });
         for (terminals.items) |t| try printTerminal(out, t);
-        const mine = try join(alloc, try onlyIn(alloc, root, "HEAD", wt.head), my_uncommitted);
-        const theirs = try join(alloc, try onlyIn(alloc, root, wt.head, "HEAD"), theirs_uncommitted);
-        try printFiles(out, "same files as yours", try overlap(alloc, mine, theirs));
+        const mine = try join(alloc, try onlyIn(alloc, root, "HEAD", base orelse wt.head), my_uncommitted);
+        const theirs = try join(alloc, try onlyIn(alloc, root, wt.head, base orelse "HEAD"), theirs_uncommitted);
+        const same = try overlap(alloc, mine, theirs);
+        const conflicted = if (same.len == 0) &.{} else try mergeConflicts(alloc, root, "HEAD", wt.head);
+        switch (try clash(alloc, same, conflicted)) {
+            .clear => try out.print("  clear, no files changed on both sides\n", .{}),
+            .ask => |files| try printFiles(out, "ask, you both changed", files),
+            .conflict => |files| try printFiles(out, "conflict, merging both stops at", files),
+        }
     }
     if (shown == 0) try out.print("\nNo other terminals in this repo.\n", .{});
 
@@ -201,6 +210,43 @@ pub fn overlap(alloc: Allocator, a: []const []const u8, b: []const []const u8) !
     var both: std.ArrayList([]const u8) = .empty;
     for (a) |file| if (set.contains(file)) try both.append(alloc, file);
     return both.items;
+}
+
+/// Whether to ask a peer before a merge or an install: not when no file
+/// changes on both sides; when one does, unless merging both already
+/// stops at a conflict there. A clean merge can still break what the
+/// other side meant, and uncommitted files can't be merged to check.
+pub const Clash = union(enum) {
+    clear,
+    ask: []const []const u8,
+    conflict: []const []const u8,
+};
+
+/// `same`: the files both sides change; `conflicted`: where merging both
+/// stops.
+pub fn clash(alloc: Allocator, same: []const []const u8, conflicted: []const []const u8) !Clash {
+    if (same.len == 0) return .clear;
+    const both = try overlap(alloc, same, conflicted);
+    return if (both.len > 0) .{ .conflict = both } else .{ .ask = same };
+}
+
+/// The files where merging `a` and `b` stops at a conflict, from a merge
+/// done in memory (`git merge-tree`): nothing is checked out or written.
+fn mergeConflicts(alloc: Allocator, root: []const u8, a: []const u8, b: []const u8) ![]const []const u8 {
+    const result = runGit(alloc, root, &.{ "merge-tree", "--write-tree", "--name-only", "--no-messages", a, b }) orelse return &.{};
+    // 1 is a merge with conflicts; 0 a clean one.
+    switch (result.term) {
+        .Exited => |code| if (code != 1) return &.{},
+        else => return &.{},
+    }
+    return parseConflicts(alloc, result.stdout);
+}
+
+/// `git merge-tree --name-only` with conflicts: the merged tree's id, then
+/// the conflicted files.
+pub fn parseConflicts(alloc: Allocator, listed: []const u8) ![]const []const u8 {
+    const files = try fileList(alloc, listed);
+    return join(alloc, if (files.len > 0) files[1..] else files, &.{});
 }
 
 fn join(alloc: Allocator, a: []const []const u8, b: []const []const u8) ![]const []const u8 {
@@ -316,19 +362,23 @@ fn printInstalled(alloc: Allocator, out: *std.Io.Writer, root: []const u8) !void
 
 /// `git -C dir args…`'s output, trimmed, when it succeeds.
 fn git(alloc: Allocator, dir: []const u8, args: []const []const u8) ?[]const u8 {
-    var argv: std.ArrayList([]const u8) = .empty;
-    argv.appendSlice(alloc, &.{ "/usr/bin/git", "-C", dir }) catch return null;
-    argv.appendSlice(alloc, args) catch return null;
-    const result = std.process.Child.run(.{
-        .allocator = alloc,
-        .argv = argv.items,
-        .max_output_bytes = 16 << 20,
-    }) catch return null;
+    const result = runGit(alloc, dir, args) orelse return null;
     switch (result.term) {
         .Exited => |code| if (code != 0) return null,
         else => return null,
     }
     return std.mem.trim(u8, result.stdout, " \r\n");
+}
+
+fn runGit(alloc: Allocator, dir: []const u8, args: []const []const u8) ?std.process.Child.RunResult {
+    var argv: std.ArrayList([]const u8) = .empty;
+    argv.appendSlice(alloc, &.{ "/usr/bin/git", "-C", dir }) catch return null;
+    argv.appendSlice(alloc, args) catch return null;
+    return std.process.Child.run(.{
+        .allocator = alloc,
+        .argv = argv.items,
+        .max_output_bytes = 16 << 20,
+    }) catch null;
 }
 
 const testing = std.testing;
@@ -402,6 +452,28 @@ test "files both sides change" {
     try testing.expectEqual(@as(usize, 2), both.len);
     try testing.expectEqualStrings("a.swift", both[0]);
     try testing.expectEqualStrings("c.swift", both[1]);
+}
+
+test "ask a peer only when a file changes on both sides" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    try testing.expect(try clash(a, &.{}, &.{"a.swift"}) == .clear);
+    const ask = try clash(a, &.{ "a.swift", "b.swift" }, &.{"c.swift"});
+    try testing.expectEqual(@as(usize, 2), ask.ask.len);
+    const conflict = try clash(a, &.{ "a.swift", "b.swift" }, &.{ "c.swift", "b.swift" });
+    try testing.expectEqual(@as(usize, 1), conflict.conflict.len);
+    try testing.expectEqualStrings("b.swift", conflict.conflict[0]);
+}
+
+test "merge-tree's conflicted files, after the tree id" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const files = try parseConflicts(arena.allocator(), "dc85de67\nmacos/A.swift\nmacos/A.swift\nsrc/b.zig\n");
+    try testing.expectEqual(@as(usize, 2), files.len);
+    try testing.expectEqualStrings("macos/A.swift", files[0]);
+    try testing.expectEqualStrings("src/b.zig", files[1]);
+    try testing.expectEqual(@as(usize, 0), (try parseConflicts(arena.allocator(), "")).len);
 }
 
 test "install.sh's record" {
