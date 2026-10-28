@@ -106,7 +106,7 @@ pub fn target(to: []const u8) []const u8 {
 }
 
 /// Whether `location` (`session:@window.%pane`) is in a member session.
-fn isMember(members: []const []const u8, location: ?[]const u8) bool {
+pub fn isMember(members: []const []const u8, location: ?[]const u8) bool {
     const loc = location orelse return false;
     const session = loc[0 .. std.mem.indexOfScalar(u8, loc, ':') orelse loc.len];
     for (members) |m| if (std.mem.eql(u8, m, session)) return true;
@@ -198,6 +198,30 @@ pub fn othersLine(alloc: Allocator, list: []const Peer) Allocator.Error!?[]const
     if (!any_feature) return line;
     return try std.fmt.allocPrint(alloc, "{s}\nIf the owner asks for another agent's feature, don't start it: " ++
         "say whose it is, and on a yes send the request, word for word, to that agent with SendMessage.", .{line});
+}
+
+/// Whether a hook's input is for Claude Code's ListAgents.
+pub fn isListAgents(alloc: Allocator, input: []const u8) bool {
+    const Input = struct { tool_name: []const u8 = "" };
+    const parsed = std.json.parseFromSliceLeaky(Input, alloc, input, .{
+        .ignore_unknown_fields = true,
+        .allocate = .alloc_always,
+    }) catch return false;
+    return std.mem.eql(u8, parsed.tool_name, "ListAgents");
+}
+
+/// What Claude hears after ListAgents in the zone `title`: ListAgents
+/// lists every session on the Mac, so this names the zone's.
+pub fn listAgentsNote(alloc: Allocator, title: []const u8, list: []const Peer) Allocator.Error![]const u8 {
+    var names: std.ArrayList([]const u8) = .empty;
+    for (list) |peer| try names.append(alloc, if (peer.feature) |f|
+        try std.fmt.allocPrint(alloc, "{s} ({s})", .{ peer.name, f })
+    else
+        peer.name);
+    const zone_agents = if (names.items.len == 0) "none besides you" else try std.mem.join(alloc, ", ", names.items);
+    return std.fmt.allocPrint(alloc, "Your zone is {s}. ListAgents lists every Claude session on this Mac; " ++
+        "the other agents in your zone are: {s}. When the owner asks about the other terminals or agents, " ++
+        "answer about these, and mention the rest of that list only if asked.", .{ title, zone_agents });
 }
 
 pub fn sessionId(alloc: Allocator, input: []const u8) ?[]const u8 {
@@ -388,4 +412,16 @@ test "claude zone: a hook's session id" {
         \\{"session_id":"s1","hook_event_name":"SessionStart","source":"startup"}
     ).?);
     try testing.expect(sessionId(a, "{}") == null);
+}
+
+test "zone: ListAgents names the zone's agents" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    try std.testing.expect(isListAgents(a, "{\"hook_event_name\":\"PostToolUse\",\"tool_name\":\"ListAgents\"}"));
+    try std.testing.expect(!isListAgents(a, "{\"tool_name\":\"Read\"}"));
+    const note = try listAgentsNote(a, "Lostty", &.{ .{ .name = "zones-7e" }, .{ .name = "media-fix-02", .feature = "Karaoke" } });
+    try std.testing.expect(std.mem.indexOf(u8, note, "Your zone is Lostty.") != null);
+    try std.testing.expect(std.mem.indexOf(u8, note, "are: zones-7e, media-fix-02 (Karaoke).") != null);
+    try std.testing.expect(std.mem.indexOf(u8, try listAgentsNote(a, "Lostty", &.{}), "none besides you") != null);
 }

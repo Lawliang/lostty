@@ -30,7 +30,8 @@ pub const Options = struct {
 /// SendMessage to an agent outside the pane's zone. It never fails,
 /// and prints only what the Mac app keeps for the pane (speak.Kind): the
 /// queued texts on `busy`, the handoff's directive on `done` (a zone
-/// move's note waits for the next prompt), and on `start` the zone's brief,
+/// move's note waits for the next prompt) and, after ListAgents, which
+/// agents are in the pane's zone, and on `start` the zone's brief,
 /// after the handoff when it follows /clear. Outside Lostty, without a
 /// terminal, or with a bad argument it does nothing and exits 0, so a hook
 /// can never break Claude.
@@ -56,8 +57,9 @@ pub fn run(gpa: Allocator) !u8 {
         // After a tool call: only speak the handoff's directive (Claude's
         // own calls, not a subagent's).
         .done => {
-            if (hookInput(alloc)) |input| if (speak.isSubagent(alloc, input)) return 0;
-            speakTexts(alloc, "PostToolUse", &.{take(alloc, pane, .say)});
+            const input = hookInput(alloc);
+            if (input) |i| if (speak.isSubagent(alloc, i)) return 0;
+            speakTexts(alloc, "PostToolUse", &.{ take(alloc, pane, .say), if (input) |i| zoneAgents(alloc, pane, i) else null });
             return 0;
         },
         // A session starting without the zone's brief gets it. After
@@ -123,6 +125,17 @@ fn zoneBrief(alloc: Allocator, pane: []const u8, input: []const u8) ?[]const u8 
     const start = file.start orelse return null;
     const line = othersLine(alloc, pane, input) orelse return start;
     return std.fmt.allocPrint(alloc, "{s}\n{s}", .{ start, line }) catch start;
+}
+
+/// After ListAgents, which lists every session on the Mac: which of them
+/// are in the pane's zone. Null for other tools or outside a zone.
+fn zoneAgents(alloc: Allocator, pane: []const u8, input: []const u8) ?[]const u8 {
+    if (!zone.isListAgents(alloc, input)) return null;
+    const file = zoneFile(alloc, pane) orelse return null;
+    const title = file.zone orelse return null;
+    const members = file.members orelse return null;
+    const list = zone.others(alloc, members, file.features, agents(alloc), zone.sessionId(alloc, input), std.posix.getenv("TMUX_PANE")) catch return null;
+    return zone.listAgentsNote(alloc, title, list) catch null;
 }
 
 /// The line naming the pane's zone's other agents and their features;

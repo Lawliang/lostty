@@ -1356,6 +1356,8 @@ class AppDelegate: NSObject,
 extension AppDelegate {
     /// This is called for the dock right-click menu.
     func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {
+        // Rebuilt each time, so Reopen from History lists the snapshots now.
+        reloadDockMenu()
         return dockMenu
     }
 
@@ -1366,6 +1368,8 @@ extension AppDelegate {
         dockMenu.removeAllItems()
         dockMenu.addItem(newWindow)
         dockMenu.addItem(newTab)
+        dockMenu.addItem(.separator())
+        dockMenu.addItem(MainActor.assumeIsolated { SessionHistoryMenu.item() })
     }
 
     /// Setup all the images for our menu items.

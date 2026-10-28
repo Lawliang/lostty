@@ -435,7 +435,8 @@ enum ClaudeUsageFont {
 }
 
 /// Every plan limit, each tappable to make it the one the bar tracks.
-private struct ClaudeUsageDetails: View {
+/// The canvas dock's Usage shows it too.
+struct ClaudeUsageDetails: View {
     @ObservedObject var usage: ClaudeUsageRuntime
     let accent: Color
     @ObservedObject var breakdown: UsageBreakdownRuntime = .shared
