@@ -11,28 +11,51 @@ struct TokenCounts: Codable, Equatable, Sendable {
 
 /// How fast tokens use up a plan limit, relative to each other (usage
 /// breakdown spec §1). A stand-in for API price, which Anthropic's limits
-/// track; only the ratios matter. Fable counts like Opus until better known.
+/// track; only the ratios matter. Prices from the claude-api skill's model
+/// table (cached 2026-10-06).
 enum UsageWeights {
-    static let input = 1.0
+    struct Model {
+        /// Input price, dollars per million tokens.
+        var input: Double
+        /// A cache read's price, as a share of input.
+        var cacheRead: Double
+    }
+
     static let output = 5.0
-    static let cacheWrite = 1.25
-    static let cacheRead = 0.1
+    /// Claude Code caches for an hour, and a 1-hour cache write costs 2×.
+    static let cacheWrite = 2.0
 
-    /// By the model id's family ("claude-haiku-5-5" → Haiku).
-    static let families: [(name: String, weight: Double)] = [
-        ("haiku", 1), ("sonnet", 3), ("opus", 5), ("fable", 5),
+    /// By the first prefix of the model id that matches.
+    static let models: [(prefix: String, model: Model)] = [
+        ("claude-fable-5-1", Model(input: 10, cacheRead: 0.025)),
+        ("claude-mythos-5-1", Model(input: 10, cacheRead: 0.025)),
+        ("claude-fable-5", Model(input: 10, cacheRead: 0.1)),
+        ("claude-mythos-5", Model(input: 10, cacheRead: 0.1)),
+        ("claude-opus-5-5", Model(input: 4, cacheRead: 0.05)),
+        ("claude-opus", Model(input: 5, cacheRead: 0.1)),
+        ("claude-sonnet-5", Model(input: 2, cacheRead: 0.1)),
+        ("claude-sonnet", Model(input: 3, cacheRead: 0.1)),
+        ("claude-haiku-5-5", Model(input: 0.1, cacheRead: 0.1)),
+        ("claude-haiku", Model(input: 1, cacheRead: 0.1)),
     ]
-    static let otherModel = 5.0
+    /// An unknown model costs like the current Opus.
+    static let otherModel = Model(input: 4, cacheRead: 0.05)
 
-    static func model(_ id: String) -> Double {
+    static func model(_ id: String) -> Model {
         let id = id.lowercased()
-        return families.first { id.contains($0.name) }?.weight ?? otherModel
+        return models.first { id.hasPrefix($0.prefix) }?.model ?? otherModel
     }
 
     static func weight(_ tokens: TokenCounts, model id: String) -> Double {
-        let raw = Double(tokens.input) * input + Double(tokens.output) * output
-            + Double(tokens.cacheWrite) * cacheWrite + Double(tokens.cacheRead) * cacheRead
-        return raw * model(id)
+        let model = model(id)
+        let raw = Double(tokens.input) + Double(tokens.output) * output
+            + Double(tokens.cacheWrite) * cacheWrite + Double(tokens.cacheRead) * model.cacheRead
+        return raw * model.input
+    }
+
+    /// The same weight in current Opus input tokens, each of which weighs 1.
+    static func opusInputs(_ tokens: TokenCounts, model id: String) -> Double {
+        weight(tokens, model: id) / model("claude-opus-5-5").input
     }
 }
 #endif

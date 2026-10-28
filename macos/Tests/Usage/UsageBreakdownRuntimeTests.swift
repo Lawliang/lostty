@@ -18,8 +18,8 @@ struct UsageBreakdownRuntimeTests {
         return defaults
     }
 
-    /// A conversation with one Opus reply (weight 50) an hour ago, reported
-    /// to a fresh ledger that also holds one Haiku run (weight 50).
+    /// A conversation with one Opus reply (weight 40) an hour ago, reported
+    /// to a fresh ledger that also holds one Haiku run (weight 40).
     func setUp(_ clock: Clock) throws -> (UsageBreakdownRuntime, URL) {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("ubr-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -29,7 +29,7 @@ struct UsageBreakdownRuntimeTests {
             + #""model":"claude-opus-5-5","usage":{"input_tokens":10}}}"# + "\n").utf8).write(to: file)
         let ledger = UsageLedger(url: dir.appendingPathComponent("ledger.json"))
         ledger.reported(file.path, at: clock.now, locate: { TranscriptLocation(url: URL(fileURLWithPath: $0), agent: .claude) })
-        ledger.record(["claude-haiku-5-5": TokenCounts(input: 50)], source: .observer, at: clock.now - 60)
+        ledger.record(["claude-haiku-5-5": TokenCounts(input: 400)], source: .observer, at: clock.now - 60)
         return (UsageBreakdownRuntime(ledger: ledger, counter: UsageCounter(), now: { clock.now }), file)
     }
 

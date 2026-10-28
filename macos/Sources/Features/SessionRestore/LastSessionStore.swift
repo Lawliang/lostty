@@ -72,11 +72,13 @@ final class LastSessionStore {
     }
 
     /// Lostty is quitting: the session as it is now, and nothing after
-    /// (its sessions end on the way out).
-    func saveForQuit() {
+    /// (its sessions end on the way out). A `deliberate` quit keeps it in
+    /// the history only, so the next Lostty doesn't offer to continue.
+    func saveForQuit(deliberate: Bool) {
         guard started, !paused else { return }
         save(force: true)
         paused = true
+        if deliberate { LastSession.delete(at: url) }
     }
 
     private func save(force: Bool = false) {

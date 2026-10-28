@@ -83,7 +83,7 @@ final class CardController: BaseTerminalController {
     /// top, else the top-left pane's.
     override func syncAppearance() {
         sidebar.chromeColor = chromePane.map {
-            NSColor($0.backgroundColor ?? $0.derivedConfig.backgroundColor).withAlphaComponent(1)
+            LosttyWindowStyle.bar(over: NSColor($0.backgroundColor ?? $0.derivedConfig.backgroundColor).withAlphaComponent(1))
         }
     }
 

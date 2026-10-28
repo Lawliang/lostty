@@ -244,6 +244,8 @@ extension Ghostty {
                 // replaces while showing.
                 ClaudeReadyOverlay(surfaceID: surfaceView.id, cellSize: surfaceView.cellSize)
                     .id(surfaceView.id)
+                GoldDropOverlay(surfaceID: surfaceView.id)
+                    .id(surfaceView.id)
                 if AgentCoordination.isOn { GuardBadgeOverlay(surfaceID: surfaceView.id) }
 
                 // Lostty: a handoff counting down to its clear, with Skip.
