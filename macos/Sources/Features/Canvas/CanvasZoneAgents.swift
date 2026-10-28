@@ -62,9 +62,11 @@ extension CanvasModel {
         return (["Lostty zone: \(title)\(folder)."] + briefLines(id)).joined(separator: "\n")
     }
 
+    /// In a project, outside its domains, with how to claim a feature.
     func zoneMovedIn(_ id: UUID) -> String? {
         guard let title = zoneTitle(id) else { return nil }
-        return (["You're now in zone \(title)."] + briefLines(id)).joined(separator: "\n")
+        let claim = zone(id)?.parent == nil ? [Self.claimBrief] : []
+        return (["You're now in zone \(title)."] + briefLines(id) + claim).joined(separator: "\n")
     }
 
     static func zoneMovedOut(of title: String) -> String {
@@ -142,6 +144,11 @@ extension CanvasModel {
         return (["\(project.name) tickets, \(starts)"] + lines).joined(separator: "\n")
     }
 
+    /// What an agent outside its project's domains is told, so the zone's
+    /// other agents know what it works on.
+    static let claimBrief = "When you start on a feature, run lostty +ticket working \"<feature, a few words>\" "
+        + "so the zone's other agents know."
+
     /// What project `id`'s manager is told (board spec §7): a feature line
     /// for each domain, with its brief's first line and the tmux sessions
     /// (`sessions`, by pane) of its panes as `panes` has them.
@@ -191,22 +198,30 @@ extension CanvasModel {
     /// The zone file of a pane in zone `id`. Its members are the tmux
     /// sessions (`sessions`, by pane) of every pane in the same project as
     /// `panes` has them, domains included; a pane with none is left out.
-    /// Its features are the domain each member in one works on. Its board
-    /// is the project's `tickets` (`boardText`). The project's manager,
-    /// `pane`, starts with its brief too.
+    /// Its features are the domain each member in one works on, else what
+    /// it `claims`. Its board is the project's `tickets` (`boardText`). The
+    /// project's manager, `pane`, starts with its brief too; any other pane
+    /// outside the domains, with how to claim a feature.
     func zoneFile(
-        _ id: UUID, pane: UUID, panes: CanvasPaneZones, sessions: [UUID: String], tickets: [CanvasTicket]
+        _ id: UUID, pane: UUID, panes: CanvasPaneZones, sessions: [UUID: String], claims: [UUID: String] = [:],
+        tickets: [CanvasTicket]
     ) -> CanvasZoneFile? {
         guard let title = zoneTitle(id), let start = zoneStart(id), let project = projectZone(id) else { return nil }
         let members = Set(panes.zones.compactMap { pane, zone in
             projectZone(zone) == project ? sessions[pane] : nil
         })
+        let manager = zone(project)?.manager
         var features: [String: String] = [:]
-        for (pane, zone) in panes.zones {
-            guard let session = sessions[pane], let domain = self.zone(zone), domain.parent == project else { continue }
-            features[session] = domain.name
+        for (member, zone) in panes.zones where projectZone(zone) == project {
+            guard let session = sessions[member] else { continue }
+            if zone != project, let domain = self.zone(zone) {
+                features[session] = domain.name
+            } else if features[session] == nil, let claim = claims[member] {
+                features[session] = claim
+            }
         }
-        let brief = zone(project)?.manager == pane ? managerBrief(project, panes: panes, sessions: sessions) : nil
+        let brief = manager == pane ? managerBrief(project, panes: panes, sessions: sessions)
+            : id == project ? Self.claimBrief : nil
         return CanvasZoneFile(
             start: [start, brief].compactMap { $0 }.joined(separator: "\n"), zone: title,
             folder: startFolder(ofZone: id), members: members.sorted(), features: features,
@@ -266,9 +281,21 @@ struct CanvasZoneStore: Sendable {
         write(data, to: file(pane, "zone.json"))
     }
 
-    /// The pane is in no zone: its Allow Once goes too.
+    /// The pane is in no zone: its Allow Once and its claim go too.
     func removeZone(_ pane: UUID) {
-        for ext in ["zone.json", "zone.allow"] { try? FileManager.default.removeItem(at: file(pane, ext)) }
+        for ext in ["zone.json", "zone.allow", "zone.claim"] { try? FileManager.default.removeItem(at: file(pane, ext)) }
+    }
+
+    func writeClaim(_ pane: UUID, _ feature: String) { write(Data(feature.utf8), to: file(pane, "zone.claim")) }
+
+    /// Each pane's claim, as `writeClaim` left them.
+    func claims() -> [UUID: String] {
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: panes.path)) ?? []
+        return names.reduce(into: [:]) { claims, name in
+            guard name.hasSuffix(".zone.claim"), let pane = UUID(uuidString: String(name.prefix(36))),
+                  let text = try? String(contentsOf: file(pane, "zone.claim"), encoding: .utf8) else { return }
+            claims[pane] = text
+        }
     }
 
     /// A move's note: it replaces any note not yet taken, which an
@@ -296,7 +323,7 @@ struct CanvasZoneStore: Sendable {
         let names = (try? FileManager.default.contentsOfDirectory(atPath: panes.path)) ?? []
         for name in names {
             guard let dot = name.firstIndex(of: "."), let pane = UUID(uuidString: String(name[..<dot])), !live.contains(pane),
-                  ["zone.json", "zone.say", "zone.allow"].contains(name[name.index(after: dot)...]) else { continue }
+                  ["zone.json", "zone.say", "zone.allow", "zone.claim"].contains(name[name.index(after: dot)...]) else { continue }
             try? FileManager.default.removeItem(at: panes.appendingPathComponent(name))
         }
     }

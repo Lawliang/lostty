@@ -37,8 +37,16 @@ extension CanvasController {
     }
 
     /// Applied when the pane's role may make it (`TicketQueue.applying`);
-    /// else dropped without a word, since the CLI can't hear back.
+    /// else dropped without a word, since the CLI can't hear back. A
+    /// pane in a zone that says what it works on keeps that as its claim.
     func ticketReported(_ report: TicketReport, from pane: UUID) {
+        if case .working(let feature) = report {
+            guard membership.panes.zones[pane] != nil, featureClaims[pane] != feature else { return }
+            featureClaims[pane] = feature
+            zoneStore.writeClaim(pane, feature)
+            writeZoneFiles()
+            return
+        }
         guard let actor = model.ticketRole(of: pane, panes: membership.panes),
               let reported = TicketQueue.applying(
                 report, from: actor, to: tickets, in: model, newKey: { nextTicketKey(in: $0, take: true) }) else { return }
