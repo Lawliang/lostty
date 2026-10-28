@@ -4,7 +4,7 @@ import Foundation
 /// A Jira-style ticket kept on the canvas: no Jira account, saved with the
 /// canvas. It has a key (LT-1, or its project's prefix, as TB-1) once it's
 /// created, and keeps it; until then it's a draft. It reads forgivingly: a
-/// field missing, or a type, priority or status this build doesn't know
+/// field missing, or a type, priority or state this build doesn't know
 /// (saved by a newer one), takes its default, so the canvas always comes
 /// back.
 struct CanvasTicket: Codable, Equatable {
@@ -19,9 +19,23 @@ struct CanvasTicket: Codable, Equatable {
         static let fallback = Priority.medium
     }
 
-    enum Status: String, Codable, CaseIterable, ForgivingCase {
-        case toDo, inProgress, done
-        static let fallback = Status.toDo
+    /// Where a ticket is on the zone board (board spec §2).
+    enum State: String, Codable, CaseIterable, ForgivingCase {
+        case queued, working, review, done, blocked
+        static let fallback = State.queued
+
+        /// The ticket lifecycle: whether `actor` may move a ticket in this
+        /// state to `next`. A same-state move is refused, so a repeated
+        /// report changes nothing.
+        func allows(_ next: State, by actor: TicketActor) -> Bool {
+            guard next != self else { return false }
+            switch actor {
+            case .lostty: return self == .queued && next == .working
+            case .agent: return self == .working && (next == .review || next == .blocked)
+            case .owner: return next != .working
+            case .manager: return false
+            }
+        }
     }
 
     /// The key prefix of a ticket in no zone, as a Jira project's.
@@ -35,11 +49,17 @@ struct CanvasTicket: Codable, Equatable {
     var summary = ""
     var kind = Kind.task
     var priority = Priority.medium
-    var status = Status.toDo
+    /// Changed only by `move(to:note:by:)`, which keeps the lifecycle.
+    private(set) var state = State.queued
     var assignee = ""
     var details = ""
-    /// The zone it was made in, a project or a domain; nil for none.
+    /// The zone it was made in, a project or a domain; nil for none. A
+    /// domain is the ticket's feature.
     var zone: UUID?
+    /// The last review or blocked line, or the owner's Send back note.
+    private(set) var note: String?
+    /// The pane Lostty last typed it into: the agent working on it.
+    private(set) var agentPane: UUID?
 
     var isCreated: Bool { key != nil }
 
@@ -60,10 +80,33 @@ struct CanvasTicket: Codable, Equatable {
         if new.summary != old.summary { ticket.summary = old.summary }
         if new.kind != old.kind { ticket.kind = old.kind }
         if new.priority != old.priority { ticket.priority = old.priority }
-        if new.status != old.status { ticket.status = old.status }
+        if new.state != old.state { ticket.state = old.state }
+        if new.note != old.note { ticket.note = old.note }
+        if new.zone != old.zone { ticket.zone = old.zone }
         if new.assignee != old.assignee { ticket.assignee = old.assignee }
         if new.details != old.details { ticket.details = old.details }
         return ticket
+    }
+
+    /// Moves it to `next` with `note` when `actor` may (`State.allows`);
+    /// an agent moves only a ticket of its own domain. Lostty's move names
+    /// the pane it typed into. False, and nothing changes, when refused.
+    @discardableResult
+    mutating func move(to next: State, note: String? = nil, by actor: TicketActor) -> Bool {
+        guard state.allows(next, by: actor) else { return false }
+        if case .agent(let domain) = actor, zone != domain { return false }
+        state = next
+        self.note = note
+        if case .lostty(let pane) = actor { agentPane = pane }
+        return true
+    }
+
+    /// Into `zone`, queued: a note on its work in the zone it left goes
+    /// with it, as a move to queued drops one.
+    mutating func assign(to zone: UUID?) {
+        if zone != self.zone { note = nil }
+        self.zone = zone
+        move(to: .queued, by: .owner)
     }
 
     /// This ticket in no zone if its zone is one of `zones`, as when they're
@@ -103,16 +146,22 @@ struct CanvasTicket: Codable, Equatable {
 
     init(
         key: String? = nil, summary: String = "", kind: Kind = .task, priority: Priority = .medium,
-        status: Status = .toDo, assignee: String = "", details: String = "", zone: UUID? = nil
+        assignee: String = "", details: String = "", zone: UUID? = nil, note: String? = nil
     ) {
         self.key = key
         self.summary = summary
         self.kind = kind
         self.priority = priority
-        self.status = status
         self.assignee = assignee
         self.details = details
         self.zone = zone
+        self.note = note
+    }
+
+    /// `status` is what builds before the board saved, and still write
+    /// so an older build keeps a finished ticket finished.
+    private enum CodingKeys: String, CodingKey {
+        case key, summary, kind, priority, state, status, assignee, details, zone, note, agentPane
     }
 
     init(from decoder: Decoder) throws {
@@ -122,11 +171,54 @@ struct CanvasTicket: Codable, Equatable {
         summary = try c.decodeIfPresent(String.self, forKey: .summary) ?? blank.summary
         kind = try c.decodeIfPresent(Kind.self, forKey: .kind) ?? blank.kind
         priority = try c.decodeIfPresent(Priority.self, forKey: .priority) ?? blank.priority
-        status = try c.decodeIfPresent(Status.self, forKey: .status) ?? blank.status
+        if let state = try c.decodeIfPresent(State.self, forKey: .state) {
+            self.state = state
+        } else {
+            switch try? c.decodeIfPresent(String.self, forKey: .status) {
+            case "inProgress": state = .working
+            case "done": state = .done
+            default: state = .queued
+            }
+        }
         assignee = try c.decodeIfPresent(String.self, forKey: .assignee) ?? blank.assignee
         details = try c.decodeIfPresent(String.self, forKey: .details) ?? blank.details
         zone = try? c.decodeIfPresent(UUID.self, forKey: .zone)
+        note = try? c.decodeIfPresent(String.self, forKey: .note)
+        agentPane = try? c.decodeIfPresent(UUID.self, forKey: .agentPane)
     }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encodeIfPresent(key, forKey: .key)
+        try c.encode(summary, forKey: .summary)
+        try c.encode(kind, forKey: .kind)
+        try c.encode(priority, forKey: .priority)
+        try c.encode(state, forKey: .state)
+        let status = switch state {
+        case .done: "done"
+        case .working: "inProgress"
+        case .queued, .review, .blocked: "toDo"
+        }
+        try c.encode(status, forKey: .status)
+        try c.encode(assignee, forKey: .assignee)
+        try c.encode(details, forKey: .details)
+        try c.encodeIfPresent(zone, forKey: .zone)
+        try c.encodeIfPresent(note, forKey: .note)
+        try c.encodeIfPresent(agentPane, forKey: .agentPane)
+    }
+}
+
+/// Who asks for a ticket to move (`CanvasTicket.State.allows`).
+enum TicketActor: Equatable {
+    /// The board's buttons and keys.
+    case owner
+    /// Lostty typing the ticket into pane `agent`.
+    case lostty(agent: UUID)
+    /// A pane in feature `domain`, by a `lostty +ticket` report.
+    case agent(domain: UUID)
+    /// Project `project`'s manager pane: it adds and assigns, and moves no
+    /// state.
+    case manager(project: UUID)
 }
 
 /// An enum that reads a case it doesn't know as `fallback`.
@@ -163,28 +255,35 @@ extension CanvasTicket.Priority {
     }
 }
 
-extension CanvasTicket.Status {
+extension CanvasTicket.State {
     var title: String {
         switch self {
-        case .toDo: "To Do"
-        case .inProgress: "In Progress"
+        case .queued: "Queued"
+        case .working: "Working"
+        case .review: "Review"
         case .done: "Done"
+        case .blocked: "Blocked"
         }
     }
 
-    /// The tickets panel's section of tickets with this status.
-    var sectionTitle: String {
+    /// Where it sits in its feature's section, top first.
+    var rank: Int {
         switch self {
-        case .toDo: "Up Next"
-        case .inProgress: "In Progress"
-        case .done: "Completed"
+        case .working: 0
+        case .queued: 1
+        case .review: 2
+        case .blocked: 3
+        case .done: 4
         }
     }
 
-    /// The status after this one: Done goes back to To Do.
+    /// The states the owner can move a ticket to, for the keys and menus.
+    static let byOwner = allCases.filter { next in allCases.contains { $0.allows(next, by: .owner) } }
+
+    /// The state S moves to: the next of `byOwner`, round again.
     var next: Self {
-        let all = Self.allCases
-        return all[(all.firstIndex(of: self)! + 1) % all.count]
+        let all = Self.byOwner
+        return all[((all.firstIndex(of: self) ?? -1) + 1) % all.count]
     }
 }
 #endif

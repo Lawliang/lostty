@@ -131,13 +131,17 @@ has a subfolder.
 
 Applies to agents in a zone; nothing changes for terminals in no zone.
 
-1. **`+peers` lists only the zone's agents.** Domains of one project
-   count as one zone unless walled off (a later option).
+1. **`+peers` says which zone each terminal is in, and hides none.**
+   Whom a merge must ask is a git fact (the same repo, the same
+   files), not a canvas one, so a filter hid exactly the terminals a
+   merge check needs (changed 2026-10-25).
 2. **Messages stop at the edge.** Claude sessions message each other
    through Claude Code's own sockets, not Lostty, so Lostty's
    PreToolUse hook (`+claude-state tool`, installed for every pane)
    denies a SendMessage to an agent outside the zone, with the reason,
-   and tells the app, which shows the notice.
+   and tells the app, which shows the notice. An agent that started in
+   a worktree of the same repo gets through wherever it sits, so a
+   `+peers` merge check reaches it. Domains of one project can talk.
 3. **Writes stay in the folder, through the Guard**, only when you've
    turned the Guard on (it stays off by default, and zones never turn
    it on). A domain's limit is its subfolder, else the project folder.
@@ -184,7 +188,7 @@ the per-pane zone files are written again.
   `start`/`say` queue. SessionStart prints the brief, and
   UserPromptSubmit and PostToolUse print the notes. Only the `lostty`
   binary changes; the hooks don't.
-- **`+peers`** (`src/cli/peers.zig`): filter to the zone file's members.
+- **`+peers`** (`src/cli/peers.zig`): label each terminal with its pane's zone.
 - **SendMessage hook** (`src/cli/claude_state.zig`, `tool` state): deny
   a SendMessage whose target isn't a member and has no allowance;
   report it to the app over the pane's terminal, as `+claude-state`
@@ -206,7 +210,7 @@ the per-pane zone files are written again.
 5. Per-pane zone files and the brief through the hooks; moving in and
    out mid-session; the notices.
 6. Tickets per zone.
-7. `+peers` filter, the SendMessage hook, Allow Once.
+7. `+peers` zone labels, the SendMessage hook, Allow Once.
 8. The Guard folder limit.
 9. Counts on the label.
 
@@ -217,7 +221,7 @@ context job; 7–8 the boundary.
 
 - Model: membership by centre, domain over project, no overlap, resize
   limits, moving a project moves its domains, removing keeps items.
-- Zig: `+peers` filtered by a zone file; the hook denies SendMessage to
+- Zig: `+peers` labels a zoned terminal; the hook denies SendMessage to
   a non-member, allows a member and an allowance once; no zone file
   changes nothing.
 - Save and restore round trip with zones and ticket zones.

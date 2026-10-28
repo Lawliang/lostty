@@ -98,12 +98,87 @@ struct CanvasZoneAgentsTests {
         let panes = CanvasPaneZones(
             panes: [p1, p2, p3, p4, p5], zones: [p1: domain, p2: project, p3: elsewhere, p4: domain, p5: project])
         let sessions = [p1: "tb-onboarding", p2: "tb-api", p3: "lostty", p5: "tb-api"]
-        let file = try #require(model.zoneFile(domain, panes: panes, sessions: sessions))
+        let file = try #require(model.zoneFile(domain, pane: p1, panes: panes, sessions: sessions, tickets: []))
         #expect(file.zone == "Textberry › Onboarding")
         #expect(file.members == ["tb-api", "tb-onboarding"])
-        #expect(model.zoneFile(project, panes: panes, sessions: sessions)?.members == ["tb-api", "tb-onboarding"])
-        #expect(model.zoneFile(elsewhere, panes: panes, sessions: sessions)?.members == ["lostty"])
-        #expect(model.zoneFile(domain, panes: panes, sessions: [:])?.members == [])
+        #expect(model.zoneFile(project, pane: p2, panes: panes, sessions: sessions, tickets: [])?.members == ["tb-api", "tb-onboarding"])
+        #expect(model.zoneFile(elsewhere, pane: p3, panes: panes, sessions: sessions, tickets: [])?.members == ["lostty"])
+        #expect(model.zoneFile(domain, pane: p1, panes: panes, sessions: [:], tickets: [])?.members == [])
+    }
+
+    @Test func theBoardListsEachFeaturesTicketsAsTheBoardDoesThenToAssign() throws {
+        var model = textberry()
+        let login = UUID()
+        model.addZone(CanvasZone(
+            id: login, frame: CGRect(x: 1000, y: 100, width: 800, height: 600), name: "Login", parent: project))
+        let tickets = [
+            CanvasTicket(key: "TB-9", summary: "Dark mode", zone: project, note: "No feature\nnamed Theme"),
+            CanvasTicket(key: "TB-10", summary: "Password reset", zone: login),
+            CanvasTicket(key: "TB-7", summary: "Google button", zone: login).moved(to: .working),
+            CanvasTicket(key: "TB-5", summary: "Hero copy", zone: login).moved(to: .done),
+            CanvasTicket(key: "LT-100", summary: "Elsewhere", zone: nil),
+        ]
+        #expect(try #require(model.boardText(project, tickets: tickets)) == """
+            Textberry tickets, started by the owner's Start on the board
+            Onboarding
+              none
+            Login
+              TB-7   working  Google button
+              TB-10  queued   Password reset
+              TB-5   done     Hero copy
+            To assign
+              TB-9   queued   Dark mode · No feature named Theme
+            """)
+        model.updateZone(project) { $0.autoStart = true }
+        #expect(model.boardText(project, tickets: [])?.hasPrefix("Textberry tickets, started when their feature's Claude is free\n") == true)
+        #expect(model.boardText(domain, tickets: tickets) == nil)
+        let panes = CanvasPaneZones(panes: [p1], zones: [p1: domain])
+        #expect(model.zoneFile(domain, pane: p1, panes: panes, sessions: [:], tickets: tickets)?.board
+            == model.boardText(project, tickets: tickets))
+    }
+
+    @Test func theManagerStartsWithABriefNamingEachFeatureAndItsAgents() throws {
+        var model = textberry(domainBrief: "Signup steps and first run.\nNo payments here.")
+        let login = UUID(), manager = UUID()
+        model.addZone(CanvasZone(
+            id: login, frame: CGRect(x: 1000, y: 100, width: 800, height: 600), name: "Login", parent: project))
+        model.updateZone(project) { $0.manager = manager }
+        let panes = CanvasPaneZones(panes: [p1, p2, p3, manager], zones: [p1: domain, p2: domain, p3: login, manager: domain])
+        let sessions = [p1: "tb-b", p2: "tb-a", manager: "tb-manager"]
+        let brief = """
+            You're the manager of Textberry. You don't write code.
+            Turn the owner's requests into tickets, one per feature, with \
+            lostty +ticket add "<feature>" "<summary>" "<details>".
+            Move a queued ticket to another feature with lostty +ticket assign <key> "<feature>".
+            Features:
+              Onboarding: Signup steps and first run. (tb-a, tb-b)
+              Login
+            Check lostty +ticket list first, so you don't repeat a ticket.
+            """
+        #expect(model.managerBrief(project, panes: panes, sessions: sessions) == brief)
+        #expect(model.managerBrief(domain, panes: panes, sessions: sessions) == nil)
+        let start = try #require(model.zoneStart(domain))
+        #expect(model.zoneFile(domain, pane: manager, panes: panes, sessions: sessions, tickets: [])?.start
+            == start + "\n" + brief)
+        #expect(model.zoneFile(domain, pane: p1, panes: panes, sessions: sessions, tickets: [])?.start == start)
+    }
+
+    @Test func theManagerHearsOfATicketThatBecameBlockedInItsProject() {
+        var model = textberry()
+        let manager = UUID()
+        model.updateZone(project) { $0.manager = manager }
+        let working = CanvasTicket(key: "TB-8", summary: "Welcome screen", zone: domain).moved(to: .working)
+        var blocked = working
+        blocked.move(to: .blocked, note: "Needs the brand font files\n", by: .agent(domain: domain))
+        let inside = CanvasPaneZones(panes: [manager], zones: [manager: project])
+        let notes = model.blockedNotes(from: [working], to: [blocked], panes: inside)
+        #expect(notes.map(\.manager) == [manager])
+        #expect(notes.map(\.text) == ["TB-8 · Onboarding is blocked: Needs the brand font files"])
+        #expect(model.blockedNotes(from: [blocked], to: [blocked], panes: inside).isEmpty)
+        #expect(model.blockedNotes(from: [], to: [blocked], panes: inside).isEmpty)
+        #expect(model.blockedNotes(from: [working], to: [blocked], panes: CanvasPaneZones(panes: [manager])).isEmpty)
+        let byOwner = CanvasTicket(key: "TB-8", summary: "Welcome screen", zone: domain).moved(to: .blocked)
+        #expect(model.blockedNotes(from: [working], to: [byOwner], panes: inside).map(\.text) == ["TB-8 · Onboarding is blocked."])
     }
 
     @Test func theZoneFileIsJSONTheHooksReadAndNotAHandoffState() throws {
@@ -124,6 +199,11 @@ struct CanvasZoneAgentsTests {
         #expect(json["zone"] as? String == "Textberry")
         #expect(json["folder"] is NSNull)
         #expect(json["members"] as? [String] == ["tb-1", "tb-2"])
+        #expect(json["board"] == nil)
+        store.writeZone(pane, CanvasZoneFile(
+            start: "Lostty zone: Textberry.", zone: "Textberry", folder: nil, board: "Textberry tickets"))
+        let boarded = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
+        #expect(boarded["board"] as? String == "Textberry tickets")
         let allow = handoff.panes.appendingPathComponent("\(pane.uuidString).zone.allow")
         #expect(try String(contentsOf: allow, encoding: .utf8) == "lostty-a9")
         let say = handoff.panes.appendingPathComponent("\(pane.uuidString).zone.say")

@@ -25,8 +25,8 @@ pub const Options = struct {
 /// worktree doesn't have, and its tmux session as Claude Code's ListAgents
 /// shows it, to message), whether to ask it (`Clash`), any other worktree
 /// whose uncommitted work touches the same files, and where the installed
-/// Lostty was built (`macos/install.sh` records it). In a canvas zone it
-/// lists only the zone's terminals. It only reads.
+/// Lostty was built (`macos/install.sh` records it). A terminal in a canvas
+/// zone says which. It only reads.
 pub fn run(gpa: Allocator) !u8 {
     var arena_state = std.heap.ArenaAllocator.init(gpa);
     defer arena_state.deinit();
@@ -46,7 +46,7 @@ pub fn run(gpa: Allocator) !u8 {
         return 1;
     };
     const worktrees = try parseWorktrees(alloc, git(alloc, root, &.{ "worktree", "list", "--porcelain" }) orelse "");
-    const sessions = try inZone(alloc, try listSessions(alloc), zoneMembers(alloc));
+    const sessions = try listSessions(alloc);
     const here = owner(worktrees, root) orelse return 1;
     const me = std.posix.getenv("TMUX_PANE");
     const my_uncommitted = try uncommitted(alloc, root);
@@ -54,9 +54,11 @@ pub fn run(gpa: Allocator) !u8 {
     // commits that one side hasn't merged yet are neither's.
     const base: ?[]const u8 = if (git(alloc, root, &.{ "rev-parse", "--verify", "--quiet", "main^{commit}" }) != null) "main" else null;
 
-    try out.print("You: {s} ({s}), {d} files uncommitted\n", .{
+    try out.print("You: {s} ({s}), {d} files uncommitted", .{
         std.fs.path.basename(root), try describeHead(alloc, worktrees[here]), my_uncommitted.len,
     });
+    if (zoneTitle(alloc, std.posix.getenv(protocol.surface_env) orelse "")) |title| try out.print(", in zone {s}", .{title});
+    try out.print("\n", .{});
 
     var shown: usize = 0;
     for (worktrees, 0..) |wt, i| {
@@ -84,14 +86,14 @@ pub fn run(gpa: Allocator) !u8 {
         shown += 1;
         if (i == here) {
             try out.print("\nAlso in this worktree:\n", .{});
-            for (terminals.items) |t| try printTerminal(out, t);
+            for (terminals.items) |t| try printTerminal(out, t, zoneTitle(alloc, t.surface));
             continue;
         }
         const ahead = git(alloc, root, &.{ "rev-list", "--count", try std.fmt.allocPrint(alloc, "HEAD..{s}", .{wt.head}) }) orelse "?";
         try out.print("\n{s} ({s}), {d} files uncommitted, {s} commits you don't have\n", .{
             std.fs.path.basename(wt.path), try describeHead(alloc, wt), theirs_uncommitted.len, ahead,
         });
-        for (terminals.items) |t| try printTerminal(out, t);
+        for (terminals.items) |t| try printTerminal(out, t, zoneTitle(alloc, t.surface));
         const mine = try join(alloc, try onlyIn(alloc, root, "HEAD", base orelse wt.head), my_uncommitted);
         const theirs = try join(alloc, try onlyIn(alloc, root, wt.head, base orelse "HEAD"), theirs_uncommitted);
         const same = try overlap(alloc, mine, theirs);
@@ -138,14 +140,16 @@ pub fn parseWorktrees(alloc: Allocator, porcelain: []const u8) ![]Worktree {
 
 /// A session on Lostty's tmux: its name, where it is as ListAgents shows
 /// it (`name:@window.%pane`), what its Claude is doing (`@lostty_claude`:
-/// working, waiting, or empty) and its active pane's folder.
+/// working, waiting, or empty), its active pane's folder and the Lostty
+/// pane it shows (`@lostty_surface`, empty for other sessions).
 pub const Session = struct {
     location: []const u8,
     claude: []const u8,
     path: []const u8,
+    surface: []const u8 = "",
 };
 
-pub const session_format = "#{session_name}:#{window_id}.#{pane_id}\t#{@lostty_claude}\t#{pane_current_path}";
+pub const session_format = "#{session_name}:#{window_id}.#{pane_id}\t#{@lostty_claude}\t#{pane_current_path}\t#{@lostty_surface}";
 
 pub fn parseSessions(alloc: Allocator, listed: []const u8) ![]Session {
     var list: std.ArrayList(Session) = .empty;
@@ -155,7 +159,8 @@ pub fn parseSessions(alloc: Allocator, listed: []const u8) ![]Session {
         const location = fields.next() orelse continue;
         const claude = fields.next() orelse continue;
         const path = fields.next() orelse continue;
-        try list.append(alloc, .{ .location = location, .claude = claude, .path = path });
+        const surface = fields.next() orelse "";
+        try list.append(alloc, .{ .location = location, .claude = claude, .path = path, .surface = surface });
     }
     return list.items;
 }
@@ -166,29 +171,14 @@ fn listSessions(alloc: Allocator) ![]Session {
     return parseSessions(alloc, listed);
 }
 
-/// The sessions in `members`, the tmux sessions of the zone this pane is
-/// in; all of them when it's in none (null).
-pub fn inZone(alloc: Allocator, sessions: []const Session, members: ?[]const []const u8) ![]const Session {
-    const names = members orelse return sessions;
-    var kept: std.ArrayList(Session) = .empty;
-    for (sessions) |s| {
-        const name = s.location[0 .. std.mem.indexOfScalar(u8, s.location, ':') orelse s.location.len];
-        for (names) |m| if (std.mem.eql(u8, m, name)) {
-            try kept.append(alloc, s);
-            break;
-        };
-    }
-    return kept.items;
-}
-
-/// The members in this pane's zone file (LOSTTY_SURFACE); null without one.
-fn zoneMembers(alloc: Allocator) ?[]const []const u8 {
-    const pane = std.posix.getenv(protocol.surface_env) orelse return null;
+/// The zone Lostty pane `pane` is in, "Textberry › Onboarding", from its
+/// zone file; null in none.
+fn zoneTitle(alloc: Allocator, pane: []const u8) ?[]const u8 {
     if (!speak.isPaneId(pane)) return null;
     const home = std.posix.getenv("HOME") orelse return null;
     const path = speak.queuedPath(alloc, home, pane, .zone) catch return null;
     const json = std.fs.cwd().readFileAlloc(alloc, path, speak.text_max) catch return null;
-    return (zone.parse(alloc, json) orelse return null).members;
+    return (zone.parse(alloc, json) orelse return null).zone;
 }
 
 /// The worktree `path` is in: the deepest one holding it, since worktrees
@@ -289,9 +279,11 @@ fn describeHead(alloc: Allocator, wt: Worktree) ![]const u8 {
     return std.fmt.allocPrint(alloc, "detached at {s}", .{wt.head[0..@min(9, wt.head.len)]});
 }
 
-fn printTerminal(out: *std.Io.Writer, t: Session) !void {
+fn printTerminal(out: *std.Io.Writer, t: Session, zone_title: ?[]const u8) !void {
     const doing = if (t.claude.len > 0) t.claude else "not working";
-    try out.print("  terminal: tmux {s} (Claude {s})\n", .{ t.location, doing });
+    try out.print("  terminal: tmux {s} (Claude {s})", .{ t.location, doing });
+    if (zone_title) |title| try out.print(", in zone {s}", .{title});
+    try out.print("\n", .{});
 }
 
 /// Up to eight files by name, then how many more.
@@ -361,7 +353,7 @@ fn printInstalled(alloc: Allocator, out: *std.Io.Writer, root: []const u8) !void
 }
 
 /// `git -C dir args…`'s output, trimmed, when it succeeds.
-fn git(alloc: Allocator, dir: []const u8, args: []const []const u8) ?[]const u8 {
+pub fn git(alloc: Allocator, dir: []const u8, args: []const []const u8) ?[]const u8 {
     const result = runGit(alloc, dir, args) orelse return null;
     switch (result.term) {
         .Exited => |code| if (code != 0) return null,
@@ -432,17 +424,26 @@ test "sessions: location, Claude and folder" {
     try testing.expectEqualStrings("/repo", sessions[1].path);
 }
 
-test "sessions: a zone keeps only its members, if it knows any" {
+test "sessions: a Lostty pane's session names the pane" {
     var arena = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
-    const a = arena.allocator();
-    const listed = try parseSessions(a, "tb-1:@6.%6\tworking\t/t\nlostty:@2.%2\t\t/repo\ntb-10:@3.%3\t\t/t\n");
-    const kept = try inZone(a, listed, &.{ "tb-1", "tb-2" });
-    try testing.expectEqual(@as(usize, 1), kept.len);
-    try testing.expectEqualStrings("tb-1:@6.%6", kept[0].location);
-    try testing.expectEqual(@as(usize, 3), (try inZone(a, listed, null)).len);
-    const unknown = zone.parse(a, "{\"members\":[]}").?.members;
-    try testing.expectEqual(@as(usize, 3), (try inZone(a, listed, unknown)).len);
+    const listed = "tb-1:@6.%6\tworking\t/t\tA7E53570-EC87-4E6B-963C-233884C85272\nother:@2.%2\t\t/repo\t\n";
+    const sessions = try parseSessions(arena.allocator(), listed);
+    try testing.expectEqualStrings("A7E53570-EC87-4E6B-963C-233884C85272", sessions[0].surface);
+    try testing.expectEqualStrings("", sessions[1].surface);
+}
+
+test "terminal: a zone shows after what Claude is doing" {
+    var buf: [256]u8 = undefined;
+    var out: std.Io.Writer = .fixed(&buf);
+    const t: Session = .{ .location = "lostty:@4.%4", .claude = "", .path = "/repo" };
+    try printTerminal(&out, t, "Lostty › Canvas");
+    try printTerminal(&out, t, null);
+    try testing.expectEqualStrings(
+        "  terminal: tmux lostty:@4.%4 (Claude not working), in zone Lostty › Canvas\n" ++
+            "  terminal: tmux lostty:@4.%4 (Claude not working)\n",
+        out.buffered(),
+    );
 }
 
 test "files both sides change" {

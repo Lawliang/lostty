@@ -5,6 +5,7 @@
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const peers = @import("../peers.zig");
 
 /// The SessionStart sources that start Claude without the zone's brief in
 /// its context. `resume` and `fork` carry the conversation that had it.
@@ -29,6 +30,9 @@ pub const File = struct {
     /// that didn't write them, or with none known: then nothing is kept
     /// inside.
     members: ?[]const []const u8 = null,
+    /// The project's tickets, as `+ticket list` prints them. Null in a
+    /// file from an app that didn't write them.
+    board: ?[]const u8 = null,
 };
 
 /// The zone file `json`; null when it isn't one. An empty `start` or
@@ -60,6 +64,8 @@ pub const Agent = struct {
     /// Where it runs in tmux, `session:@window.%pane`; null outside tmux.
     tmux: ?[]const u8 = null,
     sessionId: ?[]const u8 = null,
+    /// The folder it started in.
+    cwd: ?[]const u8 = null,
 };
 
 /// A session file's agent; null without a name.
@@ -109,14 +115,16 @@ pub const Decision = enum { allow, deny };
 
 /// Whether a message to `to` stays inside the zone. `main` and names no
 /// session file has (subagents, teammates, agent ids) stay inside Claude.
-/// A named session is inside when it runs in a member tmux session; one
-/// outside tmux is outside.
-pub fn decide(to: []const u8, members: []const []const u8, agents: []const Agent) Decision {
+/// A named session is inside when it runs in a member tmux session, or
+/// started in a worktree of this repo (`repo`): `+peers` sends a merge
+/// check to those wherever they sit. Any other named session is outside.
+pub fn decide(to: []const u8, members: []const []const u8, agents: []const Agent, repo: []const peers.Worktree) Decision {
     if (std.mem.eql(u8, to, "main")) return .allow;
     var named = false;
     for (agents) |agent| {
         if (!std.mem.eql(u8, agent.name, to)) continue;
         if (isMember(members, agent.tmux)) return .allow;
+        if (agent.cwd) |cwd| if (peers.owner(repo, cwd) != null) return .allow;
         named = true;
     }
     return if (named) .deny else .allow;
@@ -203,6 +211,10 @@ test "claude zone: the file's brief, title and members" {
     try testing.expect(parse(a,
         \\{"start":""}
     ).?.start == null);
+    try testing.expectEqualStrings("Textberry tickets\nLogin\n  none", parse(a,
+        \\{"zone":"Textberry","board":"Textberry tickets\nLogin\n  none"}
+    ).?.board.?);
+    try testing.expect(file.board == null);
     try testing.expect(parse(a,
         \\{"start":7}
     ) == null);
@@ -273,13 +285,22 @@ test "claude zone: a message stops at the zone's edge" {
         .{ .name = "outside", .tmux = "lostty:@2.%2" },
         .{ .name = "untmuxed" },
         .{ .name = "prefix", .tmux = "tb-10:@1.%1" },
+        .{ .name = "other-repo", .tmux = "web:@5.%5", .cwd = "/web" },
+        .{ .name = "same-repo", .tmux = "canvas:@3.%3", .cwd = "/repo/.claude/worktrees/canvas/macos" },
     };
-    try testing.expectEqual(Decision.allow, decide("inside", &members, &agents));
-    try testing.expectEqual(Decision.deny, decide("outside", &members, &agents));
-    try testing.expectEqual(Decision.deny, decide("untmuxed", &members, &agents));
-    try testing.expectEqual(Decision.deny, decide("prefix", &members, &agents));
-    try testing.expectEqual(Decision.allow, decide("main", &members, &agents));
-    try testing.expectEqual(Decision.allow, decide("a-subagent", &members, &agents));
+    const repo = [_]peers.Worktree{
+        .{ .path = "/repo", .head = "a" },
+        .{ .path = "/repo/.claude/worktrees/canvas", .head = "b" },
+    };
+    try testing.expectEqual(Decision.allow, decide("inside", &members, &agents, &repo));
+    try testing.expectEqual(Decision.deny, decide("outside", &members, &agents, &repo));
+    try testing.expectEqual(Decision.deny, decide("untmuxed", &members, &agents, &repo));
+    try testing.expectEqual(Decision.deny, decide("prefix", &members, &agents, &repo));
+    try testing.expectEqual(Decision.deny, decide("other-repo", &members, &agents, &repo));
+    try testing.expectEqual(Decision.allow, decide("same-repo", &members, &agents, &repo));
+    try testing.expectEqual(Decision.deny, decide("same-repo", &members, &agents, &.{}));
+    try testing.expectEqual(Decision.allow, decide("main", &members, &agents, &repo));
+    try testing.expectEqual(Decision.allow, decide("a-subagent", &members, &agents, &repo));
 }
 
 test "claude zone: Allow Once names one target" {

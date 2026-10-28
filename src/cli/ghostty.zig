@@ -27,6 +27,7 @@ const guard = @import("guard.zig");
 const tmux_launch = @import("tmux_launch.zig");
 const tmux_rename = @import("tmux_rename.zig");
 const peers = @import("peers.zig");
+const ticket = @import("ticket.zig");
 
 /// Special commands that can be invoked via CLI flags. These are all
 /// invoked by using `+<action>` as a CLI flag. The only exception is
@@ -105,6 +106,9 @@ pub const Action = enum {
     // Lostty: who else works on this repo, and where the installed build
     // came from, to check with before installing or merging.
     peers,
+
+    // Lostty: a feature's agent reports on its zone board ticket.
+    ticket,
 
     pub fn detectSpecialCase(arg: []const u8) ?SpecialCase(Action) {
         // If we see a "-e" and we haven't seen a command yet, then
@@ -192,6 +196,7 @@ pub const Action = enum {
             .@"tmux-launch" => try tmux_launch.run(alloc),
             .@"tmux-rename" => try tmux_rename.run(alloc),
             .peers => try peers.run(alloc),
+            .ticket => try ticket.run(alloc),
         };
     }
 
@@ -239,6 +244,7 @@ pub const Action = enum {
                 .@"tmux-launch" => tmux_launch.Options,
                 .@"tmux-rename" => tmux_rename.Options,
                 .peers => peers.Options,
+                .ticket => ticket.Options,
             };
         }
     }
@@ -364,6 +370,7 @@ test {
     _ = tmux_launch;
     _ = tmux_rename;
     _ = peers;
+    _ = ticket;
     _ = @import("tmux/naming.zig");
     _ = @import("tmux/session.zig");
     _ = @import("tmux/snippet_test.zig");

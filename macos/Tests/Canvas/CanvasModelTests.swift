@@ -369,8 +369,8 @@ struct CanvasSavedTests {
     }
 
     @Test func ticketsComeBackWithTheCanvas() throws {
-        let ticket = CanvasTicket(key: "LT-2", summary: "Fix login", kind: .bug, priority: .high, status: .inProgress,
-                                  assignee: "Sam", details: "Drops after 8s")
+        let ticket = CanvasTicket(key: "LT-2", summary: "Fix login", kind: .bug, priority: .high,
+                                  assignee: "Sam", details: "Drops after 8s").moved(to: .working)
         var edited = ticket
         edited.summary = "Fix login timeout"
         let saved = CanvasSaved<String>(
@@ -409,6 +409,18 @@ struct CanvasSavedTests {
         #expect(!back.isEmpty)
     }
 
+    @Test func aZoneSavedBeforeTheBoardComesBackAndTheBoardsSettingsComeBackToo() throws {
+        let old = #"{"id":"\#(UUID().uuidString)","frame":[[0,0],[2000,1000]],"name":"Textberry","color":"blue","brief":""}"#
+        let zone = try JSONDecoder().decode(CanvasZone.self, from: Data(old.utf8))
+        #expect(zone.name == "Textberry")
+        #expect(zone.autoStart == nil)
+        #expect(zone.manager == nil)
+        var board = zone
+        board.autoStart = true
+        board.manager = UUID()
+        #expect(try JSONDecoder().decode(CanvasZone.self, from: JSONEncoder().encode(board)) == board)
+    }
+
     @Test func aZoneThatCantBeReadIsLeftOutNotTheCanvas() throws {
         let good = #"{"id":"\#(UUID().uuidString)","frame":[[0,0],[2000,1000]],"name":"Kept","color":"blue","brief":""}"#
         let zones = [#"{"id":"not a uuid","frame":[[0,0],[2000,1000]],"name":"","color":"blue","brief":""}"#, good,
@@ -437,7 +449,7 @@ struct CanvasSavedTests {
     }
 
     @Test func theTicketsPanelsComeBackWithTheCanvas() throws {
-        let ticket = CanvasTicket(key: "LT-2", summary: "Fix login", kind: .bug, priority: .high, status: .inProgress)
+        let ticket = CanvasTicket(key: "LT-2", summary: "Fix login", kind: .bug, priority: .high).moved(to: .working)
         let saved = CanvasSaved<String>(
             visible: true, center: .zero, zoom: 1, cards: [],
             board: .init(tickets: [ticket], panels: [
