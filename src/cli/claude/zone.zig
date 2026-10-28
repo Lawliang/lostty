@@ -214,7 +214,10 @@ pub fn isListAgents(alloc: Allocator, input: []const u8) bool {
 /// lists every session on the Mac, so this names the zone's.
 pub fn listAgentsNote(alloc: Allocator, title: []const u8, list: []const Peer) Allocator.Error![]const u8 {
     var names: std.ArrayList([]const u8) = .empty;
-    for (list) |peer| try names.append(alloc, peer.name);
+    for (list) |peer| try names.append(alloc, if (peer.feature) |f|
+        try std.fmt.allocPrint(alloc, "{s} ({s})", .{ peer.name, f })
+    else
+        peer.name);
     const zone_agents = if (names.items.len == 0) "none besides you" else try std.mem.join(alloc, ", ", names.items);
     return std.fmt.allocPrint(alloc, "Your zone is {s}. ListAgents lists every Claude session on this Mac; " ++
         "the other agents in your zone are: {s}. When the owner asks about the other terminals or agents, " ++
@@ -417,8 +420,8 @@ test "zone: ListAgents names the zone's agents" {
     const a = arena.allocator();
     try std.testing.expect(isListAgents(a, "{\"hook_event_name\":\"PostToolUse\",\"tool_name\":\"ListAgents\"}"));
     try std.testing.expect(!isListAgents(a, "{\"tool_name\":\"Read\"}"));
-    const note = try listAgentsNote(a, "Lostty", &.{ .{ .name = "zones-7e" }, .{ .name = "lostty-dc" } });
+    const note = try listAgentsNote(a, "Lostty", &.{ .{ .name = "zones-7e" }, .{ .name = "media-fix-02", .feature = "Karaoke" } });
     try std.testing.expect(std.mem.indexOf(u8, note, "Your zone is Lostty.") != null);
-    try std.testing.expect(std.mem.indexOf(u8, note, "are: zones-7e, lostty-dc.") != null);
+    try std.testing.expect(std.mem.indexOf(u8, note, "are: zones-7e, media-fix-02 (Karaoke).") != null);
     try std.testing.expect(std.mem.indexOf(u8, try listAgentsNote(a, "Lostty", &.{}), "none besides you") != null);
 }
