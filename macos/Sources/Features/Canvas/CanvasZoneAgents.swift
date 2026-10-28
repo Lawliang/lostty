@@ -191,8 +191,9 @@ extension CanvasModel {
     /// The zone file of a pane in zone `id`. Its members are the tmux
     /// sessions (`sessions`, by pane) of every pane in the same project as
     /// `panes` has them, domains included; a pane with none is left out.
-    /// Its board is the project's `tickets` (`boardText`). The project's
-    /// manager, `pane`, starts with its brief too.
+    /// Its features are the domain each member in one works on. Its board
+    /// is the project's `tickets` (`boardText`). The project's manager,
+    /// `pane`, starts with its brief too.
     func zoneFile(
         _ id: UUID, pane: UUID, panes: CanvasPaneZones, sessions: [UUID: String], tickets: [CanvasTicket]
     ) -> CanvasZoneFile? {
@@ -200,25 +201,33 @@ extension CanvasModel {
         let members = Set(panes.zones.compactMap { pane, zone in
             projectZone(zone) == project ? sessions[pane] : nil
         })
+        var features: [String: String] = [:]
+        for (pane, zone) in panes.zones {
+            guard let session = sessions[pane], let domain = self.zone(zone), domain.parent == project else { continue }
+            features[session] = domain.name
+        }
         let brief = zone(project)?.manager == pane ? managerBrief(project, panes: panes, sessions: sessions) : nil
         return CanvasZoneFile(
             start: [start, brief].compactMap { $0 }.joined(separator: "\n"), zone: title,
-            folder: startFolder(ofZone: id), members: members.sorted(), board: boardText(project, tickets: tickets))
+            folder: startFolder(ofZone: id), members: members.sorted(), features: features,
+            board: boardText(project, tickets: tickets))
     }
 }
 
 /// `<PANE>.zone.json`: what the hooks know of a pane's zone (zones spec
 /// §7). `+claude-state start` prints `start`; `+claude-state tool` and
 /// `+peers` keep to `members`, tmux session names on Lostty's socket;
+/// the brief names each other agent's feature from `features`;
 /// `+ticket list` prints `board`.
 struct CanvasZoneFile: Equatable, Encodable {
     let start: String
     let zone: String
     let folder: String?
     var members: [String] = []
+    var features: [String: String] = [:]
     var board: String?
 
-    private enum CodingKeys: String, CodingKey { case start, zone, folder, members, board }
+    private enum CodingKeys: String, CodingKey { case start, zone, folder, members, features, board }
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
@@ -226,6 +235,7 @@ struct CanvasZoneFile: Equatable, Encodable {
         try container.encode(zone, forKey: .zone)
         try container.encode(folder, forKey: .folder)
         try container.encode(members, forKey: .members)
+        if !features.isEmpty { try container.encode(features, forKey: .features) }
         try container.encodeIfPresent(board, forKey: .board)
     }
 }
@@ -265,12 +275,13 @@ struct CanvasZoneStore: Sendable {
     /// earlier move made stale.
     func replaceSay(_ pane: UUID, _ text: String) { write(Data(text.utf8), to: file(pane, "zone.say")) }
 
-    /// Allow Once's note: it goes after any note not yet taken, so a
-    /// move's note isn't dropped.
+    /// A note that goes after any note not yet taken, so a move's note
+    /// isn't dropped; one already queued isn't queued again.
     func appendSay(_ pane: UUID, _ text: String) {
         let url = file(pane, "zone.say")
-        let queued = (try? String(contentsOf: url, encoding: .utf8)).map { $0 + "\n\n" } ?? ""
-        write(Data((queued + text).utf8), to: url)
+        let queued = try? String(contentsOf: url, encoding: .utf8)
+        if queued?.components(separatedBy: "\n\n").contains(text) == true { return }
+        write(Data(((queued.map { $0 + "\n\n" } ?? "") + text).utf8), to: url)
     }
 
     func removeSay(_ pane: UUID) { try? FileManager.default.removeItem(at: file(pane, "zone.say")) }
