@@ -74,7 +74,8 @@ struct GoldDropOverlay: View {
 /// another, spinning, bounce a little as they land on the stack, the count
 /// fades in as the first one lands, and everything fades out at the end.
 enum GoldDropAnimation {
-    static let duration = 1.5
+    /// The coins land in under a second; the count stays a few more.
+    static let duration = 4.0
     static let coins = 6
     static let coinSize: CGFloat = 14
     /// How much higher each coin on the stack sits than the one under it.
