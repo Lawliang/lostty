@@ -3,10 +3,12 @@ import AppKit
 import Combine
 import LosttyRemote
 
-/// Lostty Mobile: terminals the phone asks for (`NewTerminalRequest`). On
-/// each change in tmux, claims the requests waiting, makes a request's
-/// branch if it wants one, opens a window in its folder (typing its
-/// agent's command, if it has one), and answers with the new session's id, or why it couldn't.
+/// Lostty Mobile: terminals the phone asks for (`NewTerminalRequest`), and
+/// the lostty-open-terminal skill too. On each change in tmux, claims the
+/// requests waiting, makes a request's branch if it wants one, opens a
+/// window in its folder (typing its agent's command, if it has one), and
+/// answers with the new session's id, or why it couldn't. A request from a
+/// canvas card opens a card beside it instead, in its zone.
 /// The window's shell is a Lostty one, so Claude's hooks work in it.
 @MainActor
 final class NewTerminalRequests {
@@ -85,8 +87,14 @@ final class NewTerminalRequests {
         var config = Ghostty.SurfaceConfiguration()
         config.workingDirectory = folder
         if let start = request.startCommand { config.initialInput = start + "\n" }
-        let controller = TerminalController.newWindow(ghostty, withBaseConfig: config)
-        guard let pane = controller.surfaceTree.first(where: { _ in true })?.id else {
+        let pane: UUID?
+        if let canvas = CanvasController.shared, let asker = request.from.flatMap(UUID.init(uuidString:)),
+           let card = canvas.cards.first(where: { $0.surfaceTree.contains { $0.id == asker } }) {
+            pane = canvas.newCard(beside: card, baseConfig: config, folder: folder).card.surfaceTree.first { _ in true }?.id
+        } else {
+            pane = TerminalController.newWindow(ghostty, withBaseConfig: config).surfaceTree.first { _ in true }?.id
+        }
+        guard let pane else {
             return .failed("Couldn't open a window on your Mac.")
         }
         let session = await Task.detached(priority: .userInitiated) { Self.session(showing: pane) }.value
