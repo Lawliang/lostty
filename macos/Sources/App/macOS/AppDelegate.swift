@@ -399,8 +399,13 @@ class AppDelegate: NSObject,
         // reinstall, which brings in the handoff's hook events.
         ContextHandoffWiring.start()
         ClaudeRuntime.shared.messageKeptInside = { CanvasController.shared?.messageKeptInside(pane: $0, target: $1) }
-        // Each request's end: gold coins and what it cost, in the pane's corner.
-        ClaudeRuntime.shared.requestEnded = { GoldDropRuntime.shared.requestEnded(pane: $0, path: $1, since: $2) }
+        // Each request's end: gold coins and what it cost, in the pane's
+        // corner, and a temporary notification when nobody was looking.
+        TerminalNotices.shared.start()
+        ClaudeRuntime.shared.requestEnded = { pane, path, since in
+            GoldDropRuntime.shared.requestEnded(pane: pane, path: path, since: since)
+            TerminalNotices.shared.requestEnded(pane: pane, path: path, since: since)
+        }
         // Restart to Update: put back what window restoration doesn't
         // (Claude's state, Stay Awake, the window setting, hooks). Before
         // Stay Awake's crash restore, the hooks check and the Claude sync.
