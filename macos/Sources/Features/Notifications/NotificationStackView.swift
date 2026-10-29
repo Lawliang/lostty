@@ -1,7 +1,8 @@
 #if os(macOS)
 import SwiftUI
 
-/// The top-right stack of notification bubbles over the terminal area.
+/// The top-right stack of notification bubbles over the terminal area,
+/// with the temporary notifications always under them.
 struct NotificationStackView: View {
     @ObservedObject var center: LosttyNotifications = .shared
 
@@ -11,6 +12,7 @@ struct NotificationStackView: View {
                 NotificationBubble(item: item, center: center)
                     .transition(.move(edge: .trailing).combined(with: .opacity))
             }
+            TerminalNoticeStack()
         }
         .padding(.top, 12)
         .padding(.trailing, 12)
