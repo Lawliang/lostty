@@ -277,23 +277,25 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     /// ⌘T on a card: a new card beside it, as big, its zone growing to
     /// hold it when full, starting where its focused pane is
     /// (`baseConfig`), or in its zone's folder, or in the folder of
-    /// `other`'s zone when it lands outside every zone.
+    /// `other`'s zone when it lands outside every zone. `folder`, when
+    /// given, wins over the zone's.
     @discardableResult
-    func newCard(beside other: CardController, baseConfig: Ghostty.SurfaceConfiguration?)
+    func newCard(beside other: CardController, baseConfig: Ghostty.SurfaceConfiguration?, folder: String? = nil)
         -> (card: CardController, config: Ghostty.SurfaceConfiguration?) {
         let frame = model.placement(beside: other.id) ?? model.placement(in: scrollView.documentVisibleRect)
         if let home = model.card(other.id).flatMap({ model.zone(for: $0.frame) }), model.growZone(home, toHold: frame) {
             zonesDidChange()
         }
-        return newCard(at: frame, zone: model.startZone(beside: other.id, at: frame), baseConfig: baseConfig)
+        return newCard(at: frame, zone: model.startZone(beside: other.id, at: frame), baseConfig: baseConfig, folder: folder)
     }
 
-    private func newCard(at frame: CGRect, zone: UUID?, baseConfig: Ghostty.SurfaceConfiguration?)
-        -> (card: CardController, config: Ghostty.SurfaceConfiguration?) {
+    private func newCard(
+        at frame: CGRect, zone: UUID?, baseConfig: Ghostty.SurfaceConfiguration?, folder: String? = nil
+    ) -> (card: CardController, config: Ghostty.SurfaceConfiguration?) {
         var config = baseConfig
-        if let zone, let folder = model.startFolder(ofZone: zone), Self.isFolder(folder) {
+        if let start = folder ?? zone.flatMap({ model.startFolder(ofZone: $0) }), Self.isFolder(start) {
             config = config ?? Ghostty.SurfaceConfiguration()
-            config?.workingDirectory = folder
+            config?.workingDirectory = start
         }
         let card = CardController(ghostty, canvas: self, baseConfig: config)
         add(card, frame: frame)
