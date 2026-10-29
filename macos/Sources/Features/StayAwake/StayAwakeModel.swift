@@ -201,7 +201,7 @@ struct StayAwakeModel {
 
     private func restore(_ record: StayAwakeRecord) -> [StayAwakeAction] {
         // Sleep first: a failed Low Power Mode restore must not leave the Mac awake.
-        [.run(.disableSleep(record.settings.disableSleep))]
+        [.run(.disableSleep(false))]
             + (record.lowPowerApplied ? restoreLowPower(record.settings) : [])
     }
 

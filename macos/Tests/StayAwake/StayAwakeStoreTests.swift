@@ -6,7 +6,7 @@ import Testing
 @MainActor
 struct StayAwakeStoreTests {
     final class FakeControl: PowerControl {
-        var settings = PowerSettings(disableSleep: false, lowPowerOnBattery: true, lowPowerOnAC: false)
+        var settings = PowerSettings(lowPowerOnBattery: true, lowPowerOnAC: false)
         var ran: [PowerCommand] = []
         var failOn: PowerCommand?
         var permission = true
