@@ -34,7 +34,8 @@ before=$(sessions)
 session=""
 
 # 1. Lostty's own request: it opens the window and answers with the session id ("$12") or "!why".
-$tmux set-option -g "@lostty_new_$id" "{\"id\":\"$id\",\"folder\":\"$folder\"}"
+# From a canvas card, "from" names this pane: Lostty opens a card beside it, in its zone.
+$tmux set-option -g "@lostty_new_$id" "{\"id\":\"$id\",\"folder\":\"$folder\",\"from\":\"${LOSTTY_SURFACE:-}\"}"
 $tmux wait-for -S lostty-changed
 for i in {1..30}; do
   answer=$($tmux show-options -gqv "@lostty_made_$id")
