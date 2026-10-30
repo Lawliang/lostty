@@ -63,9 +63,10 @@ struct CanvasDock: View {
                 }
         }
         .padding(Self.inset)
-        // The + menu's glass, lit the same way while the pointer is over it.
+        // The + menu's glass without its prism, its rim lit the same way
+        // while the pointer is over it.
         .modifier(CanvasAddLitGlass(shape: shape, dark: scheme == .dark, lit: hovering,
-                                    interactive: false, reduceMotion: reduceMotion))
+                                    interactive: false, reduceMotion: reduceMotion, prism: false))
         .onHover { inside in withAnimation(CanvasAddButton.light) { hovering = inside } }
         .padding(CanvasDockView.shadowRoom)
     }

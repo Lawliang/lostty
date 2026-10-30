@@ -181,7 +181,8 @@ struct CanvasAddButton: View {
 }
 
 /// Glass in `shape` with its rim and prism, lit while the pointer is over
-/// it. The merge countdown (CanvasDrop) is it too, without the prism.
+/// it. The merge countdown (CanvasDrop) and the dock (CanvasDock) are it
+/// too, without the prism.
 struct CanvasAddLitGlass<S: InsettableShape>: ViewModifier {
     let shape: S
     let dark: Bool
