@@ -81,11 +81,19 @@ final class ClaudeRuntime: ObservableObject {
 
     func userVarChanged(_ id: UUID, name: String, value: String) {
         guard name == ClaudeConstants.userVarName else { return }
+        if let event = ClaudeMessage.task(value) {
+            PaneTasks.shared.apply(event, to: id)
+            return
+        }
         if ClaudeMessage.isFresh(value) {
+            CanvasController.shared?.conversationEnded(id)
+            PaneTasks.shared.clear(id)
             handoffSignal(id, .fresh)
             return
         }
         if ClaudeMessage.isCleared(value) {
+            CanvasController.shared?.conversationEnded(id)
+            PaneTasks.shared.clear(id)
             handoffSignal(id, .cleared)
             return
         }
@@ -113,10 +121,17 @@ final class ClaudeRuntime: ObservableObject {
         case .busy:
             hookTurns[id] = hookTurns[id] ?? now()
             handoffSignal(id, .prompted)
+        case .idle where !permission:
+            // A Stop with subagents or shells still working says `agents`.
+            PaneTasks.shared.clear(id)
         case .exit: hookTurns[id] = nil
         default: break
         }
-        if state == .exit { LastSessionStore.shared.agentGone(id) }
+        if state == .exit {
+            LastSessionStore.shared.agentGone(id)
+            CanvasController.shared?.conversationEnded(id)
+            PaneTasks.shared.clear(id)
+        }
         guard state == .idle, let path = ClaudeMessage.transcript(value) else { return }
         // The conversation to resume after the Mac restarts.
         LastSessionStore.shared.conversation(id, transcript: path)
@@ -131,6 +146,8 @@ final class ClaudeRuntime: ObservableObject {
     /// (claude included) is gone: a racing trace must not stay up.
     func commandFinished(_ id: UUID) {
         agentGone(id)
+        CanvasController.shared?.conversationEnded(id)
+        PaneTasks.shared.clear(id)
         LastSessionStore.shared.agentGone(id)
         apply(.exit, to: id)
         hookTurns[id] = nil
@@ -139,6 +156,7 @@ final class ClaudeRuntime: ObservableObject {
 
     func surfaceClosed(_ id: UUID) {
         agentGone(id)
+        PaneTasks.shared.clear(id)
         LastSessionStore.shared.agentGone(id)
         phases[id] = nil
         unfocused.remove(id)

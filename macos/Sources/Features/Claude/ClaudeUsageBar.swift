@@ -579,7 +579,7 @@ private struct ContextHandoffDetails: View {
     }
 }
 
-private extension NSColor {
+extension NSColor {
     /// Relative luminance above the midpoint: dark ink reads better on it.
     var isLight: Bool {
         guard let c = usingColorSpace(.sRGB) else { return false }

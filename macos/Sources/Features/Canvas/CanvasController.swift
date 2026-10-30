@@ -85,7 +85,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     private var zoneFiles: [UUID: CanvasZoneFile] = [:]
     /// What each pane outside its project's domains said it works on
     /// (`lostty +ticket working`), kept in its zone folder across launches.
-    lazy var featureClaims: [UUID: String] = zoneStore.claims()
+    lazy var featureClaims: [UUID: [String]] = zoneStore.claims()
     let zoneStore = CanvasZoneStore.standard
     private(set) var tmuxSessions: [TmuxSession] = []
     /// Each tmux session's Claude's name (ClaudeSessionNames).

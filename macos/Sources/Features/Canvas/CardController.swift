@@ -30,6 +30,15 @@ final class CardController: BaseTerminalController {
         sidebar.focusTerminal = { [weak self] in
             if let surface = self?.focusedSurface { Ghostty.moveFocus(to: surface) }
         }
+        // The card grows down for the strip of subagents and shells.
+        sidebar.resizeForTasks = { [weak self] delta in
+            guard let self, let canvas = self.canvas, let view = canvas.view(self.id) else { return false }
+            var frame = view.frame
+            frame.size.height += delta
+            canvas.setFrame(frame, of: self.id)
+            canvas.cardFrameDidSettle()
+            return true
+        }
         watchAppearance()
     }
 
@@ -115,6 +124,9 @@ final class CardController: BaseTerminalController {
     /// before the title: Claude's own titles, after a handoff all alike,
     /// don't say which terminal it is.
     @Published private(set) var agentName: String?
+    /// What the focused pane's Claude last said it works on (`lostty
+    /// +ticket working`), shown in place of its own title's topic.
+    @Published private(set) var claim: String?
     /// The key of the board ticket working in one of its panes, shown
     /// before the title. Set by CanvasController.showTicketKeys alone.
     @Published var ticketKey: String?
@@ -127,8 +139,19 @@ final class CardController: BaseTerminalController {
         title = windowTitle
         let name = focusedSurface.flatMap { canvas?.agentName(of: $0.id) }
         if agentName != name { agentName = name }
+        let claim = focusedSurface.flatMap { canvas?.featureClaims[$0.id]?.first }
+        if self.claim != claim { self.claim = claim }
         guard isFocusedCard else { return }
         super.applyTitleToWindow()
+    }
+
+    /// The header's topic: Claude's own title, or with a claim, the claim
+    /// after its title's working mark ("✳ Subagent strip").
+    static func topic(title: String, claim: String?) -> String {
+        guard let claim else { return title }
+        let trimmed = title.trimmingCharacters(in: .whitespaces)
+        guard let first = trimmed.unicodeScalars.first, first == "✳" || ClaudeRuntime.isSpinner(trimmed) else { return claim }
+        return "\(Character(first)) \(claim)"
     }
 
     override func pwdDidChange(to: URL?) {
