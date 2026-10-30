@@ -8,9 +8,7 @@ import SwiftUI
 /// the same color as it and the sidebar, in the terminal's font. At the
 /// left, `Context ▓▓░░░░░░░░ 50K   Session ▓░░░░░░░░░ 2%   CPU 12%  Mem 340M`:
 /// the focused pane's context, the tracked plan limit, and what the pane's
-/// processes use (`PaneResourceMonitor`), then, while its Claude has
-/// started any, `Subagents 3`, which lists them to open (`SubagentPane`).
-/// Clicking the limit lists every
+/// processes use (`PaneResourceMonitor`). Clicking the limit lists every
 /// limit, and picking one tracks it here. In the beta, a line on the
 /// context meter marks where the conversation hands off, and clicking the
 /// context shows and sets that limit. Context and limit are hidden without
@@ -31,14 +29,12 @@ struct ClaudeUsageBar: View {
     @ObservedObject private var handoffSettings = ContextHandoffPreferences.shared
     @ObservedObject private var monitor = PaneResourceMonitor.shared
     @ObservedObject private var style = WindowStylePreferences.shared
-    @ObservedObject private var subagents = PaneSubagents.shared
     @State private var showingDetails = false
-    @State private var showingSubagents = false
     @State private var showingHandoff = false
     @State private var hovered: Part?
     @State private var width: CGFloat = 0
 
-    private enum Part { case context, handoff, limit, subagents }
+    private enum Part { case context, handoff, limit }
 
     /// The context handoff is the beta's.
     private let handsOff = LosttyChannel.current.handsOff
@@ -51,8 +47,6 @@ struct ClaudeUsageBar: View {
     }
     private var hasSession: Bool { pane.map { usage.sessions.contains($0) } ?? false }
     private var resources: PaneResources? { pane.flatMap { monitor.resources[$0] } }
-    /// The focused pane's subagents, while it has any.
-    private var agents: [PaneSubagent] { pane.flatMap { subagents.lists[$0] } ?? [] }
 
     var body: some View {
         let fit = self.fit
@@ -121,7 +115,6 @@ struct ClaudeUsageBar: View {
         var texts: [String] = []
         if hasSession { texts += [contextText(style), limitText(style)] }
         if let resources { texts.append(resourcesText(resources, style)) }
-        if !agents.isEmpty { texts.append(subagentsText(style)) }
         guard !texts.isEmpty else { return 0 }
         return texts.map { ClaudeUsageFont.width($0) }.reduce(0, +)
             + CGFloat(texts.count) * 16 + CGFloat(texts.count - 1) * 6 + button
@@ -131,32 +124,6 @@ struct ClaudeUsageBar: View {
         HStack(spacing: 6) {
             if hasSession { usageChips(style) }
             if let resources { chip(resourcesLine(resources, style), lit: false) }
-            if let pane, !agents.isEmpty { subagentsChip(pane, style) }
-        }
-    }
-
-    /// `Subagents 3`, or `Subagents 1 running` while any work.
-    private func subagentsText(_ style: ClaudeUsageFit.Style) -> String {
-        let running = agents.filter { !$0.done }.count
-        let count = running > 0 ? "\(running) running" : "\(agents.count)"
-        return style.labels ? "Subagents " + count : count
-    }
-
-    /// Lists the pane's subagents; picking one opens its read-only pane
-    /// beside this one (SubagentPane).
-    private func subagentsChip(_ pane: UUID, _ style: ClaudeUsageFit.Style) -> some View {
-        Button { showingSubagents.toggle() } label: {
-            chip(Text(subagentsText(style)).foregroundColor(ink.opacity(0.9)),
-                 lit: hovered == .subagents || showingSubagents)
-        }
-        .buttonStyle(.plain)
-        .onHover { hover(.subagents, $0) }
-        .help("This pane's subagents: open one to follow what it does")
-        .popover(isPresented: $showingSubagents, arrowEdge: .top) {
-            SubagentList(agents: agents) { agent in
-                showingSubagents = false
-                SubagentPane.open(agent, beside: pane)
-            }
         }
     }
 
@@ -467,64 +434,6 @@ enum ClaudeUsageFont {
     }
 }
 
-/// The pane's subagents, newest first: each one's type and task, and
-/// whether it still works. Picking one opens it.
-private struct SubagentList: View {
-    let agents: [PaneSubagent]
-    let open: (PaneSubagent) -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text("Subagents")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 8)
-                .padding(.bottom, 2)
-            ForEach(agents.reversed()) { agent in
-                Button { open(agent) } label: { row(agent) }
-                    .buttonStyle(.plain)
-            }
-            Text("Opens a read-only view beside this pane.")
-                .font(.system(size: 11))
-                .foregroundStyle(.tertiary)
-                .padding(.horizontal, 8)
-                .padding(.top, 4)
-        }
-        .padding(8)
-        .frame(width: 320, alignment: .leading)
-    }
-
-    private func row(_ agent: PaneSubagent) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Image(systemName: agent.done ? "checkmark.circle" : "circle.dotted")
-                .foregroundStyle(agent.done ? Color.secondary : Color.accentColor)
-                .accessibilityLabel(agent.done ? "Done" : "Working")
-            VStack(alignment: .leading, spacing: 1) {
-                Text(agent.type).font(.system(size: 12, weight: .medium))
-                if let task = agent.task() {
-                    Text(task).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(2)
-                }
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
-        .contentShape(Rectangle())
-        .modifier(SubagentRowHover())
-    }
-}
-
-private struct SubagentRowHover: ViewModifier {
-    @State private var hovering = false
-
-    func body(content: Content) -> some View {
-        content
-            .background(RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(Color.primary.opacity(hovering ? 0.07 : 0)))
-            .onHover { hovering = $0 }
-    }
-}
-
 /// Every plan limit, each tappable to make it the one the bar tracks.
 /// The canvas dock's Usage shows it too.
 struct ClaudeUsageDetails: View {
@@ -670,7 +579,7 @@ private struct ContextHandoffDetails: View {
     }
 }
 
-private extension NSColor {
+extension NSColor {
     /// Relative luminance above the midpoint: dark ink reads better on it.
     var isLight: Bool {
         guard let c = usingColorSpace(.sRGB) else { return false }

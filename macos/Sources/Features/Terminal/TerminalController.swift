@@ -1026,6 +1026,11 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
         (window as? TerminalWindow)?.extensionSidebarModel.focusTerminal = { [weak self] in
             if let surface = self?.focusedSurface { Ghostty.moveFocus(to: surface) }
         }
+        // Lostty: the window grows for the strip of subagents and shells.
+        (window as? TerminalWindow)?.extensionSidebarModel.resizeForTasks = { [weak window] delta in
+            guard let window else { return false }
+            return PaneTaskStrip.resize(window, by: delta)
+        }
 
         // I copy this because we may change the source in the future but also because
         // I regularly audit our codebase for "ghostty.config" access because generally

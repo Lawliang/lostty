@@ -91,25 +91,43 @@ enum ClaudeMessage {
     }
 
     /// A subagent starting (`subagent`) or finishing (`subagent_done`),
-    /// from the SubagentStart and SubagentStop hooks; nil for anything
-    /// else. Not a ClaudeState: it changes no phase.
-    static func subagent(_ value: String) -> SubagentEvent? {
-        guard let object = object(value), let state = object["state"] as? String,
-              let agent = object["agent"] as? [String: Any],
-              let id = agent["id"] as? String, !id.isEmpty,
-              let type = agent["type"] as? String, !type.isEmpty,
-              let transcript = agent["transcript"] as? String, !transcript.isEmpty else { return nil }
-        let subagent = PaneSubagent(id: id, type: type, transcript: transcript)
+    /// from the SubagentStart and SubagentStop hooks, or a background shell
+    /// starting (`shell`, PostToolUse) or finishing (`shell_done`, Claude
+    /// Code's task notification); nil for anything else. Not a ClaudeState:
+    /// it changes no phase.
+    static func task(_ value: String) -> TaskEvent? {
+        guard let object = object(value), let state = object["state"] as? String else { return nil }
         switch state {
-        case "subagent": return .started(subagent)
-        case "subagent_done": return .stopped(subagent)
-        default: return nil
+        case "subagent", "subagent_done":
+            guard let agent = object["agent"] as? [String: Any],
+                  let id = agent["id"] as? String, !id.isEmpty,
+                  let type = agent["type"] as? String, !type.isEmpty,
+                  let transcript = agent["transcript"] as? String, !transcript.isEmpty else { return nil }
+            let task = PaneTask(id: id, kind: .subagent, title: type, path: transcript)
+            return state == "subagent" ? .started(task) : .stopped(task)
+        case "shell":
+            guard let shell = object["shell"] as? [String: Any], let id = shell["id"] as? String, !id.isEmpty else { return nil }
+            let title = (shell["description"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "Shell"
+            return .started(PaneTask(id: id, kind: .shell, title: title, path: shell["output"] as? String))
+        case "shell_done":
+            guard let id = (object["shell"] as? [String: Any])?["id"] as? String, !id.isEmpty else { return nil }
+            return .finished(id)
+        default:
+            return nil
         }
     }
 
-    enum SubagentEvent: Equatable {
-        case started(PaneSubagent)
-        case stopped(PaneSubagent)
+    enum TaskEvent: Equatable {
+        case started(PaneTask)
+        case stopped(PaneTask)
+        /// A background task finished, by id.
+        case finished(String)
+    }
+
+    /// A `busy` for a prompt the owner typed (`"typed":true`), not Claude
+    /// Code's notice that background tasks finished.
+    static func isTyped(_ value: String) -> Bool {
+        object(value)?["typed"] as? Bool == true
     }
 
     private static func object(_ value: String) -> [String: Any]? {
