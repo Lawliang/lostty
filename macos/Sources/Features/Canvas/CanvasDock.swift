@@ -3,7 +3,7 @@ import AppKit
 import SwiftUI
 
 /// The dock at the bottom of the canvas, centered and over the cards:
-/// Lostty's apps as icons on a glass shelf, drawn like macOS 26's Dock.
+/// Lostty's apps as icons on the + menu's glass, laid out like macOS 26's Dock.
 /// For now Settings and Usage.
 final class CanvasDockView: NSHostingView<CanvasDock> {
     /// Room round the shelf for its shadow.
@@ -40,7 +40,9 @@ struct CanvasDock: View {
     static let inset = EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16)
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var showingUsage = false
+    @State private var hovering = false
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: 17, style: .continuous)
@@ -61,28 +63,11 @@ struct CanvasDock: View {
                 }
         }
         .padding(Self.inset)
-        .modifier(CanvasDockGlass(shape: shape, dark: scheme == .dark))
-        .overlay(
-            shape.strokeBorder(.white.opacity(scheme == .dark ? 0.16 : 0.45), lineWidth: 0.5)
-                .allowsHitTesting(false))
+        // The + menu's glass, lit the same way while the pointer is over it.
+        .modifier(CanvasAddLitGlass(shape: shape, dark: scheme == .dark, lit: hovering,
+                                    interactive: false, reduceMotion: reduceMotion))
+        .onHover { inside in withAnimation(CanvasAddButton.light) { hovering = inside } }
         .padding(CanvasDockView.shadowRoom)
-    }
-}
-
-/// The shelf: Liquid Glass on macOS 26; before that, the thinnest material
-/// with a shadow.
-private struct CanvasDockGlass<S: Shape>: ViewModifier {
-    let shape: S
-    let dark: Bool
-
-    func body(content: Content) -> some View {
-        if #available(macOS 26, *) {
-            content.glassEffect(.regular, in: shape)
-        } else {
-            content.background(
-                shape.fill(.ultraThinMaterial)
-                    .shadow(color: .black.opacity(dark ? 0.5 : 0.18), radius: 12, y: 4))
-        }
     }
 }
 
