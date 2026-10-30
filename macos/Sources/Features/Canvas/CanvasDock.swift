@@ -3,10 +3,13 @@ import AppKit
 import SwiftUI
 
 /// Whether the dock is out: the pointer is where it sits full size, or D
-/// brought it out (and D puts it away).
+/// brought it out (and D puts it away). And where along it the pointer
+/// is, which its icons grow toward.
 final class CanvasDockState: ObservableObject {
     @Published var near = false
     @Published var shown = false
+    /// The pointer's x in the dock's view, while it's over the dock.
+    @Published var pointerX: CGFloat?
 }
 
 /// The dock at the bottom of the canvas, centered and over the cards:
@@ -22,6 +25,10 @@ final class CanvasDockView: NSHostingView<CanvasDock> {
     /// Room above the shelf for the icons' names and an icon dragged off.
     /// Clicks there go through to the canvas.
     nonisolated static let above: CGFloat = 160
+    /// Room each side of the shelf for it to widen as its icons grow.
+    nonisolated static let sideRoom: CGFloat = 40
+    /// How far grown icons stand above the shelf, which is still the dock's.
+    nonisolated static let grownRoom = CanvasDockIcon.size * (CanvasDock.magnified - 1)
 
     private let state: CanvasDockState
     private var nearArea: NSTrackingArea?
@@ -45,13 +52,21 @@ final class CanvasDockView: NSHostingView<CanvasDock> {
             width: size.width, height: size.height)
     }
 
-    /// The shelf full size, without the room for its shadow or above it:
-    /// where the pointer brings it out, and its clicks land.
+    /// The shelf full size and its grown icons, without the room for its
+    /// shadow, beside it or above them: where the pointer brings it out and
+    /// grows its icons, and its clicks land.
     private var live: CGRect {
-        var live = bounds.insetBy(dx: Self.shadowRoom, dy: Self.shadowRoom)
-        live.size.height -= Self.above
-        if isFlipped { live.origin.y += Self.above }
+        var live = bounds.insetBy(dx: Self.shadowRoom + Self.sideRoom, dy: Self.shadowRoom)
+        live.size.height -= Self.above - Self.grownRoom
+        if isFlipped { live.origin.y += Self.above - Self.grownRoom }
         return live
+    }
+
+    /// Its size follows its icons (one dragged off or put back): the canvas
+    /// lays it out again.
+    override func invalidateIntrinsicContentSize() {
+        super.invalidateIntrinsicContentSize()
+        superview?.needsLayout = true
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
@@ -66,7 +81,8 @@ final class CanvasDockView: NSHostingView<CanvasDock> {
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         if let nearArea { removeTrackingArea(nearArea) }
-        let area = NSTrackingArea(rect: live, options: [.mouseEnteredAndExited, .activeInActiveApp], owner: self)
+        let area = NSTrackingArea(
+            rect: live, options: [.mouseEnteredAndExited, .mouseMoved, .activeInActiveApp], owner: self)
         addTrackingArea(area)
         nearArea = area
     }
@@ -78,7 +94,24 @@ final class CanvasDockView: NSHostingView<CanvasDock> {
 
     override func mouseExited(with event: NSEvent) {
         super.mouseExited(with: event)
-        if event.trackingArea === nearArea { state.near = false }
+        guard event.trackingArea === nearArea else { return }
+        state.near = false
+        state.pointerX = nil
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        super.mouseMoved(with: event)
+        point(at: event)
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        super.mouseDragged(with: event)
+        point(at: event)
+    }
+
+    private func point(at event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        state.pointerX = live.contains(point) ? point.x : nil
     }
 }
 
@@ -166,6 +199,10 @@ struct CanvasDock: View {
     static let move = Animation.spring(response: 0.3, dampingFraction: 0.8)
     /// The dock's size out of the way.
     static let mini: CGFloat = 0.4
+    /// As the Dock magnifies: the icon under the pointer grows this much,
+    /// and its neighbors less the further they are, out to `reach`.
+    static let magnified: CGFloat = 1.35
+    static let reach = 3 * pitch
 
     @ObservedObject var state: CanvasDockState
     @Environment(\.colorScheme) private var scheme
@@ -193,19 +230,45 @@ struct CanvasDock: View {
     /// has left.
     private var out: Bool { state.near || state.shown || pressed != nil || lifted != nil || showingUsage }
 
+    /// The icons' places at rest, from the dock view's left edge.
+    private var firstSlot: CGFloat { CanvasDockView.shadowRoom + CanvasDockView.sideRoom + Self.inset.leading }
+
+    /// How much the icon in `slot` grows, by how far its place at rest is
+    /// from the pointer. None while an icon is dragged.
+    private func growth(_ slot: Int) -> CGFloat {
+        guard out, lifted == nil, !reduceMotion, let x = state.pointerX else { return 1 }
+        let center = firstSlot + (CGFloat(slot) + 0.5) * Self.pitch
+        return CanvasDock.growth(distance: abs(x - center))
+    }
+
+    /// The Dock's falloff: full at the pointer, easing to none at `reach`.
+    static func growth(distance: CGFloat) -> CGFloat {
+        guard distance < reach else { return 1 }
+        return 1 + (magnified - 1) * (1 + cos(.pi * distance / reach)) / 2
+    }
+
+    /// The icon whose place at rest is under the pointer.
+    private var pointedSlot: Int? {
+        guard let x = state.pointerX else { return nil }
+        let slot = Int(((x - firstSlot) / Self.pitch).rounded(.down))
+        return order.indices.contains(slot) ? slot : nil
+    }
+
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: 28, style: .continuous)
-        HStack(spacing: 0) {
-            ForEach(order, id: \.self) { app in
+        let restWidth = CGFloat(order.count) * Self.pitch + Self.inset.leading + Self.inset.trailing
+        HStack(alignment: .bottom, spacing: 0) {
+            ForEach(Array(order.enumerated()), id: \.element) { slot, app in
+                let grown = growth(slot)
                 CanvasDockIcon(
-                    app: app, lifted: lifted == app, label: label(app), action: { open(app) })
+                    app: app, lifted: lifted == app, grown: grown, label: label(app, slot), action: { open(app) })
                     .popover(isPresented: app == .usage ? $showingUsage : .constant(false), arrowEdge: .top) {
                         TimelineView(.everyMinute) { _ in
                             ClaudeUsageDetails(usage: .shared, accent: .accentColor) { showingUsage = false }
                         }
                     }
                     .offset(lifted == app ? liftOffset : .zero)
-                    .frame(width: lifted == app && liftedOff ? 0 : Self.pitch)
+                    .frame(width: lifted == app && liftedOff ? 0 : Self.pitch + CanvasDockIcon.size * (grown - 1))
                     .zIndex(lifted == app ? 1 : 0)
                     .gesture(press(app))
             }
@@ -224,15 +287,17 @@ struct CanvasDock: View {
         .scaleEffect(out ? 1 : Self.mini, anchor: .bottom)
         .allowsHitTesting(out)
         .animation(reduceMotion ? nil : Self.move, value: out)
+        .animation(.easeOut(duration: 0.12), value: state.pointerX == nil)
+        .frame(width: restWidth + 2 * CanvasDockView.sideRoom)
         .padding(CanvasDockView.shadowRoom)
         .padding(.top, CanvasDockView.above)
     }
 
     /// The name over an icon: under the pointer, or "Remove" while it's
     /// dragged off. None while another is dragged.
-    private func label(_ app: CanvasDockApp) -> String? {
+    private func label(_ app: CanvasDockApp, _ slot: Int) -> String? {
         switch lifted {
-        case nil: app.name
+        case nil: out && pointedSlot == slot ? app.name : nil
         case app: liftedOff ? "Remove" : nil
         default: nil
         }
@@ -329,20 +394,20 @@ struct CanvasDock: View {
 }
 
 /// An app's icon, as macOS 26 draws one: a squircle of soft gradient with
-/// a fine light edge, the symbol flat on it. Under the pointer it grows a
-/// little and shows its name above it, as the Dock does; lifted to be
-/// dragged it grows more, with a deeper shadow.
+/// a fine light edge, the symbol flat on it. It grows up from the shelf by
+/// `grown` as the pointer nears, and lifted to be dragged it grows more,
+/// with a deeper shadow. Its name shows in a bubble above it.
 struct CanvasDockIcon: View {
     static let size: CGFloat = 44
 
     let app: CanvasDockApp
     let lifted: Bool
-    /// What to show above it, under the pointer or while lifted.
+    let grown: CGFloat
+    /// What to show above it: its name under the pointer, or "Remove".
     let label: String?
     let action: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var hovered = false
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: Self.size * 0.24, style: .continuous)
@@ -362,16 +427,15 @@ struct CanvasDockIcon: View {
         .shadow(color: .black.opacity(lifted ? 0.35 : 0.18), radius: lifted ? 8 : 1.5, y: lifted ? 4 : 1)
         .scaleEffect(scale, anchor: .bottom)
         .overlay(alignment: .top) {
-            if let label, hovered || lifted {
-                CanvasDockLabel(text: label)
+            if let label {
+                CanvasDockLabel(text: label, pointer: true)
                     .fixedSize()
-                    .alignmentGuide(.top) { $0[.bottom] + 10 }
+                    // Clear of the icon at its grown size.
+                    .alignmentGuide(.top) { $0[.bottom] + 6 + Self.size * (scale - 1) }
                     .transition(.opacity)
             }
         }
-        .animation(.spring(duration: 0.25), value: hovered)
-        .animation(.easeOut(duration: 0.15), value: label)
-        .onHover { hovered = $0 }
+        .animation(.easeOut(duration: 0.12), value: label)
         .accessibilityElement()
         .accessibilityLabel(app.name)
         .accessibilityAddTraits(.isButton)
@@ -380,35 +444,54 @@ struct CanvasDockIcon: View {
 
     private var scale: CGFloat {
         if reduceMotion { return 1 }
-        if lifted { return 1.15 }
-        return hovered ? 1.08 : 1
+        return lifted ? 1.15 : grown
     }
 }
 
-/// The name over a dock icon, as the Dock shows one: small text on a
-/// dark rounded tag. The + menu names its items with it, with their keys.
+/// The name over a dock icon, as the Dock shows one: small text in a dark
+/// rounded bubble, with a point down to the icon. The + menu names its
+/// items with it, with their keys and no point.
 struct CanvasDockLabel: View {
     let text: String
     var key: String?
+    var pointer = false
 
     var body: some View {
-        HStack(spacing: 6) {
-            Text(text)
-            if let key {
-                Text(key.uppercased())
-                    .font(.system(size: 10, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.8))
-                    .frame(minWidth: 16, minHeight: 16)
-                    .background(RoundedRectangle(cornerRadius: 4, style: .continuous).fill(.white.opacity(0.16)))
+        VStack(spacing: -0.5) {
+            HStack(spacing: 6) {
+                Text(text)
+                if let key {
+                    Text(key.uppercased())
+                        .font(.system(size: 10, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.8))
+                        .frame(minWidth: 16, minHeight: 16)
+                        .background(RoundedRectangle(cornerRadius: 4, style: .continuous).fill(.white.opacity(0.16)))
+                }
+            }
+            .font(.system(size: 13, weight: .regular))
+            .foregroundStyle(.white)
+            .padding(.leading, 10)
+            .padding(.trailing, key == nil ? 10 : 5)
+            .padding(.vertical, 4)
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Self.fill))
+            if pointer {
+                CanvasDockLabelPoint().fill(Self.fill).frame(width: 12, height: 6)
             }
         }
-        .font(.system(size: 12, weight: .medium))
-        .foregroundStyle(.white)
-        .padding(.leading, 10)
-        .padding(.trailing, key == nil ? 10 : 4)
-        .padding(.vertical, 4)
-        .background(Capsule().fill(.black.opacity(0.7)))
-        .overlay(Capsule().strokeBorder(.white.opacity(0.15), lineWidth: 0.5))
+    }
+
+    static let fill = Color(white: 0.12).opacity(0.85)
+}
+
+/// The bubble's point, down to the icon.
+private struct CanvasDockLabelPoint: Shape {
+    func path(in rect: CGRect) -> Path {
+        Path { path in
+            path.move(to: CGPoint(x: rect.minX, y: rect.minY))
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+            path.addLine(to: CGPoint(x: rect.midX, y: rect.maxY))
+            path.closeSubpath()
+        }
     }
 }
 #endif

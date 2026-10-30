@@ -5,8 +5,8 @@ import SwiftUI
 
 /// The canvas's + button, at the bottom right over the cards and the same
 /// size at every zoom. Clicking it opens a pill of what it can add above
-/// it, each named on its left with its key; choosing one, clicking
-/// anywhere else or Escape closes it.
+/// it, each named on its left with its key under the pointer; choosing
+/// one, clicking anywhere else or Escape closes it.
 final class CanvasAddMenuView: NSView {
     enum Item: CaseIterable {
         case terminal, ticket, zone
@@ -336,8 +336,8 @@ private struct CanvasAddRipple: View {
 }
 
 /// One of the pill's icons, monochrome like the + (black in light, white
-/// and glowing in dark), lit while the pointer is over it, and named on
-/// its left with its key, as the dock names its icons.
+/// and glowing in dark). While the pointer is over it, it's lit and named
+/// on its left with its key, as the dock names its icons.
 private struct CanvasAddItem: View {
     let item: CanvasAddMenuView.Item
     let dark: Bool
@@ -357,11 +357,15 @@ private struct CanvasAddItem: View {
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
         .overlay(alignment: .leading) {
-            CanvasDockLabel(text: item.title, key: item.key)
-                .fixedSize()
-                .alignmentGuide(.leading) { $0[.trailing] + CanvasAddMenuView.pillPadding + 8 }
-                .allowsHitTesting(false)
+            if hovering {
+                CanvasDockLabel(text: item.title, key: item.key)
+                    .fixedSize()
+                    .alignmentGuide(.leading) { $0[.trailing] + CanvasAddMenuView.pillPadding + 8 }
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
+            }
         }
+        .animation(.easeOut(duration: 0.12), value: hovering)
         .accessibilityLabel(item.title)
     }
 }

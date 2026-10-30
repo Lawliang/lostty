@@ -25,6 +25,15 @@ struct CanvasDockTests {
         #expect(CanvasDockApp.moving(.settings, to: -1, in: order) == [.settings, .usage])
     }
 
+    @MainActor @Test func iconsGrowMostUnderThePointerAndLessFurtherOut() {
+        #expect(CanvasDock.growth(distance: 0) == CanvasDock.magnified)
+        let near = CanvasDock.growth(distance: CanvasDock.pitch)
+        let far = CanvasDock.growth(distance: 2 * CanvasDock.pitch)
+        #expect(near < CanvasDock.magnified && far < near && far > 1)
+        #expect(CanvasDock.growth(distance: CanvasDock.reach) == 1)
+        #expect(CanvasDock.growth(distance: 500) == 1)
+    }
+
     @Test func eachAddMenuItemHasItsOwnKeyAndNoneIsTheDocks() {
         let keys = CanvasAddMenuView.Item.allCases.map(\.key)
         #expect(keys == ["t", "m", "z"])
