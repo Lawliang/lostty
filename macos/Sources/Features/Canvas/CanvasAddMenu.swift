@@ -359,9 +359,9 @@ private struct CanvasAddItem: View {
         // Always there, faded out: a label in an `if` loses its alignment
         // guide and lands on the item.
         .overlay(alignment: .leading) {
-            CanvasDockLabel(text: item.title, key: item.key)
+            CanvasDockLabel(text: item.title, key: item.key, tail: .trailing)
                 .fixedSize()
-                .alignmentGuide(.leading) { $0[.trailing] + CanvasAddMenuView.pillPadding + 8 }
+                .alignmentGuide(.leading) { $0[.trailing] + CanvasAddMenuView.pillPadding + 6 }
                 .opacity(hovering ? 1 : 0)
                 .allowsHitTesting(false)
         }

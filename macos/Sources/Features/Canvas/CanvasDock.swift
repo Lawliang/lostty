@@ -429,7 +429,7 @@ struct CanvasDockIcon: View {
         // Always there, faded out: a label in an `if` loses its alignment
         // guide and lands on the icon.
         .overlay(alignment: .top) {
-            CanvasDockLabel(text: label ?? app.name, pointer: true)
+            CanvasDockLabel(text: label ?? app.name, tail: .bottom)
                 .fixedSize()
                 // Clear of the icon at its grown size.
                 .alignmentGuide(.top) { $0[.bottom] + 6 + Self.size * (scale - 1) }
@@ -449,50 +449,88 @@ struct CanvasDockIcon: View {
     }
 }
 
-/// The name over a dock icon, as the Dock shows one: small text in a dark
-/// rounded bubble, with a point down to the icon. The + menu names its
-/// items with it, with their keys and no point.
+/// The name over a dock icon, as the Dock shows one, in the dock's and the
+/// + menu's glass and rim: a bubble whose tail points at what it names
+/// (down to a dock icon; right, to a + menu item, with its key).
 struct CanvasDockLabel: View {
     let text: String
     var key: String?
-    var pointer = false
+    let tail: CanvasLabelBubble.Tail
+
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        VStack(spacing: -0.5) {
-            HStack(spacing: 6) {
-                Text(text)
-                if let key {
-                    Text(key.uppercased())
-                        .font(.system(size: 10, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.white.opacity(0.8))
-                        .frame(minWidth: 16, minHeight: 16)
-                        .background(RoundedRectangle(cornerRadius: 4, style: .continuous).fill(.white.opacity(0.16)))
-                }
+        let dark = scheme == .dark
+        let ink = dark ? Color.white : Color.black
+        HStack(spacing: 6) {
+            Text(text)
+            if let key {
+                Text(key.uppercased())
+                    .font(.system(size: 10, weight: .semibold, design: .rounded))
+                    .foregroundStyle(ink.opacity(0.8))
+                    .frame(minWidth: 16, minHeight: 16)
+                    .background(RoundedRectangle(cornerRadius: 4, style: .continuous).fill(ink.opacity(0.14)))
             }
-            .font(.system(size: 13, weight: .regular))
-            .foregroundStyle(.white)
-            .padding(.leading, 10)
-            .padding(.trailing, key == nil ? 10 : 5)
-            .padding(.vertical, 4)
-            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Self.fill))
-            if pointer {
-                CanvasDockLabelPoint().fill(Self.fill).frame(width: 12, height: 6)
+        }
+        .font(.system(size: 13, weight: .regular))
+        .foregroundStyle(ink)
+        .padding(.leading, 10)
+        .padding(.trailing, key == nil ? 10 : 5)
+        .padding(.vertical, 5)
+        // Room for the tail, outside the text.
+        .padding(tail == .bottom ? .bottom : .trailing, CanvasLabelBubble.tailLength)
+        .modifier(CanvasAddLitGlass(shape: CanvasLabelBubble(tail: tail), dark: dark, lit: false,
+                                    interactive: false, reduceMotion: reduceMotion, prism: false))
+    }
+}
+
+/// A rounded bubble with a tail centered on one edge, its outline one path
+/// so the glass and the rim go round the tail too.
+struct CanvasLabelBubble: InsettableShape {
+    enum Tail { case bottom, trailing }
+
+    static let tailLength: CGFloat = 6
+    static let tailWidth: CGFloat = 12
+    static let radius: CGFloat = 9
+
+    let tail: Tail
+    var inset: CGFloat = 0
+
+    func path(in rect: CGRect) -> Path {
+        let rect = rect.insetBy(dx: inset, dy: inset)
+        var body = rect
+        if tail == .bottom { body.size.height -= Self.tailLength } else { body.size.width -= Self.tailLength }
+        let radius = min(Self.radius, body.height / 2, body.width / 2)
+        let half = Self.tailWidth / 2
+        return Path { path in
+            path.move(to: CGPoint(x: body.midX, y: body.minY))
+            path.addArc(tangent1End: CGPoint(x: body.maxX, y: body.minY),
+                        tangent2End: CGPoint(x: body.maxX, y: body.maxY), radius: radius)
+            if tail == .trailing {
+                path.addLine(to: CGPoint(x: body.maxX, y: body.midY - half))
+                path.addLine(to: CGPoint(x: rect.maxX, y: body.midY))
+                path.addLine(to: CGPoint(x: body.maxX, y: body.midY + half))
             }
+            path.addArc(tangent1End: CGPoint(x: body.maxX, y: body.maxY),
+                        tangent2End: CGPoint(x: body.minX, y: body.maxY), radius: radius)
+            if tail == .bottom {
+                path.addLine(to: CGPoint(x: body.midX + half, y: body.maxY))
+                path.addLine(to: CGPoint(x: body.midX, y: rect.maxY))
+                path.addLine(to: CGPoint(x: body.midX - half, y: body.maxY))
+            }
+            path.addArc(tangent1End: CGPoint(x: body.minX, y: body.maxY),
+                        tangent2End: CGPoint(x: body.minX, y: body.minY), radius: radius)
+            path.addArc(tangent1End: CGPoint(x: body.minX, y: body.minY),
+                        tangent2End: CGPoint(x: body.maxX, y: body.minY), radius: radius)
+            path.closeSubpath()
         }
     }
 
-    static let fill = Color(white: 0.12).opacity(0.85)
-}
-
-/// The bubble's point, down to the icon.
-private struct CanvasDockLabelPoint: Shape {
-    func path(in rect: CGRect) -> Path {
-        Path { path in
-            path.move(to: CGPoint(x: rect.minX, y: rect.minY))
-            path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
-            path.addLine(to: CGPoint(x: rect.midX, y: rect.maxY))
-            path.closeSubpath()
-        }
+    func inset(by amount: CGFloat) -> Self {
+        var bubble = self
+        bubble.inset += amount
+        return bubble
     }
 }
 #endif
