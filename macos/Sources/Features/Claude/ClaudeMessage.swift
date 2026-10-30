@@ -103,8 +103,7 @@ enum ClaudeMessage {
                   let id = agent["id"] as? String, !id.isEmpty,
                   let type = agent["type"] as? String, !type.isEmpty,
                   let transcript = agent["transcript"] as? String, !transcript.isEmpty else { return nil }
-            let task = PaneTask(id: id, kind: .subagent, title: type, path: transcript)
-            return state == "subagent" ? .started(task) : .stopped(task)
+            return state == "subagent" ? .started(PaneTask(id: id, kind: .subagent, title: type, path: transcript)) : .finished(id)
         case "shell":
             guard let shell = object["shell"] as? [String: Any], let id = shell["id"] as? String, !id.isEmpty else { return nil }
             let title = (shell["description"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "Shell"
@@ -119,15 +118,8 @@ enum ClaudeMessage {
 
     enum TaskEvent: Equatable {
         case started(PaneTask)
-        case stopped(PaneTask)
-        /// A background task finished, by id.
+        /// A subagent or background task finished, by id.
         case finished(String)
-    }
-
-    /// A `busy` for a prompt the owner typed (`"typed":true`), not Claude
-    /// Code's notice that background tasks finished.
-    static func isTyped(_ value: String) -> Bool {
-        object(value)?["typed"] as? Bool == true
     }
 
     private static func object(_ value: String) -> [String: Any]? {

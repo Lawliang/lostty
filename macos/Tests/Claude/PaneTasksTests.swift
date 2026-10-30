@@ -14,7 +14,7 @@ struct PaneTasksTests {
         let a1 = PaneTask(id: "a1", kind: .subagent, title: "Explore", path: "/p/agent-a1.jsonl")
         #expect(ClaudeMessage.task(started) == .started(a1))
         let done = #"{"v":1,"state":"subagent_done","agent":{"id":"a1","type":"Explore","transcript":"/p/agent-a1.jsonl"}}"#
-        #expect(ClaudeMessage.task(done) == .stopped(a1))
+        #expect(ClaudeMessage.task(done) == .finished("a1"))
         let shell = #"{"v":1,"state":"shell","shell":{"id":"b1","description":"Dev server","output":"/t/tasks/b1.output"}}"#
         #expect(ClaudeMessage.task(shell) == .started(PaneTask(id: "b1", kind: .shell, title: "Dev server", path: "/t/tasks/b1.output")))
         #expect(ClaudeMessage.task(#"{"v":1,"state":"shell","shell":{"id":"b2"}}"#)
@@ -22,25 +22,17 @@ struct PaneTasksTests {
         #expect(ClaudeMessage.task(#"{"v":1,"state":"shell_done","shell":{"id":"b1"}}"#) == .finished("b1"))
         #expect(ClaudeMessage.task(#"{"v":1,"state":"subagent","agent":{"id":"a1"}}"#) == nil)
         #expect(ClaudeMessage.task(#"{"v":1,"state":"busy"}"#) == nil)
-        #expect(ClaudeMessage.isTyped(#"{"v":1,"state":"busy","typed":true}"#))
-        #expect(!ClaudeMessage.isTyped(#"{"v":1,"state":"busy"}"#))
     }
 
-    @Test func newOnesGoLastAndFinishedOnesStay() {
+    @Test func newOnesGoLastAndFinishedOnesGo() {
         var list = PaneTasks.updated([], with: .started(agent("a")))
         list = PaneTasks.updated(list, with: .started(agent("b")))
+        list = PaneTasks.updated(list, with: .started(agent("c")))
         list = PaneTasks.updated(list, with: .started(agent("a")))
-        list = PaneTasks.updated(list, with: .stopped(agent("a")))
+        #expect(list.map(\.id) == ["a", "b", "c"])
         list = PaneTasks.updated(list, with: .finished("b"))
         list = PaneTasks.updated(list, with: .finished("unknown"))
-        #expect(list.map(\.id) == ["a", "b"])
-        #expect(list.map(\.done) == [true, true])
-    }
-
-    @Test func oneFinishedBeforeLosttyHeardItStartIsListedDone() {
-        let list = PaneTasks.updated([], with: .stopped(agent("x")))
-        #expect(list.map(\.id) == ["x"])
-        #expect(list.first?.done == true)
+        #expect(list.map(\.id) == ["a", "c"])
     }
 
     @Test func onlyTheNewestAreKept() {
@@ -50,17 +42,14 @@ struct PaneTasksTests {
         #expect(list.first?.id == "3")
     }
 
-    @MainActor @Test func aStopSettlesThemAndTheNextTypedPromptClearsTheFinished() {
+    @MainActor @Test func thePanesListGoesWithItsLastTask() {
         let tasks = PaneTasks()
         let pane = UUID()
         tasks.apply(.started(agent("a")), to: pane)
         tasks.apply(.started(agent("b")), to: pane)
         tasks.apply(.finished("a"), to: pane)
-        tasks.clearFinished(pane)
         #expect(tasks.lists[pane]?.map(\.id) == ["b"])
-        tasks.settle(pane)
-        #expect(tasks.lists[pane]?.map(\.done) == [true])
-        tasks.clearFinished(pane)
+        tasks.apply(.finished("b"), to: pane)
         #expect(tasks.lists[pane] == nil)
     }
 

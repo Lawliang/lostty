@@ -53,8 +53,6 @@ pub const Detail = struct {
     agent: ?Subagent = null,
     /// `shell` and `shell_done`: which background shell.
     shell: ?Shell = null,
-    /// `busy`: the owner typed the prompt (not a task notification).
-    typed: bool = false,
 };
 
 /// The longest action sent, in characters.
@@ -190,14 +188,9 @@ pub fn backgroundShell(alloc: Allocator, input: []const u8) ?Shell {
     };
 }
 
-/// A UserPromptSubmit's prompt: one the owner typed, or the notice Claude
-/// Code prompts itself with when background tasks finish, with their ids.
-pub const Prompt = union(enum) {
-    typed,
-    finished: []const []const u8,
-};
-
-pub fn prompt(alloc: Allocator, input: []const u8) ?Prompt {
+/// The background tasks a UserPromptSubmit says finished: the notice Claude
+/// Code prompts itself with names them. Null for a prompt the owner typed.
+pub fn finishedTasks(alloc: Allocator, input: []const u8) ?[]const []const u8 {
     const parsed = std.json.parseFromSlice(std.json.Value, alloc, input, .{}) catch return null;
     defer parsed.deinit();
     const root = parsed.value;
@@ -205,7 +198,7 @@ pub fn prompt(alloc: Allocator, input: []const u8) ?Prompt {
     const event = stringField(root, "hook_event_name") orelse return null;
     if (!std.mem.eql(u8, event, "UserPromptSubmit")) return null;
     const text = stringField(root, "prompt") orelse return null;
-    if (!std.mem.startsWith(u8, std.mem.trimLeft(u8, text, " \t\r\n"), "<task-notification>")) return .typed;
+    if (!std.mem.startsWith(u8, std.mem.trimLeft(u8, text, " \t\r\n"), "<task-notification>")) return null;
     var ids: std.ArrayList([]const u8) = .empty;
     var rest = text;
     while (std.mem.indexOf(u8, rest, "<task-id>")) |start| {
@@ -215,7 +208,7 @@ pub fn prompt(alloc: Allocator, input: []const u8) ?Prompt {
         if (isTaskId(id)) ids.append(alloc, alloc.dupe(u8, id) catch return null) catch return null;
         rest = rest[end..];
     }
-    return .{ .finished = ids.toOwnedSlice(alloc) catch return null };
+    return ids.toOwnedSlice(alloc) catch null;
 }
 
 /// A background task's id as Claude Code makes them: letters and digits.
@@ -428,7 +421,6 @@ pub fn encodeSequence(alloc: Allocator, state: State, detail: Detail, tmux: bool
         .denied = detail.denied,
         .agent = detail.agent,
         .shell = detail.shell,
-        .typed = if (detail.typed) true else null,
     }, .{ .emit_null_optional_fields = false });
     defer alloc.free(json);
     return encodeUserVar(alloc, user_var_name, json, tmux);
@@ -816,21 +808,21 @@ test "claude protocol: a task notification prompt names the finished tasks" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const finished = prompt(a,
+    const finished = finishedTasks(a,
         \\{"hook_event_name":"UserPromptSubmit","prompt":"<task-notification>\n<task-id>bbsacozcd</task-id>\n<status>completed</status>\n</task-notification>\n<task-notification>\n<task-id>b2</task-id>\n</task-notification>"}
-    ).?.finished;
+    ).?;
     try std.testing.expectEqual(@as(usize, 2), finished.len);
     try std.testing.expectEqualStrings("bbsacozcd", finished[0]);
     try std.testing.expectEqualStrings("b2", finished[1]);
-    try std.testing.expect(prompt(a,
+    try std.testing.expect(finishedTasks(a,
         \\{"hook_event_name":"UserPromptSubmit","prompt":"fix the <task-id>x</task-id> parser"}
-    ).? == .typed);
-    try std.testing.expect(prompt(a,
+    ) == null);
+    try std.testing.expect(finishedTasks(a,
         \\{"hook_event_name":"Stop"}
     ) == null);
 }
 
-test "claude protocol: a shell message carries the shell, and a typed prompt says so" {
+test "claude protocol: a shell message carries the shell" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -840,7 +832,4 @@ test "claude protocol: a shell message carries the shell, and a typed prompt say
     try std.testing.expectEqualStrings(
         \\{"v":1,"state":"shell_done","shell":{"id":"b1"}}
     , try decodeSequence(a, try encodeSequence(a, .shell_done, .{ .shell = .{ .id = "b1" } }, false)));
-    try std.testing.expectEqualStrings(
-        \\{"v":1,"state":"busy","typed":true}
-    , try decodeSequence(a, try encodeSequence(a, .busy, .{ .typed = true }, false)));
 }

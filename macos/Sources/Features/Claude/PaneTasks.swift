@@ -14,7 +14,6 @@ struct PaneTask: Equatable, Identifiable, Sendable {
     /// A subagent's transcript, or the shell's output file; nil when the
     /// hook couldn't name it.
     let path: String?
-    var done = false
 
     /// `path` when it may be read. It comes from a user var, which anything
     /// printed in a pane can set: only a subagent's transcript in Claude's
@@ -41,10 +40,9 @@ struct PaneTask: Equatable, Identifiable, Sendable {
     }
 }
 
-/// Each pane's subagents and background shells in its Claude session,
-/// oldest first: the newest `limit`. A finished one stays, marked done,
-/// until the owner's next prompt; all go when the session ends or the
-/// window is cleared.
+/// Each pane's working subagents and background shells, oldest first: the
+/// newest `limit`. Each goes when it finishes, and all go when Claude stops
+/// with nothing left working, the session ends, or the window is cleared.
 @MainActor
 final class PaneTasks: ObservableObject {
     static let shared = PaneTasks()
@@ -54,20 +52,6 @@ final class PaneTasks: ObservableObject {
 
     func apply(_ event: ClaudeMessage.TaskEvent, to pane: UUID) {
         set(pane, Self.updated(lists[pane] ?? [], with: event))
-    }
-
-    /// Claude stopped with nothing left working: whatever is listed is done.
-    func settle(_ pane: UUID) {
-        set(pane, lists[pane]?.map { task in
-            var task = task
-            task.done = true
-            return task
-        })
-    }
-
-    /// The owner's next prompt: the finished ones go.
-    func clearFinished(_ pane: UUID) {
-        set(pane, lists[pane]?.filter { !$0.done })
     }
 
     func clear(_ pane: UUID) {
@@ -80,27 +64,15 @@ final class PaneTasks: ObservableObject {
     }
 
     /// `list` after `event`: a new task goes last, and the oldest goes past
-    /// `limit`; a finished one is marked done, or a subagent is added done
-    /// if its start was missed (the app started after it).
+    /// `limit`; a finished one goes.
     nonisolated static func updated(_ list: [PaneTask], with event: ClaudeMessage.TaskEvent) -> [PaneTask] {
-        var list = list
         switch event {
         case .started(let task):
             guard !list.contains(where: { $0.id == task.id }) else { return list }
-            list.append(task)
-        case .stopped(let task):
-            if let index = list.firstIndex(where: { $0.id == task.id }) {
-                list[index].done = true
-                return list
-            }
-            var done = task
-            done.done = true
-            list.append(done)
+            return Array((list + [task]).suffix(limit))
         case .finished(let id):
-            if let index = list.firstIndex(where: { $0.id == id }) { list[index].done = true }
-            return list
+            return list.filter { $0.id != id }
         }
-        return Array(list.suffix(limit))
     }
 }
 #endif

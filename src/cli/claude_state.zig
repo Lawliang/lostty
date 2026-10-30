@@ -63,12 +63,9 @@ pub fn run(gpa: Allocator) !u8 {
             const note = take(alloc, pane, .zone_say);
             const others = if (note != null) othersLine(alloc, pane, input orelse "{}") else null;
             speakTexts(alloc, "UserPromptSubmit", &.{ take(alloc, pane, .say), note, others });
-            if (input) |i| if (protocol.prompt(alloc, i)) |p| switch (p) {
-                .typed => detail.typed = true,
-                .finished => |ids| for (ids) |id| {
-                    const seq = protocol.encodeSequence(alloc, .shell_done, .{ .shell = .{ .id = id } }, tmux) catch continue;
-                    stopped = if (stopped) |first| std.mem.concat(alloc, u8, &.{ first, seq }) catch first else seq;
-                },
+            if (input) |i| if (protocol.finishedTasks(alloc, i)) |ids| for (ids) |id| {
+                const seq = protocol.encodeSequence(alloc, .shell_done, .{ .shell = .{ .id = id } }, tmux) catch continue;
+                stopped = if (stopped) |first| std.mem.concat(alloc, u8, &.{ first, seq }) catch first else seq;
             };
         },
         // After a tool call: speak the handoff's directive (Claude's own

@@ -119,10 +119,9 @@ final class ClaudeRuntime: ObservableObject {
         case .busy:
             hookTurns[id] = hookTurns[id] ?? now()
             handoffSignal(id, .prompted)
-            if ClaudeMessage.isTyped(value) { PaneTasks.shared.clearFinished(id) }
         case .idle where !permission:
             // A Stop with subagents or shells still working says `agents`.
-            PaneTasks.shared.settle(id)
+            PaneTasks.shared.clear(id)
         case .exit: hookTurns[id] = nil
         default: break
         }

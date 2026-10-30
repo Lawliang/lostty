@@ -67,16 +67,15 @@ private struct PaneTaskThumbnail: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 5) {
-                Image(systemName: task.done ? "checkmark.circle.fill" : task.kind == .shell ? "terminal" : "sparkle")
+                Image(systemName: task.kind == .shell ? "terminal" : "sparkle")
                     .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(task.done ? ink.opacity(0.5) : ink.opacity(0.85))
-                    .accessibilityLabel(task.done ? "Done" : "Working")
+                    .foregroundStyle(ink.opacity(0.85))
                 Text(heading)
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(ink.opacity(0.9))
                     .lineLimit(1)
                 Spacer(minLength: 0)
-                if !task.done { ProgressView().controlSize(.mini).scaleEffect(0.7) }
+                ProgressView().controlSize(.mini).scaleEffect(0.7)
             }
             .padding(.bottom, 2)
             ForEach(entry?.lines ?? []) { line in
@@ -93,7 +92,6 @@ private struct PaneTaskThumbnail: View {
         .overlay(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .strokeBorder(ink.opacity(open ? 0.45 : 0.1), lineWidth: open ? 1 : 0.5))
-        .opacity(task.done ? 0.65 : 1)
         .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .onHover { hovering = $0 }
         .help("Show it in the terminal's place")
@@ -137,9 +135,6 @@ struct PaneTaskView: View {
                     .foregroundStyle(ink.opacity(0.75))
                     .lineLimit(1)
                 Spacer(minLength: 0)
-                Text(task.done ? "Done" : "Working")
-                    .font(.system(size: 11))
-                    .foregroundStyle(ink.opacity(0.5))
             }
             .padding(.horizontal, 12)
             .frame(height: 30)
