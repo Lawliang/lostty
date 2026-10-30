@@ -82,10 +82,12 @@ final class ClaudeRuntime: ObservableObject {
     func userVarChanged(_ id: UUID, name: String, value: String) {
         guard name == ClaudeConstants.userVarName else { return }
         if ClaudeMessage.isFresh(value) {
+            CanvasController.shared?.conversationEnded(id)
             handoffSignal(id, .fresh)
             return
         }
         if ClaudeMessage.isCleared(value) {
+            CanvasController.shared?.conversationEnded(id)
             handoffSignal(id, .cleared)
             return
         }
@@ -116,7 +118,10 @@ final class ClaudeRuntime: ObservableObject {
         case .exit: hookTurns[id] = nil
         default: break
         }
-        if state == .exit { LastSessionStore.shared.agentGone(id) }
+        if state == .exit {
+            LastSessionStore.shared.agentGone(id)
+            CanvasController.shared?.conversationEnded(id)
+        }
         guard state == .idle, let path = ClaudeMessage.transcript(value) else { return }
         // The conversation to resume after the Mac restarts.
         LastSessionStore.shared.conversation(id, transcript: path)
@@ -131,6 +136,7 @@ final class ClaudeRuntime: ObservableObject {
     /// (claude included) is gone: a racing trace must not stay up.
     func commandFinished(_ id: UUID) {
         agentGone(id)
+        CanvasController.shared?.conversationEnded(id)
         LastSessionStore.shared.agentGone(id)
         apply(.exit, to: id)
         hookTurns[id] = nil

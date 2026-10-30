@@ -41,7 +41,8 @@ struct CanvasZoneAgentsTests {
             Textberry: An SMS app.
             Onboarding: Sign-up flow.
             """)
-        #expect(model.zoneMovedIn(project) == "You're now in zone Textberry.\nTextberry: An SMS app.\n" + CanvasModel.claimBrief)
+        #expect(model.zoneMovedIn(project) == "You're now in zone Textberry.\nTextberry: An SMS app.\n"
+            + CanvasModel.claimBrief(names: ["Onboarding"]))
         #expect(CanvasModel.zoneMovedOut(of: "Textberry") == "You've left zone Textberry.")
     }
 
@@ -109,17 +110,42 @@ struct CanvasZoneAgentsTests {
         #expect(model.zoneFile(domain, pane: p1, panes: panes, sessions: [:], tickets: [])?.members == [])
     }
 
-    @Test func aMembersFeatureIsItsDomainElseWhatItClaimed() throws {
+    @Test func aMembersFeatureIsItsDomainElseWhatItClaimedNewestFirst() throws {
         let model = textberry()
         let p4 = UUID()
         let panes = CanvasPaneZones(panes: [p1, p2, p3, p4], zones: [p1: domain, p2: project, p3: project, p4: project])
         let sessions = [p1: "tb-onboarding", p2: "tb-api", p3: "tb-notes", p4: "tb-api"]
-        let claims = [p1: "Something else", p2: "API"]
+        let claims = [p1: ["Something else"], p2: ["API", "Billing"]]
         let file = try #require(model.zoneFile(project, pane: p3, panes: panes, sessions: sessions, claims: claims, tickets: []))
-        #expect(file.features == ["tb-onboarding": "Onboarding", "tb-api": "API"])
-        #expect(file.start == (model.zoneStart(project) ?? "") + "\n" + CanvasModel.claimBrief)
+        #expect(file.features == ["tb-onboarding": "Onboarding", "tb-api": "API, Billing"])
+        // It reuses the zone's names: the domains', then what's claimed
+        // outside them.
+        let claim = CanvasModel.claimBrief(names: ["Onboarding", "API", "Billing"])
+        #expect(file.claim == claim)
+        #expect(claim.hasSuffix("Reuse one of the zone's names when it fits: Onboarding, API, Billing."))
+        #expect(file.start == (model.zoneStart(project) ?? "") + "\n" + claim)
+        // A domain's agent and the manager aren't told to claim.
         #expect(model.zoneFile(domain, pane: p1, panes: panes, sessions: sessions, claims: claims, tickets: [])?.start
             == model.zoneStart(domain))
+        #expect(model.zoneFile(domain, pane: p1, panes: panes, sessions: sessions, claims: claims, tickets: [])?.claim == nil)
+    }
+
+    @Test func aPaneKeepsItsLastThreeClaimsNewestFirstEachOnce() {
+        var claims = CanvasModel.claimed([], adding: "Karaoke")
+        claims = CanvasModel.claimed(claims, adding: "Happy Bird")
+        claims = CanvasModel.claimed(claims, adding: "karaoke")
+        #expect(claims == ["karaoke", "Happy Bird"])
+        claims = CanvasModel.claimed(claims, adding: "Rooms")
+        claims = CanvasModel.claimed(claims, adding: "Theater")
+        #expect(claims == ["Theater", "Rooms", "karaoke"])
+        #expect(CanvasModel.claimed(claims, adding: "  ") == claims)
+    }
+
+    @MainActor @Test func aCardsTopicIsItsClaimAfterClaudesWorkingMark() {
+        #expect(CardController.topic(title: "✳ handoff pickup", claim: "Subagent strip") == "✳ Subagent strip")
+        #expect(CardController.topic(title: "⠂ handoff pickup", claim: "Subagent strip") == "⠂ Subagent strip")
+        #expect(CardController.topic(title: "zsh", claim: "Subagent strip") == "Subagent strip")
+        #expect(CardController.topic(title: "✳ handoff pickup", claim: nil) == "✳ handoff pickup")
     }
 
     @Test func theBoardListsEachFeaturesTicketsAsTheBoardDoesThenToAssign() throws {
@@ -208,8 +234,11 @@ struct CanvasZoneAgentsTests {
         store.replaceSay(pane, "You've left zone Onboarding.")
         store.replaceSay(pane, "You're now in zone Textberry.")
         store.writeAllow(pane, target: "lostty-a9")
-        store.writeClaim(pane, "Karaoke")
-        #expect(store.claims() == [pane: "Karaoke"])
+        store.writeClaims(pane, ["Karaoke", "Happy Bird"])
+        #expect(store.claims() == [pane: ["Karaoke", "Happy Bird"]])
+        store.writeClaims(pane, [])
+        #expect(store.claims().isEmpty)
+        store.writeClaims(pane, ["Karaoke"])
 
         let url = handoff.panes.appendingPathComponent("\(pane.uuidString).zone.json")
         let json = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
@@ -219,6 +248,7 @@ struct CanvasZoneAgentsTests {
         #expect(json["members"] as? [String] == ["tb-1", "tb-2"])
         #expect(json["board"] == nil)
         #expect(json["features"] == nil)
+        #expect(json["claim"] == nil)
         store.writeZone(pane, CanvasZoneFile(
             start: "Lostty zone: Textberry.", zone: "Textberry", folder: nil, features: ["tb-1": "Onboarding"],
             board: "Textberry tickets"))
