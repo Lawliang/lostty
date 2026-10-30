@@ -57,13 +57,14 @@ pub fn run(gpa: Allocator) !u8 {
     var stopped: ?[]u8 = null;
     switch (state) {
         // A prompt: give Claude what's queued for it, then say busy. A
-        // zone's note comes with the zone's other agents as they are now.
+        // zone's note comes with the zone's other agents as they are now,
+        // and a conversation not yet told how to claim a feature is told.
         .busy => {
-            const input = hookInput(alloc);
+            const input = hookInput(alloc) orelse "{}";
             const note = take(alloc, pane, .zone_say);
-            const others = if (note != null) othersLine(alloc, pane, input orelse "{}") else null;
-            speakTexts(alloc, "UserPromptSubmit", &.{ take(alloc, pane, .say), note, others });
-            if (input) |i| if (protocol.finishedTasks(alloc, i)) |ids| for (ids) |id| {
+            const others = if (note != null) othersLine(alloc, pane, input) else null;
+            speakTexts(alloc, "UserPromptSubmit", &.{ take(alloc, pane, .say), note, others, claimOnce(alloc, pane, input) });
+            if (protocol.finishedTasks(alloc, input)) |ids| for (ids) |id| {
                 const seq = protocol.encodeSequence(alloc, .shell_done, .{ .shell = .{ .id = id } }, tmux) catch continue;
                 stopped = if (stopped) |first| std.mem.concat(alloc, u8, &.{ first, seq }) catch first else seq;
             };
@@ -150,8 +151,32 @@ fn zoneBrief(alloc: Allocator, pane: []const u8, input: []const u8) ?[]const u8 
     if (paneFile(alloc, pane, .zone_say)) |path| std.fs.deleteFileAbsolute(path) catch {};
     const file = zoneFile(alloc, pane) orelse return null;
     const start = file.start orelse return null;
+    // The brief holds how to claim a feature.
+    if (file.claim != null) if (zone.sessionId(alloc, input)) |session| markTold(alloc, pane, session);
     const line = othersLine(alloc, pane, input) orelse return start;
     return std.fmt.allocPrint(alloc, "{s}\n{s}", .{ start, line }) catch start;
+}
+
+/// How to claim a feature, once a conversation: with its first prompt
+/// when its start didn't say it, as a conversation that began before the
+/// zone told it. Null when the zone has no claim or this one was told.
+fn claimOnce(alloc: Allocator, pane: []const u8, input: []const u8) ?[]const u8 {
+    const file = zoneFile(alloc, pane) orelse return null;
+    const claim = file.claim orelse return null;
+    const session = zone.sessionId(alloc, input) orelse return null;
+    const path = paneFile(alloc, pane, .zone_told) orelse return null;
+    if (std.fs.cwd().readFileAlloc(alloc, path, 256)) |told| {
+        if (std.mem.eql(u8, told, session)) return null;
+    } else |_| {}
+    markTold(alloc, pane, session);
+    return claim;
+}
+
+fn markTold(alloc: Allocator, pane: []const u8, session: []const u8) void {
+    const path = paneFile(alloc, pane, .zone_told) orelse return;
+    const file = std.fs.createFileAbsolute(path, .{}) catch return;
+    defer file.close();
+    file.writeAll(session) catch {};
 }
 
 /// After ListAgents, which lists every session on the Mac: which of them

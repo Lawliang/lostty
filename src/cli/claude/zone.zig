@@ -35,6 +35,9 @@ pub const File = struct {
     board: ?[]const u8 = null,
     /// The feature (domain) each member in one works on, by tmux session.
     features: ?std.json.ArrayHashMap([]const u8) = null,
+    /// How an agent outside the project's domains says what it works on:
+    /// told once a conversation, at its start or with its next prompt.
+    claim: ?[]const u8 = null,
 };
 
 /// The zone file `json`; null when it isn't one. An empty `start` or
@@ -263,6 +266,10 @@ test "claude zone: the file's brief, title and members" {
         \\{"zone":"Textberry","board":"Textberry tickets\nLogin\n  none"}
     ).?.board.?);
     try testing.expect(file.board == null);
+    try testing.expect(file.claim == null);
+    try testing.expectEqualStrings("When you start on a feature, run lostty +ticket working", parse(a,
+        \\{"zone":"Textberry","claim":"When you start on a feature, run lostty +ticket working"}
+    ).?.claim.?);
     try testing.expect(parse(a,
         \\{"start":7}
     ) == null);

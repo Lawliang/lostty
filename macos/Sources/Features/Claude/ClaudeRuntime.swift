@@ -86,11 +86,13 @@ final class ClaudeRuntime: ObservableObject {
             return
         }
         if ClaudeMessage.isFresh(value) {
+            CanvasController.shared?.conversationEnded(id)
             PaneTasks.shared.clear(id)
             handoffSignal(id, .fresh)
             return
         }
         if ClaudeMessage.isCleared(value) {
+            CanvasController.shared?.conversationEnded(id)
             PaneTasks.shared.clear(id)
             handoffSignal(id, .cleared)
             return
@@ -127,6 +129,7 @@ final class ClaudeRuntime: ObservableObject {
         }
         if state == .exit {
             LastSessionStore.shared.agentGone(id)
+            CanvasController.shared?.conversationEnded(id)
             PaneTasks.shared.clear(id)
         }
         guard state == .idle, let path = ClaudeMessage.transcript(value) else { return }
@@ -143,6 +146,7 @@ final class ClaudeRuntime: ObservableObject {
     /// (claude included) is gone: a racing trace must not stay up.
     func commandFinished(_ id: UUID) {
         agentGone(id)
+        CanvasController.shared?.conversationEnded(id)
         PaneTasks.shared.clear(id)
         LastSessionStore.shared.agentGone(id)
         apply(.exit, to: id)
