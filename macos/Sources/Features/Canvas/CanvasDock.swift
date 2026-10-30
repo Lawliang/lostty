@@ -9,7 +9,7 @@ final class CanvasDockView: NSHostingView<CanvasDock> {
     /// Room round the shelf for its shadow.
     nonisolated static let shadowRoom: CGFloat = 16
     /// From the canvas's bottom edge to the shelf.
-    nonisolated static let margin: CGFloat = 6
+    nonisolated static let margin: CGFloat = 3
     /// Room above the shelf for the icons' names and an icon dragged off.
     /// Clicks there go through to the canvas.
     nonisolated static let above: CGFloat = 160
