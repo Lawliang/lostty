@@ -196,14 +196,8 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
             self?.drawsZone = false
         }
         surface.zones.canvas = self
-        surface.addMenu.chose = { [weak self] item in
-            self?.drawsZone = false
-            switch item {
-            case .terminal: self?.newCard()
-            case .ticket: self?.showTickets()
-            case .zone: self?.startDrawingZone()
-            }
-        }
+        document.typed = { [weak self] key in self?.shortcut(key) ?? false }
+        surface.addMenu.chose = { [weak self] item in self?.add(item) }
         NotificationCenter.default.addObserver(
             self, selector: #selector(canvasMoved), name: NSView.boundsDidChangeNotification, object: scrollView.contentView)
         // Focus follows the window's first responder: whichever card holds
@@ -352,6 +346,28 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
 
     func card(holding surface: Ghostty.SurfaceView) -> CardController? {
         cards.first { $0.surfaceTree.contains(surface) }
+    }
+
+    private func add(_ item: CanvasAddMenuView.Item) {
+        drawsZone = false
+        switch item {
+        case .terminal: newCard()
+        case .ticket: showTickets()
+        case .zone: startDrawingZone()
+        }
+    }
+
+    /// The canvas's one-letter keys, while nothing has the keyboard: the
+    /// + menu's items' (T, M, Z), and D, which brings the dock out or puts
+    /// it away. True when `key` was one.
+    private func shortcut(_ key: String) -> Bool {
+        if key == "d" {
+            surface.dockState.shown.toggle()
+            return true
+        }
+        guard let item = CanvasAddMenuView.Item.allCases.first(where: { $0.key == key }) else { return false }
+        add(item)
+        return true
     }
 
     /// Keyboard focus to `card`'s focused pane.
@@ -953,9 +969,9 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         return true
     }
 
-    /// While New Zone waits, a crosshair where a drag draws the zone; else
-    /// an open hand over a group of selected cards, which drags them; the
-    /// panes' own cursors everywhere else.
+    /// While New Zone waits, a crosshair with New Zone's icon where a drag
+    /// draws the zone; else an open hand over a group of selected cards,
+    /// which drags them; the panes' own cursors everywhere else.
     func updateGroupHover(at point: NSPoint) {
         let draws = drawsZone && surface.hitTest(point) === scrollView.document
         let over = draws || groupCard(at: point) != nil
@@ -970,11 +986,38 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
             }
         }
         if draws {
-            NSCursor.crosshair.set()
+            Self.zoneCursor.set()
         } else if over, groupDrag == nil {
             NSCursor.openHand.set()
         }
     }
+
+    /// The crosshair with New Zone's icon on a white tag at its bottom right.
+    static let zoneCursor: NSCursor = {
+        let cross = NSCursor.crosshair
+        let base = cross.image
+        let config = NSImage.SymbolConfiguration(pointSize: 10, weight: .bold)
+            .applying(.init(paletteColors: [.black]))
+        guard let badge = NSImage(systemSymbolName: CanvasAddMenuView.Item.zone.symbol, accessibilityDescription: nil)?
+            .withSymbolConfiguration(config) else { return cross }
+        let tag = NSRect(x: base.size.width - 6, y: base.size.height - 6,
+                         width: badge.size.width + 4, height: badge.size.height + 4)
+        let size = NSSize(width: tag.maxX + 1, height: tag.maxY + 1)
+        let image = NSImage(size: size, flipped: true) { _ in
+            base.draw(in: NSRect(origin: .zero, size: base.size), from: .zero, operation: .sourceOver,
+                      fraction: 1, respectFlipped: true, hints: nil)
+            let plate = NSBezierPath(roundedRect: tag, xRadius: 3, yRadius: 3)
+            NSColor.white.setFill()
+            plate.fill()
+            NSColor.black.withAlphaComponent(0.5).setStroke()
+            plate.lineWidth = 0.5
+            plate.stroke()
+            badge.draw(in: tag.insetBy(dx: 2, dy: 2), from: .zero, operation: .sourceOver,
+                       fraction: 1, respectFlipped: true, hints: nil)
+            return true
+        }
+        return NSCursor(image: image, hotSpot: cross.hotSpot)
+    }()
 
     /// A click on a card: with ⇧ on its title bar it goes in or out of the
     /// selection, and the click goes no further; otherwise a click on a card

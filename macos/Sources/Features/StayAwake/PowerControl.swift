@@ -1,9 +1,10 @@
 #if os(macOS)
 import Foundation
 
-/// The power settings Stay Awake changes, as they were before it did.
+/// The Low Power Mode settings Stay Awake changes, as they were before it
+/// did. Not sleep: turning off always lets the Mac sleep, so a
+/// `disablesleep` a dead Lostty left on can't carry over as the baseline.
 struct PowerSettings: Codable, Equatable {
-    var disableSleep: Bool
     /// nil on Macs without a battery.
     var lowPowerOnBattery: Bool?
     var lowPowerOnAC: Bool
@@ -37,15 +38,6 @@ enum PowerCommand: Equatable {
 }
 
 enum PowerParse {
-    /// `pmset -g` lists `SleepDisabled 1` under the system-wide settings only
-    /// while it is set.
-    static func sleepDisabled(pmsetG: String) -> Bool {
-        pmsetG.split(separator: "\n").contains { line in
-            let fields = line.split(whereSeparator: \.isWhitespace)
-            return fields.count == 2 && fields[0] == "SleepDisabled" && fields[1] == "1"
-        }
-    }
-
     /// `pmset -g custom`: `lowpowermode` under "Battery Power:" and "AC Power:".
     static func lowPower(pmsetCustom: String) -> (battery: Bool?, ac: Bool?) {
         var section: PowerSource?
@@ -85,14 +77,11 @@ protocol PowerControl {
 /// at once instead of waiting for a password nobody can type.
 struct SystemPowerControl: PowerControl {
     func read() throws -> PowerSettings {
-        guard let g = Command.run("/usr/bin/pmset", ["-g"]), g.status == 0,
-              let custom = Command.run("/usr/bin/pmset", ["-g", "custom"]), custom.status == 0
+        guard let custom = Command.run("/usr/bin/pmset", ["-g", "custom"]), custom.status == 0
         else { throw PowerControlError.unreadable }
         let lowPower = PowerParse.lowPower(pmsetCustom: custom.output)
         guard let ac = lowPower.ac else { throw PowerControlError.unreadable }
-        return PowerSettings(
-            disableSleep: PowerParse.sleepDisabled(pmsetG: g.output),
-            lowPowerOnBattery: lowPower.battery, lowPowerOnAC: ac)
+        return PowerSettings(lowPowerOnBattery: lowPower.battery, lowPowerOnAC: ac)
     }
 
     func run(_ command: PowerCommand) throws {

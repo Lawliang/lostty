@@ -5,7 +5,8 @@ import SwiftUI
 
 /// The canvas's + button, at the bottom right over the cards and the same
 /// size at every zoom. Clicking it opens a pill of what it can add above
-/// it; choosing one, clicking anywhere else or Escape closes it.
+/// it, each named on its left with its key; choosing one, clicking
+/// anywhere else or Escape closes it.
 final class CanvasAddMenuView: NSView {
     enum Item: CaseIterable {
         case terminal, ticket, zone
@@ -25,6 +26,15 @@ final class CanvasAddMenuView: NSView {
             case .zone: "square.dashed"
             }
         }
+
+        /// Its key on the canvas while nothing has the keyboard.
+        var key: String {
+            switch self {
+            case .terminal: "t"
+            case .ticket: "m"
+            case .zone: "z"
+            }
+        }
     }
 
     /// The button's diameter; the pill is as wide.
@@ -36,6 +46,8 @@ final class CanvasAddMenuView: NSView {
     static let itemSize: CGFloat = 36
     static let pillPadding: CGFloat = 4
     static let pillGap: CGFloat = 10
+    /// Room left of the pill for its items' names.
+    static let labelRoom: CGFloat = 170
 
     static var pillHeight: CGFloat {
         let count = CGFloat(Item.allCases.count)
@@ -44,7 +56,7 @@ final class CanvasAddMenuView: NSView {
 
     /// Big enough for the pill open above the button.
     static var size: CGSize {
-        CGSize(width: diameter + 2 * shadowRoom, height: pillHeight + pillGap + diameter + 2 * shadowRoom)
+        CGSize(width: labelRoom + diameter + 2 * shadowRoom, height: pillHeight + pillGap + diameter + 2 * shadowRoom)
     }
 
     var chose: ((Item) -> Void)?
@@ -71,11 +83,12 @@ final class CanvasAddMenuView: NSView {
     }
 
     /// The button, and the pill while it's open (y up): clicks anywhere else
-    /// in the view go on to the cards under it.
+    /// in the view, its items' names too, go on to the cards under it.
     private var live: CGRect {
         let inset = bounds.insetBy(dx: Self.shadowRoom, dy: Self.shadowRoom)
-        guard !state.isOpen else { return inset }
-        return CGRect(x: inset.minX, y: inset.minY, width: Self.diameter, height: Self.diameter)
+        let column = CGRect(x: inset.maxX - Self.diameter, y: inset.minY, width: Self.diameter, height: inset.height)
+        guard !state.isOpen else { return column }
+        return CGRect(x: column.minX, y: inset.minY, width: Self.diameter, height: Self.diameter)
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
@@ -161,7 +174,7 @@ struct CanvasAddButton: View {
             .accessibilityLabel(state.isOpen ? "Close" : "Add to Canvas")
         }
         .padding(CanvasAddMenuView.shadowRoom)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
     }
 
     /// The same glass as the button, as a capsule: its light turns while
@@ -181,7 +194,8 @@ struct CanvasAddButton: View {
 }
 
 /// Glass in `shape` with its rim and prism, lit while the pointer is over
-/// it. The merge countdown (CanvasDrop) is it too, without the prism.
+/// it. The merge countdown (CanvasDrop) and the dock (CanvasDock) are it
+/// too, without the prism.
 struct CanvasAddLitGlass<S: InsettableShape>: ViewModifier {
     let shape: S
     let dark: Bool
@@ -203,9 +217,9 @@ struct CanvasAddLitGlass<S: InsettableShape>: ViewModifier {
     }
 }
 
-/// The glass's body: Liquid Glass on macOS 26, which bends the cards
-/// behind it and casts its own shadow; before that, the thinnest
-/// material with one.
+/// The glass's body: Liquid Glass on macOS 26, the clear kind, lightly
+/// tinted, so the terminals behind it stay readable as it bends them, and
+/// it casts its own shadow; before that, the thinnest material with one.
 private struct CanvasAddGlass<S: Shape>: ViewModifier {
     let shape: S
     let dark: Bool
@@ -214,7 +228,7 @@ private struct CanvasAddGlass<S: Shape>: ViewModifier {
     func body(content: Content) -> some View {
         if #available(macOS 26, *) {
             content.glassEffect(
-                .regular.tint(dark ? .black.opacity(0.35) : .white.opacity(0.35)).interactive(interactive),
+                .clear.tint(dark ? .black.opacity(0.12) : .white.opacity(0.12)).interactive(interactive),
                 in: shape)
         } else {
             content.background(
@@ -322,7 +336,8 @@ private struct CanvasAddRipple: View {
 }
 
 /// One of the pill's icons, monochrome like the + (black in light, white
-/// and glowing in dark), lit while the pointer is over it.
+/// and glowing in dark), lit while the pointer is over it, and named on
+/// its left with its key, as the dock names its icons.
 private struct CanvasAddItem: View {
     let item: CanvasAddMenuView.Item
     let dark: Bool
@@ -341,7 +356,12 @@ private struct CanvasAddItem: View {
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
-        .help(item.title)
+        .overlay(alignment: .leading) {
+            CanvasDockLabel(text: item.title, key: item.key)
+                .fixedSize()
+                .alignmentGuide(.leading) { $0[.trailing] + CanvasAddMenuView.pillPadding + 8 }
+                .allowsHitTesting(false)
+        }
         .accessibilityLabel(item.title)
     }
 }
