@@ -4,7 +4,8 @@ import SwiftUI
 
 /// Under the bottom bar while the focused pane's Claude has subagents or
 /// background shells: a carousel of live thumbnails, newest first, each
-/// its last few lines. Tapping one shows it in the terminal's place
+/// its last few lines, a working subagent's lit by its own Window Light.
+/// Tapping one shows it in the terminal's place
 /// (PaneTaskView). The window grows to make room for it.
 struct PaneTaskStrip: View {
     static let height: CGFloat = 112
@@ -23,7 +24,7 @@ struct PaneTaskStrip: View {
             HStack(spacing: 8) {
                 ForEach(list.reversed()) { task in
                     PaneTaskThumbnail(
-                        task: task, entry: feed.entries[task.id], ink: ink,
+                        task: task, pane: model.focusedSurfaceID, entry: feed.entries[task.id], ink: ink,
                         open: model.openTaskID == task.id)
                         .onTapGesture { model.openTask(task.id) }
                 }
@@ -56,9 +57,11 @@ struct PaneTaskStrip: View {
     }
 }
 
-/// One subagent or shell in the strip: its name, then its last lines.
+/// One subagent or shell in the strip, square as a pane is: its name,
+/// then its last lines.
 private struct PaneTaskThumbnail: View {
     let task: PaneTask
+    let pane: UUID?
     let entry: TaskFeedEntry?
     let ink: Color
     let open: Bool
@@ -75,7 +78,7 @@ private struct PaneTaskThumbnail: View {
                     .foregroundStyle(ink.opacity(0.9))
                     .lineLimit(1)
                 Spacer(minLength: 0)
-                ProgressView().controlSize(.mini).scaleEffect(0.7)
+                if task.kind == .shell { ProgressView().controlSize(.mini).scaleEffect(0.7) }
             }
             .padding(.bottom, 2)
             ForEach(entry?.lines ?? []) { line in
@@ -88,11 +91,10 @@ private struct PaneTaskThumbnail: View {
         }
         .padding(8)
         .frame(width: 210, height: PaneTaskStrip.height - 16, alignment: .topLeading)
-        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(ink.opacity(hovering ? 0.1 : 0.06)))
-        .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .strokeBorder(ink.opacity(open ? 0.45 : 0.1), lineWidth: open ? 1 : 0.5))
-        .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .background(Rectangle().fill(ink.opacity(hovering ? 0.1 : 0.06)))
+        .overlay(Rectangle().strokeBorder(ink.opacity(open ? 0.45 : 0.1), lineWidth: open ? 1 : 0.5))
+        .overlay { if task.kind == .subagent, let pane { SubagentLight(pane: pane) } }
+        .contentShape(Rectangle())
         .onHover { hovering = $0 }
         .help("Show it in the terminal's place")
         .accessibilityElement(children: .combine)
@@ -103,6 +105,29 @@ private struct PaneTaskThumbnail: View {
     private var heading: String {
         guard task.kind == .subagent, let caption = entry?.caption else { return task.title }
         return "\(task.title) · \(caption)"
+    }
+}
+
+/// A working subagent's own Window Light round its tile, in its pane's
+/// trace colors, as the pane's would run (none with the pane's trace off).
+private struct SubagentLight: View {
+    let pane: UUID
+    @ObservedObject private var skins = SkinsRuntime.shared.manager
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @AppStorage(TraceRoute.defaultsKey, store: .ghostty) private var route = TraceRoute.initial
+    @State private var since = Date()
+    @State private var journey = TraceOverlay.Journey()
+
+    var body: some View {
+        WindowLightLayer(
+            setup: WindowLightView.Setup(
+                lighting: WindowTrace.lighting(
+                    pane: pane, phase: .racing(since: since),
+                    skin: skins.effectiveSkin(pane), enabled: skins.config.trace),
+                running: true, route: route, reduceMotion: reduceMotion),
+            journey: journey)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
     }
 }
 
