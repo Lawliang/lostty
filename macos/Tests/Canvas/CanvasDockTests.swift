@@ -24,5 +24,12 @@ struct CanvasDockTests {
         #expect(CanvasDockApp.moving(.usage, to: 5, in: order) == [.settings, .usage])
         #expect(CanvasDockApp.moving(.settings, to: -1, in: order) == [.settings, .usage])
     }
+
+    @Test func eachAddMenuItemHasItsOwnKeyAndNoneIsTheDocks() {
+        let keys = CanvasAddMenuView.Item.allCases.map(\.key)
+        #expect(keys == ["t", "m", "z"])
+        #expect(Set(keys).count == keys.count)
+        #expect(!keys.contains("d"))
+    }
 }
 #endif

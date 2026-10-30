@@ -58,8 +58,9 @@ final class CanvasScrollView: NSScrollView {
 /// The canvas itself: the cards are its subviews, framed in document
 /// points, y down. Draws nothing. Takes the keyboard when no card has it,
 /// so keys go nowhere but ⌘A, which selects every card, Escape, which
-/// deselects them, and ⌘Z and ⇧⌘Z, which undo and redo. Dragging on it
-/// between the cards draws a marquee.
+/// deselects them, ⌘Z and ⇧⌘Z, which undo and redo, and the canvas's
+/// one-letter shortcuts (`typed`). Dragging on it between the cards draws
+/// a marquee.
 final class CanvasDocumentView: NSView {
     /// A click between the cards (CanvasController.canvasClicked), with ⇧
     /// or not.
@@ -69,6 +70,8 @@ final class CanvasDocumentView: NSView {
     var dragEnded: (() -> Void)?
     var selectedAll: (() -> Void)?
     var deselected: (() -> Void)?
+    /// A letter typed with no modifier: true when it was a shortcut.
+    var typed: ((String) -> Bool)?
     private var start: CGPoint?
 
     override var isFlipped: Bool { true }
@@ -134,8 +137,11 @@ final class CanvasDocumentView: NSView {
     override func mouseMoved(with event: NSEvent) {}
 
     override func keyDown(with event: NSEvent) {
-        guard event.keyCode == 53 else { return super.keyDown(with: event) }
-        deselected?()
+        if event.keyCode == 53 { return deselected?() ?? () }
+        let mods = event.modifierFlags.intersection([.command, .control, .option, .shift])
+        if mods.isEmpty, !event.isARepeat, let key = event.charactersIgnoringModifiers?.lowercased(),
+           typed?(key) == true { return }
+        super.keyDown(with: event)
     }
 }
 
@@ -267,7 +273,8 @@ final class CanvasSurfaceView: NSView {
     let selection = CanvasSelectionView()
     let selectionBar = CanvasSelectionBarView(rootView: CanvasSelectionBar())
     let addMenu = CanvasAddMenuView()
-    let dock = CanvasDockView(rootView: CanvasDock())
+    let dockState = CanvasDockState()
+    lazy var dock = CanvasDockView(state: dockState)
     let zones = CanvasZoneLayer(frame: NSRect(x: 0, y: 0, width: CanvasModel.size, height: CanvasModel.size))
     private let grid = CanvasGridView(frame: .zero)
     private let notifications = CanvasNotificationsView(rootView: NotificationStackView())

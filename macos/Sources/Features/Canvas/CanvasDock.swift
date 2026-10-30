@@ -2,9 +2,18 @@
 import AppKit
 import SwiftUI
 
+/// Whether the dock is out: the pointer is where it sits full size, or D
+/// brought it out (and D puts it away).
+final class CanvasDockState: ObservableObject {
+    @Published var near = false
+    @Published var shown = false
+}
+
 /// The dock at the bottom of the canvas, centered and over the cards:
 /// Lostty's apps as icons on the + menu's glass, laid out like macOS 26's Dock.
-/// For now Settings and Usage.
+/// For now Settings and Usage. Out of the way it's a miniature of itself,
+/// as far from the bottom edge; the pointer where it sits full size, or D,
+/// brings it out.
 final class CanvasDockView: NSHostingView<CanvasDock> {
     /// Room round the shelf for its shadow.
     nonisolated static let shadowRoom: CGFloat = 16
@@ -14,6 +23,20 @@ final class CanvasDockView: NSHostingView<CanvasDock> {
     /// Clicks there go through to the canvas.
     nonisolated static let above: CGFloat = 160
 
+    private let state: CanvasDockState
+    private var nearArea: NSTrackingArea?
+
+    init(state: CanvasDockState) {
+        self.state = state
+        super.init(rootView: CanvasDock(state: state))
+    }
+
+    @available(*, unavailable)
+    required init(rootView: CanvasDock) { fatalError("init(rootView:) is not supported") }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
     /// The dock's frame of `size` (with the room for its shadow) in
     /// `bounds` (y up): centered, `margin` up from the bottom.
     nonisolated static func frame(size: CGSize, in bounds: CGRect) -> CGRect {
@@ -22,7 +45,8 @@ final class CanvasDockView: NSHostingView<CanvasDock> {
             width: size.width, height: size.height)
     }
 
-    /// The shelf itself, without the room for its shadow or above it.
+    /// The shelf full size, without the room for its shadow or above it:
+    /// where the pointer brings it out, and its clicks land.
     private var live: CGRect {
         var live = bounds.insetBy(dx: Self.shadowRoom, dy: Self.shadowRoom)
         live.size.height -= Self.above
@@ -37,6 +61,24 @@ final class CanvasDockView: NSHostingView<CanvasDock> {
     /// Whether a click at `point` (in the window) is the dock's.
     func covers(_ point: NSPoint) -> Bool {
         !isHiddenOrHasHiddenAncestor && live.contains(convert(point, from: nil))
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let nearArea { removeTrackingArea(nearArea) }
+        let area = NSTrackingArea(rect: live, options: [.mouseEnteredAndExited, .activeInActiveApp], owner: self)
+        addTrackingArea(area)
+        nearArea = area
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        super.mouseEntered(with: event)
+        if event.trackingArea === nearArea { state.near = true }
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        super.mouseExited(with: event)
+        if event.trackingArea === nearArea { state.near = false }
     }
 }
 
@@ -122,7 +164,10 @@ struct CanvasDock: View {
     /// Dragged this far up, the icon is off the dock: dropped, it's removed.
     static let off: CGFloat = 100
     static let move = Animation.spring(response: 0.3, dampingFraction: 0.8)
+    /// The dock's size out of the way.
+    static let mini: CGFloat = 0.4
 
+    @ObservedObject var state: CanvasDockState
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(CanvasDockApp.orderKey, store: .ghostty) private var savedOrder = ""
@@ -143,6 +188,10 @@ struct CanvasDock: View {
     @State private var liftOffset: CGSize = .zero
 
     private var order: [CanvasDockApp] { arranging ?? CanvasDockApp.order(from: savedOrder, removed: removed) }
+
+    /// Out, and while an icon is held or Usage is open, though the pointer
+    /// has left.
+    private var out: Bool { state.near || state.shown || pressed != nil || lifted != nil || showingUsage }
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: 28, style: .continuous)
@@ -172,6 +221,9 @@ struct CanvasDock: View {
                 Button("Add \(app.name) to Dock") { putBack(app) }
             }
         }
+        .scaleEffect(out ? 1 : Self.mini, anchor: .bottom)
+        .allowsHitTesting(out)
+        .animation(reduceMotion ? nil : Self.move, value: out)
         .padding(CanvasDockView.shadowRoom)
         .padding(.top, CanvasDockView.above)
     }
@@ -334,18 +386,29 @@ struct CanvasDockIcon: View {
 }
 
 /// The name over a dock icon, as the Dock shows one: small text on a
-/// dark rounded tag.
-private struct CanvasDockLabel: View {
+/// dark rounded tag. The + menu names its items with it, with their keys.
+struct CanvasDockLabel: View {
     let text: String
+    var key: String?
 
     var body: some View {
-        Text(text)
-            .font(.system(size: 12, weight: .medium))
-            .foregroundStyle(.white)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 4)
-            .background(Capsule().fill(.black.opacity(0.7)))
-            .overlay(Capsule().strokeBorder(.white.opacity(0.15), lineWidth: 0.5))
+        HStack(spacing: 6) {
+            Text(text)
+            if let key {
+                Text(key.uppercased())
+                    .font(.system(size: 10, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.8))
+                    .frame(minWidth: 16, minHeight: 16)
+                    .background(RoundedRectangle(cornerRadius: 4, style: .continuous).fill(.white.opacity(0.16)))
+            }
+        }
+        .font(.system(size: 12, weight: .medium))
+        .foregroundStyle(.white)
+        .padding(.leading, 10)
+        .padding(.trailing, key == nil ? 10 : 4)
+        .padding(.vertical, 4)
+        .background(Capsule().fill(.black.opacity(0.7)))
+        .overlay(Capsule().strokeBorder(.white.opacity(0.15), lineWidth: 0.5))
     }
 }
 #endif
