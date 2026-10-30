@@ -2,7 +2,9 @@
 import SwiftUI
 
 /// Puts the bottom bar (Claude's usage, or the apps) below the terminal
-/// content. An open overlay extension (Skins) covers the terminal content;
+/// content, and under it, while the focused pane's Claude has subagents or
+/// shells, their strip (the window grows for it). An open one covers the
+/// terminal content, as an open overlay extension (Skins) does;
 /// an open window extension (Branches) covers everything here, the bottom
 /// bar included, until closed. The terminal never changes size for an app.
 struct ExtensionSidebarLayout<Content: View>: View {
@@ -12,6 +14,7 @@ struct ExtensionSidebarLayout<Content: View>: View {
     var body: some View {
         VStack(spacing: 0) {
             content()
+                .overlay { PaneTaskOverlay(model: model) }
                 .overlay {
                     if let ext = model.active, ext.presentation == .overlay {
                         ExtensionContentView(ext: ext, model: model)
@@ -23,6 +26,7 @@ struct ExtensionSidebarLayout<Content: View>: View {
                     if model.showsNotifications { NotificationStackView() }
                 }
             ClaudeUsageBar(model: model)
+            if model.showsTasks { PaneTaskStrip(model: model) }
         }
         .overlay {
             if let ext = model.active, ext.presentation == .window {
@@ -32,6 +36,7 @@ struct ExtensionSidebarLayout<Content: View>: View {
             }
         }
         .animation(.easeOut(duration: 0.18), value: model.active)
+        .animation(.easeOut(duration: 0.15), value: model.openTaskID)
     }
 }
 #endif

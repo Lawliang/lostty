@@ -90,6 +90,38 @@ enum ClaudeMessage {
         object(value)?["state"] as? String == "cleared"
     }
 
+    /// A subagent starting (`subagent`) or finishing (`subagent_done`),
+    /// from the SubagentStart and SubagentStop hooks, or a background shell
+    /// starting (`shell`, PostToolUse) or finishing (`shell_done`, Claude
+    /// Code's task notification); nil for anything else. Not a ClaudeState:
+    /// it changes no phase.
+    static func task(_ value: String) -> TaskEvent? {
+        guard let object = object(value), let state = object["state"] as? String else { return nil }
+        switch state {
+        case "subagent", "subagent_done":
+            guard let agent = object["agent"] as? [String: Any],
+                  let id = agent["id"] as? String, !id.isEmpty,
+                  let type = agent["type"] as? String, !type.isEmpty,
+                  let transcript = agent["transcript"] as? String, !transcript.isEmpty else { return nil }
+            return state == "subagent" ? .started(PaneTask(id: id, kind: .subagent, title: type, path: transcript)) : .finished(id)
+        case "shell":
+            guard let shell = object["shell"] as? [String: Any], let id = shell["id"] as? String, !id.isEmpty else { return nil }
+            let title = (shell["description"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "Shell"
+            return .started(PaneTask(id: id, kind: .shell, title: title, path: shell["output"] as? String))
+        case "shell_done":
+            guard let id = (object["shell"] as? [String: Any])?["id"] as? String, !id.isEmpty else { return nil }
+            return .finished(id)
+        default:
+            return nil
+        }
+    }
+
+    enum TaskEvent: Equatable {
+        case started(PaneTask)
+        /// A subagent or background task finished, by id.
+        case finished(String)
+    }
+
     private static func object(_ value: String) -> [String: Any]? {
         guard let data = value.data(using: .utf8),
               let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],

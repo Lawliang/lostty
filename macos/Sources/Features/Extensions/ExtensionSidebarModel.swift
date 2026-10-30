@@ -77,6 +77,18 @@ final class ExtensionSidebarModel: ObservableObject {
     /// window's controller.
     var focusTerminal: @MainActor () -> Void = {}
 
+    /// The strip of the focused pane's subagents and shells shows under the
+    /// bottom bar (PaneTaskStrip).
+    @Published private(set) var showsTasks = false
+    /// The one shown in the terminal's place (PaneTaskView), by id.
+    @Published private(set) var openTaskID: String?
+    /// Grows the window (or card) by `delta`, or shrinks it for a negative
+    /// one, so the terminal keeps its size as the strip comes and goes;
+    /// false when it can't. Set by the window's controller.
+    var resizeForTasks: @MainActor (CGFloat) -> Bool = { _ in false }
+    private var grewForTasks = false
+    private var tasksWatch: AnyCancellable?
+
     /// The Branches panel's state; idle until Branches opens.
     let branches: BranchesModel
 
@@ -92,6 +104,40 @@ final class ExtensionSidebarModel: ObservableObject {
         self.branches = branches ?? BranchesModel()
         available = LosttyExtension.available(in: channel)
         showsNotifications = notifications
+        tasksWatch = PaneTasks.shared.$lists.combineLatest($focusedSurfaceID)
+            .sink { [weak self] lists, pane in
+                MainActor.assumeIsolated { self?.tasksChanged(pane.flatMap { lists[$0] } ?? []) }
+            }
+    }
+
+    /// Shows a subagent or shell in the terminal's place. The pane gives up
+    /// keyboard focus meanwhile, so Esc comes back rather than reaching it.
+    func openTask(_ id: String) {
+        openTaskID = id
+        if let pane = focusedSurfaceID, let window = (NSApp.delegate as? AppDelegate)?.findSurface(forUUID: pane)?.window {
+            window.makeFirstResponder(nil)
+        }
+    }
+
+    func closeTask() {
+        guard openTaskID != nil else { return }
+        openTaskID = nil
+        focusTerminal()
+    }
+
+    /// The focused pane's tasks changed: the strip comes or goes, growing
+    /// or shrinking the window first so the terminal is laid out once.
+    private func tasksChanged(_ list: [PaneTask]) {
+        if let open = openTaskID, !list.contains(where: { $0.id == open }) { closeTask() }
+        let shown = !list.isEmpty
+        guard shown != showsTasks else { return }
+        if shown {
+            grewForTasks = resizeForTasks(PaneTaskStrip.height)
+        } else if grewForTasks {
+            _ = resizeForTasks(-PaneTaskStrip.height)
+            grewForTasks = false
+        }
+        showsTasks = shown
     }
 
     /// Clicking an icon opens its extension; clicking the open one closes it.
