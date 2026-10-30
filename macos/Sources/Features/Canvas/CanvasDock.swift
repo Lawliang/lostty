@@ -426,14 +426,15 @@ struct CanvasDockIcon: View {
         .contentShape(shape)
         .shadow(color: .black.opacity(lifted ? 0.35 : 0.18), radius: lifted ? 8 : 1.5, y: lifted ? 4 : 1)
         .scaleEffect(scale, anchor: .bottom)
+        // Always there, faded out: a label in an `if` loses its alignment
+        // guide and lands on the icon.
         .overlay(alignment: .top) {
-            if let label {
-                CanvasDockLabel(text: label, pointer: true)
-                    .fixedSize()
-                    // Clear of the icon at its grown size.
-                    .alignmentGuide(.top) { $0[.bottom] + 6 + Self.size * (scale - 1) }
-                    .transition(.opacity)
-            }
+            CanvasDockLabel(text: label ?? app.name, pointer: true)
+                .fixedSize()
+                // Clear of the icon at its grown size.
+                .alignmentGuide(.top) { $0[.bottom] + 6 + Self.size * (scale - 1) }
+                .opacity(label == nil ? 0 : 1)
+                .allowsHitTesting(false)
         }
         .animation(.easeOut(duration: 0.12), value: label)
         .accessibilityElement()

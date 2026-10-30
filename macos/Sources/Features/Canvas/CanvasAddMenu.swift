@@ -356,14 +356,14 @@ private struct CanvasAddItem: View {
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
+        // Always there, faded out: a label in an `if` loses its alignment
+        // guide and lands on the item.
         .overlay(alignment: .leading) {
-            if hovering {
-                CanvasDockLabel(text: item.title, key: item.key)
-                    .fixedSize()
-                    .alignmentGuide(.leading) { $0[.trailing] + CanvasAddMenuView.pillPadding + 8 }
-                    .allowsHitTesting(false)
-                    .transition(.opacity)
-            }
+            CanvasDockLabel(text: item.title, key: item.key)
+                .fixedSize()
+                .alignmentGuide(.leading) { $0[.trailing] + CanvasAddMenuView.pillPadding + 8 }
+                .opacity(hovering ? 1 : 0)
+                .allowsHitTesting(false)
         }
         .animation(.easeOut(duration: 0.12), value: hovering)
         .accessibilityLabel(item.title)
