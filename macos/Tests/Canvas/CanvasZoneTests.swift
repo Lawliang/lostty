@@ -501,13 +501,13 @@ struct CanvasZoneTests {
         #expect(CanvasZoneCaption(briefed, folder: nil, members: [], working: [], waiting: []).note == nil)
     }
 
-    @MainActor @Test func zoneLabelsStackOverEveryCardAndTheZonesUnderThem() {
+    @MainActor @Test func zoneLabelsStackOverTheirZonesAndUnderEveryCard() {
         let document = CanvasDocumentView(frame: .zero)
         let zones = CanvasZoneLayer(frame: .zero)
         let back = StackedCard(stackIndex: 0), front = StackedCard(stackIndex: 1)
         for view in [zones.labels, front, zones, back] { document.addSubview(view) }
         document.restack()
-        #expect(document.subviews == [zones, back, front, zones.labels])
+        #expect(document.subviews == [zones, zones.labels, back, front])
     }
 }
 

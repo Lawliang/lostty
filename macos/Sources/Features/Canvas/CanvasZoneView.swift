@@ -5,7 +5,7 @@ import SwiftUI
 /// The canvas's zones, behind every card: the document's first subview,
 /// as big as it. Takes clicks only on a zone's edges, so the marquee,
 /// card clicks and panning work in a zone as anywhere else. Their labels
-/// go in `labels`, over every card.
+/// go in `labels`, over the zones and under every card.
 final class CanvasZoneLayer: NSView {
     weak var canvas: CanvasController?
     let labels: CanvasZoneLabelLayer
@@ -65,8 +65,8 @@ final class CanvasZoneLayer: NSView {
     private var zoom: CGFloat { enclosingScrollView?.magnification ?? 1 }
 }
 
-/// The zones' labels: the document's last subview, over every card, as
-/// big as it. Takes clicks only on a label.
+/// The zones' labels: the document's second subview, over the zones and
+/// under every card, as big as it. Takes clicks only on a label.
 final class CanvasZoneLabelLayer: NSView {
     override var isFlipped: Bool { true }
 
