@@ -96,8 +96,6 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     /// The glide to a card under way (CanvasController+Glide).
     var glide: CanvasGlide?
     var waits = CanvasWaits()
-    /// The panes whose Claude is working, its subagents included.
-    private var working: Set<UUID> = []
     /// The view to show when the window first opens (a restored canvas's).
     var pendingView: (center: CGPoint, zoom: CGFloat)?
     var isEmpty: Bool { model.cards.isEmpty && model.zones.isEmpty }
@@ -208,15 +206,12 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         ClaudeRuntime.shared.$awaiting
             .sink { [weak self] awaiting in
                 self?.waits.update(awaiting: awaiting, now: Date())
-                self?.updateZoneCaptions()
             }
             .store(in: &cancellables)
         ClaudeRuntime.shared.$phases
             .map { Set($0.keys) }
             .removeDuplicates()
-            .sink { [weak self] working in
-                self?.working = working
-                self?.updateZoneCaptions()
+            .sink { [weak self] _ in
                 self?.deliverSoon()
                 self?.readAgentNames()
             }
@@ -727,15 +722,8 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     }
 
     private func updateZoneCaptions() {
-        let waiting = Set(waits.since.keys)
         let captions = model.zones.map { zone in
-            let held = zone.parent == nil ? model.members(of: zone.id) : []
-            let members = held.compactMap { id -> CanvasZoneCaption.Member? in
-                if ticketPanels[id] != nil { return .tickets }
-                return cards.first { $0.id == id }.map { .terminal(panes: $0.surfaceTree.map(\.id)) }
-            }
-            return (zone.id, CanvasZoneCaption(
-                zone, folder: model.startFolder(ofZone: zone.id), members: members, working: working, waiting: waiting))
+            (zone.id, CanvasZoneCaption(zone, folder: model.startFolder(ofZone: zone.id)))
         }
         surface.zones.showCaptions(Dictionary(uniqueKeysWithValues: captions))
     }

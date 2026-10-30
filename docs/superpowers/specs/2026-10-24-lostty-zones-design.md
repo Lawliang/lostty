@@ -18,7 +18,7 @@ projects at once. What it fixes:
 - **Re-explaining the project.** Each new Claude session in a zone
   starts in the zone's folder and gets its brief, without pasting it.
 - **Finding what belongs where.** A zone is one block on the canvas,
-  with its own tickets and one status line ("2 working · 1 waiting").
+  with its own tickets.
 - **Agents reaching the wrong project.** Agents in a zone see and
   message only the zone's agents.
 
@@ -65,9 +65,7 @@ has a subfolder.
 - **A zone** is a rounded area behind the cards: a faint fill of its
   color and a solid edge (2 pt for a project, 1.5 pt for a domain).
 - **Its label**, inside the top edge: the name on a pill of its color;
-  for a project, its folder and its counts ("6 terminals · 2 ticket
-  panels · 2 working · 1 waiting"); for a domain, the first line of
-  its brief.
+  for a project, its folder; for a domain, the first line of its brief.
 - **Settings**, from the label: name, color, folder (project) or
   subfolder (domain), brief, what's inside, the boundary's rules, Zoom
   to Zone, Remove Zone.
