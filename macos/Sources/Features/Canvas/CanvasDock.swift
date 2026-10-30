@@ -35,9 +35,9 @@ final class CanvasDockView: NSHostingView<CanvasDock> {
 }
 
 struct CanvasDock: View {
-    /// Round the icons, as the Dock's: a third of an icon each side and
-    /// between, a little less above and below.
-    static let inset = EdgeInsets(top: 12, leading: 14, bottom: 12, trailing: 14)
+    /// Round the icons: about two fifths of an icon each side and between,
+    /// a little less above and below.
+    static let inset = EdgeInsets(top: 16, leading: 18, bottom: 16, trailing: 18)
 
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -45,8 +45,8 @@ struct CanvasDock: View {
     @State private var hovering = false
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: 24, style: .continuous)
-        HStack(spacing: 14) {
+        let shape = RoundedRectangle(cornerRadius: 28, style: .continuous)
+        HStack(spacing: 18) {
             CanvasDockIcon(
                 name: "Settings", symbol: "gearshape.fill",
                 colors: [Color(white: 0.78), Color(white: 0.5)], glyph: Color(white: 0.94)
