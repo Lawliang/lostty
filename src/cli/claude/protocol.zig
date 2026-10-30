@@ -15,9 +15,10 @@ pub const surface_env = "LOSTTY_SURFACE";
 /// speak the context handoff's queued text; after a /clear, `start` sends
 /// `fresh` (the fresh window took the handoff) or `cleared` (none waited).
 /// `subagent` (SubagentStart) and `subagent_done` (SubagentStop) name a
-/// subagent and its transcript, for the pane's list of them (`+agent-watch`
-/// shows one); they change no state.
-pub const State = enum { busy, idle, exit, agents, resumed, tool, done, start, fresh, cleared, subagent, subagent_done };
+/// subagent and its transcript, and `shell` (PostToolUse) and `shell_done`
+/// (the task notification Claude Code prompts itself with) a background
+/// shell, for the pane's strip of them; they change no state.
+pub const State = enum { busy, idle, exit, agents, resumed, tool, done, start, fresh, cleared, subagent, subagent_done, shell, shell_done };
 
 /// A subagent Claude started: its id, its type ("Explore"), and its own
 /// transcript.
@@ -25,6 +26,15 @@ pub const Subagent = struct {
     id: []const u8,
     type: []const u8,
     transcript: []const u8,
+};
+
+/// A background shell Claude started: its task id, the description Claude
+/// gave it, and the file its output goes to. `shell_done` carries the id
+/// alone.
+pub const Shell = struct {
+    id: []const u8,
+    description: ?[]const u8 = null,
+    output: ?[]const u8 = null,
 };
 
 /// What a message says beyond its state.
@@ -41,6 +51,10 @@ pub const Detail = struct {
     denied: ?[]const u8 = null,
     /// `subagent` and `subagent_done`: which subagent.
     agent: ?Subagent = null,
+    /// `shell` and `shell_done`: which background shell.
+    shell: ?Shell = null,
+    /// `busy`: the owner typed the prompt (not a task notification).
+    typed: bool = false,
 };
 
 /// The longest action sent, in characters.
@@ -148,6 +162,67 @@ pub fn subagent(alloc: Allocator, input: []const u8) ?Subagent {
         .type = alloc.dupe(u8, kind) catch return null,
         .transcript = transcript,
     };
+}
+
+/// The background shell a PostToolUse hook's Bash call started
+/// (`tool_response.backgroundTaskId`). Claude Code writes its output to
+/// `<session>/tasks/<id>.output`, the folder holding the session's
+/// scratchpad. Null for anything else.
+pub fn backgroundShell(alloc: Allocator, input: []const u8) ?Shell {
+    const parsed = std.json.parseFromSlice(std.json.Value, alloc, input, .{}) catch return null;
+    defer parsed.deinit();
+    const root = parsed.value;
+    if (root != .object) return null;
+    const event = stringField(root, "hook_event_name") orelse return null;
+    const tool = stringField(root, "tool_name") orelse return null;
+    if (!std.mem.eql(u8, event, "PostToolUse") or !std.mem.eql(u8, tool, "Bash")) return null;
+    const id = textField(root.object.get("tool_response") orelse return null, "backgroundTaskId") orelse return null;
+    if (!isTaskId(id)) return null;
+    const description = if (root.object.get("tool_input")) |input_value| textField(input_value, "description") else null;
+    const output = if (textField(root, "scratchpad_dir")) |dir| if (std.fs.path.dirnamePosix(dir)) |session|
+        std.fmt.allocPrint(alloc, "{s}/tasks/{s}.output", .{ session, id }) catch null
+    else
+        null else null;
+    return .{
+        .id = alloc.dupe(u8, id) catch return null,
+        .description = if (description) |d| clean(alloc, d) catch null else null,
+        .output = if (output) |o| if (o.len <= transcript_max) o else null else null,
+    };
+}
+
+/// A UserPromptSubmit's prompt: one the owner typed, or the notice Claude
+/// Code prompts itself with when background tasks finish, with their ids.
+pub const Prompt = union(enum) {
+    typed,
+    finished: []const []const u8,
+};
+
+pub fn prompt(alloc: Allocator, input: []const u8) ?Prompt {
+    const parsed = std.json.parseFromSlice(std.json.Value, alloc, input, .{}) catch return null;
+    defer parsed.deinit();
+    const root = parsed.value;
+    if (root != .object) return null;
+    const event = stringField(root, "hook_event_name") orelse return null;
+    if (!std.mem.eql(u8, event, "UserPromptSubmit")) return null;
+    const text = stringField(root, "prompt") orelse return null;
+    if (!std.mem.startsWith(u8, std.mem.trimLeft(u8, text, " \t\r\n"), "<task-notification>")) return .typed;
+    var ids: std.ArrayList([]const u8) = .empty;
+    var rest = text;
+    while (std.mem.indexOf(u8, rest, "<task-id>")) |start| {
+        rest = rest[start + "<task-id>".len ..];
+        const end = std.mem.indexOf(u8, rest, "</task-id>") orelse break;
+        const id = rest[0..end];
+        if (isTaskId(id)) ids.append(alloc, alloc.dupe(u8, id) catch return null) catch return null;
+        rest = rest[end..];
+    }
+    return .{ .finished = ids.toOwnedSlice(alloc) catch return null };
+}
+
+/// A background task's id as Claude Code makes them: letters and digits.
+fn isTaskId(id: []const u8) bool {
+    if (id.len == 0 or id.len > 64) return false;
+    for (id) |c| if (!std.ascii.isAlphanumeric(c)) return false;
+    return true;
 }
 
 /// What a PreToolUse hook's tool call does, as a person reads it at a
@@ -352,6 +427,8 @@ pub fn encodeSequence(alloc: Allocator, state: State, detail: Detail, tmux: bool
         .transcript = detail.transcript,
         .denied = detail.denied,
         .agent = detail.agent,
+        .shell = detail.shell,
+        .typed = if (detail.typed) true else null,
     }, .{ .emit_null_optional_fields = false });
     defer alloc.free(json);
     return encodeUserVar(alloc, user_var_name, json, tmux);
@@ -712,4 +789,58 @@ test "claude protocol: a subagent message carries the agent" {
     try std.testing.expectEqualStrings(
         \\{"v":1,"state":"subagent","agent":{"id":"a1","type":"Explore","transcript":"/p/agent-a1.jsonl"}}
     , json[0..n]);
+}
+
+test "claude protocol: a background Bash call names its shell and output" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const shell = backgroundShell(a,
+        \\{"scratchpad_dir":"/private/tmp/claude-501/-p/9bfe/scratchpad","hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"sleep 2","description":"Print six\nticks","run_in_background":true},"tool_response":{"stdout":"","backgroundTaskId":"bbsacozcd"}}
+    ).?;
+    try std.testing.expectEqualStrings("bbsacozcd", shell.id);
+    try std.testing.expectEqualStrings("Print six ticks", shell.description.?);
+    try std.testing.expectEqualStrings("/private/tmp/claude-501/-p/9bfe/tasks/bbsacozcd.output", shell.output.?);
+    // A foreground call, another tool, or an odd id names none.
+    for ([_][]const u8{
+        \\{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_response":{"stdout":"hi"}}
+        ,
+        \\{"hook_event_name":"PostToolUse","tool_name":"Read","tool_response":{"backgroundTaskId":"b1"}}
+        ,
+        \\{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_response":{"backgroundTaskId":"../x"}}
+        ,
+    }) |input| try std.testing.expect(backgroundShell(a, input) == null);
+}
+
+test "claude protocol: a task notification prompt names the finished tasks" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const finished = prompt(a,
+        \\{"hook_event_name":"UserPromptSubmit","prompt":"<task-notification>\n<task-id>bbsacozcd</task-id>\n<status>completed</status>\n</task-notification>\n<task-notification>\n<task-id>b2</task-id>\n</task-notification>"}
+    ).?.finished;
+    try std.testing.expectEqual(@as(usize, 2), finished.len);
+    try std.testing.expectEqualStrings("bbsacozcd", finished[0]);
+    try std.testing.expectEqualStrings("b2", finished[1]);
+    try std.testing.expect(prompt(a,
+        \\{"hook_event_name":"UserPromptSubmit","prompt":"fix the <task-id>x</task-id> parser"}
+    ).? == .typed);
+    try std.testing.expect(prompt(a,
+        \\{"hook_event_name":"Stop"}
+    ) == null);
+}
+
+test "claude protocol: a shell message carries the shell, and a typed prompt says so" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    try std.testing.expectEqualStrings(
+        \\{"v":1,"state":"shell","shell":{"id":"b1","description":"Dev server","output":"/t/tasks/b1.output"}}
+    , try decodeSequence(a, try encodeSequence(a, .shell, .{ .shell = .{ .id = "b1", .description = "Dev server", .output = "/t/tasks/b1.output" } }, false)));
+    try std.testing.expectEqualStrings(
+        \\{"v":1,"state":"shell_done","shell":{"id":"b1"}}
+    , try decodeSequence(a, try encodeSequence(a, .shell_done, .{ .shell = .{ .id = "b1" } }, false)));
+    try std.testing.expectEqualStrings(
+        \\{"v":1,"state":"busy","typed":true}
+    , try decodeSequence(a, try encodeSequence(a, .busy, .{ .typed = true }, false)));
 }

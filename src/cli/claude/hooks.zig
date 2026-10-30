@@ -29,8 +29,9 @@ pub const Agent = enum { claude, codex };
 /// (protocol.refine): a Stop with subagents or background shells still
 /// working sends `agents`. PreToolUse sends what each tool call does
 /// (protocol.action); with no output it never decides anything about the
-/// call. PostToolUse (`done`) only speaks the handoff's directive and,
-/// after ListAgents, which agents are in the zone, and SessionStart (`start`) the zone's brief and, after /clear, the handoff.
+/// call. PostToolUse (`done`) speaks the handoff's directive and,
+/// after ListAgents, which agents are in the zone, and names a background
+/// shell a Bash call started; SessionStart (`start`) the zone's brief and, after /clear, the handoff.
 const claude_events = [_]Event{
     .{ .name = "UserPromptSubmit", .state = "busy" },
     .{ .name = "Stop", .state = "idle" },
