@@ -29,6 +29,7 @@ const tmux_launch = @import("tmux_launch.zig");
 const tmux_rename = @import("tmux_rename.zig");
 const peers = @import("peers.zig");
 const ticket = @import("ticket.zig");
+const agent_watch = @import("agent_watch.zig");
 
 /// Special commands that can be invoked via CLI flags. These are all
 /// invoked by using `+<action>` as a CLI flag. The only exception is
@@ -114,6 +115,9 @@ pub const Action = enum {
 
     // Lostty: a feature's agent reports on its zone board ticket.
     ticket,
+
+    // Lostty: follow a Claude Code subagent's transcript, one step a line.
+    @"agent-watch",
 
     pub fn detectSpecialCase(arg: []const u8) ?SpecialCase(Action) {
         // If we see a "-e" and we haven't seen a command yet, then
@@ -203,6 +207,7 @@ pub const Action = enum {
             .@"tmux-rename" => try tmux_rename.run(alloc),
             .peers => try peers.run(alloc),
             .ticket => try ticket.run(alloc),
+            .@"agent-watch" => try agent_watch.run(alloc),
         };
     }
 
@@ -252,6 +257,7 @@ pub const Action = enum {
                 .@"tmux-rename" => tmux_rename.Options,
                 .peers => peers.Options,
                 .ticket => ticket.Options,
+                .@"agent-watch" => agent_watch.Options,
             };
         }
     }
@@ -379,6 +385,7 @@ test {
     _ = tmux_rename;
     _ = peers;
     _ = ticket;
+    _ = agent_watch;
     _ = @import("tmux/naming.zig");
     _ = @import("tmux/session.zig");
     _ = @import("tmux/snippet_test.zig");

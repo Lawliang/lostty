@@ -30,6 +30,15 @@ final class CardController: BaseTerminalController {
         sidebar.focusTerminal = { [weak self] in
             if let surface = self?.focusedSurface { Ghostty.moveFocus(to: surface) }
         }
+        // The card grows down for the strip of subagents and shells.
+        sidebar.resizeForTasks = { [weak self] delta in
+            guard let self, let canvas = self.canvas, let view = canvas.view(self.id) else { return false }
+            var frame = view.frame
+            frame.size.height += delta
+            canvas.setFrame(frame, of: self.id)
+            canvas.cardFrameDidSettle()
+            return true
+        }
         watchAppearance()
     }
 
