@@ -77,13 +77,14 @@ final class CanvasDocumentView: NSView {
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { true }
 
-    /// Back to front: the zones, the cards in `stackIndex` order, the
-    /// zones' labels. Reorders without taking views out of the window, so
-    /// the focused pane keeps keyboard focus.
+    /// Back to front: the zones, their labels, the cards in `stackIndex`
+    /// order, so a card over a zone's label hides it. Reorders without
+    /// taking views out of the window, so the focused pane keeps keyboard
+    /// focus.
     func restack() {
         sortSubviews({ a, b, _ in
             func depth(_ view: NSView) -> Int {
-                view is CanvasZoneLabelLayer ? Int.max : (view as? CanvasStacked)?.stackIndex ?? Int.min
+                view is CanvasZoneLabelLayer ? Int.min + 1 : (view as? CanvasStacked)?.stackIndex ?? Int.min
             }
             let left = depth(a), right = depth(b)
             return left < right ? .orderedAscending : left > right ? .orderedDescending : .orderedSame
