@@ -9,7 +9,7 @@ struct SkinTmuxSyncTests {
 
     @Test func aSkinGivesThePhoneItsColors() {
         var skin = AutoSkin.skin(forRepo: "lostty", textureOpacity: 0.1)
-        #expect(skin.sessionSkin().foreground == nil)
+        #expect(skin.sessionSkin().foreground == skin.foreground.map { SessionSkin.RGB(r: $0.r, g: $0.g, b: $0.b) })
         #expect(skin.sessionSkin().background == SessionSkin.RGB(r: skin.background.r, g: skin.background.g, b: skin.background.b))
         skin.foreground = RGB(r: 0xe0, g: 0xe0, b: 0xe0)
         #expect(SessionSkin(encoded: skin.sessionSkin().encoded) == skin.sessionSkin())
