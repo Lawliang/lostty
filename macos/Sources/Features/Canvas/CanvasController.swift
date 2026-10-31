@@ -198,6 +198,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         surface.addMenu.chose = { [weak self] item in self?.add(item) }
         NotificationCenter.default.addObserver(
             self, selector: #selector(canvasMoved), name: NSView.boundsDidChangeNotification, object: scrollView.contentView)
+        surface.panned = { [weak self] in self?.updateVisibility() }
         // Focus follows the window's first responder: whichever card holds
         // it is the focused card.
         window?.publisher(for: \.firstResponder)
@@ -1110,7 +1111,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     /// canvas is hidden or covered.
     func updateVisibility() {
         let shown = window?.isVisible == true && window?.occlusionState.contains(.visible) == true
-        let inView = model.cardsInView(scrollView.documentVisibleRect)
+        let inView = model.cardsInView(scrollView.shownRect)
         for card in cards {
             views[card.id]?.mode = shown && inView.contains(card.id) ? .live : .hidden
         }
