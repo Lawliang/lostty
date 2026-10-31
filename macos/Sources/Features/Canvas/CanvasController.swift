@@ -78,6 +78,8 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     /// The canvas sets the cursor (`updateGroupHover`), the panes' own
     /// cursors off.
     var ownsCursor = false
+    /// The cards a drag draws away from their views' frames (`show`).
+    private var dragShown: Set<UUID> = []
     /// Cards whose panes are moving to a window: gone for good, not for Undo.
     private var moving: Set<UUID> = []
     private var zoneResizeStart: CanvasZoneSnapshot?
@@ -447,11 +449,48 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     /// Moving or resizing, live.
     func setFrame(_ frame: CGRect, of id: UUID) {
         model.setFrame(frame, of: id)
+        if dragShown.contains(id) { placeDragged() }
         if let frame = model.card(id)?.frame { view(id)?.frame = frame }
         if selection.contains(id) { updateSelectionOutline() }
     }
 
+    /// A drag moved card `id` to `frame`: the model has it there now, and
+    /// its view is drawn there (`show`).
+    func dragFrame(_ frame: CGRect, of id: UUID) {
+        model.setFrame(frame, of: id)
+        if let frame = model.card(id)?.frame { show(id, at: frame) }
+    }
+
+    /// Card `id` drawn at `frame` while a drag goes on, by a layer
+    /// transform: moving a view every frame makes AppKit redo every view's
+    /// tracking areas and cursor rects. Its view takes the frame once the
+    /// drag settles (`placeDragged`).
+    private func show(_ id: UUID, at frame: CGRect) {
+        guard let view = view(id) else { return }
+        dragShown.insert(id)
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        view.layer?.setAffineTransform(
+            CGAffineTransform(translationX: frame.minX - view.frame.minX, y: frame.minY - view.frame.minY))
+        CATransaction.commit()
+    }
+
+    /// The cards a drag drew elsewhere take their frames from the model.
+    private func placeDragged() {
+        guard !dragShown.isEmpty else { return }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        for id in dragShown {
+            guard let view = view(id) else { continue }
+            view.layer?.setAffineTransform(.identity)
+            if let frame = model.card(id)?.frame { view.frame = frame }
+        }
+        CATransaction.commit()
+        dragShown = []
+    }
+
     func cardFrameDidSettle() {
+        placeDragged()
         relistTickets()
         updateVisibility()
         saveSoon()
@@ -502,7 +541,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         var moved = model
         guard let cards = moved.moveZone(id, by: delta) else { return false }
         surface.zones.show(moved.zones)
-        for card in cards { if let frame = moved.card(card)?.frame { view(card)?.frame = frame } }
+        for card in cards { if let frame = moved.card(card)?.frame { show(card, at: frame) } }
         updateSelectionOutline(in: moved)
         return true
     }
@@ -513,6 +552,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         let held = model.members(of: id)
         let before = model.zoneSnapshot(cards: held)
         if delta != .zero, model.moveZone(id, by: delta) != nil { registerZoneUndo("Move Zone", before) }
+        placeDragged()
         for card in held { if let frame = model.card(card)?.frame { view(card)?.frame = frame } }
         zonesDidChange()
         updateSelectionOutline()
