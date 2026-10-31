@@ -51,49 +51,117 @@ final class CanvasScrollView: NSScrollView {
             pane.scrollWheel(with: event)
             return
         }
-        if glides(event) { return }
+        if pans(event) { return }
         super.scrollWheel(with: event)
     }
 
-    /// A trackpad pan's distance not yet scrolled, in screen points.
-    private(set) var unscrolled: CGSize?
-    /// The cards moved without scrolling (`glides`): the views over them follow.
-    var glided: (() -> Void)?
+    /// Where the canvas is drawn while it isn't scrolled there yet (a
+    /// trackpad pan under way, a glide): the visible rect's origin, in
+    /// document points, and the zoom. The cards get there by a layer
+    /// transform: scrolling or zooming every frame moves every view, so
+    /// AppKit works out the cursor again each frame, which a customized
+    /// pointer makes cost most of a pan.
+    private(set) var drawn: (origin: CGPoint, zoom: CGFloat)?
+    /// The canvas was drawn somewhere else (`drawn`): the views over it follow.
+    var redrawn: (() -> Void)?
+    /// A pan or a pinch starts: a glide under way gives way to it.
+    var userMoves: (() -> Void)?
+    private var panning = false
+    private var pinching = false
 
-    /// What's on screen of the canvas, a trackpad pan under way included.
+    /// What's on screen of the canvas, as drawn.
     var shownRect: CGRect {
-        guard let unscrolled else { return documentVisibleRect }
-        return documentVisibleRect.offsetBy(dx: -unscrolled.width / magnification, dy: -unscrolled.height / magnification)
+        let zoom = drawn?.zoom ?? magnification
+        return CGRect(origin: drawn?.origin ?? contentView.bounds.origin,
+                      size: CGSize(width: contentView.frame.width / zoom, height: contentView.frame.height / zoom))
     }
 
-    /// A trackpad pan moves the cards with a layer transform and scrolls
-    /// once it stops: scrolling every frame moves every view, so AppKit
-    /// works out the cursor again each frame, which a customized pointer
-    /// makes cost most of a pan.
-    private func glides(_ event: NSEvent) -> Bool {
-        guard event.hasPreciseScrollingDeltas, !(event.phase.isEmpty && event.momentumPhase.isEmpty) else { return false }
-        var moved = unscrolled ?? .zero
-        moved.width += event.scrollingDeltaX
-        moved.height += event.scrollingDeltaY
-        let ends = event.momentumPhase.contains(.ended) || event.momentumPhase.contains(.cancelled)
-            || (event.momentumPhase.isEmpty && (event.phase.contains(.ended) || event.phase.contains(.cancelled)))
+    var shownZoom: CGFloat { drawn?.zoom ?? magnification }
+
+    /// Where a point on screen as scrolled is drawn instead, in the visible
+    /// area (screen points, y down): scaled by `scale`, then moved by `offset`.
+    var drawnMap: (scale: CGFloat, offset: CGPoint) {
+        guard let drawn else { return (1, .zero) }
+        let origin = contentView.bounds.origin
+        return (drawn.zoom / magnification,
+                CGPoint(x: (origin.x - drawn.origin.x) * drawn.zoom, y: (origin.y - drawn.origin.y) * drawn.zoom))
+    }
+
+    /// Draws the canvas as if scrolled to `view`; nil draws it where it is.
+    func draw(at view: (origin: CGPoint, zoom: CGFloat)?) {
+        drawn = view
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        if ends {
-            unscrolled = nil
-            document.layer?.setAffineTransform(.identity)
-            let origin = contentView.bounds.origin
-            contentView.scroll(to: CGPoint(x: origin.x - moved.width / magnification,
-                                           y: origin.y - moved.height / magnification))
-            reflectScrolledClipView(contentView)
-        } else {
-            unscrolled = moved
-            document.layer?.setAffineTransform(
-                CGAffineTransform(translationX: moved.width / magnification, y: moved.height / magnification))
+        if let layer = document.layer {
+            // In the clip view's document points a point p is drawn at
+            // scale * p + (origin - scale * drawn origin).
+            let scale = shownZoom / magnification
+            let origin = contentView.bounds.origin, to = shownRect.origin
+            let move = CGPoint(x: origin.x - scale * to.x, y: origin.y - scale * to.y)
+            layer.setAffineTransform(Self.transform(for: layer, scale: scale, move: move))
         }
-        glided?()
+        redrawn?()
         CATransaction.commit()
+    }
+
+    /// Scrolls to where the canvas is drawn, so it's drawn as it is again.
+    func settleDrawn() {
+        guard let view = drawn else { return }
+        draw(at: nil)
+        if magnification != view.zoom { magnification = view.zoom }
+        contentView.scroll(to: view.origin)
+        reflectScrolledClipView(contentView)
+    }
+
+    /// The transform that draws `layer` mapped by `scale` then `move`, in
+    /// its superlayer's coordinates, whatever its anchor point.
+    static func transform(for layer: CALayer, scale: CGFloat, move: CGPoint) -> CGAffineTransform {
+        let position = layer.position
+        return CGAffineTransform(a: scale, b: 0, c: 0, d: scale,
+                                 tx: (scale - 1) * position.x + move.x, ty: (scale - 1) * position.y + move.y)
+    }
+
+    /// A trackpad pan draws the canvas where it goes and scrolls once it
+    /// stops (`drawn`).
+    private func pans(_ event: NSEvent) -> Bool {
+        guard event.hasPreciseScrollingDeltas, !(event.phase.isEmpty && event.momentumPhase.isEmpty) else { return false }
+        if !panning {
+            userMoves?()
+            pinching = false
+            settleDrawn()
+            panning = true
+        }
+        let from = drawn?.origin ?? contentView.bounds.origin
+        let origin = CGPoint(x: from.x - event.scrollingDeltaX / magnification, y: from.y - event.scrollingDeltaY / magnification)
+        draw(at: (origin, magnification))
+        let ends = event.momentumPhase.contains(.ended) || event.momentumPhase.contains(.cancelled)
+            || (event.momentumPhase.isEmpty && (event.phase.contains(.ended) || event.phase.contains(.cancelled)))
+        if ends {
+            panning = false
+            settleDrawn()
+        }
         return true
+    }
+
+    /// A pinch draws the canvas zoomed about the pointer and zooms once it
+    /// stops (`drawn`), as a pan does.
+    override func magnify(with event: NSEvent) {
+        if !pinching {
+            userMoves?()
+            panning = false
+            settleDrawn()
+            pinching = true
+        }
+        let zoom = min(max(shownZoom * (1 + event.magnification), minMagnification), maxMagnification)
+        // The document point under the pointer stays under it.
+        let inView = convert(event.locationInWindow, from: nil)
+        let pointer = CGPoint(x: inView.x, y: isFlipped ? inView.y : bounds.height - inView.y)
+        let under = CGPoint(x: shownRect.minX + pointer.x / shownZoom, y: shownRect.minY + pointer.y / shownZoom)
+        draw(at: (CGPoint(x: under.x - pointer.x / zoom, y: under.y - pointer.y / zoom), zoom))
+        if event.phase.isEmpty || event.phase.contains(.ended) || event.phase.contains(.cancelled) {
+            pinching = false
+            settleDrawn()
+        }
     }
 }
 
@@ -263,7 +331,7 @@ final class CanvasGridView: NSView {
             drawn = (size, scale)
         }
         // Each dot sits mid-cell; one row and column of them start off-view.
-        let first = CanvasGrid.firstDot(origin: scrollView.shownRect.origin, zoom: scrollView.magnification)
+        let first = CanvasGrid.firstDot(origin: scrollView.shownRect.origin, zoom: scrollView.shownZoom)
         let top = first.y - gap.height / 2 - gap.height
         dots.position = CGPoint(x: first.x - gap.width / 2 - gap.width,
                                 y: layer?.isGeometryFlipped == true ? top : bounds.height - top - size.height)
@@ -345,24 +413,31 @@ final class CanvasSurfaceView: NSView {
         ])
         NotificationCenter.default.addObserver(
             self, selector: #selector(canvasMoved), name: NSView.boundsDidChangeNotification, object: scrollView.contentView)
-        scrollView.glided = { [weak self] in self?.glided() }
+        scrollView.redrawn = { [weak self] in self?.redrawn() }
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
-    /// The canvas's trackpad pan under way, for the controller.
-    var panned: (() -> Void)?
+    /// The canvas was drawn somewhere it isn't scrolled to, for the controller.
+    var shownMoved: (() -> Void)?
 
-    /// The selection's outline and bar move with the cards (the view is
-    /// unflipped, the document flipped).
-    private func glided() {
-        let moved = scrollView.unscrolled ?? .zero
-        let shift = CGAffineTransform(translationX: moved.width, y: -moved.height)
-        selection.layer?.setAffineTransform(shift)
-        selectionBar.layer?.setAffineTransform(shift)
+    /// The selection's outline and bar follow the canvas as drawn
+    /// (`CanvasScrollView.drawn`). The view is unflipped, the map y down;
+    /// the bar moves but keeps its size, as it does at any zoom.
+    private func redrawn() {
+        let map = scrollView.drawnMap, height = bounds.height
+        func shown(_ point: CGPoint) -> CGPoint {
+            CGPoint(x: map.scale * point.x + map.offset.x, y: map.scale * point.y + height * (1 - map.scale) - map.offset.y)
+        }
+        if let layer = selection.layer {
+            let origin = shown(.zero)
+            layer.setAffineTransform(CanvasScrollView.transform(for: layer, scale: map.scale, move: origin))
+        }
+        let top = CGPoint(x: selectionBar.frame.midX, y: selectionBar.frame.maxY), moved = shown(top)
+        selectionBar.layer?.setAffineTransform(CGAffineTransform(translationX: moved.x - top.x, y: moved.y - top.y))
         grid.update()
-        panned?()
+        shownMoved?()
     }
 
     override func layout() {

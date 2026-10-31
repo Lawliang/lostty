@@ -346,8 +346,9 @@ extension CanvasController {
         for (id, origin) in origins {
             guard var frame = model.card(id)?.frame else { continue }
             frame.origin = CGPoint(x: origin.x + delta.width, y: origin.y + delta.height)
-            setFrame(frame, of: id)
+            dragFrame(frame, of: id)
         }
+        if !selection.isDisjoint(with: origins.keys) { updateSelectionOutline() }
     }
 
     /// Every selected card in view.

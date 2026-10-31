@@ -5,7 +5,7 @@ import SwiftUI
 /// The Claude trace for one pane (spec §4). Lives in SurfaceWrapper's
 /// ZStack; draws nothing while the pane is idle. On a zoomed-out canvas it
 /// keeps its size on screen.
-struct ClaudeTraceLayer: View {
+struct ClaudeTraceLayer: View, Equatable {
     let surfaceID: UUID
     @StateObject private var claude: PaneClaude
     @ObservedObject private var skins = SkinsRuntime.shared.manager
@@ -21,6 +21,10 @@ struct ClaudeTraceLayer: View {
         self.surfaceID = surfaceID
         _claude = StateObject(wrappedValue: PaneClaude(surfaceID))
     }
+
+    /// Its pane rebuilds on every mouse move over it (the grab handle
+    /// follows the pointer); the trace changes only with its own state.
+    static func == (a: Self, b: Self) -> Bool { a.surfaceID == b.surfaceID }
 
     var body: some View {
         let phase = claude.phase
