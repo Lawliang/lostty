@@ -23,7 +23,9 @@ enum AutoSkin {
         return Skin(
             name: name,
             background: .hsl(hue, 0.35, 0.13),
-            foreground: nil,
+            // Near-white in the same hue, as skins.toml's skins have: with
+            // none, the Mockup Window Style's dim text showed through.
+            foreground: .hsl(hue, 0.4, 0.94),
             accent: .hsl(hue, 0.55, 0.62),
             texture: .builtin(textures[Int((hash >> 16) % UInt64(textures.count))]),
             textureOpacity: textureOpacity)
