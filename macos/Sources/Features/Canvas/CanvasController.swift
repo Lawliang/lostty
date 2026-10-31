@@ -34,6 +34,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     private(set) var cards: [CardController] = []
     /// The card holding keyboard focus, or that last held it.
     private(set) weak var focusedCard: CardController?
+    private weak var lastFocusedCard: CardController?
     /// The canvas's tickets, kept while no panel is open. Every panel lists
     /// them.
     private(set) var tickets: [CanvasTicket] = []
@@ -375,6 +376,12 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         return true
     }
 
+    /// Where ⌘T and ⌘N start from: the focused card, or with none (a click
+    /// between the cards, a tickets panel) the last one, while it's open.
+    var workingCard: CardController? {
+        focusedCard ?? lastFocusedCard.flatMap { last in cards.contains { $0 === last } ? last : nil }
+    }
+
     /// Keyboard focus to `card`'s focused pane.
     func focus(_ card: CardController) {
         guard let surface = card.focusedSurface ?? card.surfaceTree.first else { return }
@@ -415,6 +422,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     func cardWillFocus(_ card: CardController) {
         let previous = focusedCard
         focusedCard = card
+        lastFocusedCard = card
         guard previous !== card else { return }
         previous?.syncFocusToSurfaceTree()
         bringToFront(card.id)
