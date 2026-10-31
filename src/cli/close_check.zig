@@ -46,7 +46,7 @@ pub fn run(gpa: Allocator) !u8 {
     };
     defer file.close();
     const tmux = std.posix.getenv("TMUX") != null;
-    try file.writeAll(try protocol.encodeUserVar(alloc, user_var_name, answer, tmux));
+    try claude_state.writeWhole(file, try protocol.encodeUserVar(alloc, user_var_name, answer, tmux));
     return 0;
 }
 

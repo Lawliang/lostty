@@ -311,9 +311,9 @@ final class CanvasZoneLabel: NSView {
     }
 }
 
-/// A zone's caption beside its label: a project's folder by the pill and
-/// its counts at the right, a domain's brief by the pill. Text only, so a
-/// press there goes to the card or the canvas under it.
+/// A zone's caption beside its label: a project's folder, a domain's
+/// brief. Text only, so a press there goes to the card or the canvas under
+/// it.
 final class CanvasZoneCaptionView: NSView {
     var color: CanvasZone.Color = .blue {
         didSet { if color != oldValue { needsDisplay = true } }
@@ -334,54 +334,15 @@ final class CanvasZoneCaptionView: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        guard let caption else { return }
-        let counts = countsText(caption)
-        let countsWidth = min(counts.size().width.rounded(.up), bounds.width)
-        draw(counts, in: CGRect(x: bounds.width - countsWidth, y: 0, width: countsWidth, height: bounds.height))
-        guard let note = caption.note else { return }
-        let gap: CGFloat = counts.length > 0 ? 16 : 0
-        draw(NSAttributedString(string: note, attributes: [
+        guard let note = caption?.note, bounds.width > 0 else { return }
+        let text = NSAttributedString(string: note, attributes: [
             .font: isDomain ? NSFont.systemFont(ofSize: 11) : NSFont.monospacedSystemFont(ofSize: 11.5, weight: .regular),
             .foregroundColor: color.caption,
-        ]), in: CGRect(x: 0, y: 0, width: max(0, bounds.width - countsWidth - gap), height: bounds.height))
-    }
-
-    private func countsText(_ caption: CanvasZoneCaption) -> NSAttributedString {
-        let text = NSMutableAttributedString()
-        let plain: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 11.5), .foregroundColor: NSColor.secondaryLabelColor,
-        ]
-        for (index, count) in caption.counts.enumerated() {
-            if index > 0 { text.append(NSAttributedString(string: " · ", attributes: plain)) }
-            let strong: NSColor? = switch count.kind {
-            case .working: Self.working
-            case .waiting: Self.waiting
-            case .terminals, .ticketPanels: nil
-            }
-            text.append(NSAttributedString(string: count.text, attributes: strong.map {
-                [.font: NSFont.systemFont(ofSize: 11.5, weight: .semibold), .foregroundColor: $0]
-            } ?? plain))
-        }
-        return text
-    }
-
-    private func draw(_ text: NSAttributedString, in rect: CGRect) {
-        guard rect.width > 0, text.length > 0 else { return }
+        ])
         let height = text.size().height
         text.draw(
-            with: CGRect(x: rect.minX, y: (rect.height - height) / 2, width: rect.width, height: height),
+            with: CGRect(x: 0, y: (bounds.height - height) / 2, width: bounds.width, height: height),
             options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
-    }
-
-    private static let working = NSColor(name: nil) { appearance in
-        isDark(appearance)
-            ? NSColor(srgbRed: 0xB9 / 255, green: 0xA8 / 255, blue: 1, alpha: 1)
-            : NSColor(srgbRed: 0x6B / 255, green: 0x4F / 255, blue: 0xD8 / 255, alpha: 1)
-    }
-    private static let waiting = NSColor(name: nil) { appearance in
-        isDark(appearance)
-            ? NSColor(srgbRed: 0xF2 / 255, green: 0xC1 / 255, blue: 0x4E / 255, alpha: 1)
-            : NSColor(srgbRed: 0x8C / 255, green: 0x6A / 255, blue: 0x0C / 255, alpha: 1)
     }
 }
 

@@ -391,11 +391,12 @@ final class CanvasSurfaceView: NSView {
 
     /// Whether a click at `point` (in the window) is on what floats over
     /// the cards: the + menu, the selection's bar, the dock, a
-    /// notification, or a zone's label.
+    /// notification, or a zone's label no card covers there.
     func floats(at point: NSPoint) -> Bool {
         addMenu.covers(point) || selectionBar.covers(point) || dock.covers(point)
             || notifications.hitTest(convert(point, from: nil)) != nil
-            || zones.labels.hitTest(scrollView.document.convert(point, from: nil)) != nil
+            || scrollView.document.hitTest(scrollView.contentView.convert(point, from: nil))?
+                .isDescendant(of: zones.labels) == true
     }
 }
 
