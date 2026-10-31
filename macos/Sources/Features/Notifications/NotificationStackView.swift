@@ -108,10 +108,7 @@ struct NotificationStackView: View {
                     ForEach(group.entries) { entry($0) }
                 }
             } else {
-                VStack(alignment: .trailing, spacing: 0) {
-                    entry(group.entries[0])
-                    deck(group, zone)
-                }
+                deck(group, zone)
             }
         } else {
             ForEach(group.entries) { entry($0) }
@@ -134,27 +131,49 @@ struct NotificationStackView: View {
         }
     }
 
-    /// The folded notifications' edges under the newest, and how many.
+    /// The newest, with the folded ones' edges under it (copies of it, so
+    /// they take its width and look as it shrinks), and how many.
     private func deck(_ group: NotificationGroup, _ zone: UUID) -> some View {
         let more = group.entries.count - 1
-        return Button { open.insert(zone) } label: {
-            VStack(spacing: 4) {
-                VStack(spacing: 0) {
-                    edge(width: 300, opacity: 1)
-                    if more > 1 { edge(width: 280, opacity: 0.7) }
+        return VStack(alignment: .trailing, spacing: 4) {
+            ZStack(alignment: .top) {
+                ForEach([2, 1].filter { $0 <= more }, id: \.self) { depth in
+                    let scale = 1 - CGFloat(depth) * 0.05
+                    look(group.entries[0])
+                        .allowsHitTesting(false)
+                        // Only the strip that shows past the one above: the cards
+                        // are see-through, and would show its text.
+                        .mask(alignment: .bottom) { Rectangle().frame(height: 7 / scale) }
+                        .scaleEffect(scale, anchor: .bottom)
+                        .offset(y: CGFloat(depth) * 7)
+                        .opacity(depth == 1 ? 0.6 : 0.3)
+                        .overlay { Color.clear.contentShape(Rectangle()).onTapGesture { open.insert(zone) } }
+                        .accessibilityHidden(true)
                 }
+                entry(group.entries[0])
+            }
+            .padding(.bottom, CGFloat(min(more, 2)) * 7)
+            Button { open.insert(zone) } label: {
                 HStack(spacing: 4) {
                     Text("\(more) more from")
                     zoneName(zone)
                 }
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(.secondary)
+                .contentShape(Rectangle())
             }
-            .frame(width: 320)
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+            .accessibilityLabel("Show \(more) more notifications")
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Show \(more) more notifications")
+    }
+
+    /// A notification as it looks, for the deck's edges.
+    @ViewBuilder
+    private func look(_ entry: NotificationGroup.Entry) -> some View {
+        switch entry {
+        case .bubble(let item): NotificationBubble(item: item, center: center)
+        case .terminal(let item): TerminalNoticeCard(item: item, compact: notices.collapsed.contains(item.id))
+        }
     }
 
     /// The zone's name in its color, as its caption on the canvas.
@@ -180,14 +199,6 @@ struct NotificationStackView: View {
             }
         }
         if let zone = group.zone { open.remove(zone) }
-    }
-
-    private func edge(width: CGFloat, opacity: Double) -> some View {
-        let shape = UnevenRoundedRectangle(bottomLeadingRadius: 10, bottomTrailingRadius: 10, style: .continuous)
-        return Color.clear
-            .frame(width: width, height: 8)
-            .background(shape.fill(.regularMaterial))
-            .opacity(opacity)
     }
 
     private func pill(_ title: String, action: @escaping () -> Void) -> some View {
