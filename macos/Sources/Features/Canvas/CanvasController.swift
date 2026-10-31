@@ -1035,7 +1035,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         guard drag.moved || hypot(delta.width, delta.height) * scrollView.magnification >= Self.clickWobble else { return true }
         drag.moved = true
         groupDrag = drag
-        NSCursor.closedHand.set()
+        NSCursor.closedHand.setIfNeeded()
         move(drag.origins, by: delta)
         return true
     }
@@ -1057,9 +1057,9 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
             }
         }
         if draws {
-            Self.zoneCursor.set()
+            Self.zoneCursor.setIfNeeded()
         } else if over, groupDrag == nil {
-            NSCursor.openHand.set()
+            NSCursor.openHand.setIfNeeded()
         }
     }
 
@@ -1239,6 +1239,15 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
 
     func windowWillReturnUndoManager(_ window: NSWindow) -> UndoManager? {
         (NSApp.delegate as? AppDelegate)?.undoManager
+    }
+}
+
+extension NSCursor {
+    /// Sets the cursor unless it's the one shown: with a customized pointer
+    /// (Accessibility's pointer size or colors) each set draws the cursor
+    /// again, about 3 ms, and these run on every mouse move.
+    func setIfNeeded() {
+        if NSCursor.current != self { set() }
     }
 }
 #endif
