@@ -9,7 +9,5 @@ extension UserDefaults {
         #endif
     }
 
-    static var ghostty: UserDefaults {
-        ghosttySuite.flatMap(UserDefaults.init(suiteName:)) ?? .standard
-    }
+    static let ghostty: UserDefaults = ghosttySuite.flatMap(UserDefaults.init(suiteName:)) ?? .standard
 }

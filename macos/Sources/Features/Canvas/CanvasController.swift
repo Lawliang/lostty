@@ -78,11 +78,16 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     /// The canvas sets the cursor (`updateGroupHover`), the panes' own
     /// cursors off.
     var ownsCursor = false
+    /// The cards a drag draws away from their views' frames (`show`).
+    private var dragShown: Set<UUID> = []
     /// Cards whose panes are moving to a window: gone for good, not for Undo.
     private var moving: Set<UUID> = []
     private var zoneResizeStart: CanvasZoneSnapshot?
     private(set) var membership = (panes: CanvasPaneZones(), model: CanvasModel())
     private var zoneFiles: [UUID: CanvasZoneFile] = [:]
+    /// What each pane outside its project's domains said it works on
+    /// (`lostty +ticket working`), kept in its zone folder across launches.
+    lazy var featureClaims: [UUID: [String]] = zoneStore.claims()
     let zoneStore = CanvasZoneStore.standard
     private(set) var tmuxSessions: [TmuxSession] = []
     /// Each tmux session's Claude's name (ClaudeSessionNames).
@@ -93,8 +98,6 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     /// The glide to a card under way (CanvasController+Glide).
     var glide: CanvasGlide?
     var waits = CanvasWaits()
-    /// The panes whose Claude is working, its subagents included.
-    private var working: Set<UUID> = []
     /// The view to show when the window first opens (a restored canvas's).
     var pendingView: (center: CGPoint, zoom: CGFloat)?
     var isEmpty: Bool { model.cards.isEmpty && model.zones.isEmpty }
@@ -193,16 +196,12 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
             self?.drawsZone = false
         }
         surface.zones.canvas = self
-        surface.addMenu.chose = { [weak self] item in
-            self?.drawsZone = false
-            switch item {
-            case .terminal: self?.newCard()
-            case .ticket: self?.showTickets()
-            case .zone: self?.startDrawingZone()
-            }
-        }
+        document.typed = { [weak self] key in self?.shortcut(key) ?? false }
+        surface.addMenu.chose = { [weak self] item in self?.add(item) }
         NotificationCenter.default.addObserver(
             self, selector: #selector(canvasMoved), name: NSView.boundsDidChangeNotification, object: scrollView.contentView)
+        surface.shownMoved = { [weak self] in self?.updateVisibility() }
+        scrollView.userMoves = { [weak self] in self?.stopGlide(keep: true) }
         // Focus follows the window's first responder: whichever card holds
         // it is the focused card.
         window?.publisher(for: \.firstResponder)
@@ -211,15 +210,12 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         ClaudeRuntime.shared.$awaiting
             .sink { [weak self] awaiting in
                 self?.waits.update(awaiting: awaiting, now: Date())
-                self?.updateZoneCaptions()
             }
             .store(in: &cancellables)
         ClaudeRuntime.shared.$phases
             .map { Set($0.keys) }
             .removeDuplicates()
-            .sink { [weak self] working in
-                self?.working = working
-                self?.updateZoneCaptions()
+            .sink { [weak self] _ in
                 self?.deliverSoon()
                 self?.readAgentNames()
             }
@@ -238,9 +234,15 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         let events: NSEvent.EventTypeMask = [.magnify, .leftMouseDown, .rightMouseDown, .leftMouseDragged, .leftMouseUp, .mouseMoved]
         eventMonitor = NSEvent.addLocalMonitorForEvents(matching: events) { [weak self] event in
             guard let self, event.window === window else { return event }
+            // A click lands where the canvas is drawn: a pan's momentum, a
+            // glide or a pinch drawn elsewhere scrolls there first.
+            if event.type == .leftMouseDown || event.type == .rightMouseDown, scrollView.drawn != nil {
+                stopGlide(keep: true)
+                scrollView.settleDrawn()
+            }
             switch event.type {
             case .magnify:
-                stopGlide()
+                stopGlide(keep: true)
                 scrollView.magnify(with: event)
                 return nil
             case .leftMouseDown:
@@ -274,23 +276,25 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     /// ⌘T on a card: a new card beside it, as big, its zone growing to
     /// hold it when full, starting where its focused pane is
     /// (`baseConfig`), or in its zone's folder, or in the folder of
-    /// `other`'s zone when it lands outside every zone.
+    /// `other`'s zone when it lands outside every zone. `folder`, when
+    /// given, wins over the zone's.
     @discardableResult
-    func newCard(beside other: CardController, baseConfig: Ghostty.SurfaceConfiguration?)
+    func newCard(beside other: CardController, baseConfig: Ghostty.SurfaceConfiguration?, folder: String? = nil)
         -> (card: CardController, config: Ghostty.SurfaceConfiguration?) {
         let frame = model.placement(beside: other.id) ?? model.placement(in: scrollView.documentVisibleRect)
         if let home = model.card(other.id).flatMap({ model.zone(for: $0.frame) }), model.growZone(home, toHold: frame) {
             zonesDidChange()
         }
-        return newCard(at: frame, zone: model.startZone(beside: other.id, at: frame), baseConfig: baseConfig)
+        return newCard(at: frame, zone: model.startZone(beside: other.id, at: frame), baseConfig: baseConfig, folder: folder)
     }
 
-    private func newCard(at frame: CGRect, zone: UUID?, baseConfig: Ghostty.SurfaceConfiguration?)
-        -> (card: CardController, config: Ghostty.SurfaceConfiguration?) {
+    private func newCard(
+        at frame: CGRect, zone: UUID?, baseConfig: Ghostty.SurfaceConfiguration?, folder: String? = nil
+    ) -> (card: CardController, config: Ghostty.SurfaceConfiguration?) {
         var config = baseConfig
-        if let zone, let folder = model.startFolder(ofZone: zone), Self.isFolder(folder) {
+        if let start = folder ?? zone.flatMap({ model.startFolder(ofZone: $0) }), Self.isFolder(start) {
             config = config ?? Ghostty.SurfaceConfiguration()
-            config?.workingDirectory = folder
+            config?.workingDirectory = start
         }
         let card = CardController(ghostty, canvas: self, baseConfig: config)
         add(card, frame: frame)
@@ -347,6 +351,28 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
 
     func card(holding surface: Ghostty.SurfaceView) -> CardController? {
         cards.first { $0.surfaceTree.contains(surface) }
+    }
+
+    private func add(_ item: CanvasAddMenuView.Item) {
+        drawsZone = false
+        switch item {
+        case .terminal: newCard()
+        case .ticket: showTickets()
+        case .zone: startDrawingZone()
+        }
+    }
+
+    /// The canvas's one-letter keys, while nothing has the keyboard: the
+    /// + menu's items' (T, M, Z), and D, which brings the dock out or puts
+    /// it away. True when `key` was one.
+    private func shortcut(_ key: String) -> Bool {
+        if key == "d" {
+            surface.dockState.shown.toggle()
+            return true
+        }
+        guard let item = CanvasAddMenuView.Item.allCases.first(where: { $0.key == key }) else { return false }
+        add(item)
+        return true
     }
 
     /// Keyboard focus to `card`'s focused pane.
@@ -430,11 +456,48 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     /// Moving or resizing, live.
     func setFrame(_ frame: CGRect, of id: UUID) {
         model.setFrame(frame, of: id)
+        if dragShown.contains(id) { placeDragged() }
         if let frame = model.card(id)?.frame { view(id)?.frame = frame }
         if selection.contains(id) { updateSelectionOutline() }
     }
 
+    /// A drag moved card `id` to `frame`: the model has it there now, and
+    /// its view is drawn there (`show`).
+    func dragFrame(_ frame: CGRect, of id: UUID) {
+        model.setFrame(frame, of: id)
+        if let frame = model.card(id)?.frame { show(id, at: frame) }
+    }
+
+    /// Card `id` drawn at `frame` while a drag goes on, by a layer
+    /// transform: moving a view every frame makes AppKit redo every view's
+    /// tracking areas and cursor rects. Its view takes the frame once the
+    /// drag settles (`placeDragged`).
+    private func show(_ id: UUID, at frame: CGRect) {
+        guard let view = view(id) else { return }
+        dragShown.insert(id)
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        view.layer?.setAffineTransform(
+            CGAffineTransform(translationX: frame.minX - view.frame.minX, y: frame.minY - view.frame.minY))
+        CATransaction.commit()
+    }
+
+    /// The cards a drag drew elsewhere take their frames from the model.
+    private func placeDragged() {
+        guard !dragShown.isEmpty else { return }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        for id in dragShown {
+            guard let view = view(id) else { continue }
+            view.layer?.setAffineTransform(.identity)
+            if let frame = model.card(id)?.frame { view.frame = frame }
+        }
+        CATransaction.commit()
+        dragShown = []
+    }
+
     func cardFrameDidSettle() {
+        placeDragged()
         relistTickets()
         updateVisibility()
         saveSoon()
@@ -485,7 +548,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         var moved = model
         guard let cards = moved.moveZone(id, by: delta) else { return false }
         surface.zones.show(moved.zones)
-        for card in cards { if let frame = moved.card(card)?.frame { view(card)?.frame = frame } }
+        for card in cards { if let frame = moved.card(card)?.frame { show(card, at: frame) } }
         updateSelectionOutline(in: moved)
         return true
     }
@@ -496,6 +559,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         let held = model.members(of: id)
         let before = model.zoneSnapshot(cards: held)
         if delta != .zero, model.moveZone(id, by: delta) != nil { registerZoneUndo("Move Zone", before) }
+        placeDragged()
         for card in held { if let frame = model.card(card)?.frame { view(card)?.frame = frame } }
         zonesDidChange()
         updateSelectionOutline()
@@ -636,6 +700,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         for pane in zoneFiles.keys where now.zones[pane] == nil {
             zoneStore.removeZone(pane)
             zoneFiles[pane] = nil
+            featureClaims[pane] = nil
         }
         for pane in before.panes.panes.subtracting(now.panes) { zoneStore.removeSay(pane) }
         writeZoneFiles()
@@ -705,28 +770,27 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         }
     }
 
-    /// Each pane in a zone has its zone file, written when it changed.
-    private func writeZoneFiles() {
+    /// Each pane in a zone has its zone file, written when it changed. A
+    /// pane whose project's features changed is told with its next prompt,
+    /// which brings the other agents' features.
+    func writeZoneFiles() {
         let panes = membership.panes
         let sessions = paneSessions()
         for (pane, zone) in panes.zones {
-            guard let file = model.zoneFile(zone, pane: pane, panes: panes, sessions: sessions, tickets: tickets),
+            guard let file = model.zoneFile(
+                zone, pane: pane, panes: panes, sessions: sessions, claims: featureClaims, tickets: tickets),
                   zoneFiles[pane] != file else { continue }
             zoneStore.writeZone(pane, file)
+            if let old = zoneFiles[pane], old.features != file.features {
+                zoneStore.appendSay(pane, "The features in zone \(file.zone) changed.")
+            }
             zoneFiles[pane] = file
         }
     }
 
     private func updateZoneCaptions() {
-        let waiting = Set(waits.since.keys)
         let captions = model.zones.map { zone in
-            let held = zone.parent == nil ? model.members(of: zone.id) : []
-            let members = held.compactMap { id -> CanvasZoneCaption.Member? in
-                if ticketPanels[id] != nil { return .tickets }
-                return cards.first { $0.id == id }.map { .terminal(panes: $0.surfaceTree.map(\.id)) }
-            }
-            return (zone.id, CanvasZoneCaption(
-                zone, folder: model.startFolder(ofZone: zone.id), members: members, working: working, waiting: waiting))
+            (zone.id, CanvasZoneCaption(zone, folder: model.startFolder(ofZone: zone.id)))
         }
         surface.zones.showCaptions(Dictionary(uniqueKeysWithValues: captions))
     }
@@ -960,9 +1024,9 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         return true
     }
 
-    /// While New Zone waits, a crosshair where a drag draws the zone; else
-    /// an open hand over a group of selected cards, which drags them; the
-    /// panes' own cursors everywhere else.
+    /// While New Zone waits, a crosshair with New Zone's icon where a drag
+    /// draws the zone; else an open hand over a group of selected cards,
+    /// which drags them; the panes' own cursors everywhere else.
     func updateGroupHover(at point: NSPoint) {
         let draws = drawsZone && surface.hitTest(point) === scrollView.document
         let over = draws || groupCard(at: point) != nil
@@ -977,11 +1041,38 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
             }
         }
         if draws {
-            NSCursor.crosshair.set()
+            Self.zoneCursor.set()
         } else if over, groupDrag == nil {
             NSCursor.openHand.set()
         }
     }
+
+    /// The crosshair with New Zone's icon on a white tag at its bottom right.
+    static let zoneCursor: NSCursor = {
+        let cross = NSCursor.crosshair
+        let base = cross.image
+        let config = NSImage.SymbolConfiguration(pointSize: 10, weight: .bold)
+            .applying(.init(paletteColors: [.black]))
+        guard let badge = NSImage(systemSymbolName: CanvasAddMenuView.Item.zone.symbol, accessibilityDescription: nil)?
+            .withSymbolConfiguration(config) else { return cross }
+        let tag = NSRect(x: base.size.width - 6, y: base.size.height - 6,
+                         width: badge.size.width + 4, height: badge.size.height + 4)
+        let size = NSSize(width: tag.maxX + 1, height: tag.maxY + 1)
+        let image = NSImage(size: size, flipped: true) { _ in
+            base.draw(in: NSRect(origin: .zero, size: base.size), from: .zero, operation: .sourceOver,
+                      fraction: 1, respectFlipped: true, hints: nil)
+            let plate = NSBezierPath(roundedRect: tag, xRadius: 3, yRadius: 3)
+            NSColor.white.setFill()
+            plate.fill()
+            NSColor.black.withAlphaComponent(0.5).setStroke()
+            plate.lineWidth = 0.5
+            plate.stroke()
+            badge.draw(in: tag.insetBy(dx: 2, dy: 2), from: .zero, operation: .sourceOver,
+                       fraction: 1, respectFlipped: true, hints: nil)
+            return true
+        }
+        return NSCursor(image: image, hotSpot: cross.hotSpot)
+    }()
 
     /// A click on a card: with ⇧ on its title bar it goes in or out of the
     /// selection, and the click goes no further; otherwise a click on a card
@@ -1038,6 +1129,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     }
 
     func center(on point: CGPoint) {
+        stopGlide()
         let size = scrollView.contentView.bounds.size
         scrollView.contentView.scroll(to: CGPoint(x: point.x - size.width / 2, y: point.y - size.height / 2))
         scrollView.reflectScrolledClipView(scrollView.contentView)
@@ -1051,6 +1143,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
 
     /// `rect` in view, zoomed no closer than `atMost`.
     func zoomToFit(_ rect: CGRect, atMost cap: CGFloat = CanvasZoom.maximum) {
+        stopGlide()
         scrollView.magnify(toFit: rect)
         if scrollView.magnification > cap {
             scrollView.magnification = cap
@@ -1086,7 +1179,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     /// canvas is hidden or covered.
     func updateVisibility() {
         let shown = window?.isVisible == true && window?.occlusionState.contains(.visible) == true
-        let inView = model.cardsInView(scrollView.documentVisibleRect)
+        let inView = model.cardsInView(scrollView.shownRect)
         for card in cards {
             views[card.id]?.mode = shown && inView.contains(card.id) ? .live : .hidden
         }

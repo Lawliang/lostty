@@ -5,7 +5,7 @@ import Testing
 
 struct StayAwakeModelTests {
     let t0 = Date(timeIntervalSince1970: 1_000_000)
-    let before = PowerSettings(disableSleep: false, lowPowerOnBattery: true, lowPowerOnAC: false)
+    let before = PowerSettings(lowPowerOnBattery: true, lowPowerOnAC: false)
     let open = PowerState(lidClosed: false, onBattery: true, batteryPercent: 80, thermal: .nominal)
     var closed: PowerState { PowerState(lidClosed: true, onBattery: true, batteryPercent: 80, thermal: .nominal) }
 
@@ -56,14 +56,13 @@ struct StayAwakeModelTests {
         #expect(m.state == .off(reason: .turnedOff, at: t0))
     }
 
-    @Test func aHandSetDisableSleepStaysSet() {
+    @Test func turnOffAlwaysLetsTheMacSleep() {
         var m = StayAwakeModel()
         _ = m.handle(.power(open), now: t0)
-        let mine = PowerSettings(disableSleep: true, lowPowerOnBattery: nil, lowPowerOnAC: false)
-        _ = m.handle(.turnOn(until: nil, current: mine), now: t0)
+        _ = m.handle(.turnOn(until: nil, current: .init(lowPowerOnBattery: nil, lowPowerOnAC: false)), now: t0)
         _ = m.handle(.power(closed), now: t0)
         #expect(m.handle(.turnOff, now: t0) == [
-            .run(.disableSleep(true)), .run(.lowPower(.ac, false)), .clearRecord,
+            .run(.disableSleep(false)), .run(.lowPower(.ac, false)), .clearRecord,
         ])
     }
 
@@ -168,7 +167,7 @@ struct StayAwakeModelTests {
         var m = onModel()
         _ = m.handle(.turnOff, now: t0)
         _ = m.handle(.controlFailed(.failed("nope"), command: .disableSleep(false)), now: t0)
-        let stuck = PowerSettings(disableSleep: true, lowPowerOnBattery: true, lowPowerOnAC: true)
+        let stuck = PowerSettings(lowPowerOnBattery: true, lowPowerOnAC: true)
         #expect(m.handle(.turnOn(until: nil, current: stuck), now: t0) == [])
         #expect(m.state == .off(reason: .restoreFailed, at: t0))
     }

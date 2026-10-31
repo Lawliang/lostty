@@ -25,10 +25,13 @@ public struct NewTerminalRequest: Codable, Equatable, Sendable {
     public var agentOptions: [String]?
     /// The agent's model (`AgentModel.id`); nil: the agent's own default.
     public var model: String?
+    /// The Lostty pane that asked (its `LOSTTY_SURFACE`), when a terminal
+    /// on the Mac did: on the canvas, the new terminal opens beside it.
+    public var from: String?
 
     public init(
         folder: String, branch: String? = nil, agent: TerminalAgent?, agentOptions: [String]? = nil,
-        model: String? = nil, id: String = NewTerminalRequest.newID()
+        model: String? = nil, from: String? = nil, id: String = NewTerminalRequest.newID()
     ) {
         self.id = id
         self.folder = folder
@@ -36,6 +39,7 @@ public struct NewTerminalRequest: Codable, Equatable, Sendable {
         self.agent = agent
         self.agentOptions = agentOptions
         self.model = model
+        self.from = from
     }
 
     /// What the new terminal types first, if anything.

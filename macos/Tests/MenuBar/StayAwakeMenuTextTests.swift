@@ -7,7 +7,7 @@ import Testing
 struct StayAwakeMenuTextTests {
     let now = Date(timeIntervalSince1970: 1_000_000)
     let battery = PowerState(lidClosed: false, onBattery: true, batteryPercent: 64, thermal: .nominal)
-    let record = StayAwakeRecord(settings: .init(disableSleep: false, lowPowerOnBattery: nil, lowPowerOnAC: false), lowPowerApplied: false)
+    let record = StayAwakeRecord(settings: .init(lowPowerOnBattery: nil, lowPowerOnAC: false), lowPowerApplied: false)
 
     @Test func onWithTimeLeftBatteryAndHeat() {
         let s = StayAwakeMenuText.status(.on(until: now.addingTimeInterval(2 * 3600 + 40 * 60), record: record),

@@ -3,8 +3,9 @@ import AppKit
 import SwiftUI
 
 /// The top-right stack of notification bubbles over the terminal area, in
-/// the frontmost window only. Newest on top; past `shown` bubbles the rest
-/// fold into a deck that opens on a click.
+/// the frontmost window only, with the temporary notifications always
+/// under them. Newest on top; past `shown` bubbles the rest fold into a
+/// deck that opens on a click.
 struct NotificationStackView: View {
     @ObservedObject var center: LosttyNotifications = .shared
     @State private var window: NSWindow?
@@ -22,7 +23,9 @@ struct NotificationStackView: View {
                             removal: .move(edge: .trailing).combined(with: .opacity)))
                 }
                 if folded > 0 { deck }
+                TerminalNoticeStack()
             }
+            TerminalNoticeStack()
         }
         .padding(.top, 12)
         .padding(.trailing, 12)

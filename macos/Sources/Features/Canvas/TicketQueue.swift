@@ -11,6 +11,8 @@ enum TicketReport: Equatable {
     /// A new ticket for the feature (a domain) named `feature`.
     case add(feature: String, summary: String, details: String)
     case assign(key: String, feature: String)
+    /// The feature an agent outside its project's domains works on.
+    case working(feature: String)
 
     static let userVar = "LOSTTY_TICKET"
 
@@ -20,8 +22,9 @@ enum TicketReport: Equatable {
     init?(json: String) {
         guard let arguments = try? JSONDecoder().decode([String].self, from: Data(json.utf8)) else { return nil }
         let words = arguments.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-        guard words.count >= 3, !words[1].isEmpty else { return nil }
+        guard words.count >= 2, !words[1].isEmpty else { return nil }
         switch (words[0], words.count) {
+        case ("working", 2): self = .working(feature: words[1])
         case ("review", 3): self = .review(key: words[1].uppercased(), note: words[2])
         case ("blocked", 3): self = .blocked(key: words[1].uppercased(), reason: words[2])
         case ("add", 3), ("add", 4):
@@ -122,6 +125,8 @@ enum TicketQueue {
         in model: CanvasModel, newKey: (UUID) -> String
     ) -> [CanvasTicket]? {
         switch report {
+        case .working:
+            return nil
         case .review(let key, let note):
             return changing(key, in: tickets) { $0.move(to: .review, note: note.isEmpty ? nil : note, by: actor) }
         case .blocked(let key, let reason):

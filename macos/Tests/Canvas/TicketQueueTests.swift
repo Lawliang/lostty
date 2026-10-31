@@ -185,6 +185,8 @@ struct TicketQueueTests {
         #expect(TicketReport(json: #"["review"," ","Done"]"#) == nil)
         #expect(TicketReport(json: #"["done","TB-7","Done"]"#) == nil)
         #expect(TicketReport(json: "review TB-7 Done") == nil)
+        #expect(TicketReport(json: #"["working"," Karaoke "]"#) == .working(feature: "Karaoke"))
+        #expect(TicketReport(json: #"["working"," "]"#) == nil)
         #expect(TicketReport(json: #"["add","Main app","Settings page"]"#)
             == .add(feature: "Main app", summary: "Settings page", details: ""))
         #expect(TicketReport(json: #"["add","Login","Google button","At /auth/google"]"#)

@@ -37,8 +37,15 @@ extension CanvasController {
     }
 
     /// Applied when the pane's role may make it (`TicketQueue.applying`);
-    /// else dropped without a word, since the CLI can't hear back.
+    /// else dropped without a word, since the CLI can't hear back. A
+    /// pane in a zone that says what it works on adds that to its claims,
+    /// and its card's title shows it.
     func ticketReported(_ report: TicketReport, from pane: UUID) {
+        if case .working(let feature) = report {
+            guard membership.panes.zones[pane] != nil else { return }
+            setClaims(CanvasModel.claimed(featureClaims[pane] ?? [], adding: feature), of: pane)
+            return
+        }
         guard let actor = model.ticketRole(of: pane, panes: membership.panes),
               let reported = TicketQueue.applying(
                 report, from: actor, to: tickets, in: model, newKey: { nextTicketKey(in: $0, take: true) }) else { return }
@@ -58,6 +65,22 @@ extension CanvasController {
             let key = card.surfaceTree.lazy.compactMap { working[$0.id] }.first
             if card.ticketKey != key { card.ticketKey = key }
         }
+    }
+
+    /// Pane `pane`'s conversation ended (cleared, or Claude quit): what it
+    /// claimed and its recap's title go, as the next one doesn't remember
+    /// that work.
+    func conversationEnded(_ pane: UUID) {
+        setClaims([], of: pane)
+        RecapTitles.shared.forget(pane)
+    }
+
+    private func setClaims(_ claims: [String], of pane: UUID) {
+        guard (featureClaims[pane] ?? []) != claims else { return }
+        featureClaims[pane] = claims.isEmpty ? nil : claims
+        zoneStore.writeClaims(pane, claims)
+        writeZoneFiles()
+        for card in cards where card.surfaceTree.contains(where: { $0.id == pane }) { card.applyTitleToWindow() }
     }
 
     /// Pane `pane`'s Claude's name, else its card's title.

@@ -3,7 +3,8 @@ import AppKit
 
 /// File → Reopen from History: the newest snapshots in the
 /// `SessionHistory`, each with when it was saved and what it held. Choosing
-/// one reopens what of it isn't open now.
+/// one reopens what of it isn't open now. Also in the Dock menu and the menu
+/// bar icon's menu.
 @MainActor
 final class SessionHistoryMenu: NSObject, NSMenuDelegate {
     static let shared = SessionHistoryMenu()
@@ -20,7 +21,22 @@ final class SessionHistoryMenu: NSObject, NSMenuDelegate {
         menu.insertItem(item, at: menu.index(of: anchor) + 1)
     }
 
+    /// Reopen from History for a menu rebuilt each time it opens (the Dock's,
+    /// the menu bar icon's), its snapshots listed now: the Dock shows its
+    /// menu without asking a delegate.
+    static func item() -> NSMenuItem {
+        let item = NSMenuItem(title: "Reopen from History", action: nil, keyEquivalent: "")
+        let submenu = NSMenu(title: "Reopen from History")
+        shared.fill(submenu)
+        item.submenu = submenu
+        return item
+    }
+
     func menuNeedsUpdate(_ menu: NSMenu) {
+        fill(menu)
+    }
+
+    private func fill(_ menu: NSMenu) {
         menu.removeAllItems()
         let entries = SessionHistory.standard.entries(max: Self.shown)
         guard !entries.isEmpty else {
@@ -45,6 +61,8 @@ final class SessionHistoryMenu: NSObject, NSMenuDelegate {
     @objc private func reopen(_ sender: NSMenuItem) {
         guard let url = sender.representedObject as? URL, let session = LastSession.load(from: url),
               let ghostty = (NSApp.delegate as? AppDelegate)?.ghostty else { return }
+        // From the Dock or the menu bar Lostty may be in the background.
+        NSApp.activate(ignoringOtherApps: true)
         SessionRestore.reopen(session, ghostty)
     }
 }

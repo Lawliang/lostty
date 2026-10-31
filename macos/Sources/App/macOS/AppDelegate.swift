@@ -390,17 +390,31 @@ class AppDelegate: NSObject,
         // while it's on the turn observer, which also finds out which
         // summarizer it can use. Before the restart resume, which hands it
         // each pane's conversation.
-        ClaudeRuntime.shared.turnEnded = TurnEnd.handler(
+        let turnEnded = TurnEnd.handler(
             observes: LosttyChannel.current.observesTurns,
             observe: { pane, path in TurnObserver.shared.turnEnded(pane: pane, path: path) },
             report: { UsageLedger.shared.reported($0) })
+        // And on the canvas, a card's topic follows Claude's recaps.
+        let recaps = LosttyChannel.current.hasCanvas
+        ClaudeRuntime.shared.turnEnded = { pane, path in
+            turnEnded(pane, path)
+            if recaps { RecapTitles.shared.turnEnded(pane: pane, path: path) }
+        }
+        RecapTitles.shared.changed = { pane in
+            CanvasController.shared?.cards.first { $0.surfaceTree.contains { $0.id == pane } }?.applyTitleToWindow()
+        }
         if LosttyChannel.current.observesTurns { TurnObserver.shared.start() }
         // The context handoff (beta): before the restart resume's hook
         // reinstall, which brings in the handoff's hook events.
         ContextHandoffWiring.start()
         ClaudeRuntime.shared.messageKeptInside = { CanvasController.shared?.messageKeptInside(pane: $0, target: $1) }
-        // Each request's end: gold coins and what it cost, in the pane's corner.
-        ClaudeRuntime.shared.requestEnded = { GoldDropRuntime.shared.requestEnded(pane: $0, path: $1, since: $2) }
+        // Each request's end: gold coins and what it cost, in the pane's
+        // corner, and a temporary notification when nobody was looking.
+        TerminalNotices.shared.start()
+        ClaudeRuntime.shared.requestEnded = { pane, path, since in
+            GoldDropRuntime.shared.requestEnded(pane: pane, path: path, since: since)
+            TerminalNotices.shared.requestEnded(pane: pane, path: path, since: since)
+        }
         // Restart to Update: put back what window restoration doesn't
         // (Claude's state, Stay Awake, the window setting, hooks). Before
         // Stay Awake's crash restore, the hooks check and the Claude sync.
@@ -1356,6 +1370,8 @@ class AppDelegate: NSObject,
 extension AppDelegate {
     /// This is called for the dock right-click menu.
     func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {
+        // Rebuilt each time, so Reopen from History lists the snapshots now.
+        reloadDockMenu()
         return dockMenu
     }
 
@@ -1366,6 +1382,8 @@ extension AppDelegate {
         dockMenu.removeAllItems()
         dockMenu.addItem(newWindow)
         dockMenu.addItem(newTab)
+        dockMenu.addItem(.separator())
+        dockMenu.addItem(MainActor.assumeIsolated { SessionHistoryMenu.item() })
     }
 
     /// Setup all the images for our menu items.

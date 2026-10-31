@@ -48,8 +48,6 @@ final class CanvasGlide: NSObject {
     private let start = CACurrentMediaTime()
     private let step: @MainActor (CanvasGlide) -> Void
     private var clock: AnyObject?
-    /// The view the last step showed, to tell when a pinch or scroll took over.
-    var shown: CanvasView?
 
     init(from: CanvasView, to: CanvasView, on view: NSView, step: @escaping @MainActor (CanvasGlide) -> Void) {
         self.from = from
@@ -88,10 +86,11 @@ extension CanvasController {
         return CanvasView(center: CGPoint(x: visible.midX, y: visible.midY), zoom: scrollView.magnification)
     }
 
-    /// Glides the view to `target`: zoom and pan together, eased. Jumps
-    /// there when the system asks for reduced motion.
+    /// Glides the view to `target`: zoom and pan together, eased, drawn
+    /// there frame by frame (`CanvasScrollView.drawn`) and scrolled there
+    /// once at the end. Jumps there when the system asks for reduced motion.
     func glide(to target: CanvasView) {
-        stopGlide()
+        stopGlide(keep: true)
         let target = CanvasView(center: target.center, zoom: CanvasZoom.clamped(target.zoom))
         guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion, window?.isVisible == true else {
             show(target)
@@ -103,25 +102,34 @@ extension CanvasController {
         }
     }
 
-    /// A pinch or scroll takes over from a glide.
-    func stopGlide() {
-        glide?.stop()
-        glide = nil
+    /// Stops a glide under way. With `keep` the view it has drawn so far
+    /// becomes the view (a pan or pinch takes over from there); without,
+    /// it's dropped for whatever sets the view next.
+    func stopGlide(keep: Bool = false) {
+        guard let glide else { return }
+        glide.stop()
+        self.glide = nil
+        if keep { scrollView.settleDrawn() } else { scrollView.draw(at: nil) }
     }
 
     private func glideStep(_ glide: CanvasGlide) {
-        // Something else moved the view since the last step: it's theirs now.
-        if let shown = glide.shown, !Self.same(currentView, shown) {
+        // Something else scrolled the view since it set out: it's theirs now.
+        guard Self.same(currentView, glide.from) else {
             stopGlide()
             scheduleSettle()
             return
         }
         let time = glide.time
-        show(CanvasZoom.view(from: glide.from, to: glide.to, progress: CanvasZoom.eased(time)))
-        glide.shown = currentView
-        guard time >= 1 else { return }
-        stopGlide()
-        settleZoom()
+        guard time < 1 else {
+            stopGlide()
+            show(glide.to)
+            settleZoom()
+            return
+        }
+        let view = CanvasZoom.view(from: glide.from, to: glide.to, progress: CanvasZoom.eased(time))
+        let size = scrollView.contentView.frame.size
+        scrollView.draw(at: (CGPoint(x: view.center.x - size.width / view.zoom / 2,
+                                     y: view.center.y - size.height / view.zoom / 2), view.zoom))
     }
 
     private func show(_ view: CanvasView) {

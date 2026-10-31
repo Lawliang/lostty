@@ -87,7 +87,21 @@ struct ProjectPill: View {
     }
 
     private func pill(_ label: ProjectLabel) -> some View {
-        let colors = PillColors(skin: pane.flatMap { skins.effectiveSkin($0) }, chrome: model.chromeColor)
+        ProjectPillCapsule(label: label, skin: pane.flatMap { skins.effectiveSkin($0) }, chrome: model.chromeColor, help: pwd)
+    }
+}
+
+/// The pill itself, "> lostty/skins", in the colors of `skin`, else of
+/// the title bar `chrome`, `maxWidth` wide at most.
+struct ProjectPillCapsule: View {
+    let label: ProjectLabel
+    let skin: Skin?
+    let chrome: NSColor?
+    var help: String?
+    var maxWidth: CGFloat = 280
+
+    var body: some View {
+        let colors = PillColors(skin: skin, chrome: chrome)
         return HStack(spacing: 5) {
             Text(">")
                 .fontWeight(.heavy)
@@ -105,11 +119,11 @@ struct ProjectPill: View {
         .lineLimit(1)
         .padding(.horizontal, 9)
         .padding(.vertical, 3)
-        .frame(maxWidth: 280)
+        .frame(maxWidth: maxWidth)
         .background(Capsule().fill(colors.background))
         .overlay(Capsule().strokeBorder(colors.border, lineWidth: 1))
         .fixedSize(horizontal: false, vertical: true)
-        .help(pwd ?? label.text)
+        .help(help ?? label.text)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Project \(label.text)")
     }

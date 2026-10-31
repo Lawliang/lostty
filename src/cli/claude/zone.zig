@@ -33,6 +33,11 @@ pub const File = struct {
     /// The project's tickets, as `+ticket list` prints them. Null in a
     /// file from an app that didn't write them.
     board: ?[]const u8 = null,
+    /// The feature (domain) each member in one works on, by tmux session.
+    features: ?std.json.ArrayHashMap([]const u8) = null,
+    /// How an agent outside the project's domains says what it works on:
+    /// told once a conversation, at its start or with its next prompt.
+    claim: ?[]const u8 = null,
 };
 
 /// The zone file `json`; null when it isn't one. An empty `start` or
@@ -104,7 +109,7 @@ pub fn target(to: []const u8) []const u8 {
 }
 
 /// Whether `location` (`session:@window.%pane`) is in a member session.
-fn isMember(members: []const []const u8, location: ?[]const u8) bool {
+pub fn isMember(members: []const []const u8, location: ?[]const u8) bool {
     const loc = location orelse return false;
     const session = loc[0 .. std.mem.indexOfScalar(u8, loc, ':') orelse loc.len];
     for (members) |m| if (std.mem.eql(u8, m, session)) return true;
@@ -142,38 +147,84 @@ pub fn denyReason(alloc: Allocator, to: []const u8, title: ?[]const u8) Allocato
         "The owner can press Allow Once on the canvas, and you'll be told when you may retry.", .{ to, name });
 }
 
-/// The names of the zone's other agents, sorted, each once: sessions in a
+/// Another agent in the zone, and the feature it works on, if it's in one.
+pub const Peer = struct {
+    name: []const u8,
+    feature: ?[]const u8 = null,
+};
+
+/// The zone's other agents, sorted by name, each once: sessions in a
 /// member tmux session that aren't `session_id` or in tmux pane `pane`
-/// (`%12`, as TMUX_PANE has it).
+/// (`%12`, as TMUX_PANE has it), with their session's feature.
 pub fn others(
     alloc: Allocator,
     members: []const []const u8,
+    features: ?std.json.ArrayHashMap([]const u8),
     agents: []const Agent,
     session_id: ?[]const u8,
     pane: ?[]const u8,
-) Allocator.Error![]const []const u8 {
-    var names: std.ArrayList([]const u8) = .empty;
+) Allocator.Error![]const Peer {
+    var list: std.ArrayList(Peer) = .empty;
     for (agents) |agent| {
         if (!isMember(members, agent.tmux)) continue;
         if (session_id) |id| if (agent.sessionId) |s| if (std.mem.eql(u8, s, id)) continue;
         if (pane) |p| if (std.mem.endsWith(u8, agent.tmux.?, p)) continue;
-        for (names.items) |n| {
-            if (std.mem.eql(u8, n, agent.name)) break;
-        } else try names.append(alloc, agent.name);
+        for (list.items) |n| {
+            if (std.mem.eql(u8, n.name, agent.name)) break;
+        } else {
+            const tmux = agent.tmux.?;
+            const session = tmux[0 .. std.mem.indexOfScalar(u8, tmux, ':') orelse tmux.len];
+            try list.append(alloc, .{ .name = agent.name, .feature = if (features) |f| f.map.get(session) else null });
+        }
     }
-    std.mem.sort([]const u8, names.items, {}, struct {
-        fn lt(_: void, a: []const u8, b: []const u8) bool {
-            return std.mem.lessThan(u8, a, b);
+    std.mem.sort(Peer, list.items, {}, struct {
+        fn lt(_: void, a: Peer, b: Peer) bool {
+            return std.mem.lessThan(u8, a.name, b.name);
         }
     }.lt);
-    return names.items;
+    return list.items;
 }
 
-/// The brief's line naming the zone's other agents; null when none.
-pub fn othersLine(alloc: Allocator, names: []const []const u8) Allocator.Error!?[]const u8 {
-    if (names.len == 0) return null;
-    const list = try std.mem.join(alloc, ", ", names);
-    return try std.fmt.allocPrint(alloc, "Other agents in this zone: {s}.", .{list});
+/// The brief's line naming the zone's other agents and their features;
+/// null when none. With a feature known, how to pass its requests on.
+pub fn othersLine(alloc: Allocator, list: []const Peer) Allocator.Error!?[]const u8 {
+    if (list.len == 0) return null;
+    var names: std.ArrayList([]const u8) = .empty;
+    var any_feature = false;
+    for (list) |peer| {
+        if (peer.feature) |f| {
+            any_feature = true;
+            try names.append(alloc, try std.fmt.allocPrint(alloc, "{s} ({s})", .{ peer.name, f }));
+        } else try names.append(alloc, peer.name);
+    }
+    const line = try std.fmt.allocPrint(alloc, "Other agents in this zone: {s}.", .{try std.mem.join(alloc, ", ", names.items)});
+    if (!any_feature) return line;
+    return try std.fmt.allocPrint(alloc, "{s}\nIf the owner asks for another agent's feature, don't start it: " ++
+        "say whose it is, and on a yes send the request, word for word, to that agent with SendMessage.", .{line});
+}
+
+/// Whether a hook's input is for Claude Code's ListAgents.
+pub fn isListAgents(alloc: Allocator, input: []const u8) bool {
+    const Input = struct { tool_name: []const u8 = "" };
+    const parsed = std.json.parseFromSliceLeaky(Input, alloc, input, .{
+        .ignore_unknown_fields = true,
+        .allocate = .alloc_always,
+    }) catch return false;
+    return std.mem.eql(u8, parsed.tool_name, "ListAgents");
+}
+
+/// What Claude hears after ListAgents in the zone `title`: ListAgents
+/// lists every session on the Mac, so this names the zone's.
+pub fn listAgentsNote(alloc: Allocator, title: []const u8, list: []const Peer) Allocator.Error![]const u8 {
+    var names: std.ArrayList([]const u8) = .empty;
+    for (list) |peer| try names.append(alloc, if (peer.feature) |f|
+        try std.fmt.allocPrint(alloc, "{s} ({s})", .{ peer.name, f })
+    else
+        peer.name);
+    const zone_agents = if (names.items.len == 0) "none besides you" else try std.mem.join(alloc, ", ", names.items);
+    return std.fmt.allocPrint(alloc, "Your zone is {s}. ListAgents lists every Claude session on this Mac; " ++
+        "the other agents in your zone are: {s}. When the owner asks about the other terminals or agents, " ++
+        "answer about these, and mention the rest of that list only if asked.", .{ title, zone_agents });
 }
 
 pub fn sessionId(alloc: Allocator, input: []const u8) ?[]const u8 {
@@ -215,6 +266,10 @@ test "claude zone: the file's brief, title and members" {
         \\{"zone":"Textberry","board":"Textberry tickets\nLogin\n  none"}
     ).?.board.?);
     try testing.expect(file.board == null);
+    try testing.expect(file.claim == null);
+    try testing.expectEqualStrings("When you start on a feature, run lostty +ticket working", parse(a,
+        \\{"zone":"Textberry","claim":"When you start on a feature, run lostty +ticket working"}
+    ).?.claim.?);
     try testing.expect(parse(a,
         \\{"start":7}
     ) == null);
@@ -332,10 +387,28 @@ test "claude zone: the brief names the zone's other agents" {
         .{ .name = "tb-a", .tmux = "tb-3:@5.%5", .sessionId = "s4" },
         .{ .name = "outside", .tmux = "lostty:@2.%2", .sessionId = "s5" },
     };
-    const names = try others(a, &members, &agents, "s1", "%3");
+    const names = try others(a, &members, null, &agents, "s1", "%3");
     try testing.expectEqualStrings("Other agents in this zone: tb-a, tb-b.", (try othersLine(a, names)).?);
-    try testing.expectEqual(@as(usize, 3), (try others(a, &members, &agents, "s1", null)).len);
-    try testing.expect(try othersLine(a, try others(a, &.{"tb-1"}, &agents, "s1", "%3")) == null);
+    try testing.expectEqual(@as(usize, 3), (try others(a, &members, null, &agents, "s1", null)).len);
+    try testing.expect(try othersLine(a, try others(a, &.{"tb-1"}, null, &agents, "s1", "%3")) == null);
+}
+
+test "claude zone: the brief names each other agent's feature and how to pass a request on" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const file = parse(a,
+        \\{"start":"Lostty zone: IDFK › Happybird.","members":["idfk","media-fix","notes"],"features":{"idfk":"Happybird","media-fix":"Karaoke"}}
+    ).?;
+    const agents = [_]Agent{
+        .{ .name = "idfk-97", .tmux = "idfk:@1.%1", .sessionId = "s1" },
+        .{ .name = "media-fix-02", .tmux = "media-fix:@2.%2", .sessionId = "s2" },
+        .{ .name = "notes-4", .tmux = "notes:@3.%3", .sessionId = "s3" },
+    };
+    const line = (try othersLine(a, try others(a, file.members.?, file.features, &agents, "s1", "%1"))).?;
+    try testing.expectEqualStrings("Other agents in this zone: media-fix-02 (Karaoke), notes-4.\n" ++
+        "If the owner asks for another agent's feature, don't start it: say whose it is, " ++
+        "and on a yes send the request, word for word, to that agent with SendMessage.", line);
 }
 
 test "claude zone: a hook's session id" {
@@ -346,4 +419,16 @@ test "claude zone: a hook's session id" {
         \\{"session_id":"s1","hook_event_name":"SessionStart","source":"startup"}
     ).?);
     try testing.expect(sessionId(a, "{}") == null);
+}
+
+test "zone: ListAgents names the zone's agents" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    try std.testing.expect(isListAgents(a, "{\"hook_event_name\":\"PostToolUse\",\"tool_name\":\"ListAgents\"}"));
+    try std.testing.expect(!isListAgents(a, "{\"tool_name\":\"Read\"}"));
+    const note = try listAgentsNote(a, "Lostty", &.{ .{ .name = "zones-7e" }, .{ .name = "media-fix-02", .feature = "Karaoke" } });
+    try std.testing.expect(std.mem.indexOf(u8, note, "Your zone is Lostty.") != null);
+    try std.testing.expect(std.mem.indexOf(u8, note, "are: zones-7e, media-fix-02 (Karaoke).") != null);
+    try std.testing.expect(std.mem.indexOf(u8, try listAgentsNote(a, "Lostty", &.{}), "none besides you") != null);
 }

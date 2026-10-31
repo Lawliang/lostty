@@ -480,6 +480,7 @@ extension Ghostty {
                 ClaudeUsageRuntime.shared.surfaceClosed(closedID)
                 SessionTitleSignal.shared.surfaceClosed(closedID)
                 TurnObserver.shared.surfaceClosed(closedID)
+                RecapTitles.shared.forget(closedID)
             }
 
             // Lostty Mobile: a remote pane closes its channel; the session
@@ -1247,7 +1248,7 @@ extension Ghostty {
             }
 
             // On any keyDown event we unset our bell state
-            bell = false
+            if bell { bell = false }
 
             // We need to translate the mods (maybe) to handle configs such as option-as-alt
             let translationModsGhostty = Ghostty.eventModifierFlags(

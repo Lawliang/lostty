@@ -21,7 +21,9 @@ window. This skill opens one and hands it its first message.
        ~/.claude/skills/lostty-open-terminal/open-lostty.sh <folder> <directive file>
 
    It prints `window: <session id> <name>` once a window shows the session and Claude has started with the
-   directive. `--agent none` opens the window and prints the directive instead of starting Claude.
+   directive. Run from a card on Lostty's canvas, the new terminal opens as a card beside yours, in your zone
+   (which grows to hold it), instead of in a window of its own. `--agent none` opens the window and prints
+   the directive instead of starting Claude.
 4. **Tell the owner** a window opened, its folder, and what you asked it to do. To check on it later, read it:
    `tmux -L lostty capture-pane -p -t '<session id>'`.
 

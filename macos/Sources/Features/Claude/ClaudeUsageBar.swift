@@ -435,7 +435,8 @@ enum ClaudeUsageFont {
 }
 
 /// Every plan limit, each tappable to make it the one the bar tracks.
-private struct ClaudeUsageDetails: View {
+/// The canvas dock's Usage shows it too.
+struct ClaudeUsageDetails: View {
     @ObservedObject var usage: ClaudeUsageRuntime
     let accent: Color
     @ObservedObject var breakdown: UsageBreakdownRuntime = .shared
@@ -578,7 +579,7 @@ private struct ContextHandoffDetails: View {
     }
 }
 
-private extension NSColor {
+extension NSColor {
     /// Relative luminance above the midpoint: dark ink reads better on it.
     var isLight: Bool {
         guard let c = usingColorSpace(.sRGB) else { return false }

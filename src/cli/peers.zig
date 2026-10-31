@@ -26,7 +26,9 @@ pub const Options = struct {
 /// shows it, to message), whether to ask it (`Clash`), any other worktree
 /// whose uncommitted work touches the same files, and where the installed
 /// Lostty was built (`macos/install.sh` records it). A terminal in a canvas
-/// zone says which. It only reads.
+/// zone says which. From a pane in a zone it lists that zone's terminals,
+/// and those outside it only when they'd clash; `+peers --all` lists every
+/// one. It only reads.
 pub fn run(gpa: Allocator) !u8 {
     var arena_state = std.heap.ArenaAllocator.init(gpa);
     defer arena_state.deinit();
@@ -36,6 +38,14 @@ pub fn run(gpa: Allocator) !u8 {
     var stdout_writer = std.fs.File.stdout().writer(&stdout_buf);
     const out = &stdout_writer.interface;
     defer out.flush() catch {};
+
+    const argv = try std.process.argsAlloc(alloc);
+    const all = for (argv) |arg| {
+        if (std.mem.eql(u8, arg, "--all")) break true;
+    } else false;
+    const my_zone = zoneFile(alloc, std.posix.getenv(protocol.surface_env) orelse "");
+    // The zone's tmux sessions; null lists every terminal.
+    const members: ?[]const []const u8 = if (all) null else if (my_zone) |z| z.members else null;
 
     const cwd = try std.process.getCwdAlloc(alloc);
     const root = git(alloc, cwd, &.{ "rev-parse", "--show-toplevel" }) orelse {
@@ -57,10 +67,11 @@ pub fn run(gpa: Allocator) !u8 {
     try out.print("You: {s} ({s}), {d} files uncommitted", .{
         std.fs.path.basename(root), try describeHead(alloc, worktrees[here]), my_uncommitted.len,
     });
-    if (zoneTitle(alloc, std.posix.getenv(protocol.surface_env) orelse "")) |title| try out.print(", in zone {s}", .{title});
+    if (my_zone) |z| if (z.zone) |title| try out.print(", in zone {s}", .{title});
     try out.print("\n", .{});
 
     var shown: usize = 0;
+    var outside: usize = 0;
     for (worktrees, 0..) |wt, i| {
         var terminals: std.ArrayList(Session) = .empty;
         for (sessions) |s| {
@@ -89,22 +100,34 @@ pub fn run(gpa: Allocator) !u8 {
             for (terminals.items) |t| try printTerminal(out, t, zoneTitle(alloc, t.surface));
             continue;
         }
+        const mine = try join(alloc, try onlyIn(alloc, root, "HEAD", base orelse wt.head), my_uncommitted);
+        const theirs = try join(alloc, try onlyIn(alloc, root, wt.head, base orelse "HEAD"), theirs_uncommitted);
+        const same = try overlap(alloc, mine, theirs);
+        const conflicted = if (same.len == 0) &.{} else try mergeConflicts(alloc, root, "HEAD", wt.head);
+        const verdict = try clash(alloc, same, conflicted);
+        const in_zone = if (members) |m| for (terminals.items) |t| {
+            if (zone.isMember(m, t.location)) break true;
+        } else false else true;
+        // Outside the zone: only a clash is worth showing.
+        if (!in_zone and verdict == .clear) {
+            shown -= 1;
+            outside += 1;
+            continue;
+        }
         const ahead = git(alloc, root, &.{ "rev-list", "--count", try std.fmt.allocPrint(alloc, "HEAD..{s}", .{wt.head}) }) orelse "?";
         try out.print("\n{s} ({s}), {d} files uncommitted, {s} commits you don't have\n", .{
             std.fs.path.basename(wt.path), try describeHead(alloc, wt), theirs_uncommitted.len, ahead,
         });
         for (terminals.items) |t| try printTerminal(out, t, zoneTitle(alloc, t.surface));
-        const mine = try join(alloc, try onlyIn(alloc, root, "HEAD", base orelse wt.head), my_uncommitted);
-        const theirs = try join(alloc, try onlyIn(alloc, root, wt.head, base orelse "HEAD"), theirs_uncommitted);
-        const same = try overlap(alloc, mine, theirs);
-        const conflicted = if (same.len == 0) &.{} else try mergeConflicts(alloc, root, "HEAD", wt.head);
-        switch (try clash(alloc, same, conflicted)) {
+        if (!in_zone) try out.print("  outside your zone\n", .{});
+        switch (verdict) {
             .clear => try out.print("  clear, no files changed on both sides\n", .{}),
             .ask => |files| try printFiles(out, "ask, you both changed", files),
             .conflict => |files| try printFiles(out, "conflict, merging both stops at", files),
         }
     }
-    if (shown == 0) try out.print("\nNo other terminals in this repo.\n", .{});
+    if (shown == 0) try out.print("\nNo other terminals in {s}.\n", .{if (members != null) "your zone" else "this repo"});
+    if (outside > 0) try out.print("{d} more outside your zone, all clear (`+peers --all` lists them).\n", .{outside});
 
     try printInstalled(alloc, out, root);
     return 0;
@@ -174,11 +197,16 @@ fn listSessions(alloc: Allocator) ![]Session {
 /// The zone Lostty pane `pane` is in, "Textberry › Onboarding", from its
 /// zone file; null in none.
 fn zoneTitle(alloc: Allocator, pane: []const u8) ?[]const u8 {
+    return (zoneFile(alloc, pane) orelse return null).zone;
+}
+
+/// Lostty pane `pane`'s zone file; null in no zone.
+fn zoneFile(alloc: Allocator, pane: []const u8) ?zone.File {
     if (!speak.isPaneId(pane)) return null;
     const home = std.posix.getenv("HOME") orelse return null;
     const path = speak.queuedPath(alloc, home, pane, .zone) catch return null;
     const json = std.fs.cwd().readFileAlloc(alloc, path, speak.text_max) catch return null;
-    return (zone.parse(alloc, json) orelse return null).zone;
+    return zone.parse(alloc, json);
 }
 
 /// The worktree `path` is in: the deepest one holding it, since worktrees

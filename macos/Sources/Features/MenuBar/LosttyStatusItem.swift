@@ -122,6 +122,7 @@ final class LosttyStatusItem: NSObject, NSMenuDelegate {
 
         menu.addItem(.separator())
         menu.addItem(action("New Window", #selector(newWindow)))
+        menu.addItem(SessionHistoryMenu.item())
         menu.addItem(action("Phone Access…", #selector(openPhoneAccess)))
         menu.addItem(action("Pair a Phone…", #selector(pairPhone)))
         if PreviousBuild.available {

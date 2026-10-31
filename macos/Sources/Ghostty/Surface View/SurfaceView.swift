@@ -122,7 +122,7 @@ extension Ghostty {
 
 #if canImport(AppKit)
                 // Lostty Claude trace: a light ray around the pane while Claude works.
-                ClaudeTraceLayer(surfaceID: surfaceView.id).id(surfaceView.id)
+                ClaudeTraceLayer(surfaceID: surfaceView.id).equatable().id(surfaceView.id)
 #endif
 
 #if canImport(AppKit)

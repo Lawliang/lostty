@@ -12,13 +12,15 @@ const Allocator = std.mem.Allocator;
 /// window) on SessionStart after /clear. `zone` (zone.zig) is read, never
 /// taken: the app keeps it current. `zone_allow`, the owner's Allow Once,
 /// names the one agent a SendMessage may reach outside the zone, and is
-/// taken by that message.
+/// taken by that message. `zone_told` holds the conversation last told how
+/// to claim a feature.
 pub const Kind = enum {
     say,
     start,
     zone_say,
     zone,
     zone_allow,
+    zone_told,
 
     fn suffix(kind: Kind) []const u8 {
         return switch (kind) {
@@ -27,6 +29,7 @@ pub const Kind = enum {
             .zone_say => "zone.say",
             .zone => "zone.json",
             .zone_allow => "zone.allow",
+            .zone_told => "zone.told",
         };
     }
 };

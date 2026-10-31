@@ -32,12 +32,6 @@ struct PowerParseTests {
         #expect(lp.ac == true)
     }
 
-    @Test func sleepDisabledOnlyWhenListedAsOne() {
-        #expect(PowerParse.sleepDisabled(pmsetG: "System-wide power settings:\n SleepDisabled\t\t1\nCurrently in use:\n sleep 1\n"))
-        #expect(!PowerParse.sleepDisabled(pmsetG: "System-wide power settings:\n SleepDisabled\t\t0\n"))
-        #expect(!PowerParse.sleepDisabled(pmsetG: "System-wide power settings:\nCurrently in use:\n standby 1\n"))
-    }
-
     @Test func commandsMapToPmsetArguments() {
         #expect(PowerCommand.disableSleep(true).pmsetArguments == ["-a", "disablesleep", "1"])
         #expect(PowerCommand.lowPowerEverywhere.pmsetArguments == ["-a", "lowpowermode", "1"])

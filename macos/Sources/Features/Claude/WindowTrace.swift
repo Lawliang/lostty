@@ -287,7 +287,7 @@ struct PaneLightView: View {
     }
 }
 
-private struct WindowLightLayer: NSViewRepresentable {
+struct WindowLightLayer: NSViewRepresentable {
     let setup: WindowLightView.Setup
     let journey: TraceOverlay.Journey
 

@@ -62,9 +62,11 @@ extension CanvasModel {
         return (["Lostty zone: \(title)\(folder)."] + briefLines(id)).joined(separator: "\n")
     }
 
+    /// In a project, outside its domains, with how to claim a feature.
     func zoneMovedIn(_ id: UUID) -> String? {
         guard let title = zoneTitle(id) else { return nil }
-        return (["You're now in zone \(title)."] + briefLines(id)).joined(separator: "\n")
+        let claim = zone(id)?.parent == nil ? [Self.claimBrief(names: featureNames(in: id))] : []
+        return (["You're now in zone \(title)."] + briefLines(id) + claim).joined(separator: "\n")
     }
 
     static func zoneMovedOut(of title: String) -> String {
@@ -142,6 +144,33 @@ extension CanvasModel {
         return (["\(project.name) tickets, \(starts)"] + lines).joined(separator: "\n")
     }
 
+    /// What an agent outside its project's domains is told, so the zone's
+    /// other agents know what it works on, with the `names` already used
+    /// there, so one feature isn't named two ways.
+    static func claimBrief(names: [String] = []) -> String {
+        let brief = "When you start on a feature, run lostty +ticket working \"<feature, a few words>\" "
+            + "so the zone's other agents know."
+        return names.isEmpty ? brief : brief + " Reuse one of the zone's names when it fits: \(names.joined(separator: ", "))."
+    }
+
+    /// The names project `id`'s features go by: its domains', then what its
+    /// agents `claims` in alphabetical order, each once, case aside.
+    func featureNames(in id: UUID, claims: [String] = []) -> [String] {
+        guard let project = projectZone(id) else { return [] }
+        let domains = zones.filter { $0.parent == project }.map(\.name)
+        let claimed = claims.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+        var seen: Set<String> = []
+        return (domains + claimed).filter { seen.insert($0.lowercased()).inserted }
+    }
+
+    /// A pane's claims after it says it works on `feature`: newest first,
+    /// one of each (case aside), the latest `limit`.
+    static func claimed(_ claims: [String], adding feature: String, limit: Int = 3) -> [String] {
+        let feature = feature.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !feature.isEmpty else { return claims }
+        return Array(([feature] + claims.filter { $0.caseInsensitiveCompare(feature) != .orderedSame }).prefix(limit))
+    }
+
     /// What project `id`'s manager is told (board spec §7): a feature line
     /// for each domain, with its brief's first line and the tmux sessions
     /// (`sessions`, by pane) of its panes as `panes` has them.
@@ -191,34 +220,56 @@ extension CanvasModel {
     /// The zone file of a pane in zone `id`. Its members are the tmux
     /// sessions (`sessions`, by pane) of every pane in the same project as
     /// `panes` has them, domains included; a pane with none is left out.
-    /// Its board is the project's `tickets` (`boardText`). The project's
-    /// manager, `pane`, starts with its brief too.
+    /// Its features are the domain each member in one works on, else what
+    /// it `claims`, newest first. Its board is the project's `tickets`
+    /// (`boardText`). The project's manager, `pane`, starts with its brief
+    /// too; any other pane outside the domains, with how to claim a feature,
+    /// which is also its `claim`, for a conversation its start didn't tell.
     func zoneFile(
-        _ id: UUID, pane: UUID, panes: CanvasPaneZones, sessions: [UUID: String], tickets: [CanvasTicket]
+        _ id: UUID, pane: UUID, panes: CanvasPaneZones, sessions: [UUID: String], claims: [UUID: [String]] = [:],
+        tickets: [CanvasTicket]
     ) -> CanvasZoneFile? {
         guard let title = zoneTitle(id), let start = zoneStart(id), let project = projectZone(id) else { return nil }
         let members = Set(panes.zones.compactMap { pane, zone in
             projectZone(zone) == project ? sessions[pane] : nil
         })
-        let brief = zone(project)?.manager == pane ? managerBrief(project, panes: panes, sessions: sessions) : nil
+        let manager = zone(project)?.manager
+        var features: [String: String] = [:]
+        for (member, zone) in panes.zones where projectZone(zone) == project {
+            guard let session = sessions[member] else { continue }
+            if zone != project, let domain = self.zone(zone) {
+                features[session] = domain.name
+            } else if features[session] == nil, let claim = claims[member], !claim.isEmpty {
+                features[session] = claim.joined(separator: ", ")
+            }
+        }
+        // A domain's agent's feature is its domain, whatever it claimed.
+        let claimed = panes.zones.filter { $0.value == project }.keys.flatMap { claims[$0] ?? [] }
+        let claim = manager != pane && id == project ? Self.claimBrief(names: featureNames(in: id, claims: claimed)) : nil
+        let brief = manager == pane ? managerBrief(project, panes: panes, sessions: sessions) : claim
         return CanvasZoneFile(
             start: [start, brief].compactMap { $0 }.joined(separator: "\n"), zone: title,
-            folder: startFolder(ofZone: id), members: members.sorted(), board: boardText(project, tickets: tickets))
+            folder: startFolder(ofZone: id), members: members.sorted(), features: features,
+            board: boardText(project, tickets: tickets), claim: claim)
     }
 }
 
 /// `<PANE>.zone.json`: what the hooks know of a pane's zone (zones spec
 /// §7). `+claude-state start` prints `start`; `+claude-state tool` and
 /// `+peers` keep to `members`, tmux session names on Lostty's socket;
-/// `+ticket list` prints `board`.
+/// the brief names each other agent's feature from `features`;
+/// `+ticket list` prints `board`; a prompt in a conversation not yet told
+/// how to claim a feature gets `claim`.
 struct CanvasZoneFile: Equatable, Encodable {
     let start: String
     let zone: String
     let folder: String?
     var members: [String] = []
+    var features: [String: String] = [:]
     var board: String?
+    var claim: String?
 
-    private enum CodingKeys: String, CodingKey { case start, zone, folder, members, board }
+    private enum CodingKeys: String, CodingKey { case start, zone, folder, members, features, board, claim }
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
@@ -226,7 +277,9 @@ struct CanvasZoneFile: Equatable, Encodable {
         try container.encode(zone, forKey: .zone)
         try container.encode(folder, forKey: .folder)
         try container.encode(members, forKey: .members)
+        if !features.isEmpty { try container.encode(features, forKey: .features) }
         try container.encodeIfPresent(board, forKey: .board)
+        try container.encodeIfPresent(claim, forKey: .claim)
     }
 }
 
@@ -256,21 +309,44 @@ struct CanvasZoneStore: Sendable {
         write(data, to: file(pane, "zone.json"))
     }
 
-    /// The pane is in no zone: its Allow Once goes too.
+    /// The pane is in no zone: its Allow Once and its claims go too.
     func removeZone(_ pane: UUID) {
-        for ext in ["zone.json", "zone.allow"] { try? FileManager.default.removeItem(at: file(pane, ext)) }
+        for ext in ["zone.json", "zone.allow", "zone.claim", "zone.told"] {
+            try? FileManager.default.removeItem(at: file(pane, ext))
+        }
+    }
+
+    /// A pane's claims, newest first, a line each.
+    func writeClaims(_ pane: UUID, _ claims: [String]) {
+        guard !claims.isEmpty else {
+            try? FileManager.default.removeItem(at: file(pane, "zone.claim"))
+            return
+        }
+        write(Data(claims.joined(separator: "\n").utf8), to: file(pane, "zone.claim"))
+    }
+
+    /// Each pane's claims, as `writeClaims` left them.
+    func claims() -> [UUID: [String]] {
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: panes.path)) ?? []
+        return names.reduce(into: [:]) { claims, name in
+            guard name.hasSuffix(".zone.claim"), let pane = UUID(uuidString: String(name.prefix(36))),
+                  let text = try? String(contentsOf: file(pane, "zone.claim"), encoding: .utf8) else { return }
+            let lines = text.components(separatedBy: .newlines).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+            if !lines.isEmpty { claims[pane] = lines }
+        }
     }
 
     /// A move's note: it replaces any note not yet taken, which an
     /// earlier move made stale.
     func replaceSay(_ pane: UUID, _ text: String) { write(Data(text.utf8), to: file(pane, "zone.say")) }
 
-    /// Allow Once's note: it goes after any note not yet taken, so a
-    /// move's note isn't dropped.
+    /// A note that goes after any note not yet taken, so a move's note
+    /// isn't dropped; one already queued isn't queued again.
     func appendSay(_ pane: UUID, _ text: String) {
         let url = file(pane, "zone.say")
-        let queued = (try? String(contentsOf: url, encoding: .utf8)).map { $0 + "\n\n" } ?? ""
-        write(Data((queued + text).utf8), to: url)
+        let queued = try? String(contentsOf: url, encoding: .utf8)
+        if queued?.components(separatedBy: "\n\n").contains(text) == true { return }
+        write(Data(((queued.map { $0 + "\n\n" } ?? "") + text).utf8), to: url)
     }
 
     func removeSay(_ pane: UUID) { try? FileManager.default.removeItem(at: file(pane, "zone.say")) }
@@ -285,7 +361,7 @@ struct CanvasZoneStore: Sendable {
         let names = (try? FileManager.default.contentsOfDirectory(atPath: panes.path)) ?? []
         for name in names {
             guard let dot = name.firstIndex(of: "."), let pane = UUID(uuidString: String(name[..<dot])), !live.contains(pane),
-                  ["zone.json", "zone.say", "zone.allow"].contains(name[name.index(after: dot)...]) else { continue }
+                  ["zone.json", "zone.say", "zone.allow", "zone.claim", "zone.told"].contains(name[name.index(after: dot)...]) else { continue }
             try? FileManager.default.removeItem(at: panes.appendingPathComponent(name))
         }
     }
