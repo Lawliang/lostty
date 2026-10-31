@@ -177,9 +177,9 @@ struct CanvasAddButton: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
     }
 
-    /// The same glass as the button, as a capsule: its light turns while
-    /// the pointer is over it, but it has no press feedback of its own,
-    /// since its icons are the buttons.
+    /// The button's glass as a capsule, without its prism: its rim lights
+    /// while the pointer is over it, but it has no press feedback of its
+    /// own, since its icons are the buttons.
     private var pill: some View {
         VStack(spacing: CanvasAddMenuView.pillPadding) {
             ForEach(CanvasAddMenuView.Item.allCases, id: \.self) { item in
@@ -188,14 +188,14 @@ struct CanvasAddButton: View {
         }
         .padding(CanvasAddMenuView.pillPadding)
         .modifier(CanvasAddLitGlass(shape: Capsule(), dark: dark, lit: pillHovering,
-                                    interactive: false, reduceMotion: reduceMotion))
+                                    interactive: false, reduceMotion: reduceMotion, prism: false))
         .onHover { inside in withAnimation(Self.light) { pillHovering = inside } }
     }
 }
 
 /// Glass in `shape` with its rim and prism, lit while the pointer is over
-/// it. The merge countdown (CanvasDrop) and the dock (CanvasDock) are it
-/// too, without the prism.
+/// it. The + menu, the merge countdown (CanvasDrop) and the dock
+/// (CanvasDock) are it too, without the prism.
 struct CanvasAddLitGlass<S: InsettableShape>: ViewModifier {
     let shape: S
     let dark: Bool
