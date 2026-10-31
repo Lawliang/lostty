@@ -2,17 +2,16 @@
 import Foundation
 
 /// Claude Code titles a conversation once, from its first messages, and
-/// keeps that title however far the work moves on. Its recaps (`※ recap`,
-/// written to the conversation file about three minutes into an idle wait)
-/// say what the session is about now. Each new recap becomes the card's
-/// topic, in a few words from Haiku: rules cut half of them badly.
+/// keeps that title however far the work moves on. Its recaps (`※ recap`)
+/// say what the session is about now. Claude Code writes one to the
+/// conversation file once you've been away from an idle session for a few
+/// minutes, so Lostty watches each Claude pane's file and reads what's
+/// added. Each new recap becomes the card's topic, in a few words from
+/// Haiku: rules cut half of them badly.
 @MainActor
 final class RecapTitles {
     static let shared = RecapTitles()
-    /// How long after a turn's end to look for its recap: Claude Code
-    /// writes one about 3 minutes into the wait.
-    static let recapWait: TimeInterval = 200
-    /// How much of the end of a conversation file to look through.
+    /// How much of a conversation file's end to look through first.
     nonisolated static let tailBytes = 512 * 1024
 
     /// Each pane's title from its conversation's latest recap.
@@ -20,62 +19,81 @@ final class RecapTitles {
     /// A pane's title changed.
     var changed: (UUID) -> Void = { _ in }
 
-    private var paths: [UUID: String] = [:]
-    /// The recap each pane's title was made from.
-    private var titled: [UUID: String] = [:]
-    private var checks: [UUID: DispatchWorkItem] = [:]
-    private var running: Set<UUID> = []
+    private struct Watch {
+        var path: String
+        var source: DispatchSourceFileSystemObject
+        /// Where reading got to: the end of the last whole line read.
+        var offset: UInt64?
+        /// The recap the title was made from.
+        var titled: String?
+        var running = false
+        /// The file grew during a look: look once more after it.
+        var again = false
+    }
+
+    private var watches: [UUID: Watch] = [:]
     private var summarizer: SummarizerKind?
 
-    /// A turn ended in `pane`: look for a recap now (one that came while
-    /// you were away) and again once this wait's would have come.
+    /// A turn ended in `pane`: from then on its conversation file is
+    /// watched for recaps, starting with the latest one already there.
     func turnEnded(pane: UUID, path: String) {
         guard let location = TranscriptLocation.allowed(path), location.agent == .claude else { return }
-        if paths[pane] != location.url.path {
-            paths[pane] = location.url.path
-            forgetTitle(pane)
-        }
+        let path = location.url.path
+        guard watches[pane]?.path != path else { return }
+        forget(pane)
+        let file = open(path, O_EVTONLY)
+        guard file >= 0 else { return }
+        let source = DispatchSource.makeFileSystemObjectSource(fileDescriptor: file, eventMask: [.write, .extend], queue: .main)
+        source.setEventHandler { [weak self] in MainActor.assumeIsolated { self?.check(pane) } }
+        source.setCancelHandler { close(file) }
+        watches[pane] = Watch(path: path, source: source)
+        source.resume()
         check(pane)
-        checks[pane]?.cancel()
-        let work = DispatchWorkItem { [weak self] in MainActor.assumeIsolated { self?.check(pane) } }
-        checks[pane] = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + Self.recapWait, execute: work)
     }
 
     /// The pane's conversation ended or the pane closed: its recap is old.
     func forget(_ pane: UUID) {
-        checks.removeValue(forKey: pane)?.cancel()
-        paths[pane] = nil
-        forgetTitle(pane)
-    }
-
-    private func forgetTitle(_ pane: UUID) {
-        titled[pane] = nil
+        guard let watch = watches.removeValue(forKey: pane) else { return }
+        watch.source.cancel()
         guard titles.removeValue(forKey: pane) != nil else { return }
         changed(pane)
     }
 
     private func check(_ pane: UUID) {
-        guard let path = paths[pane], !running.contains(pane) else { return }
-        running.insert(pane)
-        let titled = titled[pane]
+        guard var watch = watches[pane] else { return }
+        guard !watch.running else {
+            watches[pane]?.again = true
+            return
+        }
+        watch.running = true
+        watches[pane] = watch
+        let (path, offset, titled) = (watch.path, watch.offset, watch.titled)
         Task {
             let kind = await summarizerKind()
-            let made = await Task.detached(priority: .utility) { () -> (String, String?)? in
-                guard let recap = Self.latestRecap(atPath: path), recap != titled else { return nil }
-                return (recap, await Self.title(recap, kind: kind))
+            let (read, title) = await Task.detached(priority: .utility) { () -> (RecapRead?, String?) in
+                guard let read = Self.readRecap(atPath: path, from: offset) else { return (nil, nil) }
+                guard let recap = read.recap, recap != titled else { return (read, nil) }
+                return (read, await Self.title(recap, kind: kind))
             }.value
-            running.remove(pane)
-            guard let (recap, title) = made, paths[pane] == path else { return }
-            guard let title else {
-                // A lapsed sign-in shows up as a failure: look again next time.
-                summarizer = nil
-                return
+            guard var watch = watches[pane], watch.path == path else { return }
+            watch.running = false
+            if let read {
+                watch.offset = read.end
+                if let title {
+                    watch.titled = read.recap
+                    if titles[pane] != title {
+                        titles[pane] = title
+                        changed(pane)
+                    }
+                } else if read.recap.map({ $0 != titled }) == true, kind != .apple, kind != .none {
+                    // A lapsed sign-in shows up as a failure: look again at the next recap.
+                    summarizer = nil
+                }
             }
-            self.titled[pane] = recap
-            guard titles[pane] != title else { return }
-            titles[pane] = title
-            changed(pane)
+            let again = watch.again
+            watch.again = false
+            watches[pane] = watch
+            if again { check(pane) }
         }
     }
 
@@ -119,19 +137,24 @@ final class RecapTitles {
         return (1...8).contains(words) ? title : nil
     }
 
-    /// The last recap in the conversation file's last `tailBytes`, without
-    /// its "(disable recaps in /config)".
-    nonisolated static func latestRecap(atPath path: String) -> String? {
+    /// The last recap in what the conversation file added after `offset`
+    /// (at first, its last `tailBytes`), without its "(disable recaps in
+    /// /config)", and where its last whole line ends.
+    nonisolated static func readRecap(atPath path: String, from offset: UInt64?) -> RecapRead? {
         guard let file = FileHandle(forReadingAtPath: path) else { return nil }
         defer { try? file.close() }
         guard let end = try? file.seekToEnd() else { return nil }
-        let start = end > UInt64(tailBytes) ? end - UInt64(tailBytes) : 0
+        // Shorter than where reading got to: rewritten, so read it afresh.
+        let from = offset.flatMap { $0 <= end ? $0 : nil }
+        let start = from ?? (end > UInt64(tailBytes) ? end - UInt64(tailBytes) : 0)
         try? file.seek(toOffset: start)
         guard var data = try? file.readToEnd() else { return nil }
-        // Mid-file, the first line (maybe mid-character) is cut: from the next.
-        if start > 0 { data = data.drop { $0 != UInt8(ascii: "\n") } }
-        guard let text = String(bytes: data, encoding: .utf8) else { return nil }
-        return latestRecap(in: text)
+        // Cut mid-file, the first line (maybe mid-character) is partial: from the next.
+        if from == nil, start > 0 { data = data.drop { $0 != UInt8(ascii: "\n") } }
+        // A line still being written waits for the next read.
+        guard let last = data.lastIndex(of: UInt8(ascii: "\n")) else { return RecapRead(recap: nil, end: start) }
+        guard let text = String(bytes: data[...last], encoding: .utf8) else { return nil }
+        return RecapRead(recap: latestRecap(in: text), end: start + UInt64(last + 1))
     }
 
     nonisolated static func latestRecap(in text: String) -> String? {
@@ -145,5 +168,12 @@ final class RecapTitles {
         }
         return nil
     }
+}
+
+/// One read of a conversation file for recaps.
+struct RecapRead: Equatable, Sendable {
+    var recap: String?
+    /// Where the read's last whole line ends.
+    var end: UInt64
 }
 #endif

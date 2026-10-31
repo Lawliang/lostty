@@ -29,11 +29,45 @@ struct RecapTitlesTests {
     @Test func aLongFileIsReadFromItsEndEvenWhenTheCutSplitsACharacter() throws {
         let recap = #"{"type":"system","subtype":"away_summary","content":"We're adding recap titles."}"#
         let filler = String(repeating: "✳", count: RecapTitles.tailBytes / 3 + 1) + "\n"
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("recap-\(UUID().uuidString).jsonl")
+        let url = try conversation(filler + recap + "\n\n")
         defer { try? FileManager.default.removeItem(at: url) }
         // The extra newline moves the cut one byte into a ✳.
-        try Data((filler + recap + "\n\n").utf8).write(to: url)
-        #expect(RecapTitles.latestRecap(atPath: url.path) == "We're adding recap titles.")
+        #expect(RecapTitles.readRecap(atPath: url.path, from: nil)?.recap == "We're adding recap titles.")
+    }
+
+    @Test func laterReadsSeeOnlyWhatWasAddedAndWaitForAHalfWrittenLine() throws {
+        let first = #"{"type":"system","subtype":"away_summary","content":"We're planning pantry."}"# + "\n"
+        let url = try conversation(first)
+        defer { try? FileManager.default.removeItem(at: url) }
+        let start = try #require(RecapTitles.readRecap(atPath: url.path, from: nil))
+        #expect(start == RecapRead(recap: "We're planning pantry.", end: UInt64(first.utf8.count)))
+
+        let file = try FileHandle(forWritingTo: url)
+        try file.seekToEnd()
+        try file.write(contentsOf: Data(#"{"type":"user"}"#.utf8) + Data("\n".utf8))
+        let quiet = try #require(RecapTitles.readRecap(atPath: url.path, from: start.end))
+        #expect(quiet.recap == nil)
+
+        let next = #"{"type":"system","subtype":"away_summary","content":"We're adding --days."}"#
+        try file.write(contentsOf: Data(next.prefix(30).utf8))
+        let half = try #require(RecapTitles.readRecap(atPath: url.path, from: quiet.end))
+        #expect(half == RecapRead(recap: nil, end: quiet.end))
+
+        try file.write(contentsOf: Data((next.dropFirst(30) + "\n").utf8))
+        try file.close()
+        #expect(RecapTitles.readRecap(atPath: url.path, from: half.end)?.recap == "We're adding --days.")
+    }
+
+    @Test func aFileShorterThanWhereReadingGotToIsReadAfresh() throws {
+        let url = try conversation(#"{"type":"system","subtype":"away_summary","content":"We're starting over."}"# + "\n")
+        defer { try? FileManager.default.removeItem(at: url) }
+        #expect(RecapTitles.readRecap(atPath: url.path, from: 1_000_000)?.recap == "We're starting over.")
+    }
+
+    private func conversation(_ text: String) throws -> URL {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("recap-\(UUID().uuidString).jsonl")
+        try Data(text.utf8).write(to: url)
+        return url
     }
 
     @Test func anAnswerBecomesItsFirstLineWithoutQuotesOrAPeriod() {
