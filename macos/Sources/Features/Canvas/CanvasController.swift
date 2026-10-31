@@ -200,7 +200,8 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         surface.addMenu.chose = { [weak self] item in self?.add(item) }
         NotificationCenter.default.addObserver(
             self, selector: #selector(canvasMoved), name: NSView.boundsDidChangeNotification, object: scrollView.contentView)
-        surface.panned = { [weak self] in self?.updateVisibility() }
+        surface.shownMoved = { [weak self] in self?.updateVisibility() }
+        scrollView.userMoves = { [weak self] in self?.stopGlide(keep: true) }
         // Focus follows the window's first responder: whichever card holds
         // it is the focused card.
         window?.publisher(for: \.firstResponder)
@@ -235,7 +236,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
             guard let self, event.window === window else { return event }
             switch event.type {
             case .magnify:
-                stopGlide()
+                stopGlide(keep: true)
                 scrollView.magnify(with: event)
                 return nil
             case .leftMouseDown:
@@ -1103,6 +1104,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     }
 
     func center(on point: CGPoint) {
+        stopGlide()
         let size = scrollView.contentView.bounds.size
         scrollView.contentView.scroll(to: CGPoint(x: point.x - size.width / 2, y: point.y - size.height / 2))
         scrollView.reflectScrolledClipView(scrollView.contentView)
@@ -1116,6 +1118,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
 
     /// `rect` in view, zoomed no closer than `atMost`.
     func zoomToFit(_ rect: CGRect, atMost cap: CGFloat = CanvasZoom.maximum) {
+        stopGlide()
         scrollView.magnify(toFit: rect)
         if scrollView.magnification > cap {
             scrollView.magnification = cap
