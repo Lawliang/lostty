@@ -309,7 +309,7 @@ struct CardHeaderContent: View {
         HStack(spacing: 6) {
             ProjectPill(model: card.sidebar)
                 .layoutPriority(1)
-            if let pane = focusedPane { CardFolderIcon(pane: pane) }
+            if let pane = focusedPane { CardFolderIcon(pane: pane).id(ObjectIdentifier(pane)) }
             if let key = card.ticketKey {
                 Text(key)
                     .font(.system(size: size - 1.5, weight: .semibold, design: .monospaced))
@@ -387,17 +387,27 @@ final class CardRenameButton: NSView {
 }
 
 /// The folder a pane is in, as a window's title bar shows it (its proxy
-/// icon): the folder's own Finder icon.
+/// icon): the folder's own Finder icon. Follows only the pane's folder, not
+/// the pane, which publishes on every mouse move over it.
 private struct CardFolderIcon: View {
-    @ObservedObject var pane: Ghostty.SurfaceView
+    let pane: Ghostty.SurfaceView
+    @State private var folder: (path: String, icon: NSImage)?
 
     var body: some View {
-        if let pwd = pane.pwd, !pwd.isEmpty {
-            Image(nsImage: NSWorkspace.shared.icon(forFile: pwd))
-                .resizable()
-                .interpolation(.high)
-                .frame(width: 16, height: 16)
-                .help(pwd)
+        Group {
+            if let folder {
+                Image(nsImage: folder.icon)
+                    .resizable()
+                    .interpolation(.high)
+                    .frame(width: 16, height: 16)
+                    .help(folder.path)
+            }
+        }
+        .onReceive(pane.$pwd) { pwd in
+            let path = pwd.flatMap { $0.isEmpty ? nil : $0 }
+            // Subscribing sends the folder again: only a new one is news.
+            guard path != folder?.path else { return }
+            folder = path.map { ($0, NSWorkspace.shared.icon(forFile: $0)) }
         }
     }
 }
