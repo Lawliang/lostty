@@ -480,6 +480,7 @@ extension Ghostty {
                 ClaudeUsageRuntime.shared.surfaceClosed(closedID)
                 SessionTitleSignal.shared.surfaceClosed(closedID)
                 TurnObserver.shared.surfaceClosed(closedID)
+                RecapTitles.shared.forget(closedID)
             }
 
             // Lostty Mobile: a remote pane closes its channel; the session

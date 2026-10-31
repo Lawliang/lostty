@@ -325,7 +325,7 @@ struct CardHeaderContent: View {
                     .foregroundStyle(color)
                     .fixedSize()
             }
-            Text(CardController.topic(title: card.title, claim: card.claim))
+            Text(CardController.topic(title: card.title, claim: card.claim, recap: card.titleOverride == nil ? card.recap : nil))
                 .font(.system(size: size, weight: card.agentName == nil ? .semibold : .regular))
                 .foregroundStyle(card.agentName == nil ? AnyShapeStyle(color) : AnyShapeStyle(.secondary))
                 .lineLimit(1)
