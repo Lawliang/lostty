@@ -649,14 +649,33 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
             guard let left, model.leftProject(move, before: before.model),
                   let card = cards.first(where: { $0.surfaceTree.contains { $0.id == move.pane } }),
                   noticed.insert(card.id).inserted else { continue }
-            LosttyNotifications.shared.post(LosttyNotification(
-                kind: .zone(card: card.id),
-                title: "\(CanvasModel.noticeTitle(card.title)) left \(left)",
-                detail: move.to.flatMap(model.zoneTitle).map { "Now in \($0)." } ?? "It's in no zone now."))
+            noticeLeft(card, zone: left, now: move.to.flatMap(model.zoneTitle))
         }
         updateZoneCaptions()
         relistTickets()
         deliverSoon()
+    }
+
+    /// Card `card` left zone `zone` (now in zone `now`): one bubble for all
+    /// the cards that left it, going to the latest.
+    private func noticeLeft(_ card: CardController, zone: String, now: String?) {
+        let kind = LosttyNotification.Kind.zoneLeft(zone)
+        let name = CanvasModel.noticeTitle(card.title)
+        let group = (LosttyNotifications.shared.current(kind)?.group ?? []).filter { $0 != name } + [name]
+        LosttyNotifications.shared.post(LosttyNotification(
+            kind: kind,
+            title: group.count == 1 ? "\(name) left \(zone)" : "\(group.count) cards left \(zone)",
+            detail: group.count == 1
+                ? now.map { "Now in \($0)." } ?? "It's in no zone now."
+                : group.joined(separator: ", "),
+            open: { [weak self] in self?.goTo(card.id) },
+            group: group))
+    }
+
+    /// Brings the canvas forward, zoomed to card `id`.
+    private func goTo(_ id: UUID) {
+        window?.makeKeyAndOrderFront(nil)
+        zoom(toCard: id)
     }
 
     /// The name of the Claude running in pane `pane`, as its agents call
@@ -736,7 +755,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         LosttyNotifications.shared.post(LosttyNotification(
             kind: kind,
             title: "Kept inside \(name)",
-            detail: "\(CanvasModel.noticeTitle(card.title)) tried to message \(target), which is outside the zone.",
+            detail: "\(CanvasModel.noticeTitle(card.title)) tried to message \(target), outside the zone.",
             actionTitle: "Allow Once",
             action: { [weak self] in
                 self?.zoneStore.writeAllow(pane, target: target)
@@ -745,7 +764,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
             },
             secondaryTitle: "Zone Settings",
             secondaryAction: { [weak self] in self?.showZoneSettings(project) },
-            persistent: true))
+            open: { [weak self, id = card.id] in self?.goTo(id) }))
     }
 
     private func showZoneSettings(_ id: UUID) {

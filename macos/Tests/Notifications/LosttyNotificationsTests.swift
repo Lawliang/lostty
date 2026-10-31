@@ -35,7 +35,7 @@ struct LosttyNotificationsTests {
         #expect(center.items.isEmpty)
     }
 
-    @Test func fadesEightSecondsAfterItIsFirstShown() {
+    @Test func fadesSixSecondsAfterItIsFirstShown() {
         let center = make()
         let n = note(.hooksMissing(.claude))
         center.post(n)
@@ -45,7 +45,7 @@ struct LosttyNotificationsTests {
         center.markShown(n.id)
         #expect(harness.pending.count == 1)
         #expect(harness.pending[0].delay == LosttyNotifications.lifetime)
-        #expect(LosttyNotifications.lifetime == 8)
+        #expect(LosttyNotifications.lifetime == 6)
         runPending()
         #expect(center.items.isEmpty)
     }
@@ -64,10 +64,10 @@ struct LosttyNotificationsTests {
         #expect(center.items.isEmpty)
     }
 
-    @Test func aPersistentBubbleStaysUntilDismissed() {
+    @Test func aBubbleWithAButtonStaysUntilDismissed() {
         let center = make()
         var n = note(.update)
-        n.persistent = true
+        n.actionTitle = "Restart to Update"
         center.post(n)
         center.markShown(n.id)
         center.setHovering(n.id, true)
@@ -84,7 +84,56 @@ struct LosttyNotificationsTests {
         center.post(second)
         center.post(note(.hooksMissing(.codex)))
         #expect(center.items.count == 2)
-        #expect(center.items.first?.id == second.id)
+        #expect(center.items.last?.id == second.id)
+    }
+
+    @Test func theNewestIsOnTop() {
+        let center = make()
+        let first = note(.update), second = note(.handoff)
+        center.post(first)
+        center.post(second)
+        #expect(center.items.map(\.id) == [second.id, first.id])
+        // A replacement goes on top too.
+        let again = note(.update)
+        center.post(again)
+        #expect(center.items.map(\.id) == [again.id, second.id])
+    }
+
+    @Test func aGroupedBubbleIsFoundToAddTo() {
+        let center = make()
+        var n = note(.zoneLeft("Lostty"))
+        n.group = ["a"]
+        center.post(n)
+        #expect(center.current(.zoneLeft("Lostty"))?.group == ["a"])
+        #expect(center.current(.zoneLeft("Other")) == nil)
+    }
+
+    @Test func clearAllEmptiesAndClosesTheDeck() {
+        let center = make()
+        for _ in 0..<5 { center.post(note(.keptInside(pane: UUID()))) }
+        center.expanded = true
+        center.clearAll()
+        #expect(center.items.isEmpty)
+        #expect(!center.expanded)
+    }
+
+    @Test func onlyTheLastKeyWindowShowsTheBubbles() {
+        let center = make()
+        let a = ObjectIdentifier(NSObject()), b = ObjectIdentifier(NSObject())
+        center.show(in: a)
+        center.show(in: b)
+        #expect(center.front == b)
+        center.windowClosed(a)
+        #expect(center.front == b)
+        center.windowClosed(b)
+        #expect(center.front == nil)
+    }
+
+    @Test func theAgeReadsLikeIOS() {
+        let now = Date()
+        #expect(LosttyNotification.age(of: now.addingTimeInterval(-20), now: now) == "now")
+        #expect(LosttyNotification.age(of: now.addingTimeInterval(-245), now: now) == "4m ago")
+        #expect(LosttyNotification.age(of: now.addingTimeInterval(-7300), now: now) == "2h ago")
     }
 
     @Test func aConnectResultReplacesItsAgentsBubble() {
@@ -122,31 +171,36 @@ struct HookNotificationsTests {
         let n = HookNotifications.missing(.codex, coordination: false)
         #expect(n.kind == .hooksMissing(.codex))
         #expect(n.title == "Codex isn't connected")
-        #expect(n.detail == "Lostty can't show the trace or Ready for response for Codex.")
+        #expect(n.detail == "Connect it to see the trace and Ready for response.")
         #expect(HookNotifications.missing(.claude, coordination: false).detail
-            == "Lostty can't show the trace, Ready for response or usage for Claude.")
+            == "Connect it to see the trace, Ready for response and usage.")
         #expect(n.actionTitle == "Connect")
+        #expect(n.stays)
     }
 
-    @Test func withCoordinationOnTheMissingBubbleNamesTheGuard() {
+    @Test func withCoordinationOnTheMissingBubbleSaysRiskyActionsAreChecked() {
         let n = HookNotifications.missing(.codex, coordination: true)
-        #expect(n.detail.contains("Lostty's guard and trace aren't set up for Codex"))
-        #expect(HookNotifications.missing(.claude, coordination: true).detail.contains("Lostty's guard and trace aren't set up for Claude"))
+        #expect(n.detail == "Connect it so Lostty can check its risky actions and show the trace and Ready for response.")
+        #expect(!n.detail.contains("guard"))
+    }
+
+    @Test func clickingAClaudeBubbleOpensClaudeIntegration() {
+        #expect(HookNotifications.missing(.claude, coordination: false).open != nil)
+        #expect(HookNotifications.missing(.codex, coordination: false).open == nil)
     }
 
     @Test func connectedBubbleSaysToRestart() {
         let claude = HookNotifications.result(.claude, exitCode: 0, stderr: "", coordination: false)
         #expect(claude.title == "Claude connected")
-        #expect(claude.detail == "Restart any running Claude sessions to see the trace and usage.")
+        #expect(claude.detail == "Restart running Claude sessions to pick it up.")
         #expect(claude.actionTitle == nil)
+        #expect(!claude.stays)
         let codex = HookNotifications.result(.codex, exitCode: 0, stderr: "", coordination: false)
-        #expect(codex.detail == "Restart any running Codex sessions to see the trace. Codex asks you to approve Lostty's hooks once.")
-        #expect(!codex.detail.contains("guard"))
+        #expect(codex.detail == "Restart running Codex sessions, then approve Lostty's hooks in Codex once.")
     }
 
-    @Test func withCoordinationOnTheConnectedBubbleNamesTheGuard() {
+    @Test func withCoordinationOnCodexIsAskedToApproveOnlyUntilItTrustsTheHooks() {
         let claude = HookNotifications.result(.claude, exitCode: 0, stderr: "", coordination: true)
-        #expect(claude.detail.contains("guard"))
         #expect(claude.detail.contains("Restart"))
         #expect(!claude.detail.contains(HookNotifications.codexTrustMessage))
         let codex = HookNotifications.result(.codex, exitCode: 0, stderr: "", codexTrusted: false, coordination: true)
@@ -200,7 +254,7 @@ struct HookNotificationsTests {
     @Test func failedConnectShowsTheReason() {
         let n = HookNotifications.result(.claude, exitCode: 1, stderr: "claude-hooks: claude: cannot write x (AccessDenied); left untouched\n")
         #expect(n.title == "Couldn't connect Claude")
-        #expect(n.detail.contains("AccessDenied"))
+        #expect(n.detail == "claude-hooks: claude: cannot write x (AccessDenied); left untouched")
     }
 }
 #endif

@@ -30,12 +30,12 @@ struct LosttyNotification: Identifiable {
         case hooksMissing(HookAgent)
         /// The outcome of connecting the agent's hooks.
         case hooks(HookAgent)
-        /// A context handoff didn't reach its fresh window.
-        case handoff(UUID)
+        /// Context handoffs that didn't reach their fresh windows, in one bubble.
+        case handoff
         /// A new Lostty is ready for Restart to Update.
         case update
-        /// A canvas card left its zone.
-        case zone(card: UUID)
+        /// Canvas cards that left the zone with this title, in one bubble.
+        case zoneLeft(String)
         /// A pane's agent messaged one outside its zone, and was stopped.
         case keptInside(pane: UUID)
 
@@ -44,15 +44,15 @@ struct LosttyNotification: Identifiable {
         var slot: String {
             switch self {
             case .hooksMissing(let agent), .hooks(let agent): "hooks-\(agent.rawValue)"
-            case .handoff(let pane): "handoff-\(pane.uuidString)"
+            case .handoff: "handoff"
             case .update: "update"
-            case .zone(let card): "zone-\(card.uuidString)"
+            case .zoneLeft(let zone): "zone-left-\(zone)"
             case .keptInside(let pane): "kept-inside-\(pane.uuidString)"
             }
         }
     }
 
-    /// Sets the bubble's icon and color.
+    /// Sets the bubble's icon color.
     enum Style { case attention, success, failure, update }
 
     let id = UUID()
@@ -65,21 +65,41 @@ struct LosttyNotification: Identifiable {
     /// A second, quieter button beside the action.
     var secondaryTitle: String?
     var secondaryAction: (@MainActor () -> Void)?
-    /// Stays until dismissed or replaced, instead of fading.
-    var persistent = false
+    /// Clicking the bubble itself: goes to what it's about.
+    var open: (@MainActor () -> Void)?
+    /// What a bubble for several events stands for, oldest first: the
+    /// cards that left a zone, or the handoffs that didn't finish.
+    var group: [String] = []
+    var posted = Date()
+
+    /// A bubble with a button waits for it; the rest fade.
+    var stays: Bool { actionTitle != nil || secondaryTitle != nil }
+
+    /// The time in the bubble's corner: "now", "4m ago", "2h ago".
+    static func age(of posted: Date, now: Date) -> String {
+        let seconds = Int(now.timeIntervalSince(posted))
+        if seconds < 60 { return "now" }
+        if seconds < 3600 { return "\(seconds / 60)m ago" }
+        return "\(seconds / 3600)h ago"
+    }
 }
 
-/// App-wide notification bubbles, shown in the top-right of each terminal
-/// window. A bubble fades `lifetime` seconds after a window first shows it;
-/// hovering keeps it, and leaving restarts the countdown.
+/// App-wide notification bubbles, newest first, shown at the top right of
+/// the frontmost window. A bubble without a button fades `lifetime`
+/// seconds after it's first shown; hovering keeps it, and leaving restarts
+/// the countdown.
 @MainActor
 final class LosttyNotifications: ObservableObject {
     typealias Scheduler = (TimeInterval, @escaping @MainActor () -> Void) -> Void
 
     static let shared = LosttyNotifications()
-    static let lifetime: TimeInterval = 8
+    static let lifetime: TimeInterval = 6
 
     @Published private(set) var items: [LosttyNotification] = []
+    /// The deck is open: every bubble shows, not just the newest few.
+    @Published var expanded = false
+    /// The window showing the bubbles: the last one with a stack to be key.
+    @Published private(set) var front: ObjectIdentifier?
 
     private let schedule: Scheduler
     private var shown: Set<UUID> = []
@@ -92,18 +112,24 @@ final class LosttyNotifications: ObservableObject {
         self.schedule = schedule
     }
 
+    /// On top, in place of the bubble in its slot.
     func post(_ notification: LosttyNotification) {
         if let index = items.firstIndex(where: { $0.kind.slot == notification.kind.slot }) {
             forget(items[index].id)
-            items[index] = notification
-        } else {
-            items.append(notification)
+            items.remove(at: index)
         }
+        items.insert(notification, at: 0)
+    }
+
+    /// The bubble up in `kind`'s slot, to add to.
+    func current(_ kind: LosttyNotification.Kind) -> LosttyNotification? {
+        items.first { $0.kind.slot == kind.slot }
     }
 
     func dismiss(_ id: UUID) {
         items.removeAll { $0.id == id }
         forget(id)
+        if items.count <= 1 { expanded = false }
     }
 
     /// The bubble in `kind`'s slot, if one is up.
@@ -111,9 +137,15 @@ final class LosttyNotifications: ObservableObject {
         for item in items where item.kind.slot == kind.slot { dismiss(item.id) }
     }
 
+    func clearAll() {
+        for item in items { forget(item.id) }
+        items = []
+        expanded = false
+    }
+
     /// A window displayed the bubble: start its countdown (once).
     func markShown(_ id: UUID) {
-        guard let item = items.first(where: { $0.id == id }), !item.persistent, !shown.contains(id) else { return }
+        guard let item = items.first(where: { $0.id == id }), !item.stays, !shown.contains(id) else { return }
         shown.insert(id)
         countdown(id)
     }
@@ -125,6 +157,13 @@ final class LosttyNotifications: ObservableObject {
             hovering.remove(id)
             if shown.contains(id) { countdown(id) }
         }
+    }
+
+    /// A window with a stack became key: the bubbles move to it.
+    func show(in window: ObjectIdentifier) { front = window }
+
+    func windowClosed(_ window: ObjectIdentifier) {
+        if front == window { front = nil }
     }
 
     private func countdown(_ id: UUID) {
