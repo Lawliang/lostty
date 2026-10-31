@@ -722,16 +722,17 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
             guard let left, model.leftProject(move, before: before.model),
                   let card = cards.first(where: { $0.surfaceTree.contains { $0.id == move.pane } }),
                   noticed.insert(card.id).inserted else { continue }
-            noticeLeft(card, zone: left, now: move.to.flatMap(model.zoneTitle))
+            noticeLeft(card, zone: left, id: move.from.flatMap(before.model.projectZone),
+                       now: move.to.flatMap(model.zoneTitle))
         }
         updateZoneCaptions()
         relistTickets()
         deliverSoon()
     }
 
-    /// Card `card` left zone `zone` (now in zone `now`): one bubble for all
-    /// the cards that left it, going to the latest.
-    private func noticeLeft(_ card: CardController, zone: String, now: String?) {
+    /// Card `card` left zone `zone` (project `id`; now in zone `now`): one
+    /// bubble for all the cards that left it, going to the latest.
+    private func noticeLeft(_ card: CardController, zone: String, id: UUID?, now: String?) {
         let kind = LosttyNotification.Kind.zoneLeft(zone)
         let name = CanvasModel.noticeTitle(card.title)
         let group = (LosttyNotifications.shared.current(kind)?.group ?? []).filter { $0 != name } + [name]
@@ -742,7 +743,8 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
                 ? now.map { "Now in \($0)." } ?? "It's in no zone now."
                 : group.joined(separator: ", "),
             open: { [weak self] in self?.goTo(card.id) },
-            group: group))
+            group: group,
+            zone: id))
     }
 
     /// Brings the canvas forward, zoomed to card `id`.
@@ -836,7 +838,13 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
             },
             secondaryTitle: "Zone Settings",
             secondaryAction: { [weak self] in self?.showZoneSettings(project) },
-            open: { [weak self, id = card.id] in self?.goTo(id) }))
+            open: { [weak self, id = card.id] in self?.goTo(id) },
+            zone: project))
+    }
+
+    /// The project zone pane `pane` is in, if any.
+    func projectZone(ofPane pane: UUID) -> UUID? {
+        membership.panes.zones[pane].flatMap(model.projectZone)
     }
 
     private func showZoneSettings(_ id: UUID) {

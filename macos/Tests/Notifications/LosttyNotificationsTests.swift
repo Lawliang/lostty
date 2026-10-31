@@ -108,13 +108,28 @@ struct LosttyNotificationsTests {
         #expect(center.current(.zoneLeft("Other")) == nil)
     }
 
-    @Test func clearAllEmptiesAndClosesTheDeck() {
-        let center = make()
-        for _ in 0..<5 { center.post(note(.keptInside(pane: UUID()))) }
-        center.expanded = true
-        center.clearAll()
-        #expect(center.items.isEmpty)
-        #expect(!center.expanded)
+    @Test func eachZoneStacksAndTheRestStandAlone() {
+        let zoneA = UUID(), zoneB = UUID()
+        let start = Date()
+        func bubble(_ kind: LosttyNotification.Kind, _ zone: UUID?, _ at: TimeInterval) -> LosttyNotification {
+            var n = note(kind)
+            n.zone = zone
+            n.posted = start.addingTimeInterval(at)
+            return n
+        }
+        let left = bubble(.zoneLeft("A"), zoneA, 1)
+        let update = bubble(.update, nil, 2)
+        let kept = bubble(.keptInside(pane: UUID()), zoneB, 3)
+        let hooks = bubble(.hooksMissing(.claude), nil, 4)
+        let ready = TerminalNotice(
+            pane: UUID(), title: "Fix", project: nil, recap: RequestRecap(), zone: zoneA, posted: start.addingTimeInterval(5))
+        let groups = NotificationGroup.make([hooks, kept, update, left], [ready])
+        // Newest first; zone A's stack holds both kinds, newest on top.
+        #expect(groups.map(\.zone) == [zoneA, nil, zoneB, nil])
+        #expect(groups[0].entries.map(\.id) == [ready.id, left.id])
+        #expect(groups[1].entries.map(\.id) == [hooks.id])
+        #expect(groups[2].entries.map(\.id) == [kept.id])
+        #expect(groups[3].entries.map(\.id) == [update.id])
     }
 
     @Test func onlyTheLastKeyWindowShowsTheBubbles() {

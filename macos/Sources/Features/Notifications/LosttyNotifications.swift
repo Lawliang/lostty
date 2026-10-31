@@ -70,6 +70,8 @@ struct LosttyNotification: Identifiable {
     /// What a bubble for several events stands for, oldest first: the
     /// cards that left a zone, or the handoffs that didn't finish.
     var group: [String] = []
+    /// The canvas project zone it's about: it stacks with the zone's others.
+    var zone: UUID?
     var posted = Date()
 
     /// A bubble with a button waits for it; the rest fade.
@@ -85,7 +87,7 @@ struct LosttyNotification: Identifiable {
 }
 
 /// App-wide notification bubbles, newest first, shown at the top right of
-/// the frontmost window. A bubble without a button fades `lifetime`
+/// the frontmost window, stacked by zone (`NotificationGroup`). A bubble without a button fades `lifetime`
 /// seconds after it's first shown; hovering keeps it, and leaving restarts
 /// the countdown.
 @MainActor
@@ -96,8 +98,6 @@ final class LosttyNotifications: ObservableObject {
     static let lifetime: TimeInterval = 6
 
     @Published private(set) var items: [LosttyNotification] = []
-    /// The deck is open: every bubble shows, not just the newest few.
-    @Published var expanded = false
     /// The window showing the bubbles: the last one with a stack to be key.
     @Published private(set) var front: ObjectIdentifier?
 
@@ -129,18 +129,11 @@ final class LosttyNotifications: ObservableObject {
     func dismiss(_ id: UUID) {
         items.removeAll { $0.id == id }
         forget(id)
-        if items.count <= 1 { expanded = false }
     }
 
     /// The bubble in `kind`'s slot, if one is up.
     func dismiss(kind: LosttyNotification.Kind) {
         for item in items where item.kind.slot == kind.slot { dismiss(item.id) }
-    }
-
-    func clearAll() {
-        for item in items { forget(item.id) }
-        items = []
-        expanded = false
     }
 
     /// A window displayed the bubble: start its countdown (once).

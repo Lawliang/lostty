@@ -2,28 +2,72 @@
 import AppKit
 import SwiftUI
 
-/// The top-right stack of notification bubbles over the terminal area, in
-/// the frontmost window only, with the temporary notifications always
-/// under them. Newest on top; past `shown` bubbles the rest fold into a
-/// deck that opens on a click.
+/// One stack in the notification column: a canvas zone's notifications,
+/// newest first, or one notification on its own.
+struct NotificationGroup: Identifiable {
+    enum Entry: Identifiable {
+        case bubble(LosttyNotification)
+        case terminal(TerminalNotice)
+
+        var id: UUID {
+            switch self {
+            case .bubble(let item): item.id
+            case .terminal(let item): item.id
+            }
+        }
+
+        var zone: UUID? {
+            switch self {
+            case .bubble(let item): item.zone
+            case .terminal(let item): item.zone
+            }
+        }
+
+        var posted: Date {
+            switch self {
+            case .bubble(let item): item.posted
+            case .terminal(let item): item.posted
+            }
+        }
+    }
+
+    let zone: UUID?
+    var entries: [Entry]
+
+    var id: UUID { zone ?? entries[0].id }
+
+    /// A stack for each zone and every other notification on its own, in
+    /// the order of their newest.
+    static func make(_ bubbles: [LosttyNotification], _ notices: [TerminalNotice]) -> [NotificationGroup] {
+        let entries = (bubbles.map(Entry.bubble) + notices.map(Entry.terminal)).sorted { $0.posted > $1.posted }
+        var groups: [NotificationGroup] = []
+        for entry in entries {
+            if let zone = entry.zone, let index = groups.firstIndex(where: { $0.zone == zone }) {
+                groups[index].entries.append(entry)
+            } else {
+                groups.append(NotificationGroup(zone: entry.zone, entries: [entry]))
+            }
+        }
+        return groups
+    }
+}
+
+/// The top-right column of notifications over the terminal area, in the
+/// frontmost window only. A zone's notifications stack: the newest shows,
+/// the rest fold behind it until a click opens the stack. The others
+/// show on their own.
 struct NotificationStackView: View {
     @ObservedObject var center: LosttyNotifications = .shared
+    @ObservedObject var notices: TerminalNotices = .shared
     @State private var window: NSWindow?
-
-    static let shown = 3
+    /// The zones whose stack is open.
+    @State private var open: Set<UUID> = []
 
     var body: some View {
+        let groups = NotificationGroup.make(center.items, notices.items)
         VStack(alignment: .trailing, spacing: 8) {
             if isFront {
-                if center.expanded { header }
-                ForEach(visible) { item in
-                    NotificationBubble(item: item, center: center)
-                        .transition(.asymmetric(
-                            insertion: .move(edge: .top).combined(with: .opacity),
-                            removal: .move(edge: .trailing).combined(with: .opacity)))
-                }
-                if folded > 0 { deck }
-                TerminalNoticeStack()
+                ForEach(groups) { stack($0) }
             }
         }
         .padding(.top, 12)
@@ -38,44 +82,104 @@ struct NotificationStackView: View {
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)) { note in
             if let window, note.object as? NSWindow === window { center.windowClosed(ObjectIdentifier(window)) }
         }
-        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: center.items.map(\.id))
-        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: center.expanded)
+        // A stack down to one closes, so the next to come starts folded.
+        .onChange(of: groups.map(\.entries.count)) { _, _ in
+            open = open.filter { zone in groups.contains { $0.zone == zone && $0.entries.count > 1 } }
+        }
+        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: groups.flatMap { $0.entries.map(\.id) })
+        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: open)
+        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: notices.collapsed)
     }
 
     private var isFront: Bool { window.map { center.front == ObjectIdentifier($0) } ?? false }
 
-    private var visible: [LosttyNotification] {
-        center.expanded ? center.items : Array(center.items.prefix(Self.shown))
-    }
-
-    private var folded: Int { center.expanded ? 0 : max(0, center.items.count - Self.shown) }
-
-    /// Over the open deck, as iOS has it.
-    private var header: some View {
-        HStack(spacing: 6) {
-            pill("Show Less") { center.expanded = false }
-            pill("Clear All") { center.clearAll() }
+    @ViewBuilder
+    private func stack(_ group: NotificationGroup) -> some View {
+        if let zone = group.zone, group.entries.count > 1 {
+            if open.contains(zone) {
+                VStack(alignment: .trailing, spacing: 8) {
+                    HStack(spacing: 6) {
+                        zoneName(zone)
+                        Spacer(minLength: 0)
+                        pill("Show Less") { open.remove(zone) }
+                        pill("Clear") { clear(group) }
+                    }
+                    .frame(width: 320)
+                    ForEach(group.entries) { entry($0) }
+                }
+            } else {
+                VStack(alignment: .trailing, spacing: 0) {
+                    entry(group.entries[0])
+                    deck(group, zone)
+                }
+            }
+        } else {
+            ForEach(group.entries) { entry($0) }
         }
     }
 
-    /// The folded bubbles' edges under the last one showing, and how many.
-    private var deck: some View {
-        Button { center.expanded = true } label: {
+    @ViewBuilder
+    private func entry(_ entry: NotificationGroup.Entry) -> some View {
+        switch entry {
+        case .bubble(let item):
+            NotificationBubble(item: item, center: center)
+                .transition(.asymmetric(
+                    insertion: .move(edge: .top).combined(with: .opacity),
+                    removal: .move(edge: .trailing).combined(with: .opacity)))
+        case .terminal(let item):
+            TerminalNoticeCard(item: item, compact: notices.collapsed.contains(item.id))
+                .onTapGesture { notices.open(item) }
+                .onHover { notices.setHovering(item.id, $0) }
+                .transition(.move(edge: .trailing).combined(with: .opacity))
+        }
+    }
+
+    /// The folded notifications' edges under the newest, and how many.
+    private func deck(_ group: NotificationGroup, _ zone: UUID) -> some View {
+        let more = group.entries.count - 1
+        return Button { open.insert(zone) } label: {
             VStack(spacing: 4) {
                 VStack(spacing: 0) {
                     edge(width: 300, opacity: 1)
-                    edge(width: 280, opacity: 0.7)
+                    if more > 1 { edge(width: 280, opacity: 0.7) }
                 }
-                Text("\(folded) more")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 4) {
+                    Text("\(more) more from")
+                    zoneName(zone)
+                }
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.secondary)
             }
             .frame(width: 320)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .padding(.top, -8)
-        .accessibilityLabel("Show \(folded) more notifications")
+        .accessibilityLabel("Show \(more) more notifications")
+    }
+
+    /// The zone's name in its color, as its caption on the canvas.
+    @ViewBuilder
+    private func zoneName(_ id: UUID) -> some View {
+        if let zone = CanvasController.shared?.model.zone(id) {
+            HStack(spacing: 4) {
+                Circle().fill(Color(nsColor: zone.color.tint)).frame(width: 7, height: 7)
+                Text(zone.name.isEmpty ? "Zone" : zone.name)
+                    .font(.system(size: 11, weight: .semibold))
+                    .lineLimit(1)
+            }
+        } else {
+            Text("Zone").font(.system(size: 11, weight: .semibold))
+        }
+    }
+
+    private func clear(_ group: NotificationGroup) {
+        for entry in group.entries {
+            switch entry {
+            case .bubble(let item): center.dismiss(item.id)
+            case .terminal(let item): notices.dismiss(item.id)
+            }
+        }
+        if let zone = group.zone { open.remove(zone) }
     }
 
     private func edge(width: CGFloat, opacity: Double) -> some View {

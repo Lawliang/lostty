@@ -12,6 +12,9 @@ struct TerminalNotice: Identifiable, Equatable {
     var title: String
     var project: ProjectLabel?
     var recap: RequestRecap
+    /// The canvas project zone of its pane: it stacks with the zone's others.
+    var zone: UUID?
+    var posted = Date()
 }
 
 /// Temporary notifications: a pane's agent finished a request while the
@@ -53,6 +56,7 @@ final class TerminalNotices: ObservableObject {
         guard awaiting.contains(pane), let surface = (NSApp.delegate as? AppDelegate)?.findSurface(forUUID: pane) else { return }
         let title = Self.title(surface.title)
         let pwd = SkinsRuntime.shared.manager.panes[pane]?.pwd
+        let zone = CanvasController.shared?.projectZone(ofPane: pane)
         // Codex words its conversation another way.
         let conversation = TranscriptLocation.allowed(path).flatMap { $0.agent == .claude ? $0.url : nil }
         Task {
@@ -61,7 +65,7 @@ final class TerminalNotices: ObservableObject {
                 if let conversation { recap = await RequestRecap.read(conversation, since: since) }
                 return (pwd.flatMap { ProjectLabel.read(pwd: $0) }, recap)
             }.value
-            post(TerminalNotice(pane: pane, title: title, project: project, recap: recap))
+            post(TerminalNotice(pane: pane, title: title, project: project, recap: recap, zone: zone))
         }
     }
 
@@ -78,6 +82,12 @@ final class TerminalNotices: ObservableObject {
         awaiting = panes
         for item in items where !panes.contains(item.pane) { forget(item.id) }
         items.removeAll { !panes.contains($0.pane) }
+    }
+
+    /// Until its pane's agent finishes another request.
+    func dismiss(_ id: UUID) {
+        items.removeAll { $0.id == id }
+        forget(id)
     }
 
     func setHovering(_ id: UUID, _ isHovering: Bool) {
