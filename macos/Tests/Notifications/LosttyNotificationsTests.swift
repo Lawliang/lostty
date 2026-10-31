@@ -119,7 +119,9 @@ struct LosttyNotificationsTests {
 
     @Test func onlyTheLastKeyWindowShowsTheBubbles() {
         let center = make()
-        let a = ObjectIdentifier(NSObject()), b = ObjectIdentifier(NSObject())
+        // Kept alive, so the two can't share an address.
+        let windows = (NSObject(), NSObject())
+        let a = ObjectIdentifier(windows.0), b = ObjectIdentifier(windows.1)
         center.show(in: a)
         center.show(in: b)
         #expect(center.front == b)
