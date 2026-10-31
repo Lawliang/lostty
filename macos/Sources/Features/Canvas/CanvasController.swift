@@ -234,6 +234,12 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         let events: NSEvent.EventTypeMask = [.magnify, .leftMouseDown, .rightMouseDown, .leftMouseDragged, .leftMouseUp, .mouseMoved]
         eventMonitor = NSEvent.addLocalMonitorForEvents(matching: events) { [weak self] event in
             guard let self, event.window === window else { return event }
+            // A click lands where the canvas is drawn: a pan's momentum, a
+            // glide or a pinch drawn elsewhere scrolls there first.
+            if event.type == .leftMouseDown || event.type == .rightMouseDown, scrollView.drawn != nil {
+                stopGlide(keep: true)
+                scrollView.settleDrawn()
+            }
             switch event.type {
             case .magnify:
                 stopGlide(keep: true)
