@@ -120,8 +120,18 @@ fn say(alloc: Allocator, seq: ?[]const u8) u8 {
     const bytes = seq orelse return 0;
     const tty = openTerminal(alloc) orelse return 0;
     defer tty.close();
-    tty.writeAll(bytes) catch {};
+    writeWhole(tty, bytes) catch {};
     return 0;
+}
+
+/// Writes `bytes` to a pane's terminal in one piece. Hooks run side by
+/// side (five subagents starting, their tool calls), and a write the
+/// terminal can't take at once goes in chunks that another write would
+/// split, losing both messages; holding the terminal's lock keeps each
+/// whole. The lock goes with the file's close.
+pub fn writeWhole(tty: std.fs.File, bytes: []const u8) !void {
+    std.posix.flock(tty.handle, std.posix.LOCK.EX) catch {};
+    try tty.writeAll(bytes);
 }
 
 /// Prints `texts` as Claude Code's additionalContext for `event`, or

@@ -92,7 +92,7 @@ pub fn run(gpa: Allocator) !u8 {
         return 1;
     };
     defer tty.close();
-    try tty.writeAll(seq);
+    try claude_state.writeWhole(tty, seq);
     try out.writeAll("sent\n");
     return 0;
 }

@@ -37,7 +37,7 @@ pub fn run(gpa: Allocator) !u8 {
     const seq = protocol.encodeUserVar(alloc, usage.user_var_name, json, tmux) catch return 0;
     const tty = claude_state.openTerminal(alloc) orelse return 0;
     defer tty.close();
-    tty.writeAll(seq) catch {};
+    claude_state.writeWhole(tty, seq) catch {};
     return 0;
 }
 
