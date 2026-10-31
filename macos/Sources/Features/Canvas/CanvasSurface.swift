@@ -51,7 +51,49 @@ final class CanvasScrollView: NSScrollView {
             pane.scrollWheel(with: event)
             return
         }
+        if glides(event) { return }
         super.scrollWheel(with: event)
+    }
+
+    /// A trackpad pan's distance not yet scrolled, in screen points.
+    private(set) var unscrolled: CGSize?
+    /// The cards moved without scrolling (`glides`): the views over them follow.
+    var glided: (() -> Void)?
+
+    /// What's on screen of the canvas, a trackpad pan under way included.
+    var shownRect: CGRect {
+        guard let unscrolled else { return documentVisibleRect }
+        return documentVisibleRect.offsetBy(dx: -unscrolled.width / magnification, dy: -unscrolled.height / magnification)
+    }
+
+    /// A trackpad pan moves the cards with a layer transform and scrolls
+    /// once it stops: scrolling every frame moves every view, so AppKit
+    /// works out the cursor again each frame, which a customized pointer
+    /// makes cost most of a pan.
+    private func glides(_ event: NSEvent) -> Bool {
+        guard event.hasPreciseScrollingDeltas, !(event.phase.isEmpty && event.momentumPhase.isEmpty) else { return false }
+        var moved = unscrolled ?? .zero
+        moved.width += event.scrollingDeltaX
+        moved.height += event.scrollingDeltaY
+        let ends = event.momentumPhase.contains(.ended) || event.momentumPhase.contains(.cancelled)
+            || (event.momentumPhase.isEmpty && (event.phase.contains(.ended) || event.phase.contains(.cancelled)))
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        if ends {
+            unscrolled = nil
+            document.layer?.setAffineTransform(.identity)
+            let origin = contentView.bounds.origin
+            contentView.scroll(to: CGPoint(x: origin.x - moved.width / magnification,
+                                           y: origin.y - moved.height / magnification))
+            reflectScrolledClipView(contentView)
+        } else {
+            unscrolled = moved
+            document.layer?.setAffineTransform(
+                CGAffineTransform(translationX: moved.width / magnification, y: moved.height / magnification))
+        }
+        glided?()
+        CATransaction.commit()
+        return true
     }
 }
 
@@ -152,7 +194,7 @@ final class CanvasDocumentView: NSView {
 /// panning only moves it (no drawing), and it's redrawn only when the gap
 /// (the zoom), the view's size or the appearance changes.
 final class CanvasGridView: NSView {
-    weak var scrollView: NSScrollView?
+    weak var scrollView: CanvasScrollView?
     private let dots = CALayer()
 
     /// The website's `--paper` and `--dot` (website/custom.html).
@@ -221,7 +263,7 @@ final class CanvasGridView: NSView {
             drawn = (size, scale)
         }
         // Each dot sits mid-cell; one row and column of them start off-view.
-        let first = CanvasGrid.firstDot(origin: scrollView.contentView.bounds.origin, zoom: scrollView.magnification)
+        let first = CanvasGrid.firstDot(origin: scrollView.shownRect.origin, zoom: scrollView.magnification)
         let top = first.y - gap.height / 2 - gap.height
         dots.position = CGPoint(x: first.x - gap.width / 2 - gap.width,
                                 y: layer?.isGeometryFlipped == true ? top : bounds.height - top - size.height)
@@ -303,10 +345,25 @@ final class CanvasSurfaceView: NSView {
         ])
         NotificationCenter.default.addObserver(
             self, selector: #selector(canvasMoved), name: NSView.boundsDidChangeNotification, object: scrollView.contentView)
+        scrollView.glided = { [weak self] in self?.glided() }
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    /// The canvas's trackpad pan under way, for the controller.
+    var panned: (() -> Void)?
+
+    /// The selection's outline and bar move with the cards (the view is
+    /// unflipped, the document flipped).
+    private func glided() {
+        let moved = scrollView.unscrolled ?? .zero
+        let shift = CGAffineTransform(translationX: moved.width, y: -moved.height)
+        selection.layer?.setAffineTransform(shift)
+        selectionBar.layer?.setAffineTransform(shift)
+        grid.update()
+        panned?()
+    }
 
     override func layout() {
         super.layout()
