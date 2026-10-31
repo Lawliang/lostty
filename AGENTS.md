@@ -49,6 +49,21 @@ worktree, and they share one installed app.
   don't install until that work is merged into your branch, or the user
   says to go ahead.
 
+## Validate before you report
+
+- When you can check a change yourself, check it before you report
+  results or ask the user to try it: build it, drive it, and measure
+  or screenshot what it does.
+- Phone: use a slimmed simulator from the pool (`ios-simulators`
+  skill, simslim).
+- Mac: use a Debug build you launched. If another Debug Lostty is
+  running, give your copy its own bundle ID so the two don't share
+  sessions. Drive it with AppleScript, tmux, or events posted to it.
+- Check that the test really happened: the pan moved, the pointer
+  was over the cards, the app was in front.
+- Ask the user only for what you can't do yourself, such as real
+  hardware or their accounts, and say what you already checked.
+
 ## pstack
 
 [pstack](https://github.com/cursor/plugins/tree/main/pstack) runs here as
