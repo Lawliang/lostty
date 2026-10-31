@@ -602,57 +602,70 @@ extension Ghostty {
         }
 
         func setCursorShape(_ shape: ghostty_action_mouse_shape_e) {
+            let style: CursorStyle
             switch shape {
             case GHOSTTY_MOUSE_SHAPE_DEFAULT:
-                pointerStyle = .default
+                style = .default
 
             case GHOSTTY_MOUSE_SHAPE_TEXT:
-                pointerStyle = .horizontalText
+                style = .horizontalText
 
             case GHOSTTY_MOUSE_SHAPE_GRAB:
-                pointerStyle = .grabIdle
+                style = .grabIdle
 
             case GHOSTTY_MOUSE_SHAPE_GRABBING:
-                pointerStyle = .grabActive
+                style = .grabActive
 
             case GHOSTTY_MOUSE_SHAPE_POINTER:
-                pointerStyle = .link
+                style = .link
 
             case GHOSTTY_MOUSE_SHAPE_W_RESIZE:
-                pointerStyle = .resizeLeft
+                style = .resizeLeft
 
             case GHOSTTY_MOUSE_SHAPE_E_RESIZE:
-                pointerStyle = .resizeRight
+                style = .resizeRight
 
             case GHOSTTY_MOUSE_SHAPE_N_RESIZE:
-                pointerStyle = .resizeUp
+                style = .resizeUp
 
             case GHOSTTY_MOUSE_SHAPE_S_RESIZE:
-                pointerStyle = .resizeDown
+                style = .resizeDown
 
             case GHOSTTY_MOUSE_SHAPE_NS_RESIZE:
-                pointerStyle = .resizeUpDown
+                style = .resizeUpDown
 
             case GHOSTTY_MOUSE_SHAPE_EW_RESIZE:
-                pointerStyle = .resizeLeftRight
+                style = .resizeLeftRight
 
             case GHOSTTY_MOUSE_SHAPE_VERTICAL_TEXT:
-                pointerStyle = .verticalText
+                style = .verticalText
 
             case GHOSTTY_MOUSE_SHAPE_CONTEXT_MENU:
-                pointerStyle = .contextMenu
+                style = .contextMenu
 
             case GHOSTTY_MOUSE_SHAPE_CROSSHAIR:
-                pointerStyle = .crosshair
+                style = .crosshair
 
             case GHOSTTY_MOUSE_SHAPE_NOT_ALLOWED:
-                pointerStyle = .operationNotAllowed
+                style = .operationNotAllowed
 
             default:
                 // We ignore unknown shapes.
                 return
             }
+            // tmux turns mouse reporting off and on in bursts, flipping the
+            // shape back and forth: only where a burst ends up is published.
+            let coalescing = pendingPointerStyle != nil
+            pendingPointerStyle = style
+            guard !coalescing else { return }
+            DispatchQueue.main.async { [weak self] in
+                guard let self, let style = pendingPointerStyle else { return }
+                pendingPointerStyle = nil
+                if pointerStyle != style { pointerStyle = style }
+            }
         }
+
+        private var pendingPointerStyle: CursorStyle?
 
         func setCursorVisibility(_ visible: Bool) {
             cursorVisible = visible
