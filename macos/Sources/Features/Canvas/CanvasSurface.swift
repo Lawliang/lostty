@@ -67,6 +67,7 @@ final class CanvasScrollView: NSScrollView {
     /// A pan or a pinch starts: a glide under way gives way to it.
     var userMoves: (() -> Void)?
     private var panning = false
+    private var pinching = false
 
     /// What's on screen of the canvas, as drawn.
     var shownRect: CGRect {
@@ -141,11 +142,25 @@ final class CanvasScrollView: NSScrollView {
         return true
     }
 
+    /// A pinch draws the canvas zoomed about the pointer and zooms once it
+    /// stops (`drawn`), as a pan does.
     override func magnify(with event: NSEvent) {
-        userMoves?()
-        panning = false
-        settleDrawn()
-        super.magnify(with: event)
+        if !pinching {
+            userMoves?()
+            panning = false
+            settleDrawn()
+            pinching = true
+        }
+        let zoom = min(max(shownZoom * (1 + event.magnification), minMagnification), maxMagnification)
+        // The document point under the pointer stays under it.
+        let inView = convert(event.locationInWindow, from: nil)
+        let pointer = CGPoint(x: inView.x, y: isFlipped ? inView.y : bounds.height - inView.y)
+        let under = CGPoint(x: shownRect.minX + pointer.x / shownZoom, y: shownRect.minY + pointer.y / shownZoom)
+        draw(at: (CGPoint(x: under.x - pointer.x / zoom, y: under.y - pointer.y / zoom), zoom))
+        if event.phase.isEmpty || event.phase.contains(.ended) || event.phase.contains(.cancelled) {
+            pinching = false
+            settleDrawn()
+        }
     }
 }
 
