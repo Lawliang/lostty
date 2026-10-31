@@ -8,8 +8,11 @@ import Foundation
 struct TerminalNotice: Identifiable, Equatable {
     let id = UUID()
     let pane: UUID
-    /// The pane's title, without the agent's ✳.
+    /// The pane's title, without the agent's ✳: on the canvas, its card
+    /// header's topic.
     var title: String
+    /// Its Claude's name, as its card's header shows it.
+    var agent: String?
     var project: ProjectLabel?
     var recap: RequestRecap
     /// The canvas project zone of its pane: it stacks with the zone's others.
@@ -54,7 +57,8 @@ final class TerminalNotices: ObservableObject {
     /// request and the reply.
     func requestEnded(pane: UUID, path: String, since: Date) {
         guard awaiting.contains(pane), let surface = (NSApp.delegate as? AppDelegate)?.findSurface(forUUID: pane) else { return }
-        let title = Self.title(surface.title)
+        let header = CanvasController.shared?.headerTitle(ofPane: pane)
+        let title = Self.title(header?.topic ?? surface.title)
         let pwd = SkinsRuntime.shared.manager.panes[pane]?.pwd
         let zone = CanvasController.shared?.projectZone(ofPane: pane)
         // Codex words its conversation another way.
@@ -65,7 +69,7 @@ final class TerminalNotices: ObservableObject {
                 if let conversation { recap = await RequestRecap.read(conversation, since: since) }
                 return (pwd.flatMap { ProjectLabel.read(pwd: $0) }, recap)
             }.value
-            post(TerminalNotice(pane: pane, title: title, project: project, recap: recap, zone: zone))
+            post(TerminalNotice(pane: pane, title: title, agent: header?.agent, project: project, recap: recap, zone: zone))
         }
     }
 

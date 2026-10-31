@@ -31,8 +31,11 @@ struct TerminalNoticeCard: View {
                         .foregroundStyle(colors.secondary)
                         .fixedSize()
                 }
-                Text(item.title.isEmpty ? "Terminal" : item.title)
-                    .font(.system(size: 13, weight: .semibold))
+                // As its card's header: the Claude's name, then the topic.
+                (Text(item.agent.map { $0 + "  " } ?? "").fontWeight(.semibold)
+                    + Text(item.title.isEmpty ? "Terminal" : item.title)
+                    .fontWeight(item.agent == nil ? .semibold : .regular))
+                    .font(.system(size: 13))
                     .foregroundStyle(colors.primary)
                     .lineLimit(1)
                 if !compact {

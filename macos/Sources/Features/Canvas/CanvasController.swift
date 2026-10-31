@@ -842,6 +842,17 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
             zone: project))
     }
 
+    /// Pane `pane`'s Claude's name and topic as its card's header shows
+    /// them, while it's on the canvas.
+    func headerTitle(ofPane pane: UUID) -> (agent: String?, topic: String)? {
+        guard let card = cards.first(where: { $0.surfaceTree.contains { $0.id == pane } }),
+              let surface = card.surfaceTree.first(where: { $0.id == pane }) else { return nil }
+        let recap = card.titleOverride == nil ? RecapTitles.shared.titles[pane] : nil
+        let topic = CardController.topic(
+            title: card.titleOverride ?? surface.title, claim: featureClaims[pane]?.first, recap: recap)
+        return (agentName(of: pane), topic)
+    }
+
     /// The project zone pane `pane` is in, if any.
     func projectZone(ofPane pane: UUID) -> UUID? {
         membership.panes.zones[pane].flatMap(model.projectZone)
