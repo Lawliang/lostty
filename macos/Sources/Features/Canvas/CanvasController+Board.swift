@@ -28,10 +28,13 @@ extension CanvasController {
         setTickets(sent)
     }
 
-    /// A user var from pane `pane`: a `lostty +ticket` report, parsed here,
-    /// at the boundary. Anything else, or a report that doesn't parse, is
-    /// ignored.
+    /// A user var from pane `pane`: a `lostty +ticket` report or a
+    /// `lostty +agent` request, parsed here, at the boundary. Anything
+    /// else, or one that doesn't parse, is ignored.
     static func userVarChanged(_ pane: UUID, name: String, value: String) {
+        if name == AgentRequest.userVar, let request = AgentRequest(json: value) {
+            shared?.agentRequested(request, from: pane)
+        }
         guard name == TicketReport.userVar, let report = TicketReport(json: value) else { return }
         shared?.ticketReported(report, from: pane)
     }
@@ -131,6 +134,7 @@ extension CanvasController {
             startedByHand.remove(key)
         }
         setTickets(next)
+        if deliverInbox() { waiting = true }
         if waiting, deliveryWork == nil { deliverSoon(after: Self.deliveryRetry) }
     }
 }

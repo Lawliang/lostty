@@ -205,7 +205,7 @@ struct CanvasZoneAgentsTests {
         #expect(model.zoneFile(domain, pane: p1, panes: panes, sessions: sessions, tickets: [])?.start == start)
     }
 
-    @Test func theManagerHearsOfATicketThatBecameBlockedInItsProject() {
+    @Test func theManagerHearsOfATicketThatBecameBlockedOrReadyInItsProject() {
         var model = textberry()
         let manager = UUID()
         model.updateZone(project) { $0.manager = manager }
@@ -213,14 +213,18 @@ struct CanvasZoneAgentsTests {
         var blocked = working
         blocked.move(to: .blocked, note: "Needs the brand font files\n", by: .agent(domain: domain))
         let inside = CanvasPaneZones(panes: [manager], zones: [manager: project])
-        let notes = model.blockedNotes(from: [working], to: [blocked], panes: inside)
+        let notes = model.managerNotes(from: [working], to: [blocked], panes: inside)
         #expect(notes.map(\.manager) == [manager])
         #expect(notes.map(\.text) == ["TB-8 · Onboarding is blocked: Needs the brand font files"])
-        #expect(model.blockedNotes(from: [blocked], to: [blocked], panes: inside).isEmpty)
-        #expect(model.blockedNotes(from: [], to: [blocked], panes: inside).isEmpty)
-        #expect(model.blockedNotes(from: [working], to: [blocked], panes: CanvasPaneZones(panes: [manager])).isEmpty)
+        #expect(model.managerNotes(from: [blocked], to: [blocked], panes: inside).isEmpty)
+        #expect(model.managerNotes(from: [], to: [blocked], panes: inside).isEmpty)
+        #expect(model.managerNotes(from: [working], to: [blocked], panes: CanvasPaneZones(panes: [manager])).isEmpty)
         let byOwner = CanvasTicket(key: "TB-8", summary: "Welcome screen", zone: domain).moved(to: .blocked)
-        #expect(model.blockedNotes(from: [working], to: [byOwner], panes: inside).map(\.text) == ["TB-8 · Onboarding is blocked."])
+        #expect(model.managerNotes(from: [working], to: [byOwner], panes: inside).map(\.text) == ["TB-8 · Onboarding is blocked."])
+        var ready = working
+        ready.move(to: .review, note: "Added the welcome screen", by: .agent(domain: domain))
+        #expect(model.managerNotes(from: [working], to: [ready], panes: inside).map(\.text)
+            == ["TB-8 · Onboarding is ready for review: Added the welcome screen"])
     }
 
     @Test func theZoneFileIsJSONTheHooksReadAndNotAHandoffState() throws {
