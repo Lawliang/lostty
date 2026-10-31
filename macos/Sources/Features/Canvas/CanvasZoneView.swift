@@ -241,7 +241,7 @@ final class CanvasZoneLabel: NSView {
         let zoom = enclosingScrollView?.magnification ?? 1
         guard drag.moved || hypot(delta.width, delta.height) * zoom >= CanvasController.clickWobble else { return }
         drag.moved = true
-        NSCursor.closedHand.set()
+        NSCursor.closedHand.setIfNeeded()
         if canvas.previewZoneMove(id, by: delta) { drag.allowed = delta }
         self.drag = drag
     }
