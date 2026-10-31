@@ -25,7 +25,6 @@ struct NotificationStackView: View {
                 if folded > 0 { deck }
                 TerminalNoticeStack()
             }
-            TerminalNoticeStack()
         }
         .padding(.top, 12)
         .padding(.trailing, 12)
