@@ -127,6 +127,9 @@ final class CardController: BaseTerminalController {
     /// What the focused pane's Claude last said it works on (`lostty
     /// +ticket working`), shown in place of its own title's topic.
     @Published private(set) var claim: String?
+    /// The focused pane's title from Claude's latest recap (RecapTitles),
+    /// shown in place of its own title's topic when it claims nothing.
+    @Published private(set) var recap: String?
     /// The key of the board ticket working in one of its panes, shown
     /// before the title. Set by CanvasController.showTicketKeys alone.
     @Published var ticketKey: String?
@@ -141,17 +144,20 @@ final class CardController: BaseTerminalController {
         if agentName != name { agentName = name }
         let claim = focusedSurface.flatMap { canvas?.featureClaims[$0.id]?.first }
         if self.claim != claim { self.claim = claim }
+        let recap = focusedSurface.flatMap { RecapTitles.shared.titles[$0.id] }
+        if self.recap != recap { self.recap = recap }
         guard isFocusedCard else { return }
         super.applyTitleToWindow()
     }
 
     /// The header's topic: Claude's own title, or with a claim, the claim
-    /// after its title's working mark ("✳ Subagent strip").
-    static func topic(title: String, claim: String?) -> String {
-        guard let claim else { return title }
+    /// after its title's working mark ("✳ Subagent strip"). Without one, a
+    /// recap's title the same way, while Claude still runs there.
+    static func topic(title: String, claim: String?, recap: String? = nil) -> String {
         let trimmed = title.trimmingCharacters(in: .whitespaces)
-        guard let first = trimmed.unicodeScalars.first, first == "✳" || ClaudeRuntime.isSpinner(trimmed) else { return claim }
-        return "\(Character(first)) \(claim)"
+        let mark = trimmed.unicodeScalars.first.flatMap { $0 == "✳" || ClaudeRuntime.isSpinner(trimmed) ? Character($0) : nil }
+        guard let topic = claim ?? (mark == nil ? nil : recap) else { return title }
+        return mark.map { "\($0) \(topic)" } ?? topic
     }
 
     override func pwdDidChange(to: URL?) {

@@ -68,9 +68,11 @@ extension CanvasController {
     }
 
     /// Pane `pane`'s conversation ended (cleared, or Claude quit): what it
-    /// claimed goes, as the next one doesn't remember that work.
+    /// claimed and its recap's title go, as the next one doesn't remember
+    /// that work.
     func conversationEnded(_ pane: UUID) {
         setClaims([], of: pane)
+        RecapTitles.shared.forget(pane)
     }
 
     private func setClaims(_ claims: [String], of pane: UUID) {

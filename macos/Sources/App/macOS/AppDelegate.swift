@@ -390,10 +390,19 @@ class AppDelegate: NSObject,
         // while it's on the turn observer, which also finds out which
         // summarizer it can use. Before the restart resume, which hands it
         // each pane's conversation.
-        ClaudeRuntime.shared.turnEnded = TurnEnd.handler(
+        let turnEnded = TurnEnd.handler(
             observes: LosttyChannel.current.observesTurns,
             observe: { pane, path in TurnObserver.shared.turnEnded(pane: pane, path: path) },
             report: { UsageLedger.shared.reported($0) })
+        // And on the canvas, a card's topic follows Claude's recaps.
+        let recaps = LosttyChannel.current.hasCanvas
+        ClaudeRuntime.shared.turnEnded = { pane, path in
+            turnEnded(pane, path)
+            if recaps { RecapTitles.shared.turnEnded(pane: pane, path: path) }
+        }
+        RecapTitles.shared.changed = { pane in
+            CanvasController.shared?.cards.first { $0.surfaceTree.contains { $0.id == pane } }?.applyTitleToWindow()
+        }
         if LosttyChannel.current.observesTurns { TurnObserver.shared.start() }
         // The context handoff (beta): before the restart resume's hook
         // reinstall, which brings in the handoff's hook events.
