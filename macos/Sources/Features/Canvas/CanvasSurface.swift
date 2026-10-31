@@ -127,6 +127,7 @@ final class CanvasScrollView: NSScrollView {
         guard event.hasPreciseScrollingDeltas, !(event.phase.isEmpty && event.momentumPhase.isEmpty) else { return false }
         if !panning {
             userMoves?()
+            pinching = false
             settleDrawn()
             panning = true
         }
