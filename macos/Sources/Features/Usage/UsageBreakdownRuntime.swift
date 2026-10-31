@@ -9,7 +9,6 @@ final class UsageBreakdownRuntime: ObservableObject {
     static let shared = UsageBreakdownRuntime()
     static let reuse: TimeInterval = 60
     static let counting = "Counting…"
-    static let footnote = "Estimated from Claude use in Lostty."
 
     /// Everything counted in the last week; nil before the first count.
     @Published private(set) var uses: [WeightedUse]?
@@ -53,16 +52,14 @@ final class UsageBreakdownRuntime: ObservableObject {
             return UsageBreakdown.make(limit: usage.fiveHour, length: UsageBreakdown.session, uses: uses, now: now())
         case .weekly:
             return UsageBreakdown.make(limit: usage.sevenDay, length: UsageBreakdown.week, uses: uses, now: now())
-        case .weeklyFable:
-            return nil
         }
     }
 
     /// The row's breakdown line: the split, "Counting…" during the first
-    /// count, or nil (no limit report, nothing counted, Weekly · Fable).
+    /// count, or nil (no limit report, nothing counted).
     func line(_ metric: ClaudeUsageMetric, usage: ClaudeUsageRuntime) -> String? {
         if uses == nil {
-            return isCounting && metric != .weeklyFable && usage.percent(metric) != nil ? Self.counting : nil
+            return isCounting && usage.percent(metric) != nil ? Self.counting : nil
         }
         return breakdown(metric, usage: usage)?.text
     }

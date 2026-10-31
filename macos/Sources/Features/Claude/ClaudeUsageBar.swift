@@ -6,12 +6,11 @@ import SwiftUI
 
 /// The strip along the bottom of the window, as tall as the title bar and
 /// the same color as it and the sidebar, in the terminal's font. At the
-/// left, `Context ▓▓░░░░░░░░ 50K   Session ▓░░░░░░░░░ 2%   CPU 12%  Mem 340M`:
-/// the focused pane's context, the tracked plan limit, and what the pane's
-/// processes use (`PaneResourceMonitor`). Clicking the limit lists every
-/// limit, and picking one tracks it here. In the beta, a line on the
-/// context meter marks where the conversation hands off, and clicking the
-/// context shows and sets that limit. Context and limit are hidden without
+/// left, `Context ▓▓░░░░░░░░ 50K   CPU 12%  Mem 340M`: the focused pane's
+/// context and what the pane's processes use (`PaneResourceMonitor`). In
+/// the beta, a line on the context meter marks where the conversation
+/// hands off, and clicking the context shows and sets that limit. The
+/// plan's weekly limit is the canvas dock's Usage app. Context is hidden without
 /// a Claude session in the focused pane; CPU and memory show for any pane
 /// on Lostty's tmux. At the right, `✳ Opus 5.5`, then the apps button;
 /// while it's on, the window's apps (`ExtensionAppsRow`) take the bar's
@@ -29,12 +28,11 @@ struct ClaudeUsageBar: View {
     @ObservedObject private var handoffSettings = ContextHandoffPreferences.shared
     @ObservedObject private var monitor = PaneResourceMonitor.shared
     @ObservedObject private var style = WindowStylePreferences.shared
-    @State private var showingDetails = false
     @State private var showingHandoff = false
     @State private var hovered: Part?
     @State private var width: CGFloat = 0
 
-    private enum Part { case context, handoff, limit }
+    private enum Part { case context, handoff }
 
     /// The context handoff is the beta's.
     private let handsOff = LosttyChannel.current.handsOff
@@ -113,7 +111,7 @@ struct ClaudeUsageBar: View {
     private func metersWidth(_ style: ClaudeUsageFit.Style) -> CGFloat {
         let button = hasSession && armedPane != nil ? Self.handoffWidth : 0
         var texts: [String] = []
-        if hasSession { texts += [contextText(style), limitText(style)] }
+        if hasSession { texts.append(contextText(style)) }
         if let resources { texts.append(resourcesText(resources, style)) }
         guard !texts.isEmpty else { return 0 }
         return texts.map { ClaudeUsageFont.width($0) }.reduce(0, +)
@@ -152,17 +150,6 @@ struct ClaudeUsageBar: View {
             }
         } else {
             chip(contextLine(style), lit: false)
-        }
-        Button { showingDetails.toggle() } label: {
-            // Ticks so a limit that resets while nothing reports drops to 0%.
-            chip(TimelineView(.everyMinute) { _ in limitLine(style) }, lit: hovered == .limit || showingDetails)
-        }
-        .buttonStyle(.plain)
-        .onHover { hover(.limit, $0) }
-        .popover(isPresented: $showingDetails, arrowEdge: .top) {
-            TimelineView(.everyMinute) { _ in
-                ClaudeUsageDetails(usage: usage, accent: accent) { showingDetails = false }
-            }
         }
     }
 
@@ -246,14 +233,6 @@ struct ClaudeUsageBar: View {
             + (style.cells > 0 ? " " : "") + ClaudeUsageFormat.thousands(context?.used ?? 0)
     }
 
-    /// `Session ▓░░░░░░░░░ 2%`, as `limitLine` draws it in `style`.
-    private func limitText(_ style: ClaudeUsageFit.Style) -> String {
-        let limit = usage.percent(usage.tracked) ?? 0
-        return (style.labels ? usage.tracked.shortTitle + " " : "")
-            + ClaudeUsageBlocks.string(limit, cells: style.cells)
-            + (style.cells > 0 ? " " : "") + ClaudeUsageFormat.percent(limit)
-    }
-
     /// `CPU 12%  Mem 340M`, as `resourcesLine` draws it in `style`.
     private func resourcesText(_ resources: PaneResources, _ style: ClaudeUsageFit.Style) -> String {
         let cpu = ClaudeUsageFormat.percent(resources.cpu), memory = PaneResourceMath.memory(resources.memory)
@@ -311,16 +290,6 @@ struct ClaudeUsageBar: View {
         guard handsOff, handoffSettings.enabled, let context, context.size > 0 else { return nil }
         let limit = ContextHandoffPolicy.limit(setting: handoffSettings.setting, size: context.size)
         return min(1, Double(limit) / Double(context.size))
-    }
-
-    private func limitLine(_ style: ClaudeUsageFit.Style) -> some View {
-        let metric = usage.tracked
-        let limit = usage.percent(metric) ?? 0
-
-        return (Text(style.labels ? metric.shortTitle + " " : "").foregroundColor(ink.opacity(0.6))
-            + ClaudeUsageBlocks.text(limit, accent: accent, empty: ink.opacity(0.28), cells: style.cells)
-            + Text((style.cells > 0 ? " " : "") + ClaudeUsageFormat.percent(limit)).foregroundColor(number(limit, style)))
-            .help(style.labels ? "" : metric.title)
     }
 }
 
@@ -434,82 +403,37 @@ enum ClaudeUsageFont {
     }
 }
 
-/// Every plan limit, each tappable to make it the one the bar tracks.
-/// The canvas dock's Usage shows it too.
+/// The Usage app's popover: the weekly limit, when it resets, and how much
+/// of it Claude Code and Lostty used.
 struct ClaudeUsageDetails: View {
     @ObservedObject var usage: ClaudeUsageRuntime
     let accent: Color
     @ObservedObject var breakdown: UsageBreakdownRuntime = .shared
-    let dismiss: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            ForEach(ClaudeUsageMetric.allCases) { metric in
-                row(metric)
+        let percent = usage.percent(.weekly) ?? 0
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 0) {
+                Text(ClaudeUsageMetric.weekly.title)
+                Spacer(minLength: 10)
+                (ClaudeUsageBlocks.text(percent, accent: accent, empty: Color.primary.opacity(0.25))
+                    + Text(" " + ClaudeUsageFormat.percent(percent)))
+                    .fixedSize()
             }
-            if ClaudeUsageMetric.allCases.contains(where: { breakdown.line($0, usage: usage) != nil }) {
-                Text(UsageBreakdownRuntime.footnote)
+            Text(usage.sevenDay?.resetsAt.map { ClaudeUsageFormat.reset($0, now: usage.now()) } ?? " ")
+                .font(ClaudeUsageFont.font(size: 10))
+                .foregroundStyle(.secondary)
+            if let line = breakdown.line(.weekly, usage: usage) {
+                Text(line)
                     .font(ClaudeUsageFont.font(size: 10))
                     .foregroundStyle(.secondary)
-                    .padding(.horizontal, 10)
-                    .padding(.top, 4)
-                    .padding(.bottom, 2)
             }
         }
         .font(ClaudeUsageFont.font(size: 12))
-        .padding(6)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 13)
         .frame(width: 320)
         .onAppear { breakdown.refresh() }
-    }
-
-    private func row(_ metric: ClaudeUsageMetric) -> some View {
-        let available = metric != .weeklyFable
-        let percent = usage.percent(metric) ?? 0
-        return Button {
-            usage.tracked = metric
-            dismiss()
-        } label: {
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 0) {
-                    Text(metric.title)
-                    Spacer(minLength: 10)
-                    if available {
-                        (ClaudeUsageBlocks.text(percent, accent: accent, empty: Color.primary.opacity(0.25))
-                            + Text(" " + ClaudeUsageFormat.percent(percent)))
-                            .fixedSize()
-                    }
-                }
-                Text(subtitle(metric))
-                    .font(ClaudeUsageFont.font(size: 10))
-                    .foregroundStyle(.secondary)
-                if let line = breakdown.line(metric, usage: usage) {
-                    Text(line)
-                        .font(ClaudeUsageFont.font(size: 10))
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
-            .background(
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(Color.primary.opacity(usage.tracked == metric ? 0.08 : 0)))
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .disabled(!available)
-        .opacity(available ? 1 : 0.5)
-    }
-
-    /// When the limit resets.
-    private func subtitle(_ metric: ClaudeUsageMetric) -> String {
-        let limit: ClaudeUsageReport.Limit?
-        switch metric {
-        case .session: limit = usage.fiveHour
-        case .weekly: limit = usage.sevenDay
-        case .weeklyFable: return "Not available"
-        }
-        guard let reset = limit?.resetsAt else { return " " }
-        return ClaudeUsageFormat.reset(reset, now: usage.now())
     }
 }
 

@@ -58,29 +58,19 @@ struct ClaudeUsageReport: Equatable {
     }
 }
 
-/// The plan limit the bar at the bottom of the window tracks (the context
-/// has a meter of its own).
+/// A plan limit.
 enum ClaudeUsageMetric: String, CaseIterable, Identifiable {
-    case session, weekly, weeklyFable
+    case session, weekly
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .session: "Current session"
-        case .weekly: "Weekly · all models"
-        case .weeklyFable: "Weekly · Fable"
+        case .weekly: "Weekly"
         }
     }
 
-    /// Short form for the bar.
-    var shortTitle: String {
-        switch self {
-        case .session: "Session"
-        case .weekly: "Weekly"
-        case .weeklyFable: "Fable"
-        }
-    }
 }
 
 /// App-wide usage: each pane's Claude context window, and the plan's
@@ -95,16 +85,11 @@ final class ClaudeUsageRuntime: ObservableObject {
     @Published private(set) var models: [UUID: String] = [:]
     @Published private(set) var fiveHour: ClaudeUsageReport.Limit?
     @Published private(set) var sevenDay: ClaudeUsageReport.Limit?
-    /// What the bar shows; tapped in the bar's popover, remembered.
-    @Published var tracked: ClaudeUsageMetric {
-        didSet { defaults.set(tracked.rawValue, forKey: Keys.tracked) }
-    }
 
     private let defaults: UserDefaults
     let now: () -> Date
 
     private enum Keys {
-        static let tracked = "LosttyUsageTracked"
         static let fiveHour = "LosttyUsageFiveHour"
         static let sevenDay = "LosttyUsageSevenDay"
     }
@@ -112,7 +97,6 @@ final class ClaudeUsageRuntime: ObservableObject {
     init(defaults: UserDefaults = .standard, now: @escaping () -> Date = Date.init) {
         self.defaults = defaults
         self.now = now
-        tracked = defaults.string(forKey: Keys.tracked).flatMap(ClaudeUsageMetric.init(rawValue:)) ?? .session
         // The limits from the last run, so the bar has numbers before Claude replies.
         fiveHour = Self.load(defaults, Keys.fiveHour)
         sevenDay = Self.load(defaults, Keys.sevenDay)
@@ -152,7 +136,6 @@ final class ClaudeUsageRuntime: ObservableObject {
         switch metric {
         case .session: fiveHour?.percent(at: now())
         case .weekly: sevenDay?.percent(at: now())
-        case .weeklyFable: nil
         }
     }
 

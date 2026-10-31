@@ -264,7 +264,7 @@ struct CanvasDock: View {
                     app: app, lifted: lifted == app, grown: grown, label: label(app, slot), action: { open(app) })
                     .popover(isPresented: app == .usage ? $showingUsage : .constant(false), arrowEdge: .top) {
                         TimelineView(.everyMinute) { _ in
-                            ClaudeUsageDetails(usage: .shared, accent: .accentColor) { showingUsage = false }
+                            ClaudeUsageDetails(usage: .shared, accent: .accentColor)
                         }
                     }
                     .offset(lifted == app ? liftOffset : .zero)
