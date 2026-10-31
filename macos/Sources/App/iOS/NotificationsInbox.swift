@@ -94,6 +94,7 @@ struct NotificationsInbox: View {
 
     private func deleteButton(_ note: LosttyNote) -> some View {
         Button("Delete", systemImage: "trash", role: .destructive) { store.deleteNotes([note.id]) }
+            .tint(.red)
     }
 
     /// A waiting note whose terminal is gone: nothing to open.
