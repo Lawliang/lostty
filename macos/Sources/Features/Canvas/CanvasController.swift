@@ -34,6 +34,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     private(set) var cards: [CardController] = []
     /// The card holding keyboard focus, or that last held it.
     private(set) weak var focusedCard: CardController?
+    private weak var lastFocusedCard: CardController?
     /// The canvas's tickets, kept while no panel is open. Every panel lists
     /// them.
     private(set) var tickets: [CanvasTicket] = []
@@ -396,6 +397,12 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         return true
     }
 
+    /// Where ⌘T and ⌘N start from: the focused card, or with none (a click
+    /// between the cards, a tickets panel) the last one, while it's open.
+    var workingCard: CardController? {
+        focusedCard ?? lastFocusedCard.flatMap { last in cards.contains { $0 === last } ? last : nil }
+    }
+
     /// Keyboard focus to `card`'s focused pane.
     func focus(_ card: CardController) {
         guard let surface = card.focusedSurface ?? card.surfaceTree.first else { return }
@@ -436,6 +443,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     func cardWillFocus(_ card: CardController) {
         let previous = focusedCard
         focusedCard = card
+        lastFocusedCard = card
         guard previous !== card else { return }
         previous?.syncFocusToSurfaceTree()
         bringToFront(card.id)
@@ -735,14 +743,35 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
             guard let left, model.leftProject(move, before: before.model),
                   let card = cards.first(where: { $0.surfaceTree.contains { $0.id == move.pane } }),
                   noticed.insert(card.id).inserted else { continue }
-            LosttyNotifications.shared.post(LosttyNotification(
-                kind: .zone(card: card.id),
-                title: "\(CanvasModel.noticeTitle(card.title)) left \(left)",
-                detail: move.to.flatMap(model.zoneTitle).map { "Now in \($0)." } ?? "It's in no zone now."))
+            noticeLeft(card, zone: left, id: move.from.flatMap(before.model.projectZone),
+                       now: move.to.flatMap(model.zoneTitle))
         }
         updateZoneCaptions()
         relistTickets()
         deliverSoon()
+    }
+
+    /// Card `card` left zone `zone` (project `id`; now in zone `now`): one
+    /// bubble for all the cards that left it, going to the latest.
+    private func noticeLeft(_ card: CardController, zone: String, id: UUID?, now: String?) {
+        let kind = LosttyNotification.Kind.zoneLeft(zone)
+        let name = CanvasModel.noticeTitle(card.title)
+        let group = (LosttyNotifications.shared.current(kind)?.group ?? []).filter { $0 != name } + [name]
+        LosttyNotifications.shared.post(LosttyNotification(
+            kind: kind,
+            title: group.count == 1 ? "\(name) left \(zone)" : "\(group.count) cards left \(zone)",
+            detail: group.count == 1
+                ? now.map { "Now in \($0)." } ?? "It's in no zone now."
+                : group.joined(separator: ", "),
+            open: { [weak self] in self?.goTo(card.id) },
+            group: group,
+            zone: id))
+    }
+
+    /// Brings the canvas forward, zoomed to card `id`.
+    private func goTo(_ id: UUID) {
+        window?.makeKeyAndOrderFront(nil)
+        zoom(toCard: id)
     }
 
     /// The name of the Claude running in pane `pane`, as its agents call
@@ -821,7 +850,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         LosttyNotifications.shared.post(LosttyNotification(
             kind: kind,
             title: "Kept inside \(name)",
-            detail: "\(CanvasModel.noticeTitle(card.title)) tried to message \(target), which is outside the zone.",
+            detail: "\(CanvasModel.noticeTitle(card.title)) tried to message \(target), outside the zone.",
             actionTitle: "Allow Once",
             action: { [weak self] in
                 self?.zoneStore.writeAllow(pane, target: target)
@@ -830,7 +859,24 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
             },
             secondaryTitle: "Zone Settings",
             secondaryAction: { [weak self] in self?.showZoneSettings(project) },
-            persistent: true))
+            open: { [weak self, id = card.id] in self?.goTo(id) },
+            zone: project))
+    }
+
+    /// Pane `pane`'s Claude's name and topic as its card's header shows
+    /// them, while it's on the canvas.
+    func headerTitle(ofPane pane: UUID) -> (agent: String?, topic: String)? {
+        guard let card = cards.first(where: { $0.surfaceTree.contains { $0.id == pane } }),
+              let surface = card.surfaceTree.first(where: { $0.id == pane }) else { return nil }
+        let recap = card.titleOverride == nil ? RecapTitles.shared.titles[pane] : nil
+        let topic = CardController.topic(
+            title: card.titleOverride ?? surface.title, claim: featureClaims[pane]?.first, recap: recap)
+        return (agentName(of: pane), topic)
+    }
+
+    /// The project zone pane `pane` is in, if any.
+    func projectZone(ofPane pane: UUID) -> UUID? {
+        membership.panes.zones[pane].flatMap(model.projectZone)
     }
 
     private func showZoneSettings(_ id: UUID) {

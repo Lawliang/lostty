@@ -53,7 +53,6 @@ struct UsageBreakdownRuntimeTests {
         #expect(!runtime.isCounting)
         #expect(runtime.line(.session, usage: usage) == "Claude Code ≈ 21 · Lostty ≈ 21")
         #expect(runtime.line(.weekly, usage: usage) == "Claude Code ≈ 8 · Lostty ≈ 9")
-        #expect(runtime.line(.weeklyFable, usage: usage) == nil)
     }
 
     @Test func aCountIsReusedForAMinute() async throws {

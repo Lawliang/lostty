@@ -420,8 +420,12 @@ extension ContextHandoffCoordinator.Dependencies {
             project: { ContextHandoffWiring.project(pwd: ContextHandoffWiring.surface($0)?.pwd) },
             model: { ClaudeUsageRuntime.shared.models[$0] },
             notify: { message in
-                LosttyNotifications.shared.post(LosttyNotification(
-                    kind: .handoff(UUID()), style: .failure, title: "Handoff didn't finish", detail: message))
+                let center = LosttyNotifications.shared
+                let group = (center.current(.handoff)?.group ?? []) + [message]
+                center.post(LosttyNotification(
+                    kind: .handoff, style: .failure,
+                    title: group.count == 1 ? "Handoff didn't finish" : "\(group.count) handoffs didn't finish",
+                    detail: message, group: group))
             },
             conversationChanging: { TurnObserver.shared.conversationChanging($0) },
             schedule: { delay, work in

@@ -2,72 +2,9 @@
 import LosttyRemote
 import SwiftUI
 
-/// The temporary notifications, under the regular ones: fresh ones in
-/// full, then the collapsed ones as a dimmed deck that fans out on hover.
-struct TerminalNoticeStack: View {
-    @ObservedObject var center: TerminalNotices = .shared
-    @State private var fanned = false
-
-    private var fresh: [TerminalNotice] { center.items.filter { !center.collapsed.contains($0.id) } }
-    private var deck: [TerminalNotice] { center.items.filter { center.collapsed.contains($0.id) } }
-
-    var body: some View {
-        VStack(alignment: .trailing, spacing: 8) {
-            ForEach(fresh) { item in
-                TerminalNoticeCard(item: item, compact: false)
-                    .onTapGesture { center.open(item) }
-                    .onHover { center.setHovering(item.id, $0) }
-                    .transition(.move(edge: .trailing).combined(with: .opacity))
-            }
-            if !deck.isEmpty { deckView }
-        }
-        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: center.items.map(\.id))
-        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: center.collapsed)
-        .animation(.spring(response: 0.3, dampingFraction: 0.85), value: fanned)
-    }
-
-    @ViewBuilder private var deckView: some View {
-        Group {
-            if fanned {
-                VStack(alignment: .trailing, spacing: 6) {
-                    ForEach(deck) { item in
-                        TerminalNoticeCard(item: item, compact: true)
-                            .onTapGesture { center.open(item) }
-                    }
-                }
-            } else {
-                ZStack(alignment: .top) {
-                    ForEach(Array(deck.prefix(3).enumerated()), id: \.element.id) { index, item in
-                        TerminalNoticeCard(item: item, compact: true)
-                            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .fill(.black.opacity(index == 0 ? 0.45 : 0.85)))
-                            .scaleEffect(1 - CGFloat(index) * 0.05, anchor: .top)
-                            .offset(y: CGFloat(index) * 7)
-                            .zIndex(Double(-index))
-                    }
-                }
-                .padding(.bottom, CGFloat(min(deck.count, 3) - 1) * 7)
-                .overlay(alignment: .topLeading) {
-                    if deck.count > 1 {
-                        Text("\(deck.count)")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Capsule().fill(.black.opacity(0.6)))
-                            .offset(x: -6, y: -6)
-                    }
-                }
-                .opacity(0.85)
-            }
-        }
-        .onHover { fanned = $0 }
-    }
-}
-
 /// One temporary notification, in its pane's skin: the project pill, the
 /// pane's title, and, in full, the request and the agent's last reply.
-private struct TerminalNoticeCard: View {
+struct TerminalNoticeCard: View {
     let item: TerminalNotice
     let compact: Bool
     @ObservedObject private var skins = SkinsRuntime.shared.manager
@@ -94,8 +31,11 @@ private struct TerminalNoticeCard: View {
                         .foregroundStyle(colors.secondary)
                         .fixedSize()
                 }
-                Text(item.title.isEmpty ? "Terminal" : item.title)
-                    .font(.system(size: 13, weight: .semibold))
+                // As its card's header: the Claude's name, then the topic.
+                (Text(item.agent.map { $0 + "  " } ?? "").fontWeight(.semibold)
+                    + Text(item.title.isEmpty ? "Terminal" : item.title)
+                    .fontWeight(item.agent == nil ? .semibold : .regular))
+                    .font(.system(size: 13))
                     .foregroundStyle(colors.primary)
                     .lineLimit(1)
                 if !compact {

@@ -142,7 +142,7 @@ enum CanvasDockApp: String, CaseIterable {
     var colors: [Color] {
         switch self {
         case .settings: [Color(white: 0.78), Color(white: 0.5)]
-        case .usage: [Color(red: 0.2, green: 0.78, blue: 0.7), Color(red: 0.0, green: 0.5, blue: 0.56)]
+        case .usage: [Color(white: 0.2), Color(white: 0.05)]
         }
     }
 
@@ -264,7 +264,7 @@ struct CanvasDock: View {
                     app: app, lifted: lifted == app, grown: grown, label: label(app, slot), action: { open(app) })
                     .popover(isPresented: app == .usage ? $showingUsage : .constant(false), arrowEdge: .top) {
                         TimelineView(.everyMinute) { _ in
-                            ClaudeUsageDetails(usage: .shared, accent: .accentColor) { showingUsage = false }
+                            ClaudeUsageDetails(usage: .shared, accent: .accentColor)
                         }
                     }
                     .offset(lifted == app ? liftOffset : .zero)
@@ -413,9 +413,13 @@ struct CanvasDockIcon: View {
         let shape = RoundedRectangle(cornerRadius: Self.size * 0.24, style: .continuous)
         ZStack {
             shape.fill(LinearGradient(colors: app.colors, startPoint: .top, endPoint: .bottom))
-            Image(systemName: app.symbol)
-                .font(.system(size: Self.size * 0.56, weight: .regular))
-                .foregroundStyle(app.glyph)
+            if app == .usage {
+                UsageDockGauge()
+            } else {
+                Image(systemName: app.symbol)
+                    .font(.system(size: Self.size * 0.56, weight: .regular))
+                    .foregroundStyle(app.glyph)
+            }
             shape.strokeBorder(
                 LinearGradient(
                     colors: [.white.opacity(0.5), .white.opacity(0.12), .white.opacity(0.25)],
@@ -446,6 +450,36 @@ struct CanvasDockIcon: View {
     private var scale: CGFloat {
         if reduceMotion { return 1 }
         return lifted ? 1.15 : grown
+    }
+}
+
+/// The Usage icon's face: the weekly limit as a ring, in the popover's
+/// meter colors, and its percent inside.
+private struct UsageDockGauge: View {
+    @ObservedObject private var usage = ClaudeUsageRuntime.shared
+
+    var body: some View {
+        // Ticks so a limit that resets while nothing reports drops to 0%.
+        TimelineView(.everyMinute) { _ in
+            let percent = usage.percent(.weekly) ?? 0
+            let width = CanvasDockIcon.size * 0.09
+            ZStack {
+                Circle().stroke(Color.white.opacity(0.14), lineWidth: width)
+                Circle()
+                    .trim(from: 0, to: min(max(percent, 0), 100) / 100)
+                    .stroke(ClaudeUsageBlocks.fill(for: percent, accent: .accentColor),
+                            style: StrokeStyle(lineWidth: width, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                Text(ClaudeUsageFormat.percent(percent))
+                    .font(.system(size: CanvasDockIcon.size * 0.22, weight: .semibold, design: .rounded).monospacedDigit())
+                    .foregroundStyle(.white)
+                    .minimumScaleFactor(0.6)
+                    .lineLimit(1)
+                    .padding(width * 1.5)
+            }
+            .padding(CanvasDockIcon.size * 0.16)
+        }
+        .accessibilityHidden(true)
     }
 }
 

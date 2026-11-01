@@ -480,11 +480,14 @@ final class CanvasSurfaceView: NSView {
     }
 }
 
-/// The canvas's one notification stack, for every card: with no bubbles up,
-/// clicks go on to the cards under its corner.
+/// The canvas's one notification stack, for every card: with nothing up,
+/// or the stack in another window, clicks go on to the cards under its corner.
 final class CanvasNotificationsView: NSHostingView<NotificationStackView> {
     override func hitTest(_ point: NSPoint) -> NSView? {
-        LosttyNotifications.shared.items.isEmpty ? nil : super.hitTest(point)
+        let center = LosttyNotifications.shared
+        guard !center.items.isEmpty || !TerminalNotices.shared.items.isEmpty,
+              let window, center.front == ObjectIdentifier(window) else { return nil }
+        return super.hitTest(point)
     }
 }
 #endif
