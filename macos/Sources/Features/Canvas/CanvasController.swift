@@ -830,14 +830,20 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         }
         guard focusedCard === card else { return }
         focusedCard = nil
-        guard let next = frontCard else { return }
-        // A card closing while you work elsewhere never pulls the canvas forward.
-        if window?.isKeyWindow == true {
-            focus(next)
-        } else {
-            cardWillFocus(next)
-            cardDidFocus(next)
+        // The keyboard goes to the front card in view; the canvas stays where it is.
+        let inView = model.cardsInView(scrollView.shownRect)
+        let next = model.cards.reversed().lazy
+            .compactMap { entry in self.cards.first { $0.id == entry.id && inView.contains(entry.id) } }
+            .first
+        guard let next, let surface = next.focusedSurface ?? next.surfaceTree.first else {
+            sidebar.focusedSurfaceID = nil
+            if window?.isKeyWindow == true { window?.makeFirstResponder(scrollView.document) }
+            return
         }
+        cardWillFocus(next)
+        cardDidFocus(next)
+        // A card closing while you work elsewhere never pulls the canvas forward.
+        if window?.isKeyWindow == true { Ghostty.moveFocus(to: surface) }
     }
 
     /// Shows the canvas and pans just enough to bring `card` into view.
