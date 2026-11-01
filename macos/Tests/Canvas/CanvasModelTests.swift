@@ -295,6 +295,19 @@ struct CanvasZoomTests {
         #expect(CanvasZoom.view(from: from, to: to, progress: 0.5) == CanvasView(center: CGPoint(x: 200, y: 100), zoom: 1))
     }
 
+    @Test func revealingACardMovesTheViewJustEnough() {
+        // At 50% a 1200×800 screen shows 2400×1600 around (0, 0).
+        let view = CanvasView(center: .zero, zoom: 0.5), size = CGSize(width: 1200, height: 800)
+        let inside = CGRect(x: -100, y: -100, width: 200, height: 200)
+        #expect(CanvasZoom.view(showing: inside, from: view, size: size) == view)
+        let pastRight = CGRect(x: 1100, y: 0, width: 300, height: 200)
+        #expect(CanvasZoom.view(showing: pastRight, from: view, size: size)
+            == CanvasView(center: CGPoint(x: 200, y: 0), zoom: 0.5))
+        let tooTall = CGRect(x: 0, y: 1000, width: 100, height: 2000)
+        #expect(CanvasZoom.view(showing: tooTall, from: view, size: size)
+            == CanvasView(center: CGPoint(x: 0, y: 2000), zoom: 0.5))
+    }
+
     @Test func aGlideEasesIntoPlace() {
         #expect(CanvasZoom.eased(0) == 0)
         #expect(CanvasZoom.eased(1) == 1)
