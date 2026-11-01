@@ -27,6 +27,13 @@ struct NewWindowPromptTests {
         #expect(picked == .some(NSHomeDirectory()))
     }
 
+    @Test func returnMakesANewWorktree() {
+        let window = makeWindow()
+        let prompt = NewWindowPrompt(repo: repo, window: window, noun: "window") { _ in }
+        #expect(prompt.take(key("\r", in: window)))
+        #expect(prompt.stage == .working)
+    }
+
     @Test func anotherCardsQuestionLeavesTheKeysToTheFocusedCard() {
         let window = makeWindow()
         var picked: String??
