@@ -8,13 +8,12 @@ import SwiftUI
 /// shortcuts still work.
 @MainActor
 final class NewWindowPrompt: ObservableObject, Identifiable {
-    enum Stage: Equatable { case choosing, naming, working }
+    enum Stage: Equatable { case choosing, working }
 
     let repo: NewWindowRepo
     /// "window" or "card".
     let noun: String
     @Published private(set) var stage: Stage = .choosing
-    @Published var branch = ""
     @Published private(set) var error: String?
     /// Ends the question: the folder to start the terminal over in, or nil
     /// to keep it.
@@ -53,32 +52,23 @@ final class NewWindowPrompt: ObservableObject, Identifiable {
     func continueHere() { done(nil) }
     func newProject() { done(NSHomeDirectory()) }
 
-    func startNaming() {
+    /// Makes a worktree on a placeholder branch (`wt-3`), then starts the
+    /// terminal there; the branch takes the feature's name when its agent
+    /// runs `+ticket working`. An error stays on the card.
+    func newWorktree() {
+        guard stage == .choosing else { return }
         error = nil
-        stage = .naming
-    }
-
-    func back() {
-        error = nil
-        stage = .choosing
-    }
-
-    /// Makes the worktree, then starts the terminal there; an error stays
-    /// on the card.
-    func create() {
-        let name = branch.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard stage == .naming, !name.isEmpty else { return }
         stage = .working
         let repo = repo
         Task {
             // Off the main thread: checking out a big repo takes a moment.
-            let made = await Task.detached { NewWindowRepo.addWorktree(repo, branch: name) }.value
+            let made = await Task.detached { NewWindowRepo.addPlaceholderWorktree(repo) }.value
             switch made {
             case .success(let path):
                 done(path)
             case .failure(let failure):
                 error = failure.message
-                stage = .naming
+                stage = .choosing
             }
         }
     }
@@ -97,15 +87,11 @@ final class NewWindowPrompt: ObservableObject, Identifiable {
         case .choosing:
             switch event.charactersIgnoringModifiers {
             case "1", "\r": continueHere()
-            case "2": startNaming()
+            case "2": newWorktree()
             case "3": newProject()
             default: if escape { continueHere() }
             }
             return true
-        case .naming:
-            // The branch field types; Esc goes back.
-            if escape { back() }
-            return escape
         case .working:
             return true
         }
@@ -130,16 +116,12 @@ struct NewWindowPromptOverlay: View {
 private struct NewWindowPromptCard: View {
     @ObservedObject var prompt: NewWindowPrompt
     let chrome: NSColor
-    @FocusState private var fieldFocused: Bool
 
     private var repo: NewWindowRepo { prompt.repo }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            switch prompt.stage {
-            case .choosing: choosing
-            case .naming, .working: naming
-            }
+            choosing
         }
         .padding(20)
         .frame(width: 420)
@@ -163,38 +145,21 @@ private struct NewWindowPromptCard: View {
                 row("1", "arrow.turn.down.right", repo.branch.map { "Continue on \($0)" } ?? "Continue here",
                     "The same folder as your other \(prompt.noun)s.", prompt.continueHere)
                 row("2", "arrow.triangle.branch", "Same project but new branch/worktree",
-                    "Its own folder and branch. Other \(prompt.noun)s stay put.", prompt.startNaming)
+                    "Its own folder and branch, named once the work has a name.", prompt.newWorktree)
                 row("3", "folder.badge.plus", "New project", "Start in your home folder.", prompt.newProject)
             }
-        }
-    }
-
-    private var naming: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            header("Same project but new branch/worktree",
-                   "Starts from \(repo.branch ?? "here"), in \(repo.name)/\(NewWindowRepo.worktrees).")
-            TextField("branch-name", text: $prompt.branch)
-                .textFieldStyle(.roundedBorder)
-                .font(ClaudeUsageFont.font(size: 13))
-                .focused($fieldFocused)
-                .disabled(prompt.stage == .working)
-                .onSubmit { prompt.create() }
-                .onAppear { DispatchQueue.main.async { fieldFocused = true } }
+            .disabled(prompt.stage == .working)
+            if prompt.stage == .working {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("Making the worktree…").font(.system(size: 11)).foregroundStyle(.secondary)
+                }
+            }
             if let error = prompt.error {
                 Text(error)
                     .font(.system(size: 11))
                     .foregroundStyle(Color(red: 0.95, green: 0.33, blue: 0.30))
                     .fixedSize(horizontal: false, vertical: true)
-            }
-            HStack {
-                Button("Back") { prompt.back() }
-                    .disabled(prompt.stage == .working)
-                Spacer()
-                if prompt.stage == .working { ProgressView().controlSize(.small) }
-                Button("Create") { prompt.create() }
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(prompt.stage == .working
-                        || prompt.branch.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
     }

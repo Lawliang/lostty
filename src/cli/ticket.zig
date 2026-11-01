@@ -3,6 +3,7 @@ const Allocator = std.mem.Allocator;
 const Action = @import("ghostty.zig").Action;
 const protocol = @import("claude/protocol.zig");
 const claude_state = @import("claude_state.zig");
+const ticket_branch = @import("ticket_branch.zig");
 
 pub const user_var_name = "LOSTTY_TICKET";
 
@@ -52,8 +53,10 @@ const usage =
 /// These write their arguments to the pane's terminal as the LOSTTY_TICKET
 /// user var, as +claude-state does, so the app knows which pane sent it,
 /// and print "sent". The app applies one only if that pane may: the
-/// report is one-way, so it can't say. `list` prints the project's tickets
-/// from the pane's zone file. A bad call prints usage and exits 1.
+/// report is one-way, so it can't say. `working` also names a branch
+/// Lostty made for a new worktree after the feature (`ticket_branch`).
+/// `list` prints the project's tickets from the pane's zone file. A bad
+/// call prints usage and exits 1.
 pub fn run(gpa: Allocator) !u8 {
     var arena_state = std.heap.ArenaAllocator.init(gpa);
     defer arena_state.deinit();
@@ -94,6 +97,9 @@ pub fn run(gpa: Allocator) !u8 {
     defer tty.close();
     try claude_state.writeWhole(tty, seq);
     try out.writeAll("sent\n");
+    if (std.mem.eql(u8, args[0], "working")) {
+        if (ticket_branch.rename(alloc, ".", args[1])) |branch| try out.print("branch is now {s}\n", .{branch});
+    }
     return 0;
 }
 
@@ -221,4 +227,8 @@ test "ticket: the report reaches the app as LOSTTY_TICKET" {
     const alloc = arena.allocator();
     const seq = try protocol.encodeUserVar(alloc, user_var_name, try json(alloc, &.{ "blocked", "TB-8", "why" }), false);
     try t.expectEqualStrings("\x1b]1337;SetUserVar=LOSTTY_TICKET=WyJibG9ja2VkIiwiVEItOCIsIndoeSJd\x07", seq);
+}
+
+test {
+    _ = ticket_branch;
 }

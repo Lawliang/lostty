@@ -45,6 +45,13 @@ struct NewWindowRepoTests {
         // Kept out of the main checkout's status.
         #expect(Git.run(["status", "--porcelain"], in: path) == "")
         #expect(NewWindowRepo.addWorktree(repo, branch: "bad..name") == .failure(.init(message: "“bad..name” isn't a valid branch name.")))
+
+        // Placeholders take the first free name, marked with where they start.
+        let first = try NewWindowRepo.addPlaceholderWorktree(repo).get()
+        let second = try NewWindowRepo.addPlaceholderWorktree(repo).get()
+        #expect(NewWindowRepo.read(pwd: first)?.branch == "wt-1")
+        #expect(NewWindowRepo.read(pwd: second)?.branch == "wt-2")
+        #expect(Git.run(["config", "branch.wt-1.lostty-base"], in: path) == Git.run(["rev-parse", "main"], in: path))
     }
 }
 #endif
