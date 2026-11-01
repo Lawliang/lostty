@@ -185,9 +185,11 @@ struct CanvasAddButton: View {
     var body: some View {
         VStack(alignment: .trailing, spacing: CanvasAddMenuView.pillGap) {
             if state.isOpen {
-                HStack(alignment: .bottom, spacing: CanvasAddMenuView.pillGap) {
+                // New Agent is the pill's middle item: the list opens level
+                // with it and grows out of its side.
+                HStack(alignment: .center, spacing: CanvasAddMenuView.pillGap) {
                     if state.agentsOpen {
-                        agentList.transition(.scale(scale: 0.8, anchor: .bottomTrailing).combined(with: .opacity))
+                        agentList.transition(.scale(scale: 0.6, anchor: .trailing).combined(with: .opacity))
                     }
                     pill
                 }
@@ -244,7 +246,7 @@ struct CanvasAddButton: View {
     }
 
     /// The agents New Agent opens, each its icon and name, in the pill's
-    /// glass, bottoms level.
+    /// glass.
     private var agentList: some View {
         let rows = VStack(spacing: CanvasAddMenuView.pillPadding) {
             ForEach(state.agents) { recipe in
@@ -466,6 +468,8 @@ private struct CanvasAddItem: View {
                 .fixedSize()
                 .alignmentGuide(.leading) { $0[.trailing] + CanvasAddMenuView.pillPadding + 6 }
                 .opacity(hovering && showsLabel ? 1 : 0)
+                // Gone at once when the agents list opens where it was.
+                .transaction { if !showsLabel { $0.animation = nil } }
                 .allowsHitTesting(false)
         }
         .animation(.easeOut(duration: 0.12), value: hovering)
