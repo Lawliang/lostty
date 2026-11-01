@@ -3,9 +3,9 @@ import AppKit
 import SwiftUI
 
 /// The question over a new window or canvas card from a repo: what's it
-/// for? Its keys are the question's while it shows (1, 2, 3, Return to continue, Esc to go
-/// back or continue), so typing never reaches the terminal under it; ⌘
-/// shortcuts still work.
+/// for? Its keys are the question's while it shows (1, 2, 3, Return for a
+/// new worktree, Esc to go back or continue), so typing never reaches the
+/// terminal under it; ⌘ shortcuts still work.
 @MainActor
 final class NewWindowPrompt: ObservableObject, Identifiable {
     enum Stage: Equatable { case choosing, working }
@@ -86,8 +86,8 @@ final class NewWindowPrompt: ObservableObject, Identifiable {
         switch stage {
         case .choosing:
             switch event.charactersIgnoringModifiers {
-            case "1", "\r": continueHere()
-            case "2": newWorktree()
+            case "1": continueHere()
+            case "2", "\r": newWorktree()
             case "3": newProject()
             default: if escape { continueHere() }
             }
@@ -144,7 +144,7 @@ private struct NewWindowPromptCard: View {
             VStack(spacing: 4) {
                 row("1", "arrow.turn.down.right", repo.branch.map { "Continue on \($0)" } ?? "Continue here",
                     "The same folder as your other \(prompt.noun)s.", prompt.continueHere)
-                row("2", "arrow.triangle.branch", "Same project but new branch/worktree",
+                row("2 ↩", "arrow.triangle.branch", "Same project but new branch/worktree",
                     "Its own folder and branch, named once the work has a name.", prompt.newWorktree)
                 row("3", "folder.badge.plus", "New project", "Start in your home folder.", prompt.newProject)
             }
@@ -205,7 +205,8 @@ private struct NewWindowPromptRow: View {
                 Text(key)
                     .font(ClaudeUsageFont.font(size: 11))
                     .foregroundStyle(.secondary)
-                    .frame(width: 20, height: 20)
+                    .padding(.horizontal, key.count > 1 ? 5 : 0)
+                    .frame(minWidth: 20, minHeight: 20)
                     .background(
                         RoundedRectangle(cornerRadius: 5, style: .continuous)
                             .strokeBorder(Color.primary.opacity(0.2), lineWidth: 1))
