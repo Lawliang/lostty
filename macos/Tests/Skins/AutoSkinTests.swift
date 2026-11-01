@@ -27,6 +27,15 @@ struct AutoSkinTests {
         }
     }
 
+    @Test func textIsNearWhite() throws {
+        for name in ["Milo", "Tabletake", "fewdy", "songslice", "x"] {
+            let skin = AutoSkin.skin(forRepo: name, textureOpacity: 0.16)
+            let fg = try #require(skin.foreground)
+            let luminance = (0.2126 * Double(fg.r) + 0.7152 * Double(fg.g) + 0.0722 * Double(fg.b)) / 255
+            #expect(luminance > 0.85, "\(name) text \(fg.hex) is too dim")
+        }
+    }
+
     @Test func fnvIsStable() {
         #expect(AutoSkin.fnv1a("") == 0xcbf29ce484222325)
         #expect(AutoSkin.fnv1a("a") == 0xaf63dc4c8601ec8c)

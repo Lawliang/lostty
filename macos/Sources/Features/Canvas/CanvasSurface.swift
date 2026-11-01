@@ -107,10 +107,15 @@ final class CanvasScrollView: NSScrollView {
     /// Scrolls to where the canvas is drawn, so it's drawn as it is again.
     func settleDrawn() {
         guard let view = drawn else { return }
+        // One transaction: draw(at:)'s own would show the canvas undrawn,
+        // where it was before the pan or pinch, for a frame.
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
         draw(at: nil)
         if magnification != view.zoom { magnification = view.zoom }
         contentView.scroll(to: view.origin)
         reflectScrolledClipView(contentView)
+        CATransaction.commit()
     }
 
     /// The transform that draws `layer` mapped by `scale` then `move`, in
