@@ -98,23 +98,29 @@ extension CanvasController {
         }
     }
 
-    /// Writes `recipe`'s prompt to a file of its own and starts it in the
-    /// card `place` makes with the config given: the new card's pane.
+    /// Writes `recipe`'s prompt and the command that starts it to files
+    /// of their own and sources the command in the card `place` makes with
+    /// the config given: the new card's pane. Typed in itself, a name or
+    /// message that isn't ASCII would arrive garbled.
     private func startAgent(
         _ recipe: AgentRecipe, name: String, message: String?, context: [String],
         place: (Ghostty.SurfaceConfiguration) -> CardController
     ) -> UUID? {
         let folder = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Lostty/Agents")
-        let file = folder.appendingPathComponent("\(UUID().uuidString).md")
+        let id = UUID().uuidString
+        let file = folder.appendingPathComponent("\(id).md")
+        let script = folder.appendingPathComponent("\(id).sh")
         do {
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
             try recipe.fileText(context: context, message: message).write(to: file, atomically: true, encoding: .utf8)
+            try (recipe.commandLine(file: file.path, name: name, message: message) + "\n")
+                .write(to: script, atomically: true, encoding: .utf8)
         } catch {
             return nil
         }
         var config = Ghostty.SurfaceConfiguration()
-        config.initialInput = recipe.commandLine(file: file.path, name: name, message: message) + "\n"
+        config.initialInput = "source \(Ghostty.Shell.quote(script.path))\n"
         return place(config).surfaceTree.first { _ in true }?.id
     }
 
