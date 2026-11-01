@@ -123,6 +123,25 @@ struct NewWindowRepo: Equatable {
         return .success(path)
     }
 
+    /// A worktree on the first free placeholder branch, `wt-1`, `wt-2`…,
+    /// marked as Lostty's to rename: `branch.<name>.lostty-base` holds the
+    /// commit it starts from, and `lostty +ticket working` names it after
+    /// the feature until something merges it. Blocking.
+    static func addPlaceholderWorktree(_ repo: NewWindowRepo) -> Result<String, Failure> {
+        let taken = { (name: String) in
+            run(["show-ref", "--verify", "--quiet", "refs/heads/" + name], in: repo.checkout).status == 0
+                || FileManager.default.fileExists(atPath: repo.worktreePath(for: name))
+        }
+        guard let name = (1...999).lazy.map({ "wt-\($0)" }).first(where: { !taken($0) }) else {
+            return .failure(Failure(message: "No free worktree name."))
+        }
+        return addWorktree(repo, branch: name).map { path in
+            let base = run(["rev-parse", "HEAD"], in: path).stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+            _ = run(["config", "branch.\(name).lostty-base", base], in: path)
+            return path
+        }
+    }
+
     /// Adds the worktrees folder to the repo's own exclude file (never a
     /// tracked .gitignore) unless something already ignores it.
     private static func excludeWorktrees(_ repo: NewWindowRepo) {
