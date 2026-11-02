@@ -38,6 +38,8 @@ struct LosttyNotification: Identifiable {
         case zone(card: UUID)
         /// A pane's agent messaged one outside its zone, and was stopped.
         case keptInside(pane: UUID)
+        /// A closed terminal's worktree stayed: it has work not in main.
+        case keptWorktree(branch: String)
 
         /// Bubbles in the same slot replace each other (a connect result
         /// takes the place of its agent's "not connected" bubble).
@@ -48,6 +50,7 @@ struct LosttyNotification: Identifiable {
             case .update: "update"
             case .zone(let card): "zone-\(card.uuidString)"
             case .keptInside(let pane): "kept-inside-\(pane.uuidString)"
+            case .keptWorktree(let branch): "kept-worktree-\(branch)"
             }
         }
     }
