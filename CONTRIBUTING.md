@@ -164,6 +164,16 @@ Both are `/Applications/Lostty.app` with the same settings, terminals and phone 
 - To keep a feature in the beta, check `LosttyChannel.current` (add a named check like `handsOff`) and make sure stable does none of its work.
 - `macos/make-beta-icon.swift` remakes the beta icon after the icon changes.
 
+### Editions
+
+Lostty Beta also comes in editions. **Core** is `main`: the owner's own Lostty. Each other edition is Core with one agent harness integrated, built from its own branch, `edition/<name>`. Editions stay local; only `main` is pushed, and releases are built from `main`, so what people download is always Core.
+
+- Start an edition from main: `git branch edition/orca main`. Build it from that branch, or from a worktree branched from it, with `macos/install.sh` (the name comes from the branch) or `macos/install.sh --edition orca`.
+- A build carries its edition in its Info.plist (`LosttyEdition`, read by `LosttyEdition.current`). An edition's About window says "Lostty Beta · Orca"; Core's is unchanged.
+- `install.sh` keeps every beta edition it installs in `~/Library/Application Support/Lostty/Editions/<name>.app`. The first install that uses this keeps the Core build it replaces there too. Once the library holds more than one edition, the menu bar shows **Edition** to switch between them; switching restarts into the other edition, keeping every terminal.
+- An edition's code goes in `macos/Sources/Editions/<Name>/` and `src/cli/editions/<name>/`, and its data in `Application Support/Lostty/editions/<name>/`, never in Core's files. `macos/edition-core-diff.sh <name>` shows what an edition changes outside its folders.
+- After each merge into `main`, merge `main` into every edition branch. Nothing moves from an edition into `main` except a feature the owner promotes, ported as its own change.
+
 ### Release
 
 Releases are made on the owner's Mac with `macos/release.sh`. It builds Lostty, signs it as Developer ID, has Apple notarize `Lostty.dmg`, and publishes it with Sparkle's `appcast.xml` as a GitHub release. Installed copies find it through that feed.

@@ -22,7 +22,13 @@ enum LosttyChannel: String, Equatable {
 
     var isBeta: Bool { self == .beta }
     /// What the app calls itself where the build shows: the About window.
-    var appName: String { isBeta ? "Lostty Beta" : "Lostty" }
+    var appName: String { name(edition: .current) }
+
+    /// An edition other than Core names itself after the beta: "Lostty
+    /// Beta · Orca". Editions are beta-only.
+    func name(edition: LosttyEdition) -> String {
+        isBeta ? "Lostty Beta" + edition.suffix : "Lostty"
+    }
     /// The context handoff: a long conversation hands off to a fresh one.
     var handsOff: Bool { isBeta }
     /// The turn observer, which summarizes each agent turn. Off in every
