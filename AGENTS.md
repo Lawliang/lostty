@@ -49,6 +49,34 @@ worktree, and they share one installed app.
   don't install until that work is merged into your branch, or the user
   says to go ahead.
 
+## Editions
+
+`main` is Core, the owner's own Lostty. A harness integrated into
+Lostty is an edition: a branch `edition/<name>` from `main`
+(CONTRIBUTING.md → Editions).
+
+- Work on an edition branches from `edition/<name>` and merges back
+  into it. Never merge an edition into `main`. A feature reaches Core
+  only when the owner says to promote it; then port it into `main` as
+  its own change.
+- Keep an edition's code in `macos/Sources/Editions/<Name>/`,
+  `src/cli/editions/<name>/` and `macos/Tests/Editions/`. Change Core
+  files only where the edition must hook in, and keep those changes
+  small: `macos/edition-core-diff.sh <name>` shows them.
+- An edition never changes Core's saved files (canvas, zones, tickets,
+  notes, settings). Its own data goes in
+  `Application Support/Lostty/editions/<name>/`.
+- Each edition keeps `macos/Sources/Editions/<Name>/README.md`: what
+  it adds, feature by feature, in plain words, and the hooks or skills
+  it installs. Update it with every change; the owner learns the
+  edition from it.
+- After a merge into `main`, merge `main` into each `edition/*` branch
+  (a merge commit) and build it. Fix what breaks on the edition, not
+  in `main`. If a worktree has that branch checked out, tell its
+  terminal instead.
+- Don't push `edition/*` branches. Installing an edition follows Other
+  Terminals and asks the owner first, like any install.
+
 ## Validate before you report
 
 - When you can check a change yourself, check it before you report
