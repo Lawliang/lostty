@@ -6,15 +6,19 @@ import SwiftUI
 /// for? Its keys are the question's while it shows (1, 2, 3, Return for a
 /// new worktree, Esc to go back or continue), so typing never reaches the
 /// terminal under it; ⌘ shortcuts still work. 3 lists the other projects
-/// beside this one: picking a repo asks the same about it.
+/// beside this one: picking a repo asks the same about it. A terminal
+/// outside any repo (a zone with no folder) starts on that list.
 @MainActor
 final class NewWindowPrompt: ObservableObject, Identifiable {
     enum Stage: Equatable { case choosing, projects, working }
 
-    /// The repo the choices are about: the terminal's, or a project picked.
-    @Published private(set) var repo: NewWindowRepo
+    /// The repo the choices are about: the terminal's, or a project picked;
+    /// nil until one is picked when the terminal isn't in a repo.
+    @Published private(set) var repo: NewWindowRepo?
     /// The terminal's repo.
-    private let start: NewWindowRepo
+    private let start: NewWindowRepo?
+    /// The folder whose repos 3 lists.
+    private let projectsFolder: String
     /// The projects 3 lists, and the filter typed over them.
     private(set) var projects: [NewWindowProject] = []
     @Published var query = "" { didSet { selected = 0 } }
@@ -33,11 +37,12 @@ final class NewWindowPrompt: ObservableObject, Identifiable {
     nonisolated(unsafe) private var monitor: Any?
 
     init(
-        repo: NewWindowRepo, window: NSWindow, noun: String = "window", takesKeys: @escaping () -> Bool = { true },
-        finish: @escaping (String?) -> Void
+        repo: NewWindowRepo?, projectsIn folder: String? = nil, window: NSWindow, noun: String = "window",
+        takesKeys: @escaping () -> Bool = { true }, finish: @escaping (String?) -> Void
     ) {
         self.repo = repo
         self.start = repo
+        projectsFolder = repo.map { ($0.root as NSString).deletingLastPathComponent } ?? folder ?? NSHomeDirectory()
         self.noun = noun
         self.window = window
         self.takesKeys = takesKeys
@@ -46,6 +51,7 @@ final class NewWindowPrompt: ObservableObject, Identifiable {
             guard let self else { return event }
             return self.take(event) ? nil : event
         }
+        if repo == nil { pickProject() }
     }
 
     /// Whether the question took a key pressed in its window.
@@ -59,14 +65,14 @@ final class NewWindowPrompt: ObservableObject, Identifiable {
     }
 
     /// Whether the choices are about a project picked with 3.
-    var picked: Bool { repo.checkout != start.checkout }
+    var picked: Bool { repo?.checkout != start?.checkout }
 
     /// On in the picked repo's main folder, or where the terminal is.
-    func continueHere() { done(repo.checkout == start.checkout ? nil : repo.checkout) }
+    func continueHere() { done(picked ? repo?.checkout : nil) }
 
     func pickProject() {
         error = nil
-        projects = NewWindowProject.list(near: start.root)
+        projects = NewWindowProject.list(in: projectsFolder, leaving: start?.root)
         query = ""
         stage = .projects
     }
@@ -89,18 +95,19 @@ final class NewWindowPrompt: ObservableObject, Identifiable {
         if list.indices.contains(selected) { choose(list[selected]) }
     }
 
+    /// Back to the choices; with no repo to choose about, the terminal
+    /// stays where it is.
     func back() {
-        stage = .choosing
+        if repo == nil { done(nil) } else { stage = .choosing }
     }
 
     /// Makes a worktree on a placeholder branch (`wt-3`), then starts the
     /// terminal there; the branch takes the feature's name when its agent
     /// runs `+ticket working`. An error stays on the card.
     func newWorktree() {
-        guard stage == .choosing else { return }
+        guard stage == .choosing, let repo else { return }
         error = nil
         stage = .working
-        let repo = repo
         Task {
             // Off the main thread: checking out a big repo takes a moment.
             let made = await Task.detached { NewWindowRepo.addPlaceholderWorktree(repo) }.value
@@ -167,11 +174,13 @@ private struct NewWindowPromptCard: View {
     @ObservedObject var prompt: NewWindowPrompt
     let chrome: NSColor
 
-    private var repo: NewWindowRepo { prompt.repo }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            if prompt.stage == .projects { NewWindowProjectList(prompt: prompt) } else { choosing }
+            if let repo = prompt.repo, prompt.stage != .projects {
+                choosing(repo)
+            } else {
+                NewWindowProjectList(prompt: prompt)
+            }
         }
         .padding(20)
         .frame(width: 420)
@@ -186,7 +195,7 @@ private struct NewWindowPromptCard: View {
         .padding(16)
     }
 
-    private var choosing: some View {
+    private func choosing(_ repo: NewWindowRepo) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             header("What's this \(prompt.noun) for?",
                    "In \(repo.name)\(repo.branch.map { " on \($0)" } ?? ""). \(prompt.noun.capitalized)s in one folder "

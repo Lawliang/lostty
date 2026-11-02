@@ -7,7 +7,8 @@ import AppKit
 /// on this branch (the same folder, as before), a new branch in a worktree
 /// of its own, or a new project (starting at home). Outside a repo, ⌘N
 /// just opens the window. On the canvas, ⌘N and ⌘T ask the same over the
-/// new card.
+/// new card, and a card outside any repo (a zone with no folder) asks
+/// which project.
 @MainActor
 enum NewWindowChoice {
     static func newWindow(_ ghostty: Ghostty.App, config: Ghostty.SurfaceConfiguration?) {
@@ -19,7 +20,12 @@ enum NewWindowChoice {
     /// A new card asks while it's the canvas's focused card: the canvas's
     /// other cards share its window and its keys.
     static func ask(_ card: CardController, config: Ghostty.SurfaceConfiguration?) {
-        ask(card, sidebar: card.sidebar, config: config, noun: "card") { [weak card] in
+        // Started at home (no zone folder): which project?
+        let zones = card.canvas.map { canvas in
+            canvas.model.zones.compactMap { canvas.model.startFolder(ofZone: $0.id) }
+        } ?? []
+        let projects = config?.workingDirectory == NSHomeDirectory() ? NewWindowProject.folder(near: zones) : nil
+        ask(card, sidebar: card.sidebar, config: config, noun: "card", projectsIn: projects) { [weak card] in
             guard let card else { return false }
             return card.canvas?.focusedCard === card
         }
@@ -27,11 +33,13 @@ enum NewWindowChoice {
 
     private static func ask(
         _ controller: BaseTerminalController, sidebar: ExtensionSidebarModel, config: Ghostty.SurfaceConfiguration?,
-        noun: String, takesKeys: @escaping () -> Bool = { true }
+        noun: String, projectsIn projects: String? = nil, takesKeys: @escaping () -> Bool = { true }
     ) {
-        guard let pwd = config?.workingDirectory, let repo = NewWindowRepo.read(pwd: pwd),
-              let window = controller.window else { return }
-        sidebar.newWindowPrompt = NewWindowPrompt(repo: repo, window: window, noun: noun, takesKeys: takesKeys) {
+        let repo = config?.workingDirectory.flatMap(NewWindowRepo.read(pwd:))
+        guard repo != nil || projects != nil, let window = controller.window else { return }
+        sidebar.newWindowPrompt = NewWindowPrompt(
+            repo: repo, projectsIn: projects, window: window, noun: noun, takesKeys: takesKeys
+        ) {
             [weak controller, weak sidebar] folder in
             sidebar?.newWindowPrompt = nil
             guard let controller else { return }
