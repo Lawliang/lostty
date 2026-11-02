@@ -103,30 +103,12 @@ struct NewWindowRepo: Equatable {
         (root as NSString).appendingPathComponent(Self.worktrees + "/" + branch.replacingOccurrences(of: "/", with: "-"))
     }
 
-    /// A worktree on `branch` (made from this checkout's HEAD if it's new),
-    /// kept out of the main checkout's `git status`. Blocking.
-    static func addWorktree(_ repo: NewWindowRepo, branch: String) -> Result<String, Failure> {
-        guard run(["check-ref-format", "--branch", branch], in: repo.checkout).status == 0 else {
-            return .failure(Failure(message: "“\(branch)” isn't a valid branch name."))
-        }
-        let path = repo.worktreePath(for: branch)
-        guard !FileManager.default.fileExists(atPath: path) else {
-            return .failure(Failure(message: "\(path) already exists."))
-        }
-        let exists = run(["show-ref", "--verify", "--quiet", "refs/heads/" + branch], in: repo.checkout).status == 0
-        let add = run(["worktree", "add"] + (exists ? [path, branch] : ["-b", branch, path, "HEAD"]), in: repo.checkout)
-        guard add.status == 0 else {
-            let said = add.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
-            return .failure(Failure(message: said.isEmpty ? "git worktree add failed." : said))
-        }
-        excludeWorktrees(repo)
-        return .success(path)
-    }
-
     /// A worktree on the first free placeholder branch, `wt-1`, `wt-2`…,
-    /// marked as Lostty's to rename: `branch.<name>.lostty-base` holds the
-    /// commit it starts from, and `lostty +ticket working` names it after
-    /// the feature until something merges it. Blocking.
+    /// started from the repo's default branch as just fetched (never what
+    /// the main checkout has out), marked as Lostty's to rename:
+    /// `branch.<name>.lostty-base` holds the commit it starts from, and
+    /// `lostty +ticket working` names it after the feature until something
+    /// merges it. Blocking.
     static func addPlaceholderWorktree(_ repo: NewWindowRepo) -> Result<String, Failure> {
         let taken = { (name: String) in
             run(["show-ref", "--verify", "--quiet", "refs/heads/" + name], in: repo.checkout).status == 0
@@ -135,24 +117,11 @@ struct NewWindowRepo: Equatable {
         guard let name = (1...999).lazy.map({ "wt-\($0)" }).first(where: { !taken($0) }) else {
             return .failure(Failure(message: "No free worktree name."))
         }
-        return addWorktree(repo, branch: name).map { path in
+        return WorktreeMaker.make(branch: name, in: repo.checkout).mapError { Failure(message: $0.message) }.map { path in
             let base = run(["rev-parse", "HEAD"], in: path).stdout.trimmingCharacters(in: .whitespacesAndNewlines)
             _ = run(["config", "branch.\(name).lostty-base", base], in: path)
             return path
         }
-    }
-
-    /// Adds the worktrees folder to the repo's own exclude file (never a
-    /// tracked .gitignore) unless something already ignores it.
-    private static func excludeWorktrees(_ repo: NewWindowRepo) {
-        guard run(["check-ignore", "-q", worktrees + "/"], in: repo.root).status != 0 else { return }
-        let info = (repo.commonDir as NSString).appendingPathComponent("info")
-        try? FileManager.default.createDirectory(atPath: info, withIntermediateDirectories: true)
-        let exclude = (info as NSString).appendingPathComponent("exclude")
-        let current = (try? String(contentsOfFile: exclude, encoding: .utf8)) ?? ""
-        let line = "/" + worktrees + "/\n"
-        let text = current + (current.isEmpty || current.hasSuffix("\n") ? "" : "\n") + line
-        try? text.write(toFile: exclude, atomically: true, encoding: .utf8)
     }
 
     private static func run(_ args: [String], in dir: String) -> ProcessResult {

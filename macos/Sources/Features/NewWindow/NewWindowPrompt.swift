@@ -5,12 +5,20 @@ import SwiftUI
 /// The question over a new window or canvas card from a repo: what's it
 /// for? Its keys are the question's while it shows (1, 2, 3, Return for a
 /// new worktree, Esc to go back or continue), so typing never reaches the
-/// terminal under it; ⌘ shortcuts still work.
+/// terminal under it; ⌘ shortcuts still work. 3 lists the other projects
+/// beside this one: picking a repo asks the same about it.
 @MainActor
 final class NewWindowPrompt: ObservableObject, Identifiable {
-    enum Stage: Equatable { case choosing, working }
+    enum Stage: Equatable { case choosing, projects, working }
 
-    let repo: NewWindowRepo
+    /// The repo the choices are about: the terminal's, or a project picked.
+    @Published private(set) var repo: NewWindowRepo
+    /// The terminal's repo.
+    private let start: NewWindowRepo
+    /// The projects 3 lists, and the filter typed over them.
+    private(set) var projects: [NewWindowProject] = []
+    @Published var query = "" { didSet { selected = 0 } }
+    @Published private(set) var selected = 0
     /// "window" or "card".
     let noun: String
     @Published private(set) var stage: Stage = .choosing
@@ -29,6 +37,7 @@ final class NewWindowPrompt: ObservableObject, Identifiable {
         finish: @escaping (String?) -> Void
     ) {
         self.repo = repo
+        self.start = repo
         self.noun = noun
         self.window = window
         self.takesKeys = takesKeys
@@ -49,8 +58,40 @@ final class NewWindowPrompt: ObservableObject, Identifiable {
         if let monitor { NSEvent.removeMonitor(monitor) }
     }
 
-    func continueHere() { done(nil) }
-    func newProject() { done(NSHomeDirectory()) }
+    /// Whether the choices are about a project picked with 3.
+    var picked: Bool { repo.checkout != start.checkout }
+
+    /// On in the picked repo's main folder, or where the terminal is.
+    func continueHere() { done(repo.checkout == start.checkout ? nil : repo.checkout) }
+
+    func pickProject() {
+        error = nil
+        projects = NewWindowProject.list(near: start.root)
+        query = ""
+        stage = .projects
+    }
+
+    /// The projects whose names hold what's typed.
+    var shown: [NewWindowProject] {
+        let typed = query.trimmingCharacters(in: .whitespaces)
+        return typed.isEmpty ? projects : projects.filter { $0.name.localizedCaseInsensitiveContains(typed) }
+    }
+
+    /// A repo asks what the terminal is for there; anything else starts it there.
+    func choose(_ project: NewWindowProject) {
+        guard let picked = NewWindowRepo.read(pwd: project.path) else { return done(project.path) }
+        repo = picked
+        stage = .choosing
+    }
+
+    func chooseSelected() {
+        let list = shown
+        if list.indices.contains(selected) { choose(list[selected]) }
+    }
+
+    func back() {
+        stage = .choosing
+    }
 
     /// Makes a worktree on a placeholder branch (`wt-3`), then starts the
     /// terminal there; the branch takes the feature's name when its agent
@@ -84,11 +125,20 @@ final class NewWindowPrompt: ObservableObject, Identifiable {
         if event.modifierFlags.contains(.command) { return false }
         let escape = event.keyCode == 53
         switch stage {
+        case .projects:
+            // The filter field types and Return picks; arrows move, Esc goes back.
+            switch event.keyCode {
+            case 125: selected = min(selected + 1, max(shown.count - 1, 0))
+            case 126: selected = max(selected - 1, 0)
+            case 53: back()
+            default: return false
+            }
+            return true
         case .choosing:
             switch event.charactersIgnoringModifiers {
             case "1": continueHere()
             case "2", "\r": newWorktree()
-            case "3": newProject()
+            case "3": pickProject()
             default: if escape { continueHere() }
             }
             return true
@@ -121,7 +171,7 @@ private struct NewWindowPromptCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            choosing
+            if prompt.stage == .projects { NewWindowProjectList(prompt: prompt) } else { choosing }
         }
         .padding(20)
         .frame(width: 420)
@@ -143,10 +193,12 @@ private struct NewWindowPromptCard: View {
                     + "share its branch: switching it in one switches it in all of them.")
             VStack(spacing: 4) {
                 row("1", "arrow.turn.down.right", repo.branch.map { "Continue on \($0)" } ?? "Continue here",
-                    "The same folder as your other \(prompt.noun)s.", prompt.continueHere)
+                    prompt.picked ? "The project's main folder." : "The same folder as your other \(prompt.noun)s.",
+                    prompt.continueHere)
                 row("2 ↩", "arrow.triangle.branch", "Same project but new branch/worktree",
                     "Its own folder and branch, named once the work has a name.", prompt.newWorktree)
-                row("3", "folder.badge.plus", "New project", "Start in your home folder.", prompt.newProject)
+                row("3", "folder.badge.plus", "Another project", "Pick one of your projects, or your home folder.",
+                    prompt.pickProject)
             }
             .disabled(prompt.stage == .working)
             if prompt.stage == .working {

@@ -29,7 +29,7 @@ struct NewWindowRepoTests {
         #expect(repo.worktreePath(for: "fix/login") == "/r/app/.claude/worktrees/fix-login")
     }
 
-    @Test func makingAWorktreeLeavesTheOtherCheckoutOnItsBranch() throws {
+    @Test func placeholderWorktreesTakeTheFirstFreeName() throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("NewWindowRepoTests-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: dir) }
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -38,20 +38,15 @@ struct NewWindowRepoTests {
             #expect(ProcessRunner.run(Git.executable, ["-C", path] + args, timeout: 10)?.status == 0)
         }
         let repo = try #require(NewWindowRepo.read(pwd: path))
-        let made = NewWindowRepo.addWorktree(repo, branch: "feature/a")
-        let worktree = try made.get()
-        #expect(NewWindowRepo.read(pwd: worktree)?.branch == "feature/a")
-        #expect(NewWindowRepo.read(pwd: path)?.branch == "main")
-        // Kept out of the main checkout's status.
-        #expect(Git.run(["status", "--porcelain"], in: path) == "")
-        #expect(NewWindowRepo.addWorktree(repo, branch: "bad..name") == .failure(.init(message: "“bad..name” isn't a valid branch name.")))
-
         // Placeholders take the first free name, marked with where they start.
         let first = try NewWindowRepo.addPlaceholderWorktree(repo).get()
         let second = try NewWindowRepo.addPlaceholderWorktree(repo).get()
         #expect(NewWindowRepo.read(pwd: first)?.branch == "wt-1")
         #expect(NewWindowRepo.read(pwd: second)?.branch == "wt-2")
         #expect(Git.run(["config", "branch.wt-1.lostty-base"], in: path) == Git.run(["rev-parse", "main"], in: path))
+        #expect(NewWindowRepo.read(pwd: path)?.branch == "main")
+        // Kept out of the main checkout's status.
+        #expect(Git.run(["status", "--porcelain"], in: path) == "")
     }
 }
 #endif

@@ -357,6 +357,14 @@ extension CanvasModel {
         return (holding.first { $0.parent != nil } ?? holding.first)?.id
     }
 
+    /// The zone a new card goes in with no card to start from: `last`, the
+    /// zone of the card focused last, while any of it is in `visible`, else
+    /// the zone at the middle of `visible`.
+    func newCardZone(last: UUID?, in visible: CGRect) -> UUID? {
+        if let last, let frame = zone(last)?.frame, frame.intersects(visible) { return last }
+        return zone(for: CGRect(x: visible.midX, y: visible.midY, width: 0, height: 0))
+    }
+
     /// The cards in zone `id`; a project's include its domains'.
     func members(of id: UUID) -> Set<UUID> {
         let within = Set([id] + zones.filter { $0.parent == id }.map(\.id))
