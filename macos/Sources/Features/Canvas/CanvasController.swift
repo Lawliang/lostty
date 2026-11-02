@@ -35,11 +35,11 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     /// The card holding keyboard focus, or that last held it.
     private(set) weak var focusedCard: CardController?
     private weak var lastFocusedCard: CardController?
-    /// The zone of the card focused last, kept after its cards close.
-    private var lastZone: UUID?
     /// The canvas's tickets, kept while no panel is open. Every panel lists
     /// them.
     private(set) var tickets: [CanvasTicket] = []
+    /// The zone of the card focused last, kept after its cards close.
+    private var lastZone: UUID?
     /// The open tickets panels' cards. They share `model` with the terminal
     /// cards, so they stack, block clicks and fit to view alike.
     private(set) var ticketPanels: [UUID: TicketBoardView] = [:]
@@ -187,8 +187,8 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
 
     private func observe() {
         let document = scrollView.document
-        document.clicked = { [weak self] adding in
-            self?.canvasClicked()
+        document.clicked = { [weak self, weak document] adding in
+            self?.canvasClicked(at: document?.start)
             self?.marqueeBegan(adding: adding)
         }
         document.dragged = { [weak self] rect in self?.marqueeMoved(to: rect) }
@@ -407,8 +407,13 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
 
     /// A click on the canvas itself, between the cards, lets go of the
     /// focused card: no pane has the keyboard, and scrolling pans the canvas
-    /// over every pane.
-    private func canvasClicked() {
+    /// over every pane. A click in another zone than the last card's makes
+    /// it the zone the next new card goes in.
+    private func canvasClicked(at point: CGPoint? = nil) {
+        if let point, let zone = model.zone(for: CGRect(origin: point, size: .zero)), zone != lastZone {
+            lastZone = zone
+            lastFocusedCard = nil
+        }
         for panel in ticketPanels.values { panel.isFocusedCard = false }
         guard let previous = focusedCard else {
             // Out of a ticket's field, too.
@@ -432,10 +437,10 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     /// from now on (before its pane is, so the pane never blinks unfocused),
     /// in front.
     func cardWillFocus(_ card: CardController) {
+        lastZone = model.card(card.id).flatMap { model.zone(for: $0.frame) }
         let previous = focusedCard
         focusedCard = card
         lastFocusedCard = card
-        lastZone = model.card(card.id).flatMap { model.zone(for: $0.frame) }
         guard previous !== card else { return }
         previous?.syncFocusToSurfaceTree()
         bringToFront(card.id)
