@@ -84,13 +84,13 @@ enum SessionRestore {
         last.windows.restore(ghostty)
         for (pane, conversation) in last.conversations {
             guard let id = UUID(uuidString: pane), let command = conversation.resumeCommand else { continue }
-            resume(id, command)
+            type(command, into: id)
         }
     }
 
     /// Types `command` into the pane once its shell is up (it reports its
     /// folder at the first prompt), or after `shellWait`.
-    private static func resume(_ pane: UUID, _ command: String) {
+    static func type(_ command: String, into pane: UUID) {
         guard let surface = ContextHandoffWiring.surface(pane) else { return }
         let resume = PendingResume()
         resume.watch = surface.$pwd.dropFirst().compactMap { $0 }.first()

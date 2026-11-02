@@ -20,12 +20,15 @@ enum NewWindowChoice {
     /// A new card asks while it's the canvas's focused card: the canvas's
     /// other cards share its window and its keys.
     static func ask(_ card: CardController, config: Ghostty.SurfaceConfiguration?) {
-        // Started at home (no zone folder): which project?
-        let zones = card.canvas.map { canvas in
-            canvas.model.zones.compactMap { canvas.model.startFolder(ofZone: $0.id) }
-        } ?? []
+        // In a project's zone: a worktree of that project, at once. Started
+        // at home (a zone with no folder): which project, then a worktree.
+        let canvas = card.canvas
+        let zones = canvas.map { canvas in canvas.model.zones.compactMap { canvas.model.startFolder(ofZone: $0.id) } } ?? []
+        let project = canvas?.model.card(card.id).flatMap { canvas?.model.zone(for: $0.frame) }
+            .flatMap { canvas?.model.startFolder(ofZone: $0) }.flatMap(NewWindowRepo.read(pwd:))
         let projects = config?.workingDirectory == NSHomeDirectory() ? NewWindowProject.folder(near: zones) : nil
-        ask(card, sidebar: card.sidebar, config: config, noun: "card", projectsIn: projects) { [weak card] in
+        ask(card, sidebar: card.sidebar, config: config, noun: "card", repo: project, projectsIn: projects,
+            worktreeAtOnce: project != nil || projects != nil) { [weak card] in
             guard let card else { return false }
             return card.canvas?.focusedCard === card
         }
@@ -33,18 +36,23 @@ enum NewWindowChoice {
 
     private static func ask(
         _ controller: BaseTerminalController, sidebar: ExtensionSidebarModel, config: Ghostty.SurfaceConfiguration?,
-        noun: String, projectsIn projects: String? = nil, takesKeys: @escaping () -> Bool = { true }
+        noun: String, repo zoneRepo: NewWindowRepo? = nil, projectsIn projects: String? = nil,
+        worktreeAtOnce: Bool = false, takesKeys: @escaping () -> Bool = { true }
     ) {
-        let repo = config?.workingDirectory.flatMap(NewWindowRepo.read(pwd:))
+        let repo = zoneRepo ?? config?.workingDirectory.flatMap(NewWindowRepo.read(pwd:))
         guard repo != nil || projects != nil, let window = controller.window else { return }
         sidebar.newWindowPrompt = NewWindowPrompt(
-            repo: repo, projectsIn: projects, window: window, noun: noun, takesKeys: takesKeys
+            repo: repo, projectsIn: projects, worktreeAtOnce: worktreeAtOnce, window: window, noun: noun,
+            takesKeys: takesKeys
         ) {
             [weak controller, weak sidebar] folder in
+            let worktree = sidebar?.newWindowPrompt?.madeWorktree == true
             sidebar?.newWindowPrompt = nil
             guard let controller else { return }
             if let folder {
-                restart(controller, in: folder, config: config)
+                let surface = restart(controller, in: folder, config: config)
+                // A new worktree is for new work: Claude starts in it.
+                if worktree, let surface { SessionRestore.type("claude", into: surface.id) }
             } else if let surface = controller.focusedSurface {
                 Ghostty.moveFocus(to: surface)
             }
@@ -53,8 +61,11 @@ enum NewWindowChoice {
 
     /// The window's or card's terminal starts over in `folder`; the first
     /// one's shell (and its tmux session) ends.
-    private static func restart(_ controller: BaseTerminalController, in folder: String, config: Ghostty.SurfaceConfiguration?) {
-        guard let app = controller.ghostty.app else { return }
+    @discardableResult
+    private static func restart(
+        _ controller: BaseTerminalController, in folder: String, config: Ghostty.SurfaceConfiguration?
+    ) -> Ghostty.SurfaceView? {
+        guard let app = controller.ghostty.app else { return nil }
         var there = config ?? Ghostty.SurfaceConfiguration()
         there.workingDirectory = folder
         let surface = Ghostty.SurfaceView(app, baseConfig: there)
@@ -67,6 +78,7 @@ enum NewWindowChoice {
         // view: free the surface first, and the view once that's done.
         for view in old { view.releaseSurface() }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) { withExtendedLifetime(old) {} }
+        return surface
     }
 }
 

@@ -26,6 +26,11 @@ final class NewWindowPrompt: ObservableObject, Identifiable {
     /// "window" or "card".
     let noun: String
     @Published private(set) var stage: Stage = .choosing
+    /// Whether the answer was a new worktree: its terminal starts Claude.
+    private(set) var madeWorktree = false
+    /// A canvas card in a project's zone asks nothing: it makes a worktree
+    /// at once, and with no project yet, once one is picked.
+    let worktreeAtOnce: Bool
     @Published private(set) var error: String?
     /// Ends the question: the folder to start the terminal over in, or nil
     /// to keep it.
@@ -37,9 +42,10 @@ final class NewWindowPrompt: ObservableObject, Identifiable {
     nonisolated(unsafe) private var monitor: Any?
 
     init(
-        repo: NewWindowRepo?, projectsIn folder: String? = nil, window: NSWindow, noun: String = "window",
-        takesKeys: @escaping () -> Bool = { true }, finish: @escaping (String?) -> Void
+        repo: NewWindowRepo?, projectsIn folder: String? = nil, worktreeAtOnce: Bool = false, window: NSWindow,
+        noun: String = "window", takesKeys: @escaping () -> Bool = { true }, finish: @escaping (String?) -> Void
     ) {
+        self.worktreeAtOnce = worktreeAtOnce
         self.repo = repo
         self.start = repo
         projectsFolder = repo.map { ($0.root as NSString).deletingLastPathComponent } ?? folder ?? NSHomeDirectory()
@@ -51,7 +57,7 @@ final class NewWindowPrompt: ObservableObject, Identifiable {
             guard let self else { return event }
             return self.take(event) ? nil : event
         }
-        if repo == nil { pickProject() }
+        if repo == nil { pickProject() } else if worktreeAtOnce { newWorktree() }
     }
 
     /// Whether the question took a key pressed in its window.
@@ -88,6 +94,7 @@ final class NewWindowPrompt: ObservableObject, Identifiable {
         guard let picked = NewWindowRepo.read(pwd: project.path) else { return done(project.path) }
         repo = picked
         stage = .choosing
+        if worktreeAtOnce { newWorktree() }
     }
 
     func chooseSelected() {
@@ -113,6 +120,7 @@ final class NewWindowPrompt: ObservableObject, Identifiable {
             let made = await Task.detached { NewWindowRepo.addPlaceholderWorktree(repo) }.value
             switch made {
             case .success(let path):
+                madeWorktree = true
                 done(path)
             case .failure(let failure):
                 error = failure.message
@@ -176,7 +184,9 @@ private struct NewWindowPromptCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            if let repo = prompt.repo, prompt.stage != .projects {
+            if let repo = prompt.repo, prompt.stage == .working, prompt.worktreeAtOnce {
+                making(repo)
+            } else if let repo = prompt.repo, prompt.stage != .projects {
                 choosing(repo)
             } else {
                 NewWindowProjectList(prompt: prompt)
@@ -193,6 +203,14 @@ private struct NewWindowPromptCard: View {
         .shadow(color: .black.opacity(0.35), radius: 24, y: 8)
         .environment(\.colorScheme, chrome.isLightColor ? .light : .dark)
         .padding(16)
+    }
+
+    /// A project zone's card while its worktree is made.
+    private func making(_ repo: NewWindowRepo) -> some View {
+        HStack(spacing: 10) {
+            ProgressView().controlSize(.small)
+            header("New worktree in \(repo.name)", "From its main branch, as just fetched. Claude starts in it.")
+        }
     }
 
     private func choosing(_ repo: NewWindowRepo) -> some View {

@@ -47,6 +47,11 @@ struct NewWindowPromptTests {
         #expect(prompt.stage == .choosing)
     }
 
+    @Test func aProjectZonesCardMakesItsWorktreeWithoutAsking() {
+        let prompt = NewWindowPrompt(repo: repo, worktreeAtOnce: true, window: makeWindow()) { _ in }
+        #expect(prompt.stage == .working)
+    }
+
     @Test func withNoRepoItStartsOnTheProjectsAndEscKeepsTheTerminal() {
         let window = makeWindow()
         var picked: String??
