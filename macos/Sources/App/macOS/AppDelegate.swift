@@ -645,6 +645,9 @@ class AppDelegate: NSObject,
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        // Lostty: quitting and Restart to Update close terminals you expect back.
+        WorktreeCleanup.paused = true
+
         // Lostty: the session as it is, for "Continue your last session?".
         LastSessionStore.shared.saveForQuit(deliberate: quitIsDeliberate && !LosttyRestart.isRestarting)
 

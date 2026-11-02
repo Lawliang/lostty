@@ -488,12 +488,14 @@ extension Ghostty {
             remoteIO?.detach()
 
             // Lostty Mobile: closing a pane ends its tmux session, as
-            // closing a plain terminal ends its shell.
-            if inTmuxSession {
-                let pid = ProcessInfo.processInfo.processIdentifier
-                Task.detached(priority: .utility) {
-                    TmuxClient().endSessions(showing: closedID, ownedBy: pid)
-                }
+            // closing a plain terminal ends its shell. Lostty: then its
+            // worktree goes, if Lostty made it and nothing in it is lost.
+            let tmux = inTmuxSession
+            let folder = pwd
+            Task.detached(priority: .utility) {
+                if tmux { TmuxClient().endSessions(showing: closedID, ownedBy: ProcessInfo.processInfo.processIdentifier) }
+                guard let folder, case .kept(let branch, let reason) = WorktreeCleanup.terminalClosed(pwd: folder) else { return }
+                await MainActor.run { LosttyNotifications.shared.postKeptWorktree(branch: branch, folder: folder, reason: reason) }
             }
 
             // Remove all of our notificationcenter subscriptions

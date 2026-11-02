@@ -37,6 +37,8 @@ enum WorktreeMaker {
             return .failure(Failure(message: "git took too long to make the worktree."))
         }
         guard result.status == 0 else { return .failure(Failure(message: reason(result.stderr))) }
+        // Lostty's to clean up once its work is in main (WorktreeCleanup).
+        if !exists { _ = git(["config", "branch.\(branch).\(WorktreeCleanup.madeKey)", "true"], in: main) }
         keepOutOfStatus(common: common, main: main)
         return .success(path)
     }

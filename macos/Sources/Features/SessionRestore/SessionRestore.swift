@@ -29,6 +29,7 @@ enum SessionRestore {
     static func offerAtLaunch(_ ghostty: Ghostty.App) {
         guard offers, let last = LastSession.load(from: LastSession.standardURL) else {
             LastSessionStore.shared.start()
+            WorktreeCleanup.sweepSoon()
             return
         }
         DispatchQueue.main.async {
@@ -47,6 +48,7 @@ enum SessionRestore {
                     _ = TerminalController.newWindow(ghostty)
                 }
                 LastSessionStore.shared.start()
+                WorktreeCleanup.sweepSoon()
             }
         }
     }
