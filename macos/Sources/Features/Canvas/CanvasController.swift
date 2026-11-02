@@ -269,14 +269,14 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
 
     /// A new card with one fresh terminal, in the middle of the view; in a
     /// zone, starting in its folder. With no `baseConfig` to start from, it
-    /// goes in the zone you were last in while that's in view, else the one
-    /// in the middle of the view, which grows to hold it. `config` is what
-    /// it started with.
+    /// goes in the zone under the pointer, else the zone you were last in
+    /// while that's in view, else the one in the middle of the view, which
+    /// grows to hold it. `config` is what it started with.
     @discardableResult
     func newCard(baseConfig: Ghostty.SurfaceConfiguration? = nil)
         -> (card: CardController, config: Ghostty.SurfaceConfiguration?) {
         let visible = scrollView.documentVisibleRect
-        guard baseConfig == nil, let zone = model.newCardZone(last: lastZone, in: visible),
+        guard baseConfig == nil, let zone = model.newCardZone(last: pointerZone ?? lastZone, in: visible),
               let zoneFrame = model.zone(zone)?.frame else {
             let frame = model.placement(in: visible)
             return newCard(at: frame, zone: model.zone(for: frame), baseConfig: baseConfig)
@@ -390,8 +390,21 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
 
     /// Where ⌘T and ⌘N start from: the focused card, or with none (a click
     /// between the cards, a tickets panel) the last one, while it's open.
+    /// None while the pointer is over another zone than that card's: the
+    /// new card goes in the zone you point at.
     var workingCard: CardController? {
-        focusedCard ?? lastFocusedCard.flatMap { last in cards.contains { $0 === last } ? last : nil }
+        let card = focusedCard ?? lastFocusedCard.flatMap { last in cards.contains { $0 === last } ? last : nil }
+        guard let pointer = pointerZone else { return card }
+        let home = card.flatMap { model.card($0.id) }.flatMap { model.zone(for: $0.frame) }
+        return pointer == home ? card : nil
+    }
+
+    /// The zone under the pointer while it's over the canvas in front.
+    private var pointerZone: UUID? {
+        guard let window, window.isKeyWindow else { return nil }
+        let point = scrollView.document.convert(window.mouseLocationOutsideOfEventStream, from: nil)
+        guard scrollView.documentVisibleRect.contains(point) else { return nil }
+        return model.zone(for: CGRect(origin: point, size: .zero))
     }
 
     /// Keyboard focus to `card`'s focused pane.
