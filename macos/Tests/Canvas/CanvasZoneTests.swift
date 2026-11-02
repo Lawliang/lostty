@@ -19,6 +19,21 @@ struct CanvasZoneTests {
         #expect(model.zone(for: CGRect(x: 1800, y: 350, width: 500, height: 300)) == nil)
     }
 
+    @Test func aNewCardGoesInTheZoneYouWereLastInWhileItsInView() {
+        var model = CanvasModel()
+        model.addZone(zone(project, CGRect(x: 0, y: 0, width: 2000, height: 1000)))
+        model.addZone(zone(other, CGRect(x: 2200, y: 0, width: 2000, height: 1000)))
+        // Both in view, the view's middle in the other: the last one wins.
+        let both = CGRect(x: 1000, y: 0, width: 2400, height: 1000)
+        #expect(model.newCardZone(last: project, in: both) == project)
+        // Scrolled away from it: the zone in the middle of the view.
+        let away = CGRect(x: 2600, y: 0, width: 1200, height: 1000)
+        #expect(model.newCardZone(last: project, in: away) == other)
+        #expect(model.newCardZone(last: nil, in: both) == other)
+        // Between zones, none.
+        #expect(model.newCardZone(last: nil, in: CGRect(x: 1600, y: 0, width: 1000, height: 1000)) == nil)
+    }
+
     @Test func aCardBesideOneInAZoneStaysInTheZone() {
         let d = UUID()
         var model = CanvasModel()

@@ -187,7 +187,8 @@ final class CanvasDocumentView: NSView {
     var deselected: (() -> Void)?
     /// A letter typed with no modifier: true when it was a shortcut.
     var typed: ((String) -> Bool)?
-    private var start: CGPoint?
+    /// Where the last click between the cards landed, in document points.
+    private(set) var start: CGPoint?
 
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { true }

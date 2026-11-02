@@ -12,7 +12,6 @@ struct NotificationStackView: View {
                 NotificationBubble(item: item, center: center)
                     .transition(.move(edge: .trailing).combined(with: .opacity))
             }
-            TerminalNoticeStack()
         }
         .padding(.top, 12)
         .padding(.trailing, 12)

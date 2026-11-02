@@ -1207,10 +1207,10 @@ class AppDelegate: NSObject,
 
     @IBAction func newWindow(_ sender: Any?) {
         // Lostty Canvas: on the canvas, New Window makes a card, starting
-        // where the focused card's pane is and asking what it's for, as ⌘N
+        // where the working card's pane is and asking what it's for, as ⌘N
         // from the keyboard does.
         if let canvas = CanvasController.key {
-            let config = canvas.focusedCard?.focusedSurface?.surface.map {
+            let config = canvas.workingCard?.focusedSurface?.surface.map {
                 Ghostty.SurfaceConfiguration(from: ghostty_surface_inherited_config($0, GHOSTTY_SURFACE_CONTEXT_WINDOW))
             }
             let made = canvas.newCard(baseConfig: config)
@@ -1227,11 +1227,12 @@ class AppDelegate: NSObject,
 
     @IBAction func newTab(_ sender: Any?) {
         // Lostty Canvas: on the canvas, New Tab makes a card beside the
-        // focused one, starting where its focused pane is; with none
-        // focused, a card as New Window does.
+        // working one, starting where its focused pane is; with none, a card
+        // as New Window does. Either asks what it's for.
         if let canvas = CanvasController.key {
-            guard let card = canvas.focusedCard else {
-                canvas.newCard()
+            guard let card = canvas.workingCard else {
+                let made = canvas.newCard()
+                NewWindowChoice.ask(made.card, config: made.config)
                 return
             }
             let config = card.focusedSurface?.surface.map {
