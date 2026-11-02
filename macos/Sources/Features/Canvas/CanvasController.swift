@@ -305,7 +305,10 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         at frame: CGRect, zone: UUID?, baseConfig: Ghostty.SurfaceConfiguration?, folder: String? = nil
     ) -> (card: CardController, config: Ghostty.SurfaceConfiguration?) {
         var config = baseConfig
-        if let start = folder ?? zone.flatMap({ model.startFolder(ofZone: $0) }), Self.isFolder(start) {
+        // With no folder to start in (a zone without one), home: never the
+        // folder of whichever terminal had focus.
+        let start = folder ?? zone.flatMap({ model.startFolder(ofZone: $0) })
+        if let start = start.flatMap({ Self.isFolder($0) ? $0 : nil }) ?? (config == nil ? NSHomeDirectory() : nil) {
             config = config ?? Ghostty.SurfaceConfiguration()
             config?.workingDirectory = start
         }

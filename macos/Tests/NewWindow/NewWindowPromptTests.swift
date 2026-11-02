@@ -47,6 +47,21 @@ struct NewWindowPromptTests {
         #expect(prompt.stage == .choosing)
     }
 
+    @Test func withNoRepoItStartsOnTheProjectsAndEscKeepsTheTerminal() {
+        let window = makeWindow()
+        var picked: String??
+        let prompt = NewWindowPrompt(repo: nil, projectsIn: "/nowhere", window: window) { picked = $0 }
+        #expect(prompt.stage == .projects)
+        #expect(prompt.shown.map(\.isHome) == [true])
+        prompt.back()
+        #expect(picked == .some(nil))
+    }
+
+    @Test func aTerminalOutsideAnyRepoLooksBesideTheZonesFolders() {
+        #expect(NewWindowProject.folder(near: ["/nowhere/x", NSTemporaryDirectory()])
+            == (NSTemporaryDirectory() as NSString).deletingLastPathComponent)
+    }
+
     @Test func projectsAreTheReposBesideTheTerminalsMostRecentFirst() throws {
         let files = FileManager.default
         let dir = files.temporaryDirectory.appendingPathComponent("NewWindowProjects-\(UUID().uuidString)").path

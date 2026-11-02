@@ -14,7 +14,24 @@ struct NewWindowProject: Equatable {
     /// `~/projectrepos/lostty`), `root` left out, the one used last first;
     /// then the home folder.
     static func list(near root: String) -> [NewWindowProject] {
-        let parent = (root as NSString).deletingLastPathComponent
+        list(in: (root as NSString).deletingLastPathComponent, leaving: root)
+    }
+
+    /// Where a terminal outside any repo looks for projects: the folder
+    /// holding the first of `folders` (the canvas's zones') that exists,
+    /// else `~/projectrepos`, else home.
+    static func folder(near folders: [String]) -> String {
+        let files = FileManager.default
+        if let first = folders.first(where: { files.fileExists(atPath: $0) }) {
+            return (first as NSString).deletingLastPathComponent
+        }
+        let repos = (NSHomeDirectory() as NSString).appendingPathComponent("projectrepos")
+        return files.fileExists(atPath: repos) ? repos : NSHomeDirectory()
+    }
+
+    /// The repos in `parent`, `root` left out, the one used last first;
+    /// then the home folder.
+    static func list(in parent: String, leaving root: String?) -> [NewWindowProject] {
         let files = FileManager.default
         let repos = ((try? files.contentsOfDirectory(atPath: parent)) ?? [])
             .filter { !$0.hasPrefix(".") }
