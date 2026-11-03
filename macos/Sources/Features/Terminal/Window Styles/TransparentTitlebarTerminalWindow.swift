@@ -8,9 +8,8 @@ class TransparentTitlebarTerminalWindow: TerminalWindow {
     /// visibility changes) can reset the titlebar appearance.
     private var lastSurfaceConfig: Ghostty.SurfaceView.DerivedConfig?
 
-    /// Lostty: the Mockup window style's line under the title bar, its
-    /// title in place of the system's, and its buttons.
-    private var titlebarHairline: NSView?
+    /// Lostty: the Mockup window style's title in place of the system's,
+    /// and its buttons.
     private var mockupTitle: NSTextField?
     /// Lostty: the folder's own Finder icon before the title, as the
     /// system's title shows it.
@@ -139,9 +138,9 @@ class TransparentTitlebarTerminalWindow: TerminalWindow {
         titlebarAppearsTransparent = true
     }
 
-    /// Lostty: in the Mockup window style, the mockup's flat 12pt window
-    /// buttons in place of the system's, the title after them at 12pt in the
-    /// terminal's text color, and a hairline along the title bar's bottom.
+    /// Lostty: in the Mockup window style, the mockup's flat window buttons
+    /// in place of the system's, and the title after them at 13pt in the
+    /// terminal's text color.
     private func syncMockupTitlebar(in titlebar: NSView) {
         let mockup = LosttyWindowStyle.isMockup
         for kind in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] {
@@ -149,8 +148,8 @@ class TransparentTitlebarTerminalWindow: TerminalWindow {
         }
         titleVisibility = mockup ? .hidden : .visible
         guard mockup, let background = preferredBackgroundColor else {
-            for view in [titlebarHairline, mockupTitle?.superview, mockupButtons] as [NSView?] { view?.removeFromSuperview() }
-            (titlebarHairline, mockupTitle, mockupFolder, mockupButtons) = (nil, nil, nil, nil)
+            for view in [mockupTitle?.superview, mockupButtons] as [NSView?] { view?.removeFromSuperview() }
+            (mockupTitle, mockupFolder, mockupButtons) = (nil, nil, nil)
             return
         }
         let bar = LosttyWindowStyle.bar(over: background)
@@ -181,7 +180,7 @@ class TransparentTitlebarTerminalWindow: TerminalWindow {
             folder.widthAnchor.constraint(equalToConstant: 16).isActive = true
             folder.heightAnchor.constraint(equalToConstant: 16).isActive = true
             let label = NSTextField(labelWithString: title)
-            label.font = .systemFont(ofSize: 12, weight: .semibold)
+            label.font = .systemFont(ofSize: 13)
             label.lineBreakMode = .byTruncatingMiddle
             label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
             // A stack, so the title closes up when there's no folder.
@@ -201,20 +200,6 @@ class TransparentTitlebarTerminalWindow: TerminalWindow {
         }
         let skin = terminalController?.focusedSurface.flatMap { SkinsRuntime.shared.manager.effectiveSkin($0.id) }
         mockupTitle?.textColor = LosttyWindowStyle.titleColor(skin: skin, bar: bar)
-
-        if titlebarHairline?.superview !== titlebar {
-            titlebarHairline?.removeFromSuperview()
-            let line = NSView()
-            line.wantsLayer = true
-            let flipped = titlebar.isFlipped
-            line.autoresizingMask = [.width, flipped ? .minYMargin : .maxYMargin]
-            // Stops at the window's edge rather than crossing it.
-            line.frame = NSRect(
-                x: 1, y: flipped ? titlebar.bounds.height - 0.5 : 0, width: max(0, titlebar.bounds.width - 2), height: 0.5)
-            titlebar.addSubview(line)
-            titlebarHairline = line
-        }
-        titlebarHairline?.layer?.backgroundColor = LosttyWindowStyle.hairline(on: bar).cgColor
     }
 
     /// Lostty: the Mockup title's folder icon, hidden outside a folder.
