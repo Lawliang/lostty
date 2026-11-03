@@ -114,8 +114,10 @@ struct ClaudeUsageTests {
         // 1970-01-02 09:00 UTC was a Friday.
         let friday = Date(timeIntervalSince1970: 24 * 3600 + 9 * 3600)
         let text = ClaudeUsageFormat.reset(friday, now: now, calendar: calendar, locale: Locale(identifier: "en_US"))
-        // The formatter puts a narrow no-break space before "AM".
-        #expect(text.replacingOccurrences(of: "\u{202F}", with: " ") == "Resets Fri, 9 AM")
+        // The formatter puts a narrow no-break space before "AM", and
+        // newer macOS drops the comma after the day.
+        let plain = text.replacingOccurrences(of: "\u{202F}", with: " ").replacingOccurrences(of: ",", with: "")
+        #expect(plain == "Resets Fri 9 AM")
     }
 
     @Test func blocksShowAnyUseAndCapAtFull() {
