@@ -50,7 +50,7 @@ struct VoiceWatch: Equatable {
     /// The buffer after your last word: no countdown shows yet, so the
     /// voice key goes to Claude and sends right away.
     static let quiet: TimeInterval = 1
-    static let countdown: TimeInterval = 4
+    static let countdown: TimeInterval = 3
     /// How long Claude may take to start recording after the key.
     static let warmup: TimeInterval = 5
     /// How long the recording mark may be missing (a frame mid-redraw)
@@ -140,19 +140,13 @@ enum VoiceKeys {
 }
 
 /// A pane's countdown as its badge draws it: when it sends, and where
-/// Claude's input box line and footer sit in the pane (points from its
-/// top left), when Lostty could find them.
+/// Claude's footer sits in the pane (points from its top left), when
+/// Lostty could find it.
 struct VoiceCountdown: Equatable {
     var sendsAt: Date
-    var ruleY: CGFloat?
     var footerY: CGFloat?
     var left: CGFloat = 0
     var key = "`"
-
-    /// 1 at the start, 0 when it sends.
-    func remaining(at date: Date) -> Double {
-        min(1, max(0, sendsAt.timeIntervalSince(date) / VoiceWatch.countdown))
-    }
 
     func secondsLeft(at date: Date) -> Int {
         max(1, Int(sendsAt.timeIntervalSince(date).rounded(.up)))
@@ -271,7 +265,7 @@ final class VoiceAutoSend: ObservableObject {
         let footer = watch.footerRow.flatMap { Self.rowCentre(view, row: $0) }
         let key = voiceKeys().sorted().first.map { $0 == " " ? "space" : $0 } ?? "`"
         countdowns[pane] = VoiceCountdown(
-            sendsAt: sendsAt, ruleY: rule?.y, footerY: footer?.y, left: rule?.x ?? footer?.x ?? 0, key: key)
+            sendsAt: sendsAt, footerY: footer?.y, left: rule?.x ?? footer?.x ?? 0, key: key)
     }
 
     /// The middle of a screen row, and its left edge, in the pane's
