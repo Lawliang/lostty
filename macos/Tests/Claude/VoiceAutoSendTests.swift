@@ -49,12 +49,27 @@ struct VoiceAutoSendTests {
         var watch = VoiceWatch(since: start)
         _ = watch.update(VoiceFrame(words: "fix it"), now: start)
         _ = watch.update(VoiceFrame(words: "fix it"), now: start + 1)
-        watch.hold()
+        watch.hold(now: start + 2)
         #expect(watch.update(VoiceFrame(words: "fix it"), now: start + 10) == .wait)
         #expect(watch.sendsAt == nil)
         _ = watch.update(VoiceFrame(words: "fix it now"), now: start + 11)
         _ = watch.update(VoiceFrame(words: "fix it now"), now: start + 12)
         #expect(watch.sendsAt == start + 15)
+    }
+
+    @Test func touchUpsAfterAHoldDontSend() {
+        let start = Date()
+        var watch = VoiceWatch(since: start)
+        _ = watch.update(VoiceFrame(words: "fix the menu"), now: start)
+        _ = watch.update(VoiceFrame(words: "fix the menu"), now: start + 1)
+        watch.hold(now: start + 2)
+        // The last word lands just after the hold, then Claude fixes punctuation.
+        _ = watch.update(VoiceFrame(words: "fix the menu bar"), now: start + 2.5)
+        _ = watch.update(VoiceFrame(words: "Fix the menu bar."), now: start + 5)
+        for second in 6..<20 {
+            #expect(watch.update(VoiceFrame(words: "Fix the menu bar."), now: start + Double(second)) == .wait)
+        }
+        #expect(watch.sendsAt == nil)
     }
 
     @Test func silenceFromTheStartNeverSends() {

@@ -33,9 +33,11 @@ struct VoiceFrame: Equatable {
 
 /// One pane's dictation, from its voice key on: once words have come in
 /// and none has for `quiet` seconds, a `countdown` starts, and when it runs
-/// out Lostty sends the message. Speaking again calls the countdown off,
-/// and so does `hold()` (the voice key pressed during it) until you speak
-/// again.
+/// out Lostty sends the message. New words call the countdown off, and so
+/// does `hold()` (the voice key pressed during it) until you say more:
+/// Claude touching up the words already there (punctuation, a word
+/// heard better, the last words landing just after the hold) doesn't
+/// count.
 struct VoiceWatch: Equatable {
     static let quiet: TimeInterval = 1
     static let countdown: TimeInterval = 3
@@ -44,6 +46,8 @@ struct VoiceWatch: Equatable {
     /// How long the recording mark may be missing (a frame mid-redraw)
     /// before the recording counts as over.
     static let gone: TimeInterval = 1
+    /// After a hold, how long late words still count as said before it.
+    static let settle: TimeInterval = 1.5
 
     enum Step: Equatable { case wait, send, stop }
 
@@ -52,7 +56,9 @@ struct VoiceWatch: Equatable {
     var heard: Date?
     var seen: Date?
     var sendsAt: Date?
-    var held = false
+    /// The word count when you held, and when.
+    var heldCount: Int?
+    var heldAt: Date?
 
     init(since: Date) { self.since = since }
 
@@ -67,19 +73,32 @@ struct VoiceWatch: Equatable {
             words = frame.words
             heard = now
             sendsAt = nil
-            held = false
+            if let heldCount, let heldAt {
+                let count = Self.count(words)
+                if now.timeIntervalSince(heldAt) < Self.settle {
+                    self.heldCount = max(heldCount, count)
+                } else if count > heldCount {
+                    self.heldCount = nil
+                    self.heldAt = nil
+                }
+            }
             return .wait
         }
         if let sendsAt { return now >= sendsAt ? .send : .wait }
-        if let heard, !held, now.timeIntervalSince(heard) >= Self.quiet {
+        if let heard, heldCount == nil, now.timeIntervalSince(heard) >= Self.quiet {
             sendsAt = now.addingTimeInterval(Self.countdown)
         }
         return .wait
     }
 
-    mutating func hold() {
+    mutating func hold(now: Date = Date()) {
         sendsAt = nil
-        held = true
+        heldCount = Self.count(words)
+        heldAt = now
+    }
+
+    private static func count(_ words: String) -> Int {
+        words.split(whereSeparator: \.isWhitespace).count
     }
 }
 
