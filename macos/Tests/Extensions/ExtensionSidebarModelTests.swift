@@ -8,12 +8,13 @@ struct ExtensionSidebarModelTests {
     /// A sidebar whose Branches model reads a scripted world.
     private func makeModel(channel: LosttyChannel = .beta) throws -> (ExtensionSidebarModel, BranchesModel) {
         let branches = BranchesModel(env: try FakeBranchesWorld().environment())
-        return (ExtensionSidebarModel(branches: branches, channel: channel), branches)
+        return (ExtensionSidebarModel(branches: branches, channel: channel, skinsPaused: false), branches)
     }
 
     @Test func branchesIsInTheBetaOnly() {
-        #expect(LosttyExtension.available(in: .beta) == [.branches, .skins])
-        #expect(LosttyExtension.available(in: .stable) == [.skins])
+        #expect(LosttyExtension.available(in: .beta, skinsPaused: false) == [.branches, .skins])
+        #expect(LosttyExtension.available(in: .stable, skinsPaused: false) == [.skins])
+        #expect(LosttyExtension.available(in: .beta, skinsPaused: true) == [.branches])
     }
 
     @Test func stableNeverOpensBranches() throws {

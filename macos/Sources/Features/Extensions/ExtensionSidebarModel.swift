@@ -19,9 +19,9 @@ enum LosttyExtension: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 
     /// The extensions `channel` offers, in sidebar order: Branches is beta
-    /// only.
-    static func available(in channel: LosttyChannel) -> [LosttyExtension] {
-        allCases.filter { $0 != .branches || channel.hasBranches }
+    /// only, and Skins is hidden while skins are off.
+    static func available(in channel: LosttyChannel, skinsPaused: Bool = SkinsRuntime.paused) -> [LosttyExtension] {
+        allCases.filter { ($0 != .branches || channel.hasBranches) && ($0 != .skins || !skinsPaused) }
     }
 
     var title: String {
@@ -99,10 +99,11 @@ final class ExtensionSidebarModel: ObservableObject {
     let showsNotifications: Bool
 
     init(
-        branches: BranchesModel? = nil, channel: LosttyChannel = .current, notifications: Bool = true
+        branches: BranchesModel? = nil, channel: LosttyChannel = .current, notifications: Bool = true,
+        skinsPaused: Bool = SkinsRuntime.paused
     ) {
         self.branches = branches ?? BranchesModel()
-        available = LosttyExtension.available(in: channel)
+        available = LosttyExtension.available(in: channel, skinsPaused: skinsPaused)
         showsNotifications = notifications
         tasksWatch = PaneTasks.shared.$lists.combineLatest($focusedSurfaceID)
             .sink { [weak self] lists, pane in

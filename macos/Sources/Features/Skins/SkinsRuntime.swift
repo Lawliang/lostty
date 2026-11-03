@@ -104,6 +104,10 @@ enum SkinsLocation {
 final class SkinsRuntime {
     static let shared = SkinsRuntime()
 
+    /// Skins are off during the UI revamp, to be rebuilt after it: every
+    /// pane has the default look and the Skins app is hidden.
+    static let paused = true
+
     /// `~/.config/lostty/skins` (see `SkinsLocation`), resolved once.
     static let configDir: URL = SkinsLocation.configDir(home: URL(fileURLWithPath: NSHomeDirectory()))
 
@@ -135,6 +139,7 @@ final class SkinsRuntime {
             textures: textures,
             catalogURL: Self.configDir.appendingPathComponent("state/catalog.json"),
             apply: { id, applied in applier.apply(id, applied) })
+        manager.paused = Self.paused
         manager.updateConfig(store.config, error: store.error)
         store.onChange = { [weak self] in
             guard let self else { return }
