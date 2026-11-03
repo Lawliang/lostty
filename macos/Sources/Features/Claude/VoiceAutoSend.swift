@@ -129,7 +129,7 @@ final class VoiceAutoSend: ObservableObject {
         guard keyMonitor == nil else { return }
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             let characters = event.characters
-            let plain = event.modifierFlags.intersection([.command, .control, .option]).isEmpty
+            let plain = event.modifierFlags.isDisjoint(with: [.command, .control, .option])
             let keep = MainActor.assumeIsolated { VoiceAutoSend.shared.keyDown(characters, plain: plain) }
             return keep ? nil : event
         }
