@@ -892,11 +892,14 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         if window?.isKeyWindow == true { Ghostty.moveFocus(to: surface) }
     }
 
-    /// Shows the canvas and pans just enough to bring `card` into view.
+    /// Shows the canvas and glides just enough to bring `card` into view,
+    /// where a glide under way won't show it already.
     func reveal(_ card: CardController) {
         if window?.isVisible != true { showWindow(nil) }
-        guard let view = views[card.id] else { return }
-        view.scrollToVisible(view.bounds)
+        guard let frame = model.card(card.id)?.frame else { return }
+        let target = glide?.to ?? currentView
+        let shown = CanvasZoom.view(showing: frame, from: target, size: scrollView.contentView.frame.size)
+        if shown != target { glide(to: shown) }
     }
 
     /// Move to Window: the card's panes become a normal window; nothing restarts.
@@ -1176,13 +1179,9 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
 
     /// `rect` in view, zoomed no closer than `atMost`.
     func zoomToFit(_ rect: CGRect, atMost cap: CGFloat = CanvasZoom.maximum) {
-        stopGlide()
-        scrollView.magnify(toFit: rect)
-        if scrollView.magnification > cap {
-            scrollView.magnification = cap
-            center(on: CGPoint(x: rect.midX, y: rect.midY))
-        }
-        settleZoom()
+        let size = scrollView.contentView.frame.size
+        let fit = min(size.width / rect.width, size.height / rect.height)
+        glide(to: CanvasView(center: CGPoint(x: rect.midX, y: rect.midY), zoom: min(fit, cap)))
     }
 
     /// ⌃⌘1, double-clicking a header, the green button: glides to `card`
