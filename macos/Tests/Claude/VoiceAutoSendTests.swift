@@ -9,9 +9,9 @@ struct VoiceAutoSendTests {
 
     @Test func readsTheBarAndWordsWhileRecording() {
         let screen = [" ▐▛███▛█   Claude Code", rule, "❯ ▃", rule, footer].joined(separator: "\n")
-        #expect(VoiceFrame.parse(screen) == VoiceFrame(words: "", ruleRow: 3, footerRow: 4))
+        #expect(VoiceFrame.parse(screen) == VoiceFrame(words: "", level: 3))
         let talking = [rule, "❯ fix the menu bar so", "  it opens ▅", rule, footer].joined(separator: "\n")
-        #expect(VoiceFrame.parse(talking) == VoiceFrame(words: "fix the menu bar so it opens", ruleRow: 3, footerRow: 4))
+        #expect(VoiceFrame.parse(talking) == VoiceFrame(words: "fix the menu bar so it opens", level: 5))
     }
 
     @Test func noFrameWhenNotRecording() {
@@ -45,32 +45,37 @@ struct VoiceAutoSendTests {
         #expect(watch.sendsAt == nil)
     }
 
-    @Test func holdWaitsForMoreWords() {
+    @Test func maybeSpeechNearTheEndPutsTheSendOff() {
         let start = Date()
         var watch = VoiceWatch(since: start)
-        _ = watch.update(VoiceFrame(words: "fix it"), now: start)
-        _ = watch.update(VoiceFrame(words: "fix it"), now: start + 1)
-        watch.hold(now: start + 2)
-        #expect(watch.update(VoiceFrame(words: "fix it"), now: start + 10) == .wait)
+        _ = watch.update(VoiceFrame(words: "fix it", level: 2), now: start)
+        _ = watch.update(VoiceFrame(words: "fix it", level: 2), now: start + 1)
+        #expect(watch.sendsAt == start + 4)
+        // You start again just before it sends: the bar jumps before any word lands.
+        #expect(watch.update(VoiceFrame(words: "fix it", level: 5), now: start + 3.9) == .wait)
+        #expect(watch.update(VoiceFrame(words: "fix it", level: 2), now: start + 4.5) == .wait)
+        // Its words arrive in time, and nothing sends.
+        _ = watch.update(VoiceFrame(words: "fix it and also", level: 3), now: start + 5)
         #expect(watch.sendsAt == nil)
-        _ = watch.update(VoiceFrame(words: "fix it now"), now: start + 11)
-        _ = watch.update(VoiceFrame(words: "fix it now"), now: start + 12)
-        #expect(watch.sendsAt == start + 15)
     }
 
-    @Test func touchUpsAfterAHoldDontSend() {
+    @Test func roomNoiseDoesntPutTheSendOff() {
         let start = Date()
         var watch = VoiceWatch(since: start)
-        _ = watch.update(VoiceFrame(words: "fix the menu"), now: start)
-        _ = watch.update(VoiceFrame(words: "fix the menu"), now: start + 1)
-        watch.hold(now: start + 2)
-        // The last word lands just after the hold, then Claude fixes punctuation.
-        _ = watch.update(VoiceFrame(words: "fix the menu bar"), now: start + 2.5)
-        _ = watch.update(VoiceFrame(words: "Fix the menu bar."), now: start + 5)
-        for second in 6..<20 {
-            #expect(watch.update(VoiceFrame(words: "Fix the menu bar."), now: start + Double(second)) == .wait)
-        }
-        #expect(watch.sendsAt == nil)
+        _ = watch.update(VoiceFrame(words: "fix it", level: 3), now: start)
+        _ = watch.update(VoiceFrame(words: "fix it", level: 2), now: start + 1)
+        #expect(watch.update(VoiceFrame(words: "fix it", level: 3), now: start + 3) == .wait)
+        #expect(watch.update(VoiceFrame(words: "fix it", level: 2), now: start + 4) == .send)
+    }
+
+    @Test func aNoiseWithNoWordsStillSendsAfterListening() {
+        let start = Date()
+        var watch = VoiceWatch(since: start)
+        _ = watch.update(VoiceFrame(words: "fix it", level: 1), now: start)
+        _ = watch.update(VoiceFrame(words: "fix it", level: 1), now: start + 1)
+        _ = watch.update(VoiceFrame(words: "fix it", level: 6), now: start + 3.5)
+        #expect(watch.update(VoiceFrame(words: "fix it", level: 1), now: start + 5) == .wait)
+        #expect(watch.update(VoiceFrame(words: "fix it", level: 1), now: start + 5.5) == .send)
     }
 
     @Test func silenceFromTheStartNeverSends() {
