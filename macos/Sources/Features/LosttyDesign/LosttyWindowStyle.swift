@@ -65,9 +65,10 @@ enum LosttyWindowStyle {
         ghostty_config_load_file(cfg, url.path)
     }
 
-    /// The mockup's terminal: its text, background and dim text, with the
-    /// ANSI colors in the same tone.
+    /// The mockup's terminal: its 12.5pt text, its colors and dim text,
+    /// with the ANSI colors in the same tone.
     private static let mockupColors = """
+        font-size = 12.5
         background = #17141B
         foreground = #E8E2EE
         cursor-color = #E8E2EE

@@ -383,8 +383,9 @@ final class CanvasGridView: NSView {
 }
 
 /// The grid with the scroll view over it, over that the selection's
-/// outline, and over that the + button, the selection's bar, the dock and
-/// the notification stack, pinned to the window's edges at every zoom.
+/// outline, and over that the + button, the selection's bar, the dock, the
+/// zoom meter and the notification stack, pinned to the window's edges at
+/// every zoom.
 final class CanvasSurfaceView: NSView {
     let scrollView = CanvasScrollView(frame: .zero)
     let selection = CanvasSelectionView()
@@ -395,6 +396,8 @@ final class CanvasSurfaceView: NSView {
     let zones = CanvasZoneLayer(frame: NSRect(x: 0, y: 0, width: CanvasModel.size, height: CanvasModel.size))
     private let grid = CanvasGridView(frame: .zero)
     private let notifications = CanvasNotificationsView(rootView: NotificationStackView())
+    private let zoomState = CanvasZoomMeterState()
+    private lazy var zoomMeter = PassthroughHostingView(rootView: CanvasZoomMeter(state: zoomState))
 
     init() {
         super.init(frame: .zero)
@@ -409,6 +412,9 @@ final class CanvasSurfaceView: NSView {
         addSubview(selectionBar)
         addSubview(addMenu)
         addSubview(dock)
+        zoomMeter.sizingOptions = [.intrinsicContentSize]
+        zoomMeter.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(zoomMeter)
         // As big as its bubbles, at the top right.
         notifications.sizingOptions = [.intrinsicContentSize]
         notifications.translatesAutoresizingMaskIntoConstraints = false
@@ -416,6 +422,8 @@ final class CanvasSurfaceView: NSView {
         NSLayoutConstraint.activate([
             notifications.topAnchor.constraint(equalTo: topAnchor),
             notifications.trailingAnchor.constraint(equalTo: trailingAnchor),
+            zoomMeter.topAnchor.constraint(equalTo: topAnchor),
+            zoomMeter.trailingAnchor.constraint(equalTo: trailingAnchor),
         ])
         NotificationCenter.default.addObserver(
             self, selector: #selector(canvasMoved), name: NSView.boundsDidChangeNotification, object: scrollView.contentView)
@@ -465,6 +473,7 @@ final class CanvasSurfaceView: NSView {
     }
 
     @objc private func canvasMoved() {
+        zoomState.zoomed(to: scrollView.magnification)
         grid.update()
         selection.needsDisplay = true
         needsLayout = true
