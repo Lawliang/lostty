@@ -1,13 +1,14 @@
 #if os(macOS)
 import AppKit
 import Foundation
+import os
 
 /// What a Claude pane shows while it records a dictation in tap mode:
-/// the words in its input box so far and its sound-level bar (1, quiet,
-/// to 8, loud; nil when Claude draws no bar).
+/// the words in its input box so far, which Claude fills in as you talk.
+/// Its sound-level bar is left out: room noise keeps it from ever
+/// reading quiet.
 struct VoiceFrame: Equatable {
     var words: String
-    var level: Int?
 
     static let marker = "REC · tap to send"
     static let bars: [Character] = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"]
@@ -22,17 +23,16 @@ struct VoiceFrame: Equatable {
             if index > 0 && line.hasPrefix("─") { break }
             text.append(index == 0 ? String(line.dropFirst()) : line)
         }
-        let joined = text.joined(separator: " ")
-        let level = joined.last { bars.contains($0) }.flatMap { bars.firstIndex(of: $0) }.map { $0 + 1 }
-        let words = joined.filter { !bars.contains($0) }
+        let words = text.joined(separator: " ")
+            .filter { !bars.contains($0) }
             .split(whereSeparator: \.isWhitespace)
             .joined(separator: " ")
-        return VoiceFrame(words: words, level: level)
+        return VoiceFrame(words: words)
     }
 }
 
-/// One pane's dictation, from its voice key on: once you've spoken and
-/// gone quiet for `quiet` seconds, a `countdown` starts, and when it runs
+/// One pane's dictation, from its voice key on: once words have come in
+/// and none has for `quiet` seconds, a `countdown` starts, and when it runs
 /// out Lostty sends the message. Speaking again calls the countdown off,
 /// and so does `hold()` (the voice key pressed during it) until you speak
 /// again.
@@ -63,7 +63,7 @@ struct VoiceWatch: Equatable {
             return now.timeIntervalSince(seen ?? since) > limit ? .stop : .wait
         }
         seen = now
-        if frame.words != words || (frame.level ?? 1) > 1 {
+        if frame.words != words {
             words = frame.words
             heard = now
             sendsAt = nil
@@ -113,6 +113,7 @@ enum VoiceKeys {
 final class VoiceAutoSend: ObservableObject {
     static let shared = VoiceAutoSend()
     static let tick: TimeInterval = 0.25
+    private static let log = Logger(subsystem: "com.lawliang.lostty", category: "voice")
 
     /// Panes counting down, with when each sends.
     @Published private(set) var countdowns: [UUID: Date] = [:]
@@ -158,6 +159,7 @@ final class VoiceAutoSend: ObservableObject {
         }
         if isVoiceKey && watches[view.id] == nil {
             watches[view.id] = VoiceWatch(since: Date())
+            Self.log.notice("voice key in pane \(view.id.uuidString, privacy: .public): watching")
             startTimer()
         }
         return false
@@ -189,6 +191,7 @@ final class VoiceAutoSend: ObservableObject {
             }
             let step = watch.update(VoiceFrame.parse(TicketDelivery.screen(of: view)), now: now)
             watches[pane] = step == .wait ? watch : nil
+            if step != .wait { Self.log.notice("pane \(pane.uuidString, privacy: .public): \(String(describing: step), privacy: .public)") }
             if step == .send { send(view) }
             publish(pane)
         }
@@ -207,7 +210,9 @@ final class VoiceAutoSend: ObservableObject {
 
     private func publish(_ pane: UUID) {
         let sendsAt = watches[pane]?.sendsAt
-        if countdowns[pane] != sendsAt { countdowns[pane] = sendsAt }
+        guard countdowns[pane] != sendsAt else { return }
+        countdowns[pane] = sendsAt
+        Self.log.notice("pane \(pane.uuidString, privacy: .public): countdown \(sendsAt == nil ? "off" : "on", privacy: .public)")
     }
 }
 #endif

@@ -9,9 +9,9 @@ struct VoiceAutoSendTests {
 
     @Test func readsTheBarAndWordsWhileRecording() {
         let screen = [" ▐▛███▛█   Claude Code", rule, "❯ ▃", rule, footer].joined(separator: "\n")
-        #expect(VoiceFrame.parse(screen) == VoiceFrame(words: "", level: 3))
+        #expect(VoiceFrame.parse(screen) == VoiceFrame(words: ""))
         let talking = [rule, "❯ fix the menu bar so", "  it opens ▅", rule, footer].joined(separator: "\n")
-        #expect(VoiceFrame.parse(talking) == VoiceFrame(words: "fix the menu bar so it opens", level: 5))
+        #expect(VoiceFrame.parse(talking) == VoiceFrame(words: "fix the menu bar so it opens"))
     }
 
     @Test func noFrameWhenNotRecording() {
@@ -20,40 +20,40 @@ struct VoiceAutoSendTests {
         #expect(VoiceFrame.parse(screen) == nil)
     }
 
-    @Test func quietAfterSpeechCountsDownThenSends() {
+    @Test func noNewWordsCountsDownThenSends() {
         let start = Date()
         var watch = VoiceWatch(since: start)
-        #expect(watch.update(VoiceFrame(words: "", level: 1), now: start) == .wait)
+        #expect(watch.update(VoiceFrame(words: ""), now: start) == .wait)
+        #expect(watch.update(VoiceFrame(words: "Just"), now: start + 1) == .wait)
+        #expect(watch.update(VoiceFrame(words: "Just testing"), now: start + 1.5) == .wait)
+        #expect(watch.update(VoiceFrame(words: "Just testing"), now: start + 2) == .wait)
         #expect(watch.sendsAt == nil)
-        #expect(watch.update(VoiceFrame(words: "", level: 5), now: start + 1) == .wait)
-        #expect(watch.update(VoiceFrame(words: "", level: 1), now: start + 1.5) == .wait)
-        #expect(watch.sendsAt == nil)
-        #expect(watch.update(VoiceFrame(words: "", level: 1), now: start + 2) == .wait)
-        #expect(watch.sendsAt == start + 5)
-        #expect(watch.update(VoiceFrame(words: "", level: 1), now: start + 4) == .wait)
-        #expect(watch.update(VoiceFrame(words: "", level: 1), now: start + 5) == .send)
+        #expect(watch.update(VoiceFrame(words: "Just testing"), now: start + 2.5) == .wait)
+        #expect(watch.sendsAt == start + 5.5)
+        #expect(watch.update(VoiceFrame(words: "Just testing"), now: start + 4) == .wait)
+        #expect(watch.update(VoiceFrame(words: "Just testing"), now: start + 5.5) == .send)
     }
 
-    @Test func talkingAgainCallsTheCountdownOff() {
+    @Test func newWordsCallTheCountdownOff() {
         let start = Date()
         var watch = VoiceWatch(since: start)
-        _ = watch.update(VoiceFrame(words: "", level: 4), now: start)
-        _ = watch.update(VoiceFrame(words: "", level: 1), now: start + 1)
+        _ = watch.update(VoiceFrame(words: "fix it"), now: start)
+        _ = watch.update(VoiceFrame(words: "fix it"), now: start + 1)
         #expect(watch.sendsAt != nil)
-        _ = watch.update(VoiceFrame(words: "and also", level: 1), now: start + 2)
+        _ = watch.update(VoiceFrame(words: "fix it and also"), now: start + 2)
         #expect(watch.sendsAt == nil)
     }
 
-    @Test func holdWaitsUntilYouSpeakAgain() {
+    @Test func holdWaitsForMoreWords() {
         let start = Date()
         var watch = VoiceWatch(since: start)
-        _ = watch.update(VoiceFrame(words: "", level: 4), now: start)
-        _ = watch.update(VoiceFrame(words: "", level: 1), now: start + 1)
+        _ = watch.update(VoiceFrame(words: "fix it"), now: start)
+        _ = watch.update(VoiceFrame(words: "fix it"), now: start + 1)
         watch.hold()
-        #expect(watch.update(VoiceFrame(words: "", level: 1), now: start + 10) == .wait)
+        #expect(watch.update(VoiceFrame(words: "fix it"), now: start + 10) == .wait)
         #expect(watch.sendsAt == nil)
-        _ = watch.update(VoiceFrame(words: "", level: 6), now: start + 11)
-        _ = watch.update(VoiceFrame(words: "", level: 1), now: start + 12)
+        _ = watch.update(VoiceFrame(words: "fix it now"), now: start + 11)
+        _ = watch.update(VoiceFrame(words: "fix it now"), now: start + 12)
         #expect(watch.sendsAt == start + 15)
     }
 
@@ -61,7 +61,7 @@ struct VoiceAutoSendTests {
         let start = Date()
         var watch = VoiceWatch(since: start)
         for second in 0..<20 {
-            #expect(watch.update(VoiceFrame(words: "", level: 1), now: start + Double(second)) == .wait)
+            #expect(watch.update(VoiceFrame(words: ""), now: start + Double(second)) == .wait)
         }
         #expect(watch.sendsAt == nil)
     }
@@ -72,7 +72,7 @@ struct VoiceAutoSendTests {
         #expect(watch.update(nil, now: start + 4) == .wait)
         #expect(watch.update(nil, now: start + 6) == .stop)
         var recording = VoiceWatch(since: start)
-        _ = recording.update(VoiceFrame(words: "", level: 1), now: start)
+        _ = recording.update(VoiceFrame(words: ""), now: start)
         #expect(recording.update(nil, now: start + 0.5) == .wait)
         #expect(recording.update(nil, now: start + 1.5) == .stop)
     }
