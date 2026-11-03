@@ -1,6 +1,7 @@
 #if os(macOS)
 import AppKit
 import Foundation
+import GhosttyKit
 import os
 
 /// What a Claude pane shows while it records a dictation in tap mode:
@@ -9,6 +10,9 @@ import os
 /// reading quiet.
 struct VoiceFrame: Equatable {
     var words: String
+    /// Screen rows of the input box's bottom line and of the footer.
+    var ruleRow: Int?
+    var footerRow: Int?
 
     static let marker = "REC · tap to send"
     static let bars: [Character] = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"]
@@ -19,15 +23,19 @@ struct VoiceFrame: Equatable {
         guard let footer = lines.lastIndex(where: { $0.contains(marker) }),
               let start = lines[..<footer].lastIndex(where: { $0.hasPrefix("❯") }) else { return nil }
         var text: [String] = []
+        var rule: Int?
         for (index, line) in lines[start..<footer].enumerated() {
-            if index > 0 && line.hasPrefix("─") { break }
+            if index > 0 && line.hasPrefix("─") {
+                rule = start + index
+                break
+            }
             text.append(index == 0 ? String(line.dropFirst()) : line)
         }
         let words = text.joined(separator: " ")
             .filter { !bars.contains($0) }
             .split(whereSeparator: \.isWhitespace)
             .joined(separator: " ")
-        return VoiceFrame(words: words)
+        return VoiceFrame(words: words, ruleRow: rule, footerRow: footer)
     }
 }
 
@@ -56,6 +64,8 @@ struct VoiceWatch: Equatable {
     var heard: Date?
     var seen: Date?
     var sendsAt: Date?
+    var ruleRow: Int?
+    var footerRow: Int?
     /// The word count when you held, and when.
     var heldCount: Int?
     var heldAt: Date?
@@ -69,6 +79,8 @@ struct VoiceWatch: Equatable {
             return now.timeIntervalSince(seen ?? since) > limit ? .stop : .wait
         }
         seen = now
+        ruleRow = frame.ruleRow
+        footerRow = frame.footerRow
         if frame.words != words {
             words = frame.words
             heard = now
@@ -125,6 +137,26 @@ enum VoiceKeys {
     }
 }
 
+/// A pane's countdown as its badge draws it: when it sends, and where
+/// Claude's input box line and footer sit in the pane (points from its
+/// top left), when Lostty could find them.
+struct VoiceCountdown: Equatable {
+    var sendsAt: Date
+    var ruleY: CGFloat?
+    var footerY: CGFloat?
+    var left: CGFloat = 0
+    var key = "`"
+
+    /// 1 at the start, 0 when it sends.
+    func remaining(at date: Date) -> Double {
+        min(1, max(0, sendsAt.timeIntervalSince(date) / VoiceWatch.countdown))
+    }
+
+    func secondsLeft(at date: Date) -> Int {
+        max(1, Int(sendsAt.timeIntervalSince(date).rounded(.up)))
+    }
+}
+
 /// Sends a Claude dictation by itself when you stop talking (VoiceWatch),
 /// so you can talk and move on to another terminal. It looks at a pane
 /// only after its voice key, and only until the recording ends.
@@ -134,8 +166,8 @@ final class VoiceAutoSend: ObservableObject {
     static let tick: TimeInterval = 0.25
     private static let log = Logger(subsystem: "com.lawliang.lostty", category: "voice")
 
-    /// Panes counting down, with when each sends.
-    @Published private(set) var countdowns: [UUID: Date] = [:]
+    /// Panes counting down.
+    @Published private(set) var countdowns: [UUID: VoiceCountdown] = [:]
 
     private var watches: [UUID: VoiceWatch] = [:]
     private var timer: Timer?
@@ -212,7 +244,7 @@ final class VoiceAutoSend: ObservableObject {
             watches[pane] = step == .wait ? watch : nil
             if step != .wait { Self.log.notice("pane \(pane.uuidString, privacy: .public): \(String(describing: step), privacy: .public)") }
             if step == .send { send(view) }
-            publish(pane)
+            publish(pane, view: view)
         }
         if watches.isEmpty {
             timer?.invalidate()
@@ -227,11 +259,31 @@ final class VoiceAutoSend: ObservableObject {
         _ = view.surfaceModel?.perform(action: TicketDelivery.textAction(key))
     }
 
-    private func publish(_ pane: UUID) {
-        let sendsAt = watches[pane]?.sendsAt
-        guard countdowns[pane] != sendsAt else { return }
-        countdowns[pane] = sendsAt
-        Self.log.notice("pane \(pane.uuidString, privacy: .public): countdown \(sendsAt == nil ? "off" : "on", privacy: .public)")
+    private func publish(_ pane: UUID, view: Ghostty.SurfaceView? = nil) {
+        guard let watch = watches[pane], let sendsAt = watch.sendsAt else {
+            if countdowns[pane] != nil { countdowns[pane] = nil }
+            return
+        }
+        guard countdowns[pane]?.sendsAt != sendsAt, let view = view ?? ContextHandoffWiring.surface(pane) else { return }
+        let rule = watch.ruleRow.flatMap { Self.rowCentre(view, row: $0) }
+        let footer = watch.footerRow.flatMap { Self.rowCentre(view, row: $0) }
+        let key = voiceKeys().sorted().first.map { $0 == " " ? "space" : $0 } ?? "`"
+        countdowns[pane] = VoiceCountdown(
+            sendsAt: sendsAt, ruleY: rule?.y, footerY: footer?.y, left: rule?.x ?? footer?.x ?? 0, key: key)
+    }
+
+    /// The middle of a screen row, and its left edge, in the pane's
+    /// points: Ghostty reports a read's baseline, about 0.3 of a row
+    /// below the middle.
+    private static func rowCentre(_ view: Ghostty.SurfaceView, row: Int) -> CGPoint? {
+        guard let surface = view.surface, row >= 0 else { return nil }
+        let point = ghostty_point_s(tag: GHOSTTY_POINT_VIEWPORT, coord: GHOSTTY_POINT_COORD_EXACT, x: 0, y: UInt32(row))
+        var text = ghostty_text_s()
+        let selection = ghostty_selection_s(top_left: point, bottom_right: point, rectangle: false)
+        guard ghostty_surface_read_text(surface, selection, &text) else { return nil }
+        defer { ghostty_surface_free_text(surface, &text) }
+        guard text.tl_px_y >= 0 else { return nil }
+        return CGPoint(x: text.tl_px_x, y: text.tl_px_y - view.cellSize.height * 0.3)
     }
 }
 #endif

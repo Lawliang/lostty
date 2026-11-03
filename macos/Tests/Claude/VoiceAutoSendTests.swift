@@ -9,9 +9,9 @@ struct VoiceAutoSendTests {
 
     @Test func readsTheBarAndWordsWhileRecording() {
         let screen = [" ▐▛███▛█   Claude Code", rule, "❯ ▃", rule, footer].joined(separator: "\n")
-        #expect(VoiceFrame.parse(screen) == VoiceFrame(words: ""))
+        #expect(VoiceFrame.parse(screen) == VoiceFrame(words: "", ruleRow: 3, footerRow: 4))
         let talking = [rule, "❯ fix the menu bar so", "  it opens ▅", rule, footer].joined(separator: "\n")
-        #expect(VoiceFrame.parse(talking) == VoiceFrame(words: "fix the menu bar so it opens"))
+        #expect(VoiceFrame.parse(talking) == VoiceFrame(words: "fix the menu bar so it opens", ruleRow: 3, footerRow: 4))
     }
 
     @Test func noFrameWhenNotRecording() {

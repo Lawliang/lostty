@@ -252,7 +252,7 @@ extension Ghostty {
                 ContextHandoffCountdownCard(surfaceID: surfaceView.id)
 
                 // Lostty: a dictation about to send itself, with Keep talking.
-                VoiceAutoSendBadge(surfaceID: surfaceView.id)
+                VoiceAutoSendBadge(surfaceID: surfaceView.id, cellSize: surfaceView.cellSize)
 
                 // Grab handle for dragging the window. We want this to appear at the very
                 // top Z-index os it isn't faded by the unfocused overlay.
