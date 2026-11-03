@@ -40,7 +40,7 @@ struct VoiceFrame: Equatable {
 /// count.
 struct VoiceWatch: Equatable {
     static let quiet: TimeInterval = 1
-    static let countdown: TimeInterval = 3
+    static let countdown: TimeInterval = 5
     /// How long Claude may take to start recording after the key.
     static let warmup: TimeInterval = 5
     /// How long the recording mark may be missing (a frame mid-redraw)

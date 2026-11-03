@@ -29,9 +29,10 @@ struct VoiceAutoSendTests {
         #expect(watch.update(VoiceFrame(words: "Just testing"), now: start + 2) == .wait)
         #expect(watch.sendsAt == nil)
         #expect(watch.update(VoiceFrame(words: "Just testing"), now: start + 2.5) == .wait)
-        #expect(watch.sendsAt == start + 5.5)
+        #expect(watch.sendsAt == start + 7.5)
         #expect(watch.update(VoiceFrame(words: "Just testing"), now: start + 4) == .wait)
-        #expect(watch.update(VoiceFrame(words: "Just testing"), now: start + 5.5) == .send)
+        #expect(watch.update(VoiceFrame(words: "Just testing"), now: start + 6) == .wait)
+        #expect(watch.update(VoiceFrame(words: "Just testing"), now: start + 7.5) == .send)
     }
 
     @Test func newWordsCallTheCountdownOff() {
@@ -54,7 +55,7 @@ struct VoiceAutoSendTests {
         #expect(watch.sendsAt == nil)
         _ = watch.update(VoiceFrame(words: "fix it now"), now: start + 11)
         _ = watch.update(VoiceFrame(words: "fix it now"), now: start + 12)
-        #expect(watch.sendsAt == start + 15)
+        #expect(watch.sendsAt == start + 17)
     }
 
     @Test func touchUpsAfterAHoldDontSend() {
