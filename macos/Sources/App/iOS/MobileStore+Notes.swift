@@ -42,7 +42,13 @@ extension MobileStore {
         let unread = shownNotes.filter { !$0.read }.map(\.id)
         if !unread.isEmpty { send(.read(unread)) }
     }
+    func markNotesUnread(_ ids: [UUID]) { send(.unread(ids)) }
     func deleteNotes(_ ids: [UUID]) { send(.delete(ids)) }
+    /// The read notes this phone shows.
+    func clearReadNotes() {
+        let read = shownNotes.filter(\.read).map(\.id)
+        if !read.isEmpty { send(.delete(read)) }
+    }
 
     func setDelivery(_ delivery: NoteDelivery, for kind: LosttyNote.Kind) {
         noteSettings[kind] = delivery

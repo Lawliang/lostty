@@ -10,6 +10,7 @@ struct SessionsScreen: View {
     @EnvironmentObject private var store: MobileStore
     @EnvironmentObject private var ghostty: Ghostty.App
     @Environment(\.displayScale) private var displayScale
+    @Environment(\.openURL) private var openURL
     /// Shows the Settings tab (the welcome's Settings button).
     var openSettings: () -> Void = {}
     @State private var path: [String] = []
@@ -93,7 +94,9 @@ struct SessionsScreen: View {
                 if route == Self.creatingRoute, open == nil, let creating {
                     CreatingTerminalScreen(request: creating) { openMade($0) }
                 } else if let open {
+                    // A banner can open another terminal over this one.
                     TerminalScreen(session: open.session, surfaceView: open.view, io: open.io, link: open.link)
+                        .id(open.session.id)
                 }
             }
             .sheet(isPresented: $showNewTerminal) {
@@ -131,6 +134,7 @@ struct SessionsScreen: View {
                 // trace follows the session's state from it.
             }
         }
+        .modifier(NoteBanner(openSessionID: open?.session.id, open: openNote))
     }
 
     private var sessionList: some View {
@@ -238,6 +242,17 @@ struct SessionsScreen: View {
             return
         }
         open = (session, terminal.view, terminal.io, terminal.link)
+    }
+
+    /// A note's banner tapped: as tapping the note in 🔔.
+    private func openNote(_ note: LosttyNote) {
+        store.markNotesRead([note.id])
+        switch note.kind {
+        case .waiting:
+            if let session = store.sessions.first(where: { $0.id == note.sessionID }) { openTerminal(session) }
+        case .build:
+            if let url = note.build.flatMap({ URL(string: $0.installURL) }) { openURL(url) }
+        }
     }
 
     /// Opens `session`'s terminal: a row's tap, or a note's.

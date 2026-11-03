@@ -43,7 +43,6 @@ struct ClaudeUsageTests {
         #expect(runtime.contexts[other] == nil)
         #expect(runtime.percent(.session) == 12)
         #expect(runtime.percent(.weekly) == nil)
-        #expect(runtime.percent(.weeklyFable) == nil)
     }
 
     @Test func aReportWithoutNumbersStillMarksASession() {
@@ -80,14 +79,11 @@ struct ClaudeUsageTests {
         #expect(runtime.percent(.session) == 0)
     }
 
-    @Test func trackedMetricAndLimitsSurviveARelaunch() {
+    @Test func limitsSurviveARelaunch() {
         let defaults = makeDefaults()
         let first = ClaudeUsageRuntime(defaults: defaults)
-        #expect(first.tracked == .session)
-        first.tracked = .weekly
         first.userVarChanged(pane, name: "LOSTTY_USAGE", value: #"{"v":1,"week":{"pct":33,"reset":9999999999}}"#)
         let second = ClaudeUsageRuntime(defaults: defaults)
-        #expect(second.tracked == .weekly)
         #expect(second.sevenDay?.percent == 33)
     }
 
@@ -96,12 +92,6 @@ struct ClaudeUsageTests {
         #expect(ClaudeUsageFormat.thousands(43_490) == "43K")
         #expect(ClaudeUsageFormat.thousands(300) == "0K")
         #expect(ClaudeUsageFormat.thousands(1_234_000) == "1,234K")
-    }
-
-    @Test func aTrackedContextFromBeforeFallsBackToTheSession() {
-        let defaults = makeDefaults()
-        defaults.set("context", forKey: "LosttyUsageTracked")
-        #expect(ClaudeUsageRuntime(defaults: defaults).tracked == .session)
     }
 
     @Test func formatsResets() {

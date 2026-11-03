@@ -199,16 +199,18 @@ extension CanvasModel {
     }
 
     /// What each project's manager is told of the tickets that became
-    /// blocked between `old` and `new`, when it sits inside its project as
-    /// `panes` has it: "TB-8 · Onboarding is blocked: <reason>".
-    func blockedNotes(from old: [CanvasTicket], to new: [CanvasTicket], panes: CanvasPaneZones) -> [(manager: UUID, text: String)] {
+    /// blocked or ready for review between `old` and `new`, when it sits
+    /// inside its project as `panes` has it: "TB-8 · Onboarding is
+    /// blocked: <reason>", "TB-7 · Login is ready for review: <note>".
+    func managerNotes(from old: [CanvasTicket], to new: [CanvasTicket], panes: CanvasPaneZones) -> [(manager: UUID, text: String)] {
         new.compactMap { ticket in
-            guard ticket.state == .blocked, let key = ticket.key,
-                  let before = old.first(where: { $0.key == key }), before.state != .blocked,
+            guard [.blocked, .review].contains(ticket.state), let key = ticket.key,
+                  let before = old.first(where: { $0.key == key }), before.state != ticket.state,
                   let id = ticket.zone, let feature = zone(id), let project = projectZone(id),
                   let manager = zone(project)?.manager, panes.zones[manager].flatMap(projectZone) == project else { return nil }
-            let reason = (ticket.note ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            return (manager, "\(key) · \(feature.name) is blocked" + (reason.isEmpty ? "." : ": \(reason)"))
+            let note = (ticket.note ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let what = ticket.state == .blocked ? "is blocked" : "is ready for review"
+            return (manager, "\(key) · \(feature.name) \(what)" + (note.isEmpty ? "." : ": \(note)"))
         }
     }
 

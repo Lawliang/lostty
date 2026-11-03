@@ -111,8 +111,10 @@ enum TicketDelivery {
         return faint
     }
 
+    /// A line of `─`, or one with a session's name near its end, as
+    /// Claude draws the rule over its box when the session has a name.
     private static func isRule(_ line: String) -> Bool {
-        line.count >= 10 && line.allSatisfy { $0 == "─" }
+        line.count >= 10 && line.prefix(10).allSatisfy { $0 == "─" } && line.last == "─"
     }
 
     private static func isSpinner(_ line: String) -> Bool {
