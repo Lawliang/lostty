@@ -1202,12 +1202,14 @@ extension Ghostty {
         override func scrollWheel(with event: NSEvent) {
             // Lostty Canvas: scrolling over the focused pane on a card scrolls
             // it, and over any other pane pans the canvas; ⌥ swaps the two,
-            // and ⌘ zooms the canvas over any pane. Decided as the scroll
-            // starts (CanvasScrollView.scrollingPane).
+            // ⌘ zooms the canvas over any pane, and a scroll soon after the
+            // canvas panned pans it on. Decided as the scroll starts
+            // (CanvasScrollView.scrollingPane).
             if let canvas = canvasScrollView {
                 if CanvasScrollView.startsScroll(event) {
                     let focused = window?.firstResponder === self
                     let mine = focused != event.modifierFlags.contains(.option) && !event.modifierFlags.contains(.command)
+                        && !canvas.panCarriesOn()
                     canvas.scrollingPane = mine ? self : nil
                     canvas.scrollingTicket = nil
                 }

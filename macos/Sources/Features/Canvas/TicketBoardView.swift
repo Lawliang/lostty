@@ -211,6 +211,7 @@ final class TicketBoardHost: NSHostingView<TicketBoardContent> {
             if CanvasScrollView.startsScroll(event) {
                 let focused = enclosingBoard?.isFocusedCard ?? false
                 let mine = focused != event.modifierFlags.contains(.option) && !event.modifierFlags.contains(.command)
+                    && !canvas.panCarriesOn()
                 canvas.scrollingTicket = mine ? self : nil
             }
             if canvas.scrollingTicket !== self { return enclosingBoard }
@@ -338,7 +339,7 @@ final class TicketBoardHeaderView: NSView {
     override func mouseUp(with event: NSEvent) {
         guard start != nil else { return }
         start = nil
-        canvas?.cardFrameDidSettle()
+        canvas?.endMove()
     }
 
     override func menu(for event: NSEvent) -> NSMenu? {

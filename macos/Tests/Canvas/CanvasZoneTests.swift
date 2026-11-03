@@ -11,6 +11,32 @@ struct CanvasZoneTests {
         CanvasZone(id: id, frame: frame, parent: parent)
     }
 
+    @Test func aMarqueeSelectsOnlyTheZonesItWhollyCovers() {
+        var model = CanvasModel()
+        model.addZone(zone(project, CGRect(x: 1000, y: 1000, width: 2000, height: 1000)))
+        model.addZone(zone(domain, CGRect(x: 1100, y: 1100, width: 600, height: 400), in: project))
+        #expect(model.zones(within: CGRect(x: 900, y: 900, width: 2200, height: 1200)) == [project, domain])
+        // Over most of the project but not all of it: only the domain.
+        #expect(model.zones(within: CGRect(x: 1050, y: 1050, width: 1000, height: 1000)) == [domain])
+        #expect(model.zones(within: CGRect(x: 1050, y: 1050, width: 300, height: 300)).isEmpty)
+    }
+
+    @Test func selectedZonesMoveWithTheirDomainsButNotTheirCards() {
+        var model = CanvasModel()
+        model.addZone(zone(project, CGRect(x: 1000, y: 1000, width: 2000, height: 1000)))
+        model.addZone(zone(domain, CGRect(x: 1100, y: 1100, width: 600, height: 400), in: project))
+        model.add(a, frame: CGRect(x: 1200, y: 1200, width: 400, height: 300))
+        let moved = model.shiftZones([project], by: CGSize(width: 300, height: 50))
+        #expect(moved)
+        #expect(model.zone(project)?.frame.origin == CGPoint(x: 1300, y: 1050))
+        #expect(model.zone(domain)?.frame.origin == CGPoint(x: 1400, y: 1150))
+        #expect(model.card(a)?.frame.origin == CGPoint(x: 1200, y: 1200))
+        // A domain alone can't leave its project.
+        let left = model.shiftZones([domain], by: CGSize(width: -1000, height: 0))
+        #expect(!left)
+        #expect(model.zone(domain)?.frame.origin == CGPoint(x: 1400, y: 1150))
+    }
+
     @Test func aCardIsInTheZoneHoldingItsCentre() {
         var model = CanvasModel()
         model.addZone(zone(project, CGRect(x: 0, y: 0, width: 2000, height: 1000)))

@@ -160,6 +160,14 @@ final class CardController: BaseTerminalController {
         return mark.map { "\($0) \(topic)" } ?? topic
     }
 
+    /// What Rename starts with: the title the header shows, without its
+    /// working mark, which comes and goes with Claude's work.
+    static func renameText(title: String, claim: String?, recap: String? = nil) -> String {
+        let shown = topic(title: title, claim: claim, recap: recap)
+        guard shown != title, let space = shown.firstIndex(of: " ") else { return shown }
+        return String(shown[shown.index(after: space)...])
+    }
+
     override func pwdDidChange(to: URL?) {
         guard isFocusedCard else { return }
         super.pwdDidChange(to: to)

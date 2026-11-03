@@ -79,7 +79,7 @@ final class CardHeaderView: NSView {
         guard start != nil else { return }
         start = nil
         CanvasUnmerge.shared.cancel()
-        canvas?.cardFrameDidSettle()
+        canvas?.endMove()
     }
 
     override func menu(for event: NSEvent) -> NSMenu? {

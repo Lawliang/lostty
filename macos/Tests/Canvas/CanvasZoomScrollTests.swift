@@ -42,6 +42,14 @@ struct CanvasZoomScrollTests {
         #expect(view.magnification == 1)
     }
 
+    @Test func aScrollSoonAfterAPanPansOn() {
+        let view = canvas()
+        #expect(!view.panCarriesOn())
+        swipe(view, by: 10, command: false)
+        #expect(view.panCarriesOn())
+        #expect(!view.panCarriesOn(now: Date().addingTimeInterval(CanvasScrollView.panCarry + 0.1)))
+    }
+
     @Test func meterReadsThePercent() {
         #expect(CanvasZoomMeterState.label(1) == "100%")
         #expect(CanvasZoomMeterState.label(0.755) == "76%")

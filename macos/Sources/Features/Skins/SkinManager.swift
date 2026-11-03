@@ -32,6 +32,12 @@ final class SkinManager: ObservableObject {
     @Published private(set) var configError: String?
     @Published private(set) var panes: [UUID: Pane] = [:]
     @Published private(set) var textureError: String?
+    /// While skins are off (SkinsRuntime.paused) no pane shows one, and
+    /// skinned panes go back to the default look. Panes are still tracked:
+    /// their folders feed the project pill.
+    var paused = false {
+        didSet { if paused != oldValue { for id in panes.keys { applyIfNeeded(id, force: true) } } }
+    }
 
     private let textures: TextureStore
     private let catalogURL: URL?
@@ -184,7 +190,7 @@ final class SkinManager: ObservableObject {
     func equippedName(_ id: UUID) -> String? { panes[id]?.override?.name }
 
     func effectiveSkin(_ id: UUID) -> Skin? {
-        guard let pane = panes[id] else { return nil }
+        guard !paused, let pane = panes[id] else { return nil }
         return pane.preview ?? pane.override ?? autoSkin(for: pane.source)
     }
 

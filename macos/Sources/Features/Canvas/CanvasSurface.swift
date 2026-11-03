@@ -42,6 +42,17 @@ final class CanvasScrollView: NSScrollView {
         event.phase.contains(.began) || (event.phase.isEmpty && event.momentumPhase.isEmpty)
     }
 
+    /// How long after the canvas last panned a new scroll still pans it,
+    /// over a pane or ticket list that would scroll: swipes in a row are
+    /// one move of the view.
+    static let panCarry: TimeInterval = 1
+    private var lastPan: Date?
+
+    /// Whether a scroll starting `now` carries on the pan before it.
+    func panCarriesOn(now: Date = Date()) -> Bool {
+        lastPan.map { now.timeIntervalSince($0) < Self.panCarry } ?? false
+    }
+
     override func scrollWheel(with event: NSEvent) {
         if Self.startsScroll(event) {
             // Started over the canvas, or a pane or ticket handed it on: it
@@ -146,6 +157,7 @@ final class CanvasScrollView: NSScrollView {
             settleDrawn()
             panning = true
         }
+        lastPan = Date()
         let from = drawn?.origin ?? contentView.bounds.origin
         let origin = CGPoint(x: from.x - event.scrollingDeltaX / magnification, y: from.y - event.scrollingDeltaY / magnification)
         draw(at: (origin, magnification))

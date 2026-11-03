@@ -206,6 +206,11 @@ struct CanvasModel: Equatable {
         Set(cards.filter { $0.frame.intersects(rect) }.map(\.id))
     }
 
+    /// The zones a marquee over `rect` selects: only those it wholly covers.
+    func zones(within rect: CGRect) -> Set<UUID> {
+        Set(zones.filter { rect.contains($0.frame) }.map(\.id))
+    }
+
     /// The space Re-organize leaves between cards.
     static let tidyGap: CGFloat = 14
 
@@ -398,6 +403,23 @@ extension CanvasModel {
             cards[index].frame = Self.clamped(cards[index].frame.offsetBy(dx: delta.width, dy: delta.height))
         }
         return held
+    }
+
+    /// Moves zones `ids` and their domains by `delta`, leaving the cards to
+    /// the selection they move with. False, and nothing moves, when a new
+    /// frame breaks the rules.
+    @discardableResult
+    mutating func shiftZones(_ ids: Set<UUID>, by delta: CGSize) -> Bool {
+        var moved = zones
+        var shifted: Set<UUID> = []
+        for index in moved.indices where ids.contains(moved[index].id) || moved[index].parent.map(ids.contains) == true {
+            moved[index].frame = moved[index].frame.offsetBy(dx: delta.width, dy: delta.height)
+            shifted.insert(moved[index].id)
+        }
+        guard !shifted.isEmpty, shifted.allSatisfy({ id in moved.first { $0.id == id }.map { Self.allows($0, among: moved) } == true })
+        else { return false }
+        zones = moved
+        return true
     }
 
     /// Resizes zone `id` alone: its cards and domains stay put. False, and
