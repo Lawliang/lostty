@@ -18,6 +18,13 @@ struct TicketDeliveryTests {
         #expect(TicketDelivery.input(in: claude(above: ["✻ Cooked for 3m 26s · done Saturday 6:01 PM"], box: ["❯ "])) == .empty)
     }
 
+    @Test func aNamedSessionsBoxUnderItsNamedRuleIsABox() {
+        let named = String(repeating: "─", count: 68) + " Worker · Login ─"
+        let screen = ["⏺ Done.", "", named, "❯\u{00A0}", Self.rule, Self.status, "", ""].joined(separator: "\n")
+        #expect(TicketDelivery.input(in: screen) == .empty)
+        #expect(TicketDelivery.input(in: screen.replacingOccurrences(of: "❯\u{00A0}", with: "❯ hi")) == .typed)
+    }
+
     @Test func aFreshSessionsSuggestionCountsAsEmpty() {
         #expect(TicketDelivery.input(in: claude(above: ["╰───╯"], box: ["❯\u{00A0}Try \"refactor <filepath>\""])) == .empty)
     }

@@ -66,6 +66,16 @@ struct TerminalNoticesTests {
         #expect(!center.collapsed.contains(first.id))
     }
 
+    @Test func dismissingOneLeavesTheOthers() {
+        let center = make()
+        center.awaitingChanged([p1, p2])
+        let first = notice(p1), second = notice(p2)
+        center.post(first)
+        center.post(second)
+        center.dismiss(first.id)
+        #expect(center.items.map(\.id) == [second.id])
+    }
+
     @Test func theTitleLeavesOutTheAgentsMark() {
         #expect(TerminalNotices.title("✳ Fix the login") == "Fix the login")
         #expect(TerminalNotices.title("◐ Fix the login") == "Fix the login")

@@ -198,6 +198,8 @@ struct NotesTests {
         #expect(log.notes.map(\.read) == [true, false])
         log.apply(.readAll, now: now)
         #expect(log.unreadCount == 0)
+        log.apply(.unread([log.notes[1].id]), now: now)
+        #expect(log.notes.map(\.read) == [true, false])
     }
 
     @Test func pruneDropsReadNotesAfterAWeekButKeepsUnread() {
@@ -231,7 +233,7 @@ struct NotesTests {
 
     @Test func dropsRoundTripThroughJSON() throws {
         let drops: [NoteDrop] = [
-            .read([UUID()]), .readAll, .delete([UUID(), UUID()]),
+            .read([UUID()]), .unread([UUID()]), .readAll, .delete([UUID(), UUID()]),
             .installed(bundleID: "com.lawliang.lostty-mobile", build: "202610131331"),
             .build(lostty, sessionID: "$3", terminal: "it's \"done\"", skin: skin),
             .phone(PhoneNoteSettings(phoneID: "P1", name: "iPhone 13", settings: NoteSettings(waiting: .off, build: .wave))),

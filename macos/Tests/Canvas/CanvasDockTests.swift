@@ -34,11 +34,12 @@ struct CanvasDockTests {
         #expect(CanvasDock.growth(distance: 500) == 1)
     }
 
-    @Test func eachAddMenuItemHasItsOwnKeyAndNoneIsTheDocks() {
+    @Test func eachAddMenuItemHasItsOwnKeyAndNoneIsTheDocksOrTheTicketsPanels() {
         let keys = CanvasAddMenuView.Item.allCases.map(\.key)
-        #expect(keys == ["t", "m", "z"])
+        #expect(keys == ["t", "a", "z"])
         #expect(Set(keys).count == keys.count)
         #expect(!keys.contains("d"))
+        #expect(!keys.contains("m"))
     }
 }
 #endif

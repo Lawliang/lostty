@@ -49,6 +49,12 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     var startedByHand: Set<String> = []
     /// The delivery attempt waiting to run (CanvasController+Board).
     var deliveryWork: DispatchWorkItem?
+    /// Each pane `lostty +agent open` made, with the pane that asked:
+    /// where its `+agent report` goes.
+    var agentOpeners: [UUID: UUID] = [:]
+    /// What Lostty has to tell each pane, typed in once its Claude is free
+    /// (CanvasController+Agents).
+    var agentInbox: [UUID: [String]] = [:]
     /// A new ticket's sheet left open in a panel since closed: the next
     /// panel opened takes it.
     var parkedDraft: CanvasTicket? {
@@ -213,6 +219,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         surface.zones.canvas = self
         document.typed = { [weak self] key in self?.shortcut(key) ?? false }
         surface.addMenu.chose = { [weak self] item in self?.add(item) }
+        surface.addMenu.choseAgent = { [weak self] recipe in self?.newAgent(recipe) }
         NotificationCenter.default.addObserver(
             self, selector: #selector(canvasMoved), name: NSView.boundsDidChangeNotification, object: scrollView.contentView)
         surface.shownMoved = { [weak self] in self?.updateVisibility() }
@@ -313,7 +320,16 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         return newCard(at: frame, zone: model.startZone(beside: other.id, at: frame), baseConfig: baseConfig, folder: folder)
     }
 
-    private func newCard(
+    /// Where a new card goes in zone `id`: in its middle, the zone
+    /// growing to hold it if it can.
+    func newCardSpot(in id: UUID) -> CGRect {
+        guard let zone = model.zone(id) else { return model.placement(in: scrollView.documentVisibleRect) }
+        let frame = model.placement(in: zone.frame)
+        if model.growZone(id, toHold: frame) { zonesDidChange() }
+        return frame
+    }
+
+    func newCard(
         at frame: CGRect, zone: UUID?, baseConfig: Ghostty.SurfaceConfiguration?, folder: String? = nil
     ) -> (card: CardController, config: Ghostty.SurfaceConfiguration?) {
         var config = baseConfig
@@ -385,17 +401,22 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         drawsZone = false
         switch item {
         case .terminal: newCard()
-        case .ticket: showTickets()
+        case .agent: surface.addMenu.openAgents()
         case .zone: startDrawingZone()
         }
     }
 
     /// The canvas's one-letter keys, while nothing has the keyboard: the
-    /// + menu's items' (T, M, Z), and D, which brings the dock out or puts
-    /// it away. True when `key` was one.
+    /// + menu's items' (T, A, Z), M, which opens the tickets panel, and
+    /// D, which brings the dock out or puts it away. True when `key` was
+    /// one.
     private func shortcut(_ key: String) -> Bool {
         if key == "d" {
             surface.dockState.shown.toggle()
+            return true
+        }
+        if key == "m" {
+            showTickets()
             return true
         }
         guard let item = CanvasAddMenuView.Item.allCases.first(where: { $0.key == key }) else { return false }
@@ -774,14 +795,35 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
             guard let left, model.leftProject(move, before: before.model),
                   let card = cards.first(where: { $0.surfaceTree.contains { $0.id == move.pane } }),
                   noticed.insert(card.id).inserted else { continue }
-            LosttyNotifications.shared.post(LosttyNotification(
-                kind: .zone(card: card.id),
-                title: "\(CanvasModel.noticeTitle(card.title)) left \(left)",
-                detail: move.to.flatMap(model.zoneTitle).map { "Now in \($0)." } ?? "It's in no zone now."))
+            noticeLeft(card, zone: left, id: move.from.flatMap(before.model.projectZone),
+                       now: move.to.flatMap(model.zoneTitle))
         }
         updateZoneCaptions()
         relistTickets()
         deliverSoon()
+    }
+
+    /// Card `card` left zone `zone` (project `id`; now in zone `now`): one
+    /// bubble for all the cards that left it, going to the latest.
+    private func noticeLeft(_ card: CardController, zone: String, id: UUID?, now: String?) {
+        let kind = LosttyNotification.Kind.zoneLeft(zone)
+        let name = CanvasModel.noticeTitle(card.title)
+        let group = (LosttyNotifications.shared.current(kind)?.group ?? []).filter { $0 != name } + [name]
+        LosttyNotifications.shared.post(LosttyNotification(
+            kind: kind,
+            title: group.count == 1 ? "\(name) left \(zone)" : "\(group.count) cards left \(zone)",
+            detail: group.count == 1
+                ? now.map { "Now in \($0)." } ?? "It's in no zone now."
+                : group.joined(separator: ", "),
+            open: { [weak self] in self?.goTo(card.id) },
+            group: group,
+            zone: id))
+    }
+
+    /// Brings the canvas forward, zoomed to card `id`.
+    private func goTo(_ id: UUID) {
+        window?.makeKeyAndOrderFront(nil)
+        zoom(toCard: id)
     }
 
     /// The name of the Claude running in pane `pane`, as its agents call
@@ -860,7 +902,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         LosttyNotifications.shared.post(LosttyNotification(
             kind: kind,
             title: "Kept inside \(name)",
-            detail: "\(CanvasModel.noticeTitle(card.title)) tried to message \(target), which is outside the zone.",
+            detail: "\(CanvasModel.noticeTitle(card.title)) tried to message \(target), outside the zone.",
             actionTitle: "Allow Once",
             action: { [weak self] in
                 self?.zoneStore.writeAllow(pane, target: target)
@@ -869,7 +911,24 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
             },
             secondaryTitle: "Zone Settings",
             secondaryAction: { [weak self] in self?.showZoneSettings(project) },
-            persistent: true))
+            open: { [weak self, id = card.id] in self?.goTo(id) },
+            zone: project))
+    }
+
+    /// Pane `pane`'s Claude's name and topic as its card's header shows
+    /// them, while it's on the canvas.
+    func headerTitle(ofPane pane: UUID) -> (agent: String?, topic: String)? {
+        guard let card = cards.first(where: { $0.surfaceTree.contains { $0.id == pane } }),
+              let surface = card.surfaceTree.first(where: { $0.id == pane }) else { return nil }
+        let recap = card.titleOverride == nil ? RecapTitles.shared.titles[pane] : nil
+        let topic = CardController.topic(
+            title: card.titleOverride ?? surface.title, claim: featureClaims[pane]?.first, recap: recap)
+        return (agentName(of: pane), topic)
+    }
+
+    /// The project zone pane `pane` is in, if any.
+    func projectZone(ofPane pane: UUID) -> UUID? {
+        membership.panes.zones[pane].flatMap(model.projectZone)
     }
 
     private func showZoneSettings(_ id: UUID) {
@@ -944,7 +1003,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
 
     // MARK: Tickets
 
-    /// + → Tickets: a panel opens in the middle of the view, or the one in
+    /// M: a panel opens in the middle of the view, or the one in
     /// the zone there (or outside every zone, as there) comes forward where
     /// it is, at 100% (where its rows take clicks), its list taking the
     /// keyboard.
@@ -1001,8 +1060,8 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     func setTickets(_ new: [CanvasTicket]) {
         guard new != tickets else { return }
         relistTickets()
-        for note in model.blockedNotes(from: tickets, to: new, panes: membership.panes) {
-            zoneStore.appendSay(note.manager, note.text)
+        for note in model.managerNotes(from: tickets, to: new, panes: membership.panes) {
+            tell(note.manager, note.text)
         }
         tickets = new
         saveSoon()

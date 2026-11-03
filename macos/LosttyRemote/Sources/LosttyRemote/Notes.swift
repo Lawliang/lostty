@@ -140,6 +140,8 @@ public struct NoteLog: Codable, Equatable, Sendable {
         switch drop {
         case .read(let ids):
             for i in notes.indices where ids.contains(notes[i].id) { notes[i].read = true }
+        case .unread(let ids):
+            for i in notes.indices where ids.contains(notes[i].id) { notes[i].read = false }
         case .readAll:
             for i in notes.indices { notes[i].read = true }
         case .delete(let ids):
@@ -213,6 +215,7 @@ public struct NoteLog: Codable, Equatable, Sendable {
 /// `notifications/inbox/` by the phone or a ship script.
 public enum NoteDrop: Equatable, Sendable {
     case read([UUID])
+    case unread([UUID])
     case readAll
     case delete([UUID])
     /// A phone runs this build of `bundleID`: that app's build notes up to it are read.
@@ -225,6 +228,7 @@ public enum NoteDrop: Equatable, Sendable {
         let wire = try JSONDecoder().decode(Wire.self, from: data)
         switch wire.type {
         case "read": self = .read(try wire.need(\.ids))
+        case "unread": self = .unread(try wire.need(\.ids))
         case "readAll": self = .readAll
         case "delete": self = .delete(try wire.need(\.ids))
         case "installed": self = .installed(bundleID: try wire.need(\.bundleID), build: try wire.need(\.build))
@@ -243,7 +247,7 @@ public enum NoteDrop: Equatable, Sendable {
     public func json() throws -> Data {
         var wire = Wire(type: type)
         switch self {
-        case .read(let ids), .delete(let ids): wire.ids = ids
+        case .read(let ids), .unread(let ids), .delete(let ids): wire.ids = ids
         case .readAll: break
         case .installed(let bundleID, let build):
             wire.bundleID = bundleID
@@ -273,6 +277,7 @@ public enum NoteDrop: Equatable, Sendable {
     private var type: String {
         switch self {
         case .read: "read"
+        case .unread: "unread"
         case .readAll: "readAll"
         case .delete: "delete"
         case .installed: "installed"

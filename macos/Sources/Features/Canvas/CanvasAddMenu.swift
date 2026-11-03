@@ -6,15 +6,16 @@ import SwiftUI
 /// The canvas's + button, at the bottom right over the cards and the same
 /// size at every zoom. Clicking it opens a pill of what it can add above
 /// it, each named on its left with its key under the pointer; choosing
-/// one, clicking anywhere else or Escape closes it.
+/// one, clicking anywhere else or Escape closes it. New Agent opens a
+/// list of agents (AgentRecipe) to the pill's left instead.
 final class CanvasAddMenuView: NSView {
     enum Item: CaseIterable {
-        case terminal, ticket, zone
+        case terminal, agent, zone
 
         var title: String {
             switch self {
             case .terminal: "New Terminal"
-            case .ticket: "Tickets"
+            case .agent: "New Agent"
             case .zone: "New Zone"
             }
         }
@@ -22,7 +23,7 @@ final class CanvasAddMenuView: NSView {
         var symbol: String {
             switch self {
             case .terminal: "terminal"
-            case .ticket: "ticket"
+            case .agent: "person.2"
             case .zone: "square.dashed"
             }
         }
@@ -31,7 +32,7 @@ final class CanvasAddMenuView: NSView {
         var key: String {
             switch self {
             case .terminal: "t"
-            case .ticket: "m"
+            case .agent: "a"
             case .zone: "z"
             }
         }
@@ -46,25 +47,40 @@ final class CanvasAddMenuView: NSView {
     static let itemSize: CGFloat = 36
     static let pillPadding: CGFloat = 4
     static let pillGap: CGFloat = 10
-    /// Room left of the pill for its items' names.
+    /// Room left of the pill for its items' names, and the agents list.
     static let labelRoom: CGFloat = 170
+    static let agentRowHeight: CGFloat = 30
+    static let agentListWidth: CGFloat = 156
+    /// The agents list shows this many rows; more scroll.
+    static let agentRowsShown = 6
 
     static var pillHeight: CGFloat {
         let count = CGFloat(Item.allCases.count)
         return count * itemSize + (count - 1) * pillPadding + 2 * pillPadding
     }
 
-    /// Big enough for the pill open above the button.
+    static func agentListHeight(rows: Int) -> CGFloat {
+        let count = CGFloat(min(max(rows, 1), agentRowsShown))
+        return count * agentRowHeight + (count - 1) * pillPadding + 2 * pillPadding
+    }
+
+    /// Big enough for the pill open above the button, and the agents list
+    /// beside it.
     static var size: CGSize {
-        CGSize(width: labelRoom + diameter + 2 * shadowRoom, height: pillHeight + pillGap + diameter + 2 * shadowRoom)
+        let column = max(pillHeight, agentListHeight(rows: agentRowsShown))
+        return CGSize(width: labelRoom + diameter + 2 * shadowRoom, height: column + pillGap + diameter + 2 * shadowRoom)
     }
 
     var chose: ((Item) -> Void)?
+    var choseAgent: ((AgentRecipe) -> Void)?
     private let state = CanvasAddMenuState()
-    private lazy var host = NSHostingView(rootView: CanvasAddButton(state: state) { [weak self] item in
+    private lazy var host = NSHostingView(rootView: CanvasAddButton(state: state, choose: { [weak self] item in
         self?.close()
         self?.chose?(item)
-    })
+    }, chooseAgent: { [weak self] recipe in
+        self?.close()
+        self?.choseAgent?(recipe)
+    }))
     private var monitor: Any?
     private var opened: AnyCancellable?
 
@@ -82,11 +98,13 @@ final class CanvasAddMenuView: NSView {
         host.frame = bounds
     }
 
-    /// The button, and the pill while it's open (y up): clicks anywhere else
-    /// in the view, its items' names too, go on to the cards under it.
+    /// The button, the pill while it's open and the agents list while
+    /// that is (y up): clicks anywhere else in the view, its items' names
+    /// too, go on to the cards under it.
     private var live: CGRect {
         let inset = bounds.insetBy(dx: Self.shadowRoom, dy: Self.shadowRoom)
         let column = CGRect(x: inset.maxX - Self.diameter, y: inset.minY, width: Self.diameter, height: inset.height)
+        if state.agentsOpen { return inset }
         guard !state.isOpen else { return column }
         return CGRect(x: column.minX, y: inset.minY, width: Self.diameter, height: Self.diameter)
     }
@@ -119,12 +137,27 @@ final class CanvasAddMenuView: NSView {
     }
 
     private func close() {
-        withAnimation(CanvasAddButton.spring) { state.isOpen = false }
+        withAnimation(CanvasAddButton.spring) {
+            state.isOpen = false
+            state.agentsOpen = false
+        }
+    }
+
+    /// The A key: the pill opens with its agents list out.
+    func openAgents() {
+        state.agents = AgentRecipe.all()
+        withAnimation(CanvasAddButton.spring) {
+            state.isOpen = true
+            state.agentsOpen = true
+        }
     }
 }
 
 final class CanvasAddMenuState: ObservableObject {
     @Published var isOpen = false
+    @Published var agentsOpen = false
+    /// Read from their files each time the list opens.
+    @Published var agents: [AgentRecipe] = []
 }
 
 /// The + button, after Apple Music's 2026 icon: a clear disc of Liquid
@@ -136,6 +169,7 @@ final class CanvasAddMenuState: ObservableObject {
 struct CanvasAddButton: View {
     @ObservedObject var state: CanvasAddMenuState
     let choose: (CanvasAddMenuView.Item) -> Void
+    let chooseAgent: (AgentRecipe) -> Void
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var hovering = false
@@ -149,12 +183,23 @@ struct CanvasAddButton: View {
     private var dark: Bool { scheme == .dark }
 
     var body: some View {
-        VStack(spacing: CanvasAddMenuView.pillGap) {
+        VStack(alignment: .trailing, spacing: CanvasAddMenuView.pillGap) {
             if state.isOpen {
-                pill.transition(.scale(scale: 0.6, anchor: .bottom).combined(with: .opacity))
+                // New Agent is the pill's middle item: the list opens level
+                // with it and grows out of its side.
+                HStack(alignment: .center, spacing: CanvasAddMenuView.pillGap) {
+                    if state.agentsOpen {
+                        agentList.transition(.scale(scale: 0.6, anchor: .trailing).combined(with: .opacity))
+                    }
+                    pill
+                }
+                .transition(.scale(scale: 0.6, anchor: .bottomTrailing).combined(with: .opacity))
             }
             Button {
-                withAnimation(Self.spring) { state.isOpen.toggle() }
+                withAnimation(Self.spring) {
+                    state.isOpen.toggle()
+                    state.agentsOpen = false
+                }
                 if !reduceMotion { ripples += 1 }
             } label: {
                 Image(systemName: "plus")
@@ -177,25 +222,82 @@ struct CanvasAddButton: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
     }
 
-    /// The same glass as the button, as a capsule: its light turns while
-    /// the pointer is over it, but it has no press feedback of its own,
-    /// since its icons are the buttons.
+    /// The button's glass as a capsule, without its prism: its rim lights
+    /// while the pointer is over it, but it has no press feedback of its
+    /// own, since its icons are the buttons.
     private var pill: some View {
         VStack(spacing: CanvasAddMenuView.pillPadding) {
             ForEach(CanvasAddMenuView.Item.allCases, id: \.self) { item in
-                CanvasAddItem(item: item, dark: dark) { choose(item) }
+                CanvasAddItem(item: item, dark: dark, isOn: item == .agent && state.agentsOpen,
+                              showsLabel: !state.agentsOpen) { pick(item) }
             }
         }
         .padding(CanvasAddMenuView.pillPadding)
         .modifier(CanvasAddLitGlass(shape: Capsule(), dark: dark, lit: pillHovering,
-                                    interactive: false, reduceMotion: reduceMotion))
+                                    interactive: false, reduceMotion: reduceMotion, prism: false))
         .onHover { inside in withAnimation(Self.light) { pillHovering = inside } }
+    }
+
+    /// New Agent opens or closes the agents list; the rest add.
+    private func pick(_ item: CanvasAddMenuView.Item) {
+        guard item == .agent else { return choose(item) }
+        if !state.agentsOpen { state.agents = AgentRecipe.all() }
+        withAnimation(Self.spring) { state.agentsOpen.toggle() }
+    }
+
+    /// The agents New Agent opens, each its icon and name, in the pill's
+    /// glass.
+    private var agentList: some View {
+        let rows = VStack(spacing: CanvasAddMenuView.pillPadding) {
+            ForEach(state.agents) { recipe in
+                CanvasAgentRow(recipe: recipe, dark: dark) { chooseAgent(recipe) }
+            }
+        }
+        .padding(CanvasAddMenuView.pillPadding)
+        return ScrollView(.vertical) { rows }
+            .scrollDisabled(state.agents.count <= CanvasAddMenuView.agentRowsShown)
+            .frame(width: CanvasAddMenuView.agentListWidth,
+                   height: CanvasAddMenuView.agentListHeight(rows: state.agents.count))
+            .modifier(CanvasAddLitGlass(shape: RoundedRectangle(cornerRadius: 19, style: .continuous), dark: dark,
+                                        lit: false, interactive: false, reduceMotion: reduceMotion, prism: false))
+    }
+}
+
+/// One agent in New Agent's list: lit while the pointer is over it.
+private struct CanvasAgentRow: View {
+    let recipe: AgentRecipe
+    let dark: Bool
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: recipe.icon)
+                    .font(.system(size: 13, weight: .medium))
+                    .frame(width: 20)
+                Text(recipe.name)
+                    .font(.system(size: 13, weight: .medium))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(dark ? Color.white : Color.black)
+            .padding(.horizontal, 10)
+            .frame(height: CanvasAddMenuView.agentRowHeight)
+            .background(Color.primary.opacity(hovering ? 0.1 : 0), in: Capsule())
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .help(recipe.instructions.split(whereSeparator: \.isNewline).first.map(String.init) ?? recipe.name)
+        .accessibilityLabel("New \(recipe.name)")
     }
 }
 
 /// Glass in `shape` with its rim and prism, lit while the pointer is over
-/// it. The merge countdown (CanvasDrop) and the dock (CanvasDock) are it
-/// too, without the prism.
+/// it. The + menu, the merge countdown (CanvasDrop) and the dock
+/// (CanvasDock) are it too, without the prism.
 struct CanvasAddLitGlass<S: InsettableShape>: ViewModifier {
     let shape: S
     let dark: Bool
@@ -341,6 +443,9 @@ private struct CanvasAddRipple: View {
 private struct CanvasAddItem: View {
     let item: CanvasAddMenuView.Item
     let dark: Bool
+    /// New Agent while its list is out.
+    var isOn = false
+    var showsLabel = true
     let action: () -> Void
     @State private var hovering = false
 
@@ -351,7 +456,7 @@ private struct CanvasAddItem: View {
                 .foregroundStyle(dark ? Color.white : Color.black)
                 .shadow(color: .white.opacity(dark ? 0.45 : 0), radius: 4)
                 .frame(width: CanvasAddMenuView.itemSize, height: CanvasAddMenuView.itemSize)
-                .background(Color.primary.opacity(hovering ? 0.1 : 0), in: Circle())
+                .background(Color.primary.opacity(hovering || isOn ? 0.1 : 0), in: Circle())
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
@@ -362,7 +467,9 @@ private struct CanvasAddItem: View {
             CanvasDockLabel(text: item.title, key: item.key, tail: .trailing)
                 .fixedSize()
                 .alignmentGuide(.leading) { $0[.trailing] + CanvasAddMenuView.pillPadding + 6 }
-                .opacity(hovering ? 1 : 0)
+                .opacity(hovering && showsLabel ? 1 : 0)
+                // Gone at once when the agents list opens where it was.
+                .transaction { if !showsLabel { $0.animation = nil } }
                 .allowsHitTesting(false)
         }
         .animation(.easeOut(duration: 0.12), value: hovering)

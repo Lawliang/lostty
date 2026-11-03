@@ -84,11 +84,10 @@ final class WhatsNewCenter: ObservableObject {
         let headline = WhatsNewCard.notes(for: pending, seenHeadline: seen.headline)?.headline
         LosttyNotifications.shared.post(LosttyNotification(
             kind: .update, style: .update,
-            title: "A new Lostty is ready",
+            title: "Lostty update ready",
             detail: headline.map { "\($0). Your terminals stay open." } ?? "Restart to switch to it. Your terminals stay open.",
             actionTitle: "Restart to Update",
-            action: { WhatsNewCenter.shared.restart() },
-            persistent: true))
+            action: { WhatsNewCenter.shared.restart() }))
     }
 
     /// A window opened: it shows the card due, if no other window is.
