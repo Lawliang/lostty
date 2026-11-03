@@ -6,7 +6,9 @@ import AppKit
 /// done` or `pending` (the LOSTTY_CLOSE_CHECK user var). A card closes when
 /// every pane in it would: no agent, or an agent that answered done. A busy
 /// agent, a permission prompt or a half-typed prompt keeps it open unasked,
-/// and so does no answer within two minutes.
+/// and so does no answer within two minutes. An agent the owner asked
+/// directly ("is your work done?") answers done unasked, and Lostty closes
+/// its pane.
 @MainActor
 final class CanvasCloseCheck {
     static let shared = CanvasCloseCheck()
@@ -75,8 +77,12 @@ final class CanvasCloseCheck {
         }
     }
 
-    func userVarChanged(_ id: UUID, name: String, value: String) {
-        guard name == Self.userVarName, let card = asked.removeValue(forKey: id) else { return }
+    func userVarChanged(_ surface: Ghostty.SurfaceView, name: String, value: String) {
+        guard name == Self.userVarName else { return }
+        guard let card = asked.removeValue(forKey: surface.id) else {
+            if value == "done" { Self.close(surface) }
+            return
+        }
         guard value == "done" else {
             stop(card)
             return
@@ -84,6 +90,14 @@ final class CanvasCloseCheck {
         guard !asked.values.contains(where: { $0 === card }) else { return }
         card.checkingClose = false
         card.closeCard(confirm: false)
+    }
+
+    /// Close one pane, in a card or a window, without asking.
+    private static func close(_ surface: Ghostty.SurfaceView) {
+        NotificationCenter.default.post(
+            name: Ghostty.Notification.ghosttyCloseSurface,
+            object: surface,
+            userInfo: ["process_alive": false])
     }
 
     /// The card stays open: forget its other panes' answers.
