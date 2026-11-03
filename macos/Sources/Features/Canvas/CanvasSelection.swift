@@ -10,7 +10,9 @@ final class CanvasSelectionView: NSView {
     weak var document: NSView?
     /// The marquee, in document points.
     var marquee: CGRect? { didSet { needsDisplay = true } }
-    /// The selected cards' frames, in document points.
+    /// The selected cards' frames, then the selected zones', in document
+    /// points: `zones` of them are zones.
+    var zones = 0
     var selected: [CGRect] = [] {
         didSet {
             needsDisplay = true
@@ -42,7 +44,8 @@ final class CanvasSelectionView: NSView {
             outline.setLineDash([4, 3], count: 2, phase: 0)
             color.setStroke()
             outline.stroke()
-            drawLabel("\(selected.count) selected", above: box)
+            let cards = "\(selected.count - zones) selected"
+            drawLabel(zones == 0 ? cards : "\(cards) · \(zones == 1 ? "1 zone" : "\(zones) zones")", above: box)
         }
         if let marquee {
             let box = convert(marquee, from: document)
@@ -267,16 +270,24 @@ extension CanvasModel.Tidy {
 
 extension CanvasController {
     /// A drag on the canvas between the cards starts a marquee: it selects
-    /// every card it touches, with ⇧ as well as those already selected.
+    /// every card it touches and every zone it wholly covers, with ⇧ as
+    /// well as those already selected.
     func marqueeBegan(adding: Bool) {
         guard !drawsZone else { return }
         marqueeBase = adding ? selection : []
-        if !adding { selection = [] }
+        marqueeZoneBase = adding ? selectedZones : []
+        if !adding {
+            selection = []
+            selectedZones = []
+        }
     }
 
     /// The marquee, in document points, as dragged so far.
     func marqueeMoved(to rect: CGRect) {
-        if !drawsZone { selection = (marqueeBase ?? selection).union(model.cards(touching: rect)) }
+        if !drawsZone {
+            selection = (marqueeBase ?? selection).union(model.cards(touching: rect))
+            selectedZones = selection.isEmpty ? [] : marqueeZoneBase.union(model.zones(within: rect))
+        }
         surface.selection.marquee = rect
     }
 
@@ -328,27 +339,57 @@ extension CanvasController {
         surface.needsLayout = true
     }
 
-    /// The outline round the selection, where its cards are now (in
-    /// `shown`, while a zone's drag shows them elsewhere).
+    /// The outline round the selection, where its cards and zones are now
+    /// (in `shown`, while a drag shows them elsewhere).
     func updateSelectionOutline(in shown: CanvasModel? = nil) {
-        surface.selection.selected = (shown ?? model).cards.filter { selection.contains($0.id) }.map(\.frame)
+        let at = shown ?? model
+        let zones = at.zones.filter { selectedZones.contains($0.id) }.map(\.frame)
+        surface.selection.zones = zones.count
+        surface.selection.selected = at.cards.filter { selection.contains($0.id) }.map(\.frame) + zones
     }
 
     /// A title bar drag on card `id` starts: where it, and the rest of the
-    /// selection if it's selected, started out.
+    /// selection if it's selected, started out. Selected zones go along.
     func beginMove(_ id: UUID) -> [UUID: CGPoint] {
         let moving = selection.contains(id) ? selection : [id]
+        zoneMove = selection.contains(id) && !selectedZones.isEmpty
+            ? (selectedZones, model.zoneSnapshot(cards: moving), .zero) : nil
         return Dictionary(uniqueKeysWithValues: model.cards.filter { moving.contains($0.id) }.map { ($0.id, $0.frame.origin) })
     }
 
-    /// The cards that began a move at `origins`, dragged by `delta` since.
+    /// The cards that began a move at `origins`, dragged by `delta` since,
+    /// and the zones with them, shown where they go while the rules allow.
     func move(_ origins: [UUID: CGPoint], by delta: CGSize) {
         for (id, origin) in origins {
             guard var frame = model.card(id)?.frame else { continue }
             frame.origin = CGPoint(x: origin.x + delta.width, y: origin.y + delta.height)
             dragFrame(frame, of: id)
         }
+        if var zoneMove {
+            var shown = model
+            if shown.shiftZones(zoneMove.zones, by: delta) { zoneMove.delta = delta }
+            self.zoneMove = zoneMove
+            shown = model
+            shown.shiftZones(zoneMove.zones, by: zoneMove.delta)
+            surface.zones.show(shown.zones)
+            updateSelectionOutline(in: shown)
+            return
+        }
         if !selection.isDisjoint(with: origins.keys) { updateSelectionOutline() }
+    }
+
+    /// A move of cards ends: the zones that went with them take their new
+    /// frames, one Undo for the lot.
+    func endMove() {
+        if let zoneMove {
+            self.zoneMove = nil
+            if zoneMove.delta != .zero, shiftZones(zoneMove.zones, by: zoneMove.delta) {
+                registerZoneUndo("Move", zoneMove.before)
+            }
+            zonesDidChange()
+            updateSelectionOutline()
+        }
+        cardFrameDidSettle()
     }
 
     /// Every selected card in view.

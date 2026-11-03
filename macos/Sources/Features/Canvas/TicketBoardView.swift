@@ -339,7 +339,7 @@ final class TicketBoardHeaderView: NSView {
     override func mouseUp(with event: NSEvent) {
         guard start != nil else { return }
         start = nil
-        canvas?.cardFrameDidSettle()
+        canvas?.endMove()
     }
 
     override func menu(for event: NSEvent) -> NSMenu? {

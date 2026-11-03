@@ -65,11 +65,23 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     private var retired: [(card: CardController, frame: CGRect)] = []
     /// The selected cards, of either kind: a marquee's, ⇧-clicks' or ⌘A's.
     var selection: Set<UUID> = [] {
-        didSet { if selection != oldValue { selectionDidChange() } }
+        didSet {
+            guard selection != oldValue else { return }
+            if selection.isEmpty { selectedZones = [] }
+            selectionDidChange()
+        }
+    }
+    /// The zones a marquee wholly covered: they move with the selection.
+    var selectedZones: Set<UUID> = [] {
+        didSet { if selectedZones != oldValue { updateSelectionOutline() } }
     }
     /// What a marquee under way adds to: the selection it started with
     /// under ⇧, else nothing.
     var marqueeBase: Set<UUID>?
+    var marqueeZoneBase: Set<UUID> = []
+    /// A move of the selection with zones in it: the zones it moves, where
+    /// everything was before, and how far it has gone.
+    var zoneMove: (zones: Set<UUID>, before: CanvasZoneSnapshot, delta: CGSize)?
     var drawsZone = false {
         didSet { if drawsZone != oldValue { updateGroupHover(at: window?.mouseLocationOutsideOfEventStream ?? .zero) } }
     }
@@ -496,6 +508,12 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     }
 
     /// Moving or resizing, live.
+    /// Zones `ids` moved by `delta` with their domains, unless that breaks
+    /// the rules (CanvasModel.shiftZones).
+    func shiftZones(_ ids: Set<UUID>, by delta: CGSize) -> Bool {
+        model.shiftZones(ids, by: delta)
+    }
+
     func setFrame(_ frame: CGRect, of id: UUID) {
         model.setFrame(frame, of: id)
         if dragShown.contains(id) { placeDragged() }
@@ -642,7 +660,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     /// puts them back as they are now. A zone change is often noticed
     /// late, so it stays undoable for at least a minute unless
     /// `undo-timeout = 0` turns undo off.
-    private func registerZoneUndo(_ action: String, _ before: CanvasZoneSnapshot) {
+    func registerZoneUndo(_ action: String, _ before: CanvasZoneSnapshot) {
         guard let manager = (NSApp.delegate as? AppDelegate)?.undoManager else { return }
         let timeout = ghostty.config.undoTimeout
         manager.setActionName(action)
@@ -1038,7 +1056,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         if event.type == .leftMouseUp {
             groupDrag = nil
             if drag.moved {
-                cardFrameDidSettle()
+                endMove()
             } else {
                 selection = []
                 if ticketPanels[drag.id] != nil {
