@@ -20,7 +20,7 @@ struct VoiceAutoSendBadge: View {
                     ZStack(alignment: .topLeading) {
                         if let y = countdown.ruleY {
                             drain(countdown, skin: skin, width: geometry.size.width - 2 * countdown.left, now: timeline.date)
-                                .offset(x: countdown.left, y: y - 1)
+                                .offset(x: countdown.left, y: y - 0.5)
                         }
                         if let y = countdown.footerY {
                             footer(countdown, skin: skin, now: timeline.date)
@@ -40,8 +40,8 @@ struct VoiceAutoSendBadge: View {
         let accent2 = TraceColors.color(skin?.accent2 ?? ResolvedTrace.unskinnedColor2)
         return Capsule()
             .fill(LinearGradient(colors: [accent, accent2], startPoint: .leading, endPoint: .trailing))
-            .frame(width: max(0, width) * countdown.remaining(at: now), height: 2)
-            .shadow(color: accent.opacity(0.6), radius: 4)
+            .frame(width: max(0, width) * countdown.remaining(at: now), height: 1)
+            .shadow(color: accent.opacity(0.5), radius: 2)
             .allowsHitTesting(false)
     }
 
