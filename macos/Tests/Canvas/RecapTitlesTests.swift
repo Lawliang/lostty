@@ -14,6 +14,13 @@ struct RecapTitlesTests {
         #expect(CardController.topic(title: "zsh", claim: nil, recap: "Canvas dock glass restyle") == "zsh")
     }
 
+    @MainActor @Test func renameStartsWithTheShownTitleWithoutItsMark() {
+        #expect(CardController.renameText(title: "✳ Claude Code", claim: nil, recap: "Voice auto-send") == "Voice auto-send")
+        #expect(CardController.renameText(title: "✳ Claude Code", claim: "terminal reskin", recap: nil) == "terminal reskin")
+        #expect(CardController.renameText(title: "zsh", claim: nil, recap: "Voice auto-send") == "zsh")
+        #expect(CardController.renameText(title: "~/projects", claim: nil) == "~/projects")
+    }
+
     @Test func theLatestRecapIsReadWithoutItsConfigHint() {
         let file = """
         {"type":"system","subtype":"away_summary","content":"We're polishing the dock. (disable recaps in /config)"}

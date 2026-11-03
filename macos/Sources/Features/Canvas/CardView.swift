@@ -143,7 +143,8 @@ final class CardView: NSView, CanvasStacked {
     /// a click away took it.
     func beginRename() {
         guard rename == nil else { return }
-        let overlay = CardRenameOverlay(title: card.titleOverride ?? card.title) { [weak self] title in
+        let shown = CardController.renameText(title: card.title, claim: card.claim, recap: card.recap)
+        let overlay = CardRenameOverlay(title: card.titleOverride ?? shown) { [weak self] title in
             self?.card.renameTab(to: title.isEmpty ? nil : title)
         } closed: { [weak self] refocus in
             guard let self else { return }
