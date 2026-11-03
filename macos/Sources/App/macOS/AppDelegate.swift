@@ -407,6 +407,8 @@ class AppDelegate: NSObject,
         // The context handoff (beta): before the restart resume's hook
         // reinstall, which brings in the handoff's hook events.
         ContextHandoffWiring.start()
+        // A Claude dictation sends itself when you stop talking.
+        VoiceAutoSend.shared.start()
         ClaudeRuntime.shared.messageKeptInside = { CanvasController.shared?.messageKeptInside(pane: $0, target: $1) }
         // Each request's end: gold coins and what it cost, in the pane's
         // corner, and a temporary notification when nobody was looking.
