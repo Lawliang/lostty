@@ -14,8 +14,6 @@ final class CardHeaderView: NSView {
     private let content: PassthroughHostingView<CardHeaderContent>
     let buttons: CardWindowButtons
     private let rename: CardRenameButton
-    /// The Mockup window style's line along the bottom.
-    private let hairline = NSView()
     /// Where a drag started, and where the cards it moves were then.
     private var start: (point: CGPoint, origins: [UUID: CGPoint])?
 
@@ -35,11 +33,9 @@ final class CardHeaderView: NSView {
         }
         super.init(frame: .zero)
         wantsLayer = true
-        hairline.wantsLayer = true
         addSubview(content)
         addSubview(buttons)
         addSubview(rename)
-        addSubview(hairline)
     }
 
     @available(*, unavailable)
@@ -51,15 +47,11 @@ final class CardHeaderView: NSView {
     override func updateLayer() {
         let chrome = card.sidebar.chromeColor ?? .windowBackgroundColor
         layer?.backgroundColor = chrome.cgColor
-        hairline.isHidden = !LosttyWindowStyle.isMockup
-        hairline.layer?.backgroundColor = LosttyWindowStyle.hairline(on: chrome).cgColor
     }
 
     override func layout() {
         super.layout()
         content.frame = bounds
-        // Stops at the card's edge rather than crossing it.
-        hairline.frame = NSRect(x: 0.5, y: bounds.height - 0.5, width: max(0, bounds.width - 1), height: 0.5)
         let size = buttons.intrinsicContentSize
         buttons.frame = NSRect(
             x: CardWindowButtons.inset, y: (bounds.height - size.height) / 2, width: size.width, height: size.height)
@@ -114,7 +106,8 @@ final class CardHeaderView: NSView {
 /// A Mac window's red, yellow and green buttons, for a card: colored on the
 /// focused card while the canvas is the active window, and gray otherwise,
 /// as on inactive windows, with their symbols while the pointer is over
-/// them. Red closes the card, yellow
+/// them. In the Mockup window style they're smaller and gray until the
+/// pointer is over them. Red closes the card, yellow
 /// zooms out to every card, green zooms to the card at 100%. AppKit, so
 /// they take clicks however far the canvas is zoomed.
 final class CardWindowButtons: NSView {
@@ -122,10 +115,9 @@ final class CardWindowButtons: NSView {
         case close, minimize, zoom
     }
 
-    static let diameter: CGFloat = 12
-    static let spacing: CGFloat = 8
-    /// From the title bar's leading edge: the mockup's 10pt, or 12.
-    static var inset: CGFloat { LosttyWindowStyle.isMockup ? 10 : 12 }
+    static var diameter: CGFloat { LosttyWindowStyle.isMockup ? 10 : 12 }
+    static var spacing: CGFloat { LosttyWindowStyle.isMockup ? 6 : 8 }
+    static let inset: CGFloat = 12
     static var width: CGFloat {
         let count = CGFloat(Button.allCases.count)
         return count * diameter + (count - 1) * spacing
@@ -154,8 +146,9 @@ final class CardWindowButtons: NSView {
         NSSize(width: Self.width, height: Self.diameter)
     }
 
-    /// Gray while the canvas isn't the active window.
-    private var lit: Bool { isActive && window?.isKeyWindow == true }
+    /// Gray while the canvas isn't the active window, and in the Mockup
+    /// window style.
+    private var lit: Bool { isActive && window?.isKeyWindow == true && !LosttyWindowStyle.isMockup }
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
@@ -192,7 +185,7 @@ final class CardWindowButtons: NSView {
                 circle.lineWidth = 0.5
                 circle.stroke()
             }
-            if hovering, lit { drawSymbol(button) }
+            if hovering, lit || LosttyWindowStyle.isMockup { drawSymbol(button) }
         }
     }
 
@@ -256,10 +249,11 @@ final class CardWindowButtons: NSView {
 /// project pill (its repo and branch, hidden outside a repo), folder icon,
 /// the key of the ticket working in it, its Claude's name, the card's title
 /// (dimmed after a name, and the first to shorten) and room for its rename
-/// pencil (`pencilMoved` places it).
+/// pencil (`pencilMoved` places it). The Mockup window style leaves out
+/// the folder and puts the pill after the pencil.
 struct CardHeaderContent: View {
     /// Clear of the close, minimize and zoom buttons.
-    static var titleInset: CGFloat { CardWindowButtons.inset + CardWindowButtons.width + 14 }
+    static var titleInset: CGFloat { CardWindowButtons.inset + CardWindowButtons.width + (LosttyWindowStyle.isMockup ? 8 : 14) }
 
     @ObservedObject var card: CardController
     @ObservedObject private var sidebar: ExtensionSidebarModel
@@ -279,7 +273,7 @@ struct CardHeaderContent: View {
     var body: some View {
         HStack(spacing: 6) {
             if style.isMockup {
-                title(size: 12, color: mockupTitleColor)
+                title(size: 13, color: mockupTitleColor)
             } else {
                 title(size: 13, color: .primary.opacity(0.8))
             }
@@ -307,9 +301,11 @@ struct CardHeaderContent: View {
 
     private func title(size: CGFloat, color: Color) -> some View {
         HStack(spacing: 6) {
-            ProjectPill(model: card.sidebar)
-                .layoutPriority(1)
-            if let pane = focusedPane { CardFolderIcon(pane: pane).id(ObjectIdentifier(pane)) }
+            if !style.isMockup {
+                ProjectPill(model: card.sidebar)
+                    .layoutPriority(1)
+                if let pane = focusedPane { CardFolderIcon(pane: pane).id(ObjectIdentifier(pane)) }
+            }
             if let key = card.ticketKey {
                 Text(key)
                     .font(.system(size: size - 1.5, weight: .semibold, design: .monospaced))
@@ -326,13 +322,17 @@ struct CardHeaderContent: View {
                     .fixedSize()
             }
             Text(CardController.topic(title: card.title, claim: card.claim, recap: card.titleOverride == nil ? card.recap : nil))
-                .font(.system(size: size, weight: card.agentName == nil ? .semibold : .regular))
+                .font(.system(size: size, weight: card.agentName == nil && !style.isMockup ? .semibold : .regular))
                 .foregroundStyle(card.agentName == nil ? AnyShapeStyle(color) : AnyShapeStyle(.secondary))
                 .lineLimit(1)
                 .truncationMode(.tail)
             Color.clear
                 .frame(width: CardRenameButton.size, height: CardRenameButton.size)
                 .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.space)) } action: { pencilMoved($0) }
+            if style.isMockup {
+                ProjectPill(model: card.sidebar)
+                    .layoutPriority(1)
+            }
         }
     }
 

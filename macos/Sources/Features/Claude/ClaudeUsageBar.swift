@@ -91,13 +91,6 @@ struct ClaudeUsageBar: View {
                 .onChange(of: geo.size.width) { width = $0 }
         })
         .background(Color(nsColor: chrome))
-        .overlay(alignment: .top) {
-            if style.isMockup {
-                // Stops at the window's edge rather than crossing it.
-                Rectangle().fill(Color(nsColor: LosttyWindowStyle.hairline(on: chrome))).frame(height: 0.5)
-                    .padding(.horizontal, 1)
-            }
-        }
     }
 
     private var modelName: String { pane.flatMap { usage.models[$0] } ?? "" }
