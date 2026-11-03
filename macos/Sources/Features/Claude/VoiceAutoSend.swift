@@ -47,8 +47,10 @@ struct VoiceFrame: Equatable {
 /// heard better, the last words landing just after the hold) doesn't
 /// count.
 struct VoiceWatch: Equatable {
+    /// The buffer after your last word: no countdown shows yet, so the
+    /// voice key goes to Claude and sends right away.
     static let quiet: TimeInterval = 1
-    static let countdown: TimeInterval = 5
+    static let countdown: TimeInterval = 4
     /// How long Claude may take to start recording after the key.
     static let warmup: TimeInterval = 5
     /// How long the recording mark may be missing (a frame mid-redraw)
