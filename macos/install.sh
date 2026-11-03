@@ -3,6 +3,8 @@
 #   macos/install.sh             Lostty Beta (this Mac runs the beta features)
 #   macos/install.sh --stable    stable, what people download
 #   macos/install.sh --previous  back to the build this one replaced
+#   macos/install.sh --edition orca  an edition of Lostty Beta (AGENTS.md → Editions);
+#                                    on an edition/<name> branch the name is implied
 set -eu
 cd "$(dirname "$0")/.."
 # Each install is recorded, for `lostty +peers` and the next install: the
@@ -38,9 +40,38 @@ fi
 # The beta by default: this Mac runs the beta features (CONTRIBUTING.md →
 # Stable and beta). --stable builds what people download.
 CHANNEL=beta
-if [ "${1:-}" = "--stable" ]; then CHANNEL=stable; shift; fi
+EDITION=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --stable) CHANNEL=stable; shift ;;
+    --edition) [ $# -ge 2 ] || { echo "--edition needs a name, such as --edition orca." >&2; exit 1; }
+      EDITION=$2; shift 2 ;;
+    *) echo "Unknown option $1." >&2; exit 1 ;;
+  esac
+done
+# Which edition this is (AGENTS.md → Editions): Core, or Core with one
+# harness on an edition/<name> branch. A branch built on an edition is that
+# edition, so a worktree branched from edition/orca can't install as Core.
+BRANCH=$(git branch --show-current)
+case "$BRANCH" in edition/*) [ -n "$EDITION" ] || EDITION=${BRANCH#edition/} ;; esac
+[ -n "$EDITION" ] || EDITION=core
+case "$EDITION" in *[!a-z0-9-]* | -*)
+  echo "An edition's name is lowercase letters, digits and dashes, like its branch: edition/$EDITION." >&2; exit 1 ;;
+esac
+for REF in $(git for-each-ref --format='%(refname:short)' refs/heads/edition/); do
+  NAME=${REF#edition/}
+  [ "$NAME" = "$EDITION" ] && continue
+  if git merge-base --is-ancestor "$REF" HEAD && ! git merge-base --is-ancestor "$REF" main; then
+    echo "This branch has $REF's work, so it's the $NAME edition: run install.sh --edition $NAME." >&2; exit 1
+  fi
+done
+if [ "$EDITION" != core ]; then
+  [ "$CHANNEL" = beta ] || { echo "Editions are Lostty Beta only; drop --stable." >&2; exit 1; }
+  git rev-parse -q --verify "refs/heads/edition/$EDITION" >/dev/null && git merge-base --is-ancestor "edition/$EDITION" HEAD \
+    || { echo "There's no edition/$EDITION branch under this one. Start an edition from main: git branch edition/$EDITION main" >&2; exit 1; }
+fi
 if [ "$CHANNEL" = beta ]; then
-  set -- LOSTTY_CHANNEL=beta "INFOPLIST_KEY_CFBundleDisplayName=Lostty Beta" \
+  set -- LOSTTY_CHANNEL=beta LOSTTY_EDITION="$EDITION" "INFOPLIST_KEY_CFBundleDisplayName=Lostty Beta" \
     ASSETCATALOG_COMPILER_APPICON_NAME=LosttyMacBetaIcon
 else
   set --
@@ -87,6 +118,12 @@ WANT=""; [ "$CHANNEL" = beta ] && WANT=beta
   echo "The build isn't the $CHANNEL channel; see macos/build/last-install.log" >&2
   exit 1
 }
+if [ "$CHANNEL" = beta ]; then
+  [ "$(/usr/libexec/PlistBuddy -c 'Print :LosttyEdition' "$APP/Contents/Info.plist")" = "$EDITION" ] || {
+    echo "The build isn't the $EDITION edition; see macos/build/last-install.log" >&2
+    exit 1
+  }
+fi
 # What's new since the build this replaces, for the What's New card when
 # WhatsNew.md hasn't changed: its commits (none on a first install). Before
 # signing: a file added to the app after would break its signature.
@@ -111,6 +148,25 @@ if [ -n "$IDENTITY" ]; then
   codesign --force --deep --timestamp=none --sign "$IDENTITY" --preserve-metadata=entitlements,flags "$APP"
   codesign --verify --deep --strict "$APP"
 fi
+# Every beta edition installed here is kept in the library, so the menu
+# bar's Edition submenu can switch back without a build. The build being
+# replaced goes in first when the library has no copy of its edition: the
+# Core installed before editions existed is how the library starts.
+LIBRARY="$HOME/Library/Application Support/Lostty/Editions"
+mkdir -p "$LIBRARY"
+keep_edition() { # app name
+  rm -rf "$LIBRARY/$2 (copying).app"
+  cp -R "$1" "$LIBRARY/$2 (copying).app"
+  rm -rf "$LIBRARY/$2.app"
+  mv "$LIBRARY/$2 (copying).app" "$LIBRARY/$2.app"
+}
+OLD_INFO=/Applications/Lostty.app/Contents/Info.plist
+if [ -f "$OLD_INFO" ] && [ "$(/usr/libexec/PlistBuddy -c 'Print :LosttyChannel' "$OLD_INFO" 2>/dev/null)" = beta ]; then
+  OLD_EDITION=$(/usr/libexec/PlistBuddy -c 'Print :LosttyEdition' "$OLD_INFO" 2>/dev/null || true)
+  case "$OLD_EDITION" in "" | *[!a-z0-9-]* | -*) OLD_EDITION=core ;; esac
+  [ -d "$LIBRARY/$OLD_EDITION.app" ] || keep_edition /Applications/Lostty.app "$OLD_EDITION"
+fi
+[ "$CHANNEL" = beta ] && keep_edition "$APP" "$EDITION"
 # Keep the build being replaced: the menu bar's Go Back to Previous Build,
 # or `install.sh --previous` when the new one won't start.
 rm -rf "/Applications/Lostty (previous).app" "/Applications/Ghostty Skins.app"
@@ -134,10 +190,12 @@ branch=$(git branch --show-current)
 commit=$(git rev-parse HEAD)
 uncommitted=$UNCOMMITTED
 channel=$CHANNEL
+edition=$EDITION
 at=$(date '+%Y-%m-%d %H:%M')
 RECORD
-if [ "$CHANNEL" = beta ]; then echo "Installed /Applications/Lostty.app (Lostty Beta)"
-else echo "Installed /Applications/Lostty.app (stable)"; fi
+if [ "$CHANNEL" = stable ]; then echo "Installed /Applications/Lostty.app (stable)"
+elif [ "$EDITION" = core ]; then echo "Installed /Applications/Lostty.app (Lostty Beta)"
+else echo "Installed /Applications/Lostty.app (Lostty Beta, $EDITION edition). Back to Core: menu bar → Edition → Core."; fi
 echo "Switch with Lostty's menu bar → Restart to Update (keeps your terminals)."
 echo "Don't Quit Lostty to update: Quit ends every terminal session."
 if [ -n "$WARNING" ]; then echo "$WARNING" >&2; fi

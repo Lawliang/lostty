@@ -357,6 +357,14 @@ extension CanvasModel {
         return (holding.first { $0.parent != nil } ?? holding.first)?.id
     }
 
+    /// The zone a new card goes in with no card to start from: `last`, the
+    /// zone of the card focused last, while any of it is in `visible`, else
+    /// the zone at the middle of `visible`.
+    func newCardZone(last: UUID?, in visible: CGRect) -> UUID? {
+        if let last, let frame = zone(last)?.frame, frame.intersects(visible) { return last }
+        return zone(for: CGRect(x: visible.midX, y: visible.midY, width: 0, height: 0))
+    }
+
     /// The cards in zone `id`; a project's include its domains'.
     func members(of id: UUID) -> Set<UUID> {
         let within = Set([id] + zones.filter { $0.parent == id }.map(\.id))
@@ -637,9 +645,9 @@ enum CanvasZoom {
 
 /// The dot grid behind the cards: a dot every `spacing` screen points.
 enum CanvasGrid {
-    /// The dots' spacing on screen, the same at every zoom: a square 14pt
-    /// grid, denser than the Lostty website's.
-    static let spacing = CGSize(width: 14, height: 14)
+    /// The dots' spacing on screen, the same at every zoom: the terminal
+    /// reskin's square 22pt grid.
+    static let spacing = CGSize(width: 22, height: 22)
 
     /// Where the first dot sits on screen (the view's top-left at 0, 0) when
     /// the view shows the document from `origin` at `zoom`, so dots move

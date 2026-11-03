@@ -295,6 +295,19 @@ struct CanvasZoomTests {
         #expect(CanvasZoom.view(from: from, to: to, progress: 0.5) == CanvasView(center: CGPoint(x: 200, y: 100), zoom: 1))
     }
 
+    @Test func revealingACardMovesTheViewJustEnough() {
+        // At 50% a 1200×800 screen shows 2400×1600 around (0, 0).
+        let view = CanvasView(center: .zero, zoom: 0.5), size = CGSize(width: 1200, height: 800)
+        let inside = CGRect(x: -100, y: -100, width: 200, height: 200)
+        #expect(CanvasZoom.view(showing: inside, from: view, size: size) == view)
+        let pastRight = CGRect(x: 1100, y: 0, width: 300, height: 200)
+        #expect(CanvasZoom.view(showing: pastRight, from: view, size: size)
+            == CanvasView(center: CGPoint(x: 200, y: 0), zoom: 0.5))
+        let tooTall = CGRect(x: 0, y: 1000, width: 100, height: 2000)
+        #expect(CanvasZoom.view(showing: tooTall, from: view, size: size)
+            == CanvasView(center: CGPoint(x: 0, y: 2000), zoom: 0.5))
+    }
+
     @Test func aGlideEasesIntoPlace() {
         #expect(CanvasZoom.eased(0) == 0)
         #expect(CanvasZoom.eased(1) == 1)
@@ -312,14 +325,14 @@ struct CanvasZoomTests {
 
     @Test func gridDotsMoveWithThePan() {
         #expect(CanvasGrid.firstDot(origin: .zero, zoom: 1) == .zero)
-        #expect(CanvasGrid.firstDot(origin: CGPoint(x: 10, y: 30), zoom: 1) == CGPoint(x: 4, y: 12))
+        #expect(CanvasGrid.firstDot(origin: CGPoint(x: 10, y: 30), zoom: 1) == CGPoint(x: 12, y: 14))
         // At 25% the same document point is a quarter as far on screen.
-        #expect(CanvasGrid.firstDot(origin: CGPoint(x: 100, y: 0), zoom: 0.25) == CGPoint(x: 3, y: 0))
+        #expect(CanvasGrid.firstDot(origin: CGPoint(x: 100, y: 0), zoom: 0.25) == CGPoint(x: 19, y: 0))
     }
 
     @Test func gridDotsKeepTheirSpacingAtEveryZoom() {
-        // 14pt each way, on screen, however zoomed.
-        #expect(CanvasGrid.spacing == CGSize(width: 14, height: 14))
+        // 22pt each way, on screen, however zoomed.
+        #expect(CanvasGrid.spacing == CGSize(width: 22, height: 22))
     }
 }
 

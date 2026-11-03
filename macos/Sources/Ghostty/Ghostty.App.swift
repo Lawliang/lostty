@@ -1788,7 +1788,7 @@ extension Ghostty {
                 ClaudeRuntime.shared.userVarChanged(surfaceView.id, name: name, value: value)
                 ClaudeUsageRuntime.shared.userVarChanged(surfaceView.id, name: name, value: value)
                 CanvasController.userVarChanged(surfaceView.id, name: name, value: value)
-                CanvasCloseCheck.shared.userVarChanged(surfaceView.id, name: name, value: value)
+                CanvasCloseCheck.shared.userVarChanged(surfaceView, name: name, value: value)
             }
         }
 

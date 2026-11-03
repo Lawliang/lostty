@@ -37,6 +37,21 @@ extension CanvasZoom {
             y: from.center.y + (to.center.y - from.center.y) * share)
         return CanvasView(center: center, zoom: zoom)
     }
+
+    /// `view` moved just enough that `frame` is in it, on a screen `size`
+    /// big; centered on `frame` along a side it's too big for.
+    static func view(showing frame: CGRect, from view: CanvasView, size: CGSize) -> CanvasView {
+        let width = size.width / view.zoom, height = size.height / view.zoom
+        func shift(_ low: CGFloat, _ high: CGFloat, _ center: CGFloat, _ span: CGFloat) -> CGFloat {
+            if high - low > span { return (low + high) / 2 - center }
+            if low < center - span / 2 { return low - (center - span / 2) }
+            if high > center + span / 2 { return high - (center + span / 2) }
+            return 0
+        }
+        let dx = shift(frame.minX, frame.maxX, view.center.x, width)
+        let dy = shift(frame.minY, frame.maxY, view.center.y, height)
+        return CanvasView(center: CGPoint(x: view.center.x + dx, y: view.center.y + dy), zoom: view.zoom)
+    }
 }
 
 /// A glide under way: where it set out from and is going, and the frame

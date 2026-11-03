@@ -7,7 +7,8 @@ import AppKit
 /// on this branch (the same folder, as before), a new branch in a worktree
 /// of its own, or a new project (starting at home). Outside a repo, ⌘N
 /// just opens the window. On the canvas, ⌘N and ⌘T ask the same over the
-/// new card.
+/// new card, and a card outside any repo (a zone with no folder) asks
+/// which project.
 @MainActor
 enum NewWindowChoice {
     static func newWindow(_ ghostty: Ghostty.App, config: Ghostty.SurfaceConfiguration?) {
@@ -19,7 +20,15 @@ enum NewWindowChoice {
     /// A new card asks while it's the canvas's focused card: the canvas's
     /// other cards share its window and its keys.
     static func ask(_ card: CardController, config: Ghostty.SurfaceConfiguration?) {
-        ask(card, sidebar: card.sidebar, config: config, noun: "card") { [weak card] in
+        // In a project's zone: a worktree of that project, at once. Started
+        // at home (a zone with no folder): which project, then a worktree.
+        let canvas = card.canvas
+        let zones = canvas.map { canvas in canvas.model.zones.compactMap { canvas.model.startFolder(ofZone: $0.id) } } ?? []
+        let project = canvas?.model.card(card.id).flatMap { canvas?.model.zone(for: $0.frame) }
+            .flatMap { canvas?.model.startFolder(ofZone: $0) }.flatMap(NewWindowRepo.read(pwd:))
+        let projects = config?.workingDirectory == NSHomeDirectory() ? NewWindowProject.folder(near: zones) : nil
+        ask(card, sidebar: card.sidebar, config: config, noun: "card", repo: project, projectsIn: projects,
+            worktreeAtOnce: project != nil || projects != nil) { [weak card] in
             guard let card else { return false }
             return card.canvas?.focusedCard === card
         }
@@ -27,16 +36,23 @@ enum NewWindowChoice {
 
     private static func ask(
         _ controller: BaseTerminalController, sidebar: ExtensionSidebarModel, config: Ghostty.SurfaceConfiguration?,
-        noun: String, takesKeys: @escaping () -> Bool = { true }
+        noun: String, repo zoneRepo: NewWindowRepo? = nil, projectsIn projects: String? = nil,
+        worktreeAtOnce: Bool = false, takesKeys: @escaping () -> Bool = { true }
     ) {
-        guard let pwd = config?.workingDirectory, let repo = NewWindowRepo.read(pwd: pwd),
-              let window = controller.window else { return }
-        sidebar.newWindowPrompt = NewWindowPrompt(repo: repo, window: window, noun: noun, takesKeys: takesKeys) {
+        let repo = zoneRepo ?? config?.workingDirectory.flatMap(NewWindowRepo.read(pwd:))
+        guard repo != nil || projects != nil, let window = controller.window else { return }
+        sidebar.newWindowPrompt = NewWindowPrompt(
+            repo: repo, projectsIn: projects, worktreeAtOnce: worktreeAtOnce, window: window, noun: noun,
+            takesKeys: takesKeys
+        ) {
             [weak controller, weak sidebar] folder in
+            let worktree = sidebar?.newWindowPrompt?.madeWorktree == true
             sidebar?.newWindowPrompt = nil
             guard let controller else { return }
             if let folder {
-                restart(controller, in: folder, config: config)
+                let surface = restart(controller, in: folder, config: config)
+                // A new worktree is for new work: Claude starts in it.
+                if worktree, let surface { SessionRestore.type("claude", into: surface.id) }
             } else if let surface = controller.focusedSurface {
                 Ghostty.moveFocus(to: surface)
             }
@@ -45,8 +61,11 @@ enum NewWindowChoice {
 
     /// The window's or card's terminal starts over in `folder`; the first
     /// one's shell (and its tmux session) ends.
-    private static func restart(_ controller: BaseTerminalController, in folder: String, config: Ghostty.SurfaceConfiguration?) {
-        guard let app = controller.ghostty.app else { return }
+    @discardableResult
+    private static func restart(
+        _ controller: BaseTerminalController, in folder: String, config: Ghostty.SurfaceConfiguration?
+    ) -> Ghostty.SurfaceView? {
+        guard let app = controller.ghostty.app else { return nil }
         var there = config ?? Ghostty.SurfaceConfiguration()
         there.workingDirectory = folder
         let surface = Ghostty.SurfaceView(app, baseConfig: there)
@@ -59,6 +78,7 @@ enum NewWindowChoice {
         // view: free the surface first, and the view once that's done.
         for view in old { view.releaseSurface() }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) { withExtendedLifetime(old) {} }
+        return surface
     }
 }
 
@@ -103,37 +123,25 @@ struct NewWindowRepo: Equatable {
         (root as NSString).appendingPathComponent(Self.worktrees + "/" + branch.replacingOccurrences(of: "/", with: "-"))
     }
 
-    /// A worktree on `branch` (made from this checkout's HEAD if it's new),
-    /// kept out of the main checkout's `git status`. Blocking.
-    static func addWorktree(_ repo: NewWindowRepo, branch: String) -> Result<String, Failure> {
-        guard run(["check-ref-format", "--branch", branch], in: repo.checkout).status == 0 else {
-            return .failure(Failure(message: "“\(branch)” isn't a valid branch name."))
+    /// A worktree on the first free placeholder branch, `wt-1`, `wt-2`…,
+    /// started from the repo's default branch as just fetched (never what
+    /// the main checkout has out), marked as Lostty's to rename:
+    /// `branch.<name>.lostty-base` holds the commit it starts from, and
+    /// `lostty +ticket working` names it after the feature until something
+    /// merges it. Blocking.
+    static func addPlaceholderWorktree(_ repo: NewWindowRepo) -> Result<String, Failure> {
+        let taken = { (name: String) in
+            run(["show-ref", "--verify", "--quiet", "refs/heads/" + name], in: repo.checkout).status == 0
+                || FileManager.default.fileExists(atPath: repo.worktreePath(for: name))
         }
-        let path = repo.worktreePath(for: branch)
-        guard !FileManager.default.fileExists(atPath: path) else {
-            return .failure(Failure(message: "\(path) already exists."))
+        guard let name = (1...999).lazy.map({ "wt-\($0)" }).first(where: { !taken($0) }) else {
+            return .failure(Failure(message: "No free worktree name."))
         }
-        let exists = run(["show-ref", "--verify", "--quiet", "refs/heads/" + branch], in: repo.checkout).status == 0
-        let add = run(["worktree", "add"] + (exists ? [path, branch] : ["-b", branch, path, "HEAD"]), in: repo.checkout)
-        guard add.status == 0 else {
-            let said = add.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
-            return .failure(Failure(message: said.isEmpty ? "git worktree add failed." : said))
+        return WorktreeMaker.make(branch: name, in: repo.checkout).mapError { Failure(message: $0.message) }.map { path in
+            let base = run(["rev-parse", "HEAD"], in: path).stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+            _ = run(["config", "branch.\(name).lostty-base", base], in: path)
+            return path
         }
-        excludeWorktrees(repo)
-        return .success(path)
-    }
-
-    /// Adds the worktrees folder to the repo's own exclude file (never a
-    /// tracked .gitignore) unless something already ignores it.
-    private static func excludeWorktrees(_ repo: NewWindowRepo) {
-        guard run(["check-ignore", "-q", worktrees + "/"], in: repo.root).status != 0 else { return }
-        let info = (repo.commonDir as NSString).appendingPathComponent("info")
-        try? FileManager.default.createDirectory(atPath: info, withIntermediateDirectories: true)
-        let exclude = (info as NSString).appendingPathComponent("exclude")
-        let current = (try? String(contentsOfFile: exclude, encoding: .utf8)) ?? ""
-        let line = "/" + worktrees + "/\n"
-        let text = current + (current.isEmpty || current.hasSuffix("\n") ? "" : "\n") + line
-        try? text.write(toFile: exclude, atomically: true, encoding: .utf8)
     }
 
     private static func run(_ args: [String], in dir: String) -> ProcessResult {

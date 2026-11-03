@@ -210,7 +210,8 @@ final class TicketBoardHost: NSHostingView<TicketBoardContent> {
             // Decided as the scroll starts (CanvasScrollView.scrollingTicket).
             if CanvasScrollView.startsScroll(event) {
                 let focused = enclosingBoard?.isFocusedCard ?? false
-                canvas.scrollingTicket = focused != event.modifierFlags.contains(.option) ? self : nil
+                let mine = focused != event.modifierFlags.contains(.option) && !event.modifierFlags.contains(.command)
+                canvas.scrollingTicket = mine ? self : nil
             }
             if canvas.scrollingTicket !== self { return enclosingBoard }
         }

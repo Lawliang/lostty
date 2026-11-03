@@ -488,12 +488,14 @@ extension Ghostty {
             remoteIO?.detach()
 
             // Lostty Mobile: closing a pane ends its tmux session, as
-            // closing a plain terminal ends its shell.
-            if inTmuxSession {
-                let pid = ProcessInfo.processInfo.processIdentifier
-                Task.detached(priority: .utility) {
-                    TmuxClient().endSessions(showing: closedID, ownedBy: pid)
-                }
+            // closing a plain terminal ends its shell. Lostty: then its
+            // worktree goes, if Lostty made it and nothing in it is lost.
+            let tmux = inTmuxSession
+            let folder = pwd
+            Task.detached(priority: .utility) {
+                if tmux { TmuxClient().endSessions(showing: closedID, ownedBy: ProcessInfo.processInfo.processIdentifier) }
+                guard let folder, case .kept(let branch, let reason) = WorktreeCleanup.terminalClosed(pwd: folder) else { return }
+                await MainActor.run { LosttyNotifications.shared.postKeptWorktree(branch: branch, folder: folder, reason: reason) }
             }
 
             // Remove all of our notificationcenter subscriptions
@@ -1199,12 +1201,14 @@ extension Ghostty {
 
         override func scrollWheel(with event: NSEvent) {
             // Lostty Canvas: scrolling over the focused pane on a card scrolls
-            // it, and over any other pane pans the canvas; ⌥ swaps the two.
-            // Decided as the scroll starts (CanvasScrollView.scrollingPane).
+            // it, and over any other pane pans the canvas; ⌥ swaps the two,
+            // and ⌘ zooms the canvas over any pane. Decided as the scroll
+            // starts (CanvasScrollView.scrollingPane).
             if let canvas = canvasScrollView {
                 if CanvasScrollView.startsScroll(event) {
                     let focused = window?.firstResponder === self
-                    canvas.scrollingPane = focused != event.modifierFlags.contains(.option) ? self : nil
+                    let mine = focused != event.modifierFlags.contains(.option) && !event.modifierFlags.contains(.command)
+                    canvas.scrollingPane = mine ? self : nil
                     canvas.scrollingTicket = nil
                 }
                 if canvas.scrollingPane !== self {

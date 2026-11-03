@@ -358,6 +358,7 @@ private struct NotificationBubble: View {
         case .update: "arrow.up"
         case .zoneLeft: "square.dashed"
         case .keptInside: "hand.raised.fill"
+        case .keptWorktree: "arrow.triangle.branch"
         }
     }
 

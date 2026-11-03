@@ -3,18 +3,34 @@ import AppKit
 import SwiftUI
 
 /// The question over a new window or canvas card from a repo: what's it
-/// for? Its keys are the question's while it shows (1, 2, 3, Return to continue, Esc to go
-/// back or continue), so typing never reaches the terminal under it; ⌘
-/// shortcuts still work.
+/// for? Its keys are the question's while it shows (1, 2, 3, Return for a
+/// new worktree, Esc to go back or continue), so typing never reaches the
+/// terminal under it; ⌘ shortcuts still work. 3 lists the other projects
+/// beside this one: picking a repo asks the same about it. A terminal
+/// outside any repo (a zone with no folder) starts on that list.
 @MainActor
 final class NewWindowPrompt: ObservableObject, Identifiable {
-    enum Stage: Equatable { case choosing, naming, working }
+    enum Stage: Equatable { case choosing, projects, working }
 
-    let repo: NewWindowRepo
+    /// The repo the choices are about: the terminal's, or a project picked;
+    /// nil until one is picked when the terminal isn't in a repo.
+    @Published private(set) var repo: NewWindowRepo?
+    /// The terminal's repo.
+    private let start: NewWindowRepo?
+    /// The folder whose repos 3 lists.
+    private let projectsFolder: String
+    /// The projects 3 lists, and the filter typed over them.
+    private(set) var projects: [NewWindowProject] = []
+    @Published var query = "" { didSet { selected = 0 } }
+    @Published private(set) var selected = 0
     /// "window" or "card".
     let noun: String
     @Published private(set) var stage: Stage = .choosing
-    @Published var branch = ""
+    /// Whether the answer was a new worktree: its terminal starts Claude.
+    private(set) var madeWorktree = false
+    /// A canvas card in a project's zone asks nothing: it makes a worktree
+    /// at once, and with no project yet, once one is picked.
+    let worktreeAtOnce: Bool
     @Published private(set) var error: String?
     /// Ends the question: the folder to start the terminal over in, or nil
     /// to keep it.
@@ -26,10 +42,13 @@ final class NewWindowPrompt: ObservableObject, Identifiable {
     nonisolated(unsafe) private var monitor: Any?
 
     init(
-        repo: NewWindowRepo, window: NSWindow, noun: String = "window", takesKeys: @escaping () -> Bool = { true },
-        finish: @escaping (String?) -> Void
+        repo: NewWindowRepo?, projectsIn folder: String? = nil, worktreeAtOnce: Bool = false, window: NSWindow,
+        noun: String = "window", takesKeys: @escaping () -> Bool = { true }, finish: @escaping (String?) -> Void
     ) {
+        self.worktreeAtOnce = worktreeAtOnce
         self.repo = repo
+        self.start = repo
+        projectsFolder = repo.map { ($0.root as NSString).deletingLastPathComponent } ?? folder ?? NSHomeDirectory()
         self.noun = noun
         self.window = window
         self.takesKeys = takesKeys
@@ -38,6 +57,7 @@ final class NewWindowPrompt: ObservableObject, Identifiable {
             guard let self else { return event }
             return self.take(event) ? nil : event
         }
+        if repo == nil { pickProject() } else if worktreeAtOnce { newWorktree() }
     }
 
     /// Whether the question took a key pressed in its window.
@@ -50,35 +70,61 @@ final class NewWindowPrompt: ObservableObject, Identifiable {
         if let monitor { NSEvent.removeMonitor(monitor) }
     }
 
-    func continueHere() { done(nil) }
-    func newProject() { done(NSHomeDirectory()) }
+    /// Whether the choices are about a project picked with 3.
+    var picked: Bool { repo?.checkout != start?.checkout }
 
-    func startNaming() {
+    /// On in the picked repo's main folder, or where the terminal is.
+    func continueHere() { done(picked ? repo?.checkout : nil) }
+
+    func pickProject() {
         error = nil
-        stage = .naming
+        projects = NewWindowProject.list(in: projectsFolder, leaving: start?.root)
+        query = ""
+        stage = .projects
     }
 
-    func back() {
-        error = nil
+    /// The projects whose names hold what's typed.
+    var shown: [NewWindowProject] {
+        let typed = query.trimmingCharacters(in: .whitespaces)
+        return typed.isEmpty ? projects : projects.filter { $0.name.localizedCaseInsensitiveContains(typed) }
+    }
+
+    /// A repo asks what the terminal is for there; anything else starts it there.
+    func choose(_ project: NewWindowProject) {
+        guard let picked = NewWindowRepo.read(pwd: project.path) else { return done(project.path) }
+        repo = picked
         stage = .choosing
+        if worktreeAtOnce { newWorktree() }
     }
 
-    /// Makes the worktree, then starts the terminal there; an error stays
-    /// on the card.
-    func create() {
-        let name = branch.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard stage == .naming, !name.isEmpty else { return }
+    func chooseSelected() {
+        let list = shown
+        if list.indices.contains(selected) { choose(list[selected]) }
+    }
+
+    /// Back to the choices; with no repo to choose about, the terminal
+    /// stays where it is.
+    func back() {
+        if repo == nil { done(nil) } else { stage = .choosing }
+    }
+
+    /// Makes a worktree on a placeholder branch (`wt-3`), then starts the
+    /// terminal there; the branch takes the feature's name when its agent
+    /// runs `+ticket working`. An error stays on the card.
+    func newWorktree() {
+        guard stage == .choosing, let repo else { return }
+        error = nil
         stage = .working
-        let repo = repo
         Task {
             // Off the main thread: checking out a big repo takes a moment.
-            let made = await Task.detached { NewWindowRepo.addWorktree(repo, branch: name) }.value
+            let made = await Task.detached { NewWindowRepo.addPlaceholderWorktree(repo) }.value
             switch made {
             case .success(let path):
+                madeWorktree = true
                 done(path)
             case .failure(let failure):
                 error = failure.message
-                stage = .naming
+                stage = .choosing
             }
         }
     }
@@ -94,18 +140,23 @@ final class NewWindowPrompt: ObservableObject, Identifiable {
         if event.modifierFlags.contains(.command) { return false }
         let escape = event.keyCode == 53
         switch stage {
+        case .projects:
+            // The filter field types and Return picks; arrows move, Esc goes back.
+            switch event.keyCode {
+            case 125: selected = min(selected + 1, max(shown.count - 1, 0))
+            case 126: selected = max(selected - 1, 0)
+            case 53: back()
+            default: return false
+            }
+            return true
         case .choosing:
             switch event.charactersIgnoringModifiers {
-            case "1", "\r": continueHere()
-            case "2": startNaming()
-            case "3": newProject()
+            case "1": continueHere()
+            case "2", "\r": newWorktree()
+            case "3": pickProject()
             default: if escape { continueHere() }
             }
             return true
-        case .naming:
-            // The branch field types; Esc goes back.
-            if escape { back() }
-            return escape
         case .working:
             return true
         }
@@ -130,15 +181,15 @@ struct NewWindowPromptOverlay: View {
 private struct NewWindowPromptCard: View {
     @ObservedObject var prompt: NewWindowPrompt
     let chrome: NSColor
-    @FocusState private var fieldFocused: Bool
-
-    private var repo: NewWindowRepo { prompt.repo }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            switch prompt.stage {
-            case .choosing: choosing
-            case .naming, .working: naming
+            if let repo = prompt.repo, prompt.stage == .working, prompt.worktreeAtOnce {
+                making(repo)
+            } else if let repo = prompt.repo, prompt.stage != .projects {
+                choosing(repo)
+            } else {
+                NewWindowProjectList(prompt: prompt)
             }
         }
         .padding(20)
@@ -154,47 +205,40 @@ private struct NewWindowPromptCard: View {
         .padding(16)
     }
 
-    private var choosing: some View {
+    /// A project zone's card while its worktree is made.
+    private func making(_ repo: NewWindowRepo) -> some View {
+        HStack(spacing: 10) {
+            ProgressView().controlSize(.small)
+            header("New worktree in \(repo.name)", "From its main branch, as just fetched. Claude starts in it.")
+        }
+    }
+
+    private func choosing(_ repo: NewWindowRepo) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             header("What's this \(prompt.noun) for?",
                    "In \(repo.name)\(repo.branch.map { " on \($0)" } ?? ""). \(prompt.noun.capitalized)s in one folder "
                     + "share its branch: switching it in one switches it in all of them.")
             VStack(spacing: 4) {
                 row("1", "arrow.turn.down.right", repo.branch.map { "Continue on \($0)" } ?? "Continue here",
-                    "The same folder as your other \(prompt.noun)s.", prompt.continueHere)
-                row("2", "arrow.triangle.branch", "Same project but new branch/worktree",
-                    "Its own folder and branch. Other \(prompt.noun)s stay put.", prompt.startNaming)
-                row("3", "folder.badge.plus", "New project", "Start in your home folder.", prompt.newProject)
+                    prompt.picked ? "The project's main folder." : "The same folder as your other \(prompt.noun)s.",
+                    prompt.continueHere)
+                row("2 ↩", "arrow.triangle.branch", "Same project but new branch/worktree",
+                    "Its own folder and branch, named once the work has a name.", prompt.newWorktree)
+                row("3", "folder.badge.plus", "Another project", "Pick one of your projects, or your home folder.",
+                    prompt.pickProject)
             }
-        }
-    }
-
-    private var naming: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            header("Same project but new branch/worktree",
-                   "Starts from \(repo.branch ?? "here"), in \(repo.name)/\(NewWindowRepo.worktrees).")
-            TextField("branch-name", text: $prompt.branch)
-                .textFieldStyle(.roundedBorder)
-                .font(ClaudeUsageFont.font(size: 13))
-                .focused($fieldFocused)
-                .disabled(prompt.stage == .working)
-                .onSubmit { prompt.create() }
-                .onAppear { DispatchQueue.main.async { fieldFocused = true } }
+            .disabled(prompt.stage == .working)
+            if prompt.stage == .working {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("Making the worktree…").font(.system(size: 11)).foregroundStyle(.secondary)
+                }
+            }
             if let error = prompt.error {
                 Text(error)
                     .font(.system(size: 11))
                     .foregroundStyle(Color(red: 0.95, green: 0.33, blue: 0.30))
                     .fixedSize(horizontal: false, vertical: true)
-            }
-            HStack {
-                Button("Back") { prompt.back() }
-                    .disabled(prompt.stage == .working)
-                Spacer()
-                if prompt.stage == .working { ProgressView().controlSize(.small) }
-                Button("Create") { prompt.create() }
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(prompt.stage == .working
-                        || prompt.branch.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
     }
@@ -240,7 +284,8 @@ private struct NewWindowPromptRow: View {
                 Text(key)
                     .font(ClaudeUsageFont.font(size: 11))
                     .foregroundStyle(.secondary)
-                    .frame(width: 20, height: 20)
+                    .padding(.horizontal, key.count > 1 ? 5 : 0)
+                    .frame(minWidth: 20, minHeight: 20)
                     .background(
                         RoundedRectangle(cornerRadius: 5, style: .continuous)
                             .strokeBorder(Color.primary.opacity(0.2), lineWidth: 1))

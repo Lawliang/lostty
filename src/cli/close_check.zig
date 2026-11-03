@@ -21,8 +21,8 @@ pub const Options = struct {
 /// The `close-check` command answers Lostty's close check: the
 /// lostty-close-check skill runs `+close-check done` when the agent's work
 /// in this pane is finished, so Lostty closes the terminal, or
-/// `+close-check pending` to keep it open. Lostty ignores it unless it
-/// asked. Outside a Lostty terminal it says so and exits 1; a bad argument
+/// `+close-check pending` to keep it open. When the owner asks the agent
+/// directly, an unasked `done` closes the pane too. Outside a Lostty terminal it says so and exits 1; a bad argument
 /// exits 2.
 pub fn run(gpa: Allocator) !u8 {
     var arena_state = std.heap.ArenaAllocator.init(gpa);

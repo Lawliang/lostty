@@ -38,6 +38,8 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     /// The canvas's tickets, kept while no panel is open. Every panel lists
     /// them.
     private(set) var tickets: [CanvasTicket] = []
+    /// The zone of the card focused last, kept after its cards close.
+    private var lastZone: UUID?
     /// The open tickets panels' cards. They share `model` with the terminal
     /// cards, so they stack, block clicks and fit to view alike.
     private(set) var ticketPanels: [UUID: TicketBoardView] = [:]
@@ -191,8 +193,8 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
 
     private func observe() {
         let document = scrollView.document
-        document.clicked = { [weak self] adding in
-            self?.canvasClicked()
+        document.clicked = { [weak self, weak document] adding in
+            self?.canvasClicked(at: document?.start)
             self?.marqueeBegan(adding: adding)
         }
         document.dragged = { [weak self] rect in self?.marqueeMoved(to: rect) }
@@ -273,12 +275,22 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     // MARK: Cards
 
     /// A new card with one fresh terminal, in the middle of the view; in a
-    /// zone, starting in its folder. `config` is what it started with.
+    /// zone, starting in its folder. With no `baseConfig` to start from, it
+    /// goes in the zone under the pointer, else the zone you were last in
+    /// while that's in view, else the one in the middle of the view, which
+    /// grows to hold it. `config` is what it started with.
     @discardableResult
     func newCard(baseConfig: Ghostty.SurfaceConfiguration? = nil)
         -> (card: CardController, config: Ghostty.SurfaceConfiguration?) {
-        let frame = model.placement(in: scrollView.documentVisibleRect)
-        return newCard(at: frame, zone: model.zone(for: frame), baseConfig: baseConfig)
+        let visible = scrollView.documentVisibleRect
+        guard baseConfig == nil, let zone = model.newCardZone(last: pointerZone ?? lastZone, in: visible),
+              let zoneFrame = model.zone(zone)?.frame else {
+            let frame = model.placement(in: visible)
+            return newCard(at: frame, zone: model.zone(for: frame), baseConfig: baseConfig)
+        }
+        let frame = model.placement(in: visible.intersection(zoneFrame))
+        if model.growZone(zone, toHold: frame) { zonesDidChange() }
+        return newCard(at: frame, zone: model.zone(for: frame) ?? zone, baseConfig: nil)
     }
 
     /// ⌘T on a card: a new card beside it, as big, its zone growing to
@@ -309,7 +321,10 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         at frame: CGRect, zone: UUID?, baseConfig: Ghostty.SurfaceConfiguration?, folder: String? = nil
     ) -> (card: CardController, config: Ghostty.SurfaceConfiguration?) {
         var config = baseConfig
-        if let start = folder ?? zone.flatMap({ model.startFolder(ofZone: $0) }), Self.isFolder(start) {
+        // With no folder to start in (a zone without one), home: never the
+        // folder of whichever terminal had focus.
+        let start = folder ?? zone.flatMap({ model.startFolder(ofZone: $0) })
+        if let start = start.flatMap({ Self.isFolder($0) ? $0 : nil }) ?? (config == nil ? NSHomeDirectory() : nil) {
             config = config ?? Ghostty.SurfaceConfiguration()
             config?.workingDirectory = start
         }
@@ -399,8 +414,21 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
 
     /// Where ⌘T and ⌘N start from: the focused card, or with none (a click
     /// between the cards, a tickets panel) the last one, while it's open.
+    /// None while the pointer is over another zone than that card's: the
+    /// new card goes in the zone you point at.
     var workingCard: CardController? {
-        focusedCard ?? lastFocusedCard.flatMap { last in cards.contains { $0 === last } ? last : nil }
+        let card = focusedCard ?? lastFocusedCard.flatMap { last in cards.contains { $0 === last } ? last : nil }
+        guard let pointer = pointerZone else { return card }
+        let home = card.flatMap { model.card($0.id) }.flatMap { model.zone(for: $0.frame) }
+        return pointer == home ? card : nil
+    }
+
+    /// The zone under the pointer while it's over the canvas in front.
+    private var pointerZone: UUID? {
+        guard let window, window.isKeyWindow else { return nil }
+        let point = scrollView.document.convert(window.mouseLocationOutsideOfEventStream, from: nil)
+        guard scrollView.documentVisibleRect.contains(point) else { return nil }
+        return model.zone(for: CGRect(origin: point, size: .zero))
     }
 
     /// Keyboard focus to `card`'s focused pane.
@@ -416,8 +444,13 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
 
     /// A click on the canvas itself, between the cards, lets go of the
     /// focused card: no pane has the keyboard, and scrolling pans the canvas
-    /// over every pane.
-    private func canvasClicked() {
+    /// over every pane. A click in another zone than the last card's makes
+    /// it the zone the next new card goes in.
+    private func canvasClicked(at point: CGPoint? = nil) {
+        if let point, let zone = model.zone(for: CGRect(origin: point, size: .zero)), zone != lastZone {
+            lastZone = zone
+            lastFocusedCard = nil
+        }
         for panel in ticketPanels.values { panel.isFocusedCard = false }
         guard let previous = focusedCard else {
             // Out of a ticket's field, too.
@@ -441,6 +474,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     /// from now on (before its pane is, so the pane never blinks unfocused),
     /// in front.
     func cardWillFocus(_ card: CardController) {
+        lastZone = model.card(card.id).flatMap { model.zone(for: $0.frame) }
         let previous = focusedCard
         focusedCard = card
         lastFocusedCard = card
@@ -897,21 +931,34 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         }
         guard focusedCard === card else { return }
         focusedCard = nil
-        guard let next = frontCard else { return }
-        // A card closing while you work elsewhere never pulls the canvas forward.
-        if window?.isKeyWindow == true {
-            focus(next)
-        } else {
-            cardWillFocus(next)
-            cardDidFocus(next)
+        // The keyboard goes to the front card in view in the same zone; the
+        // canvas stays where it is. With none, nothing has it, and the next
+        // new card goes in that zone.
+        let inView = model.cardsInView(scrollView.shownRect)
+        let home = model.zone(for: frame)
+        let next = model.cards.reversed().lazy
+            .filter { inView.contains($0.id) && self.model.zone(for: $0.frame) == home }
+            .compactMap { entry in self.cards.first { $0.id == entry.id } }
+            .first
+        guard let next, let surface = next.focusedSurface ?? next.surfaceTree.first else {
+            sidebar.focusedSurfaceID = nil
+            if window?.isKeyWindow == true { window?.makeFirstResponder(scrollView.document) }
+            return
         }
+        cardWillFocus(next)
+        cardDidFocus(next)
+        // A card closing while you work elsewhere never pulls the canvas forward.
+        if window?.isKeyWindow == true { Ghostty.moveFocus(to: surface) }
     }
 
-    /// Shows the canvas and pans just enough to bring `card` into view.
+    /// Shows the canvas and glides just enough to bring `card` into view,
+    /// where a glide under way won't show it already.
     func reveal(_ card: CardController) {
         if window?.isVisible != true { showWindow(nil) }
-        guard let view = views[card.id] else { return }
-        view.scrollToVisible(view.bounds)
+        guard let frame = model.card(card.id)?.frame else { return }
+        let target = glide?.to ?? currentView
+        let shown = CanvasZoom.view(showing: frame, from: target, size: scrollView.contentView.frame.size)
+        if shown != target { glide(to: shown) }
     }
 
     /// Move to Window: the card's panes become a normal window; nothing restarts.
@@ -1191,13 +1238,9 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
 
     /// `rect` in view, zoomed no closer than `atMost`.
     func zoomToFit(_ rect: CGRect, atMost cap: CGFloat = CanvasZoom.maximum) {
-        stopGlide()
-        scrollView.magnify(toFit: rect)
-        if scrollView.magnification > cap {
-            scrollView.magnification = cap
-            center(on: CGPoint(x: rect.midX, y: rect.midY))
-        }
-        settleZoom()
+        let size = scrollView.contentView.frame.size
+        let fit = min(size.width / rect.width, size.height / rect.height)
+        glide(to: CanvasView(center: CGPoint(x: rect.midX, y: rect.midY), zoom: min(fit, cap)))
     }
 
     /// ⌃⌘1, double-clicking a header, the green button: glides to `card`

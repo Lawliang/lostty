@@ -128,6 +128,7 @@ final class LosttyStatusItem: NSObject, NSMenuDelegate {
         if PreviousBuild.available {
             menu.addItem(action("Go Back to Previous Build", #selector(goBackToPreviousBuild)))
         }
+        if EditionLibrary.available { menu.addItem(editionItem()) }
         let floors = NSMenu()
         for floor in StayAwakeStore.floors {
             let f = NSMenuItem(title: "\(floor)%", action: #selector(setFloor(_:)), keyEquivalent: "")
@@ -202,6 +203,42 @@ final class LosttyStatusItem: NSObject, NSMenuDelegate {
             alert.messageText = "Couldn't go back to the previous build"
             alert.informativeText = error.localizedDescription
             alert.runModal()
+        }
+    }
+
+    /// Edition ▸ Core / Orca …, the running one ticked.
+    private func editionItem() -> NSMenuItem {
+        let editions = NSMenu()
+        for entry in EditionLibrary.entries() {
+            let item = NSMenuItem(title: EditionLibrary.title(entry), action: #selector(switchEdition(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = entry.url
+            item.state = entry.edition == .current ? .on : .off
+            editions.addItem(item)
+        }
+        let item = NSMenuItem(title: "Edition", action: nil, keyEquivalent: "")
+        item.submenu = editions
+        return item
+    }
+
+    @objc private func switchEdition(_ sender: NSMenuItem) {
+        guard let url = sender.representedObject as? URL,
+              let entry = EditionLibrary.entries().first(where: { $0.url == url }),
+              entry.edition != .current else { return }
+        // Copying a whole app takes a moment; off the main thread, then
+        // restart into it keeping every terminal.
+        Task.detached {
+            do {
+                try EditionLibrary.install(entry)
+                await MainActor.run { LosttyRestart.restart(reason: .menu) }
+            } catch {
+                await MainActor.run {
+                    let alert = NSAlert()
+                    alert.messageText = "Couldn't switch to \(entry.edition.title)"
+                    alert.informativeText = error.localizedDescription
+                    alert.runModal()
+                }
+            }
         }
     }
 

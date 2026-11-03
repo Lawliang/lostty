@@ -4,9 +4,9 @@ import SwiftUI
 
 /// The canvas's scroll view: two-finger scrolling pans it, over a card too
 /// (but scrolls the focused pane over it; ⌥ swaps the two over a pane), in
-/// any direction (not locked to the swipe's main axis), pinching
-/// zooms it 25%–200% (its clip view scales, so clicks still land on the
-/// right cell), and it has no scrollers.
+/// any direction (not locked to the swipe's main axis), pinching or ⌘ and
+/// scrolling zooms it 25%–200% (its clip view scales, so clicks still land
+/// on the right cell), and it has no scrollers.
 final class CanvasScrollView: NSScrollView {
     let document = CanvasDocumentView(frame: NSRect(x: 0, y: 0, width: CanvasModel.size, height: CanvasModel.size))
 
@@ -44,11 +44,17 @@ final class CanvasScrollView: NSScrollView {
 
     override func scrollWheel(with event: NSEvent) {
         if Self.startsScroll(event) {
-            // Started over the canvas, or a pane or ticket handed it on: it pans.
+            // Started over the canvas, or a pane or ticket handed it on: it
+            // pans, or zooms with ⌘.
             scrollingPane = nil
             scrollingTicket = nil
+            scrollZooming = event.modifierFlags.contains(.command)
         } else if let pane = scrollingPane {
             pane.scrollWheel(with: event)
+            return
+        }
+        if scrollZooming {
+            zooms(event)
             return
         }
         if pans(event) { return }
@@ -68,6 +74,10 @@ final class CanvasScrollView: NSScrollView {
     var userMoves: (() -> Void)?
     private var panning = false
     private var pinching = false
+    /// The scroll under way started with ⌘ down: it zooms.
+    private var scrollZooming = false
+    /// How much a point of ⌘-scroll zooms: finer than a pinch.
+    static let scrollZoomStep: CGFloat = 0.003
 
     /// What's on screen of the canvas, as drawn.
     var shownRect: CGRect {
@@ -151,22 +161,40 @@ final class CanvasScrollView: NSScrollView {
     /// A pinch draws the canvas zoomed about the pointer and zooms once it
     /// stops (`drawn`), as a pan does.
     override func magnify(with event: NSEvent) {
+        zoom(to: shownZoom * (1 + event.magnification), at: event)
+        if event.phase.isEmpty || event.phase.contains(.ended) || event.phase.contains(.cancelled) {
+            pinching = false
+            settleDrawn()
+        }
+    }
+
+    /// ⌘ and a two-finger scroll zooms the same way, finer: fingers up zoom
+    /// in. Its momentum is left out, so the zoom stops with your fingers.
+    private func zooms(_ event: NSEvent) {
+        guard event.momentumPhase.isEmpty else { return }
+        let up = event.isDirectionInvertedFromDevice ? -event.scrollingDeltaY : event.scrollingDeltaY
+        let step = event.hasPreciseScrollingDeltas ? Self.scrollZoomStep : Self.scrollZoomStep * 10
+        zoom(to: shownZoom * exp(up * step), at: event)
+        if event.phase.isEmpty || event.phase.contains(.ended) || event.phase.contains(.cancelled) {
+            pinching = false
+            settleDrawn()
+        }
+    }
+
+    /// Draws the canvas at `zoom` about the pointer.
+    private func zoom(to zoom: CGFloat, at event: NSEvent) {
         if !pinching {
             userMoves?()
             panning = false
             settleDrawn()
             pinching = true
         }
-        let zoom = min(max(shownZoom * (1 + event.magnification), minMagnification), maxMagnification)
+        let zoom = min(max(zoom, minMagnification), maxMagnification)
         // The document point under the pointer stays under it.
         let inView = convert(event.locationInWindow, from: nil)
         let pointer = CGPoint(x: inView.x, y: isFlipped ? inView.y : bounds.height - inView.y)
         let under = CGPoint(x: shownRect.minX + pointer.x / shownZoom, y: shownRect.minY + pointer.y / shownZoom)
         draw(at: (CGPoint(x: under.x - pointer.x / zoom, y: under.y - pointer.y / zoom), zoom))
-        if event.phase.isEmpty || event.phase.contains(.ended) || event.phase.contains(.cancelled) {
-            pinching = false
-            settleDrawn()
-        }
     }
 }
 
@@ -187,7 +215,8 @@ final class CanvasDocumentView: NSView {
     var deselected: (() -> Void)?
     /// A letter typed with no modifier: true when it was a shortcut.
     var typed: ((String) -> Bool)?
-    private var start: CGPoint?
+    /// Where the last click between the cards landed, in document points.
+    private(set) var start: CGPoint?
 
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { true }
@@ -382,8 +411,9 @@ final class CanvasGridView: NSView {
 }
 
 /// The grid with the scroll view over it, over that the selection's
-/// outline, and over that the + button, the selection's bar, the dock and
-/// the notification stack, pinned to the window's edges at every zoom.
+/// outline, and over that the + button, the selection's bar, the dock, the
+/// zoom meter and the notification stack, pinned to the window's edges at
+/// every zoom.
 final class CanvasSurfaceView: NSView {
     let scrollView = CanvasScrollView(frame: .zero)
     let selection = CanvasSelectionView()
@@ -394,6 +424,8 @@ final class CanvasSurfaceView: NSView {
     let zones = CanvasZoneLayer(frame: NSRect(x: 0, y: 0, width: CanvasModel.size, height: CanvasModel.size))
     private let grid = CanvasGridView(frame: .zero)
     private let notifications = CanvasNotificationsView(rootView: NotificationStackView())
+    private let zoomState = CanvasZoomMeterState()
+    private lazy var zoomMeter = PassthroughHostingView(rootView: CanvasZoomMeter(state: zoomState))
 
     init() {
         super.init(frame: .zero)
@@ -408,6 +440,9 @@ final class CanvasSurfaceView: NSView {
         addSubview(selectionBar)
         addSubview(addMenu)
         addSubview(dock)
+        zoomMeter.sizingOptions = [.intrinsicContentSize]
+        zoomMeter.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(zoomMeter)
         // As big as its bubbles, at the top right.
         notifications.sizingOptions = [.intrinsicContentSize]
         notifications.translatesAutoresizingMaskIntoConstraints = false
@@ -415,6 +450,8 @@ final class CanvasSurfaceView: NSView {
         NSLayoutConstraint.activate([
             notifications.topAnchor.constraint(equalTo: topAnchor),
             notifications.trailingAnchor.constraint(equalTo: trailingAnchor),
+            zoomMeter.topAnchor.constraint(equalTo: topAnchor),
+            zoomMeter.trailingAnchor.constraint(equalTo: trailingAnchor),
         ])
         NotificationCenter.default.addObserver(
             self, selector: #selector(canvasMoved), name: NSView.boundsDidChangeNotification, object: scrollView.contentView)
@@ -442,6 +479,7 @@ final class CanvasSurfaceView: NSView {
         let top = CGPoint(x: selectionBar.frame.midX, y: selectionBar.frame.maxY), moved = shown(top)
         selectionBar.layer?.setAffineTransform(CGAffineTransform(translationX: moved.x - top.x, y: moved.y - top.y))
         grid.update()
+        zoomState.zoomed(to: scrollView.shownZoom)
         shownMoved?()
     }
 
@@ -464,6 +502,7 @@ final class CanvasSurfaceView: NSView {
     }
 
     @objc private func canvasMoved() {
+        zoomState.zoomed(to: scrollView.shownZoom)
         grid.update()
         selection.needsDisplay = true
         needsLayout = true

@@ -92,7 +92,8 @@ struct ProjectPill: View {
 }
 
 /// The pill itself, "> lostty/skins", in the colors of `skin`, else of
-/// the title bar `chrome`, `maxWidth` wide at most.
+/// the title bar `chrome`, `maxWidth` wide at most. The Mockup window
+/// style's is "lostty/skins" in cyan on a faint cyan, with no edge.
 struct ProjectPillCapsule: View {
     let label: ProjectLabel
     let skin: Skin?
@@ -101,12 +102,15 @@ struct ProjectPillCapsule: View {
     var maxWidth: CGFloat = 280
 
     var body: some View {
-        let colors = PillColors(skin: skin, chrome: chrome)
+        let mockup = LosttyWindowStyle.isMockup
+        let colors = mockup ? PillColors.mockup : PillColors(skin: skin, chrome: chrome)
         return HStack(spacing: 5) {
-            Text(">")
-                .fontWeight(.heavy)
-                .foregroundStyle(colors.prompt)
-                .accessibilityHidden(true)
+            if !mockup {
+                Text(">")
+                    .fontWeight(.heavy)
+                    .foregroundStyle(colors.prompt)
+                    .accessibilityHidden(true)
+            }
             HStack(spacing: 0) {
                 Text(label.project).foregroundStyle(colors.primary)
                 if let branch = label.branch {
@@ -115,10 +119,10 @@ struct ProjectPillCapsule: View {
             }
             .truncationMode(.middle)
         }
-        .font(ClaudeUsageFont.font(size: 11.5))
+        .font(mockup ? .system(size: 11.5) : ClaudeUsageFont.font(size: 11.5))
         .lineLimit(1)
-        .padding(.horizontal, 9)
-        .padding(.vertical, 3)
+        .padding(.horizontal, mockup ? 8 : 9)
+        .padding(.vertical, mockup ? 2 : 3)
         .frame(maxWidth: maxWidth)
         .background(Capsule().fill(colors.background))
         .overlay(Capsule().strokeBorder(colors.border, lineWidth: 1))
@@ -137,6 +141,16 @@ private struct PillColors {
     var secondary: Color
     var border: Color
     var prompt: Color
+
+    /// The mockup's: its cyan, on a 14% tint of it.
+    static let mockup: PillColors = {
+        let cyan = Color(red: 0x7A / 255, green: 0xF0 / 255, blue: 0xFF / 255)
+        return PillColors(background: cyan.opacity(0.14), primary: cyan, secondary: cyan.opacity(0.65), border: .clear, prompt: cyan)
+    }()
+
+    init(background: Color, primary: Color, secondary: Color, border: Color, prompt: Color) {
+        (self.background, self.primary, self.secondary, self.border, self.prompt) = (background, primary, secondary, border, prompt)
+    }
 
     init(skin: Skin?, chrome: NSColor?) {
         guard let skin = skin?.sessionSkin() else {
