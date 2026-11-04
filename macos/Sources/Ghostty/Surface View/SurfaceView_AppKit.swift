@@ -1203,7 +1203,7 @@ extension Ghostty {
             // Lostty Canvas: scrolling over the focused pane on a card scrolls
             // it, and over any other pane pans the canvas; ⌥ swaps the two,
             // ⌘ zooms the canvas over any pane, and a scroll soon after the
-            // canvas panned pans it on. Decided as the scroll starts
+            // canvas panned pans it on, unless a click came between. Decided as the scroll starts
             // (CanvasScrollView.scrollingPane).
             if let canvas = canvasScrollView {
                 if CanvasScrollView.startsScroll(event) {
