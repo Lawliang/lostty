@@ -308,7 +308,7 @@ struct CardHeaderContent: View {
             }
             if let key = card.ticketKey {
                 Text(key)
-                    .font(.system(size: size - 1.5, weight: .semibold, design: .monospaced))
+                    .font(PaneFont.mono(size - 1.5, .semibold))
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 5)
                     .padding(.vertical, 1)
@@ -317,12 +317,12 @@ struct CardHeaderContent: View {
             }
             if let name = card.agentName {
                 Text(name)
-                    .font(.system(size: size, weight: .semibold))
+                    .font(PaneFont.mono(size, .bold))
                     .foregroundStyle(color)
                     .fixedSize()
             }
             Text(CardController.topic(title: card.title, claim: card.claim, recap: card.titleOverride == nil ? card.recap : nil))
-                .font(.system(size: size, weight: card.agentName == nil && !style.isMockup ? .semibold : .regular))
+                .font(PaneFont.mono(size, card.agentName == nil && !style.isMockup ? .bold : .regular))
                 .foregroundStyle(card.agentName == nil ? AnyShapeStyle(color) : AnyShapeStyle(.secondary))
                 .lineLimit(1)
                 .truncationMode(.tail)
