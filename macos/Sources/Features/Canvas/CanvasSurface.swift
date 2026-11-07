@@ -48,13 +48,27 @@ final class CanvasScrollView: NSScrollView {
     static let panCarry: TimeInterval = 1
     private var lastPan: Date?
 
+    /// A click ended the pan: what's left of its swipe and momentum goes
+    /// nowhere, until the next scroll starts.
+    private var panEnded = false
+
     /// Whether a scroll starting `now` carries on the pan before it.
     func panCarriesOn(now: Date = Date()) -> Bool {
         lastPan.map { now.timeIntervalSince($0) < Self.panCarry } ?? false
     }
 
+    /// A click says what's clicked is what you want: the canvas stops where
+    /// it's drawn, and the next scroll goes to the pane under the pointer.
+    func clickEndsPan() {
+        settleDrawn()
+        lastPan = nil
+        panning = false
+        panEnded = true
+    }
+
     override func scrollWheel(with event: NSEvent) {
         if Self.startsScroll(event) {
+            panEnded = false
             // Started over the canvas, or a pane or ticket handed it on: it
             // pans, or zooms with ⌘.
             scrollingPane = nil
@@ -151,6 +165,7 @@ final class CanvasScrollView: NSScrollView {
     /// stops (`drawn`).
     private func pans(_ event: NSEvent) -> Bool {
         guard event.hasPreciseScrollingDeltas, !(event.phase.isEmpty && event.momentumPhase.isEmpty) else { return false }
+        if panEnded { return true }
         if !panning {
             userMoves?()
             pinching = false

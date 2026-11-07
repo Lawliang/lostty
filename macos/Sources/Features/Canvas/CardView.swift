@@ -106,12 +106,14 @@ final class CardView: NSView, CanvasStacked {
     }
 
     /// A Mac window's hairline edge, white on the active card, and its
-    /// shadow: deeper on the active one. The Mockup window style's: no edge
-    /// and a short soft shadow, the same on every card.
+    /// shadow: deeper on the active one. The Mockup window style's: an
+    /// off-white edge on the active card only, so you see which one has the
+    /// keyboard, and a short soft shadow, the same on every card.
     static func updateWindowLook(_ card: NSView, content: NSView, focused: Bool) {
         let dark = card.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
         if LosttyWindowStyle.isMockup {
-            content.layer?.borderWidth = 0
+            content.layer?.borderColor = LosttyWindowStyle.nsColor(LosttyWindowStyle.mockupText).cgColor
+            content.layer?.borderWidth = focused ? 1 : 0
             // The mockup's `0 10px 30px rgba(0, 0, 0, .45)`.
             card.layer?.shadowOffset = CGSize(width: 0, height: -10)
             card.layer?.shadowOpacity = 0.45

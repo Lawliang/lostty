@@ -50,6 +50,46 @@ struct CanvasZoomScrollTests {
         #expect(!view.panCarriesOn(now: Date().addingTimeInterval(CanvasScrollView.panCarry + 0.1)))
     }
 
+    private func momentum(_ dy: Int32, phase: Int64) -> NSEvent {
+        let event = CGEvent(scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 1, wheel1: dy, wheel2: 0, wheel3: 0)!
+        event.setIntegerValueField(.scrollWheelEventIsContinuous, value: 1)
+        event.setIntegerValueField(.scrollWheelEventMomentumPhase, value: phase)
+        return NSEvent(cgEvent: event)!
+    }
+
+    @Test func aPanStillInMotionCarriesOn() {
+        let view = canvas()
+        swipe(view, by: 10, command: false)
+        view.scrollWheel(with: momentum(10, phase: 2))
+        #expect(view.drawn != nil)
+        #expect(view.panCarriesOn())
+    }
+
+    @Test func aClickEndsThePan() {
+        let view = canvas()
+        swipe(view, by: 10, command: false)
+        view.clickEndsPan()
+        #expect(!view.panCarriesOn())
+    }
+
+    @Test func aClickDropsWhatIsLeftOfTheMomentum() {
+        let view = canvas()
+        swipe(view, by: 10, command: false)
+        view.scrollWheel(with: momentum(10, phase: 2))
+        view.clickEndsPan()
+        view.scrollWheel(with: momentum(10, phase: 2))
+        #expect(view.drawn == nil)
+        #expect(!view.panCarriesOn())
+    }
+
+    @Test func aNewSwipeAfterAClickPansAgain() {
+        let view = canvas()
+        swipe(view, by: 10, command: false)
+        view.clickEndsPan()
+        swipe(view, by: 10, command: false)
+        #expect(view.panCarriesOn())
+    }
+
     @Test func meterReadsThePercent() {
         #expect(CanvasZoomMeterState.label(1) == "100%")
         #expect(CanvasZoomMeterState.label(0.755) == "76%")

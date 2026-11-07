@@ -262,6 +262,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
                 stopGlide(keep: true)
                 scrollView.settleDrawn()
             }
+            if event.type == .leftMouseDown { scrollView.clickEndsPan() }
             switch event.type {
             case .magnify:
                 stopGlide(keep: true)

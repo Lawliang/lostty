@@ -119,7 +119,7 @@ struct ProjectPillCapsule: View {
             }
             .truncationMode(.middle)
         }
-        .font(mockup ? .system(size: 11.5) : ClaudeUsageFont.font(size: 11.5))
+        .font(mockup ? PaneFont.mono(11.5) : ClaudeUsageFont.font(size: 11.5))
         .lineLimit(1)
         .padding(.horizontal, mockup ? 8 : 9)
         .padding(.vertical, mockup ? 2 : 3)
