@@ -227,11 +227,10 @@ struct CanvasZoneAgentsTests {
             == ["TB-8 · Onboarding is ready for review: Added the welcome screen"])
     }
 
-    @Test func theZoneFileIsJSONTheHooksReadAndNotAHandoffState() throws {
+    @Test func theZoneFileIsJSONTheHooksRead() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
-        let handoff = ContextHandoffStore(root: root)
-        let store = CanvasZoneStore(panes: handoff.panes)
+        let store = CanvasZoneStore(panes: root.appendingPathComponent("handoff/panes"))
         let pane = UUID()
         store.writeZone(pane, CanvasZoneFile(
             start: "Lostty zone: Textberry.", zone: "Textberry", folder: nil, members: ["tb-1", "tb-2"]))
@@ -244,7 +243,7 @@ struct CanvasZoneAgentsTests {
         #expect(store.claims().isEmpty)
         store.writeClaims(pane, ["Karaoke"])
 
-        let url = handoff.panes.appendingPathComponent("\(pane.uuidString).zone.json")
+        let url = store.panes.appendingPathComponent("\(pane.uuidString).zone.json")
         let json = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
         #expect(json["start"] as? String == "Lostty zone: Textberry.")
         #expect(json["zone"] as? String == "Textberry")
@@ -259,9 +258,9 @@ struct CanvasZoneAgentsTests {
         let boarded = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
         #expect(boarded["board"] as? String == "Textberry tickets")
         #expect(boarded["features"] as? [String: String] == ["tb-1": "Onboarding"])
-        let allow = handoff.panes.appendingPathComponent("\(pane.uuidString).zone.allow")
+        let allow = store.panes.appendingPathComponent("\(pane.uuidString).zone.allow")
         #expect(try String(contentsOf: allow, encoding: .utf8) == "lostty-a9")
-        let say = handoff.panes.appendingPathComponent("\(pane.uuidString).zone.say")
+        let say = store.panes.appendingPathComponent("\(pane.uuidString).zone.say")
         #expect(try String(contentsOf: say, encoding: .utf8) == "You're now in zone Textberry.")
         store.appendSay(pane, "You may retry your message to lostty-a9 once.")
         #expect(try String(contentsOf: say, encoding: .utf8)
@@ -269,17 +268,16 @@ struct CanvasZoneAgentsTests {
         store.appendSay(pane, "You may retry your message to lostty-a9 once.")
         #expect(try String(contentsOf: say, encoding: .utf8)
             == "You're now in zone Textberry.\n\nYou may retry your message to lostty-a9 once.")
-        #expect(handoff.loadStates().isEmpty)
 
         store.removeZone(pane)
         store.removeSay(pane)
-        #expect(try FileManager.default.contentsOfDirectory(atPath: handoff.panes.path).isEmpty)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: store.panes.path).isEmpty)
     }
 
     @Test func sweepingRemovesOnlyTheZoneFilesOfPanesGoneFromTheCanvas() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
-        let store = CanvasZoneStore(panes: ContextHandoffStore(root: root).panes)
+        let store = CanvasZoneStore(panes: root.appendingPathComponent("handoff/panes"))
         let live = UUID(), gone = UUID()
         for pane in [live, gone] {
             store.writeZone(pane, CanvasZoneFile(start: "Lostty zone: Textberry.", zone: "Textberry", folder: nil))

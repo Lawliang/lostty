@@ -285,13 +285,14 @@ struct CanvasZoneFile: Equatable, Encodable {
     }
 }
 
-/// Each pane's zone files, in the context handoff's queue folder
-/// (`ContextHandoffStore.panes`): `<PANE>.zone.json`, read by the hooks
+/// Each pane's zone files, in the hooks' queue folder
+/// (`handoff/panes`): `<PANE>.zone.json`, read by the hooks
 /// and kept current, `<PANE>.zone.say`, a move's note, taken by the
 /// next prompt or tool call, and `<PANE>.zone.allow`, the owner's Allow
 /// Once, taken by the one SendMessage it names.
 struct CanvasZoneStore: Sendable {
-    static let standard = CanvasZoneStore(panes: ContextHandoffStore.standard.panes)
+    static let standard = CanvasZoneStore(panes: FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent("Library/Application Support/Lostty/handoff/panes"))
 
     let panes: URL
 

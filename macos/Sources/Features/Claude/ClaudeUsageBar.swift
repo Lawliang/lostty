@@ -7,9 +7,7 @@ import SwiftUI
 /// The strip along the bottom of the window, as tall as the title bar and
 /// the same color as it and the sidebar, in the terminal's font. At the
 /// left, `Context ▓▓░░░░░░░░ 50K   CPU 12%  Mem 340M`: the focused pane's
-/// context and what the pane's processes use (`PaneResourceMonitor`). In
-/// the beta, a line on the context meter marks where the conversation
-/// hands off, and clicking the context shows and sets that limit. The
+/// context and what the pane's processes use (`PaneResourceMonitor`). The
 /// plan's weekly limit is the canvas dock's Usage app. Context is hidden without
 /// a Claude session in the focused pane; CPU and memory show for any pane
 /// on Lostty's tmux. At the right, `✳ Opus 5.5`, then the apps button;
@@ -24,18 +22,9 @@ struct ClaudeUsageBar: View {
     @ObservedObject var model: ExtensionSidebarModel
     @ObservedObject private var usage = ClaudeUsageRuntime.shared
     @ObservedObject private var skins = SkinsRuntime.shared.manager
-    @ObservedObject private var handoff = ContextHandoffCoordinator.shared
-    @ObservedObject private var handoffSettings = ContextHandoffPreferences.shared
     @ObservedObject private var monitor = PaneResourceMonitor.shared
     @ObservedObject private var style = WindowStylePreferences.shared
-    @State private var showingHandoff = false
-    @State private var hovered: Part?
     @State private var width: CGFloat = 0
-
-    private enum Part { case context, handoff }
-
-    /// The context handoff is the beta's.
-    private let handsOff = LosttyChannel.current.handsOff
 
     private var pane: UUID? { model.focusedSurfaceID }
     private var chrome: NSColor { model.chromeColor ?? .windowBackgroundColor }
@@ -102,97 +91,25 @@ struct ClaudeUsageBar: View {
 
     /// The chips in a style: their text, padding and the space between.
     private func metersWidth(_ style: ClaudeUsageFit.Style) -> CGFloat {
-        let button = hasSession && armedPane != nil ? Self.handoffWidth : 0
         var texts: [String] = []
         if hasSession { texts.append(contextText(style)) }
         if let resources { texts.append(resourcesText(resources, style)) }
         guard !texts.isEmpty else { return 0 }
         return texts.map { ClaudeUsageFont.width($0) }.reduce(0, +)
-            + CGFloat(texts.count) * 16 + CGFloat(texts.count - 1) * 6 + button
+            + CGFloat(texts.count) * 16 + CGFloat(texts.count - 1) * 6
     }
 
     private func meters(_ style: ClaudeUsageFit.Style) -> some View {
         HStack(spacing: 6) {
-            if hasSession { usageChips(style) }
-            if let resources { chip(resourcesLine(resources, style), lit: false) }
+            if hasSession { chip(contextLine(style)) }
+            if let resources { chip(resourcesLine(resources, style)) }
         }
     }
 
-    @ViewBuilder
-    private func usageChips(_ style: ClaudeUsageFit.Style) -> some View {
-        if handsOff {
-            // The context and, while a handoff is armed, its button: one chip.
-            HStack(spacing: 0) {
-                Button { showingHandoff.toggle() } label: {
-                    contextLine(style)
-                        .padding(.leading, 8)
-                        .padding(.trailing, armedPane == nil ? 8 : 3)
-                        .padding(.vertical, 4)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .onHover { hover(.context, $0) }
-                if let armedPane { handoffButton(armedPane) }
-            }
-            .background(
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(ink.opacity(hovered == .context || showingHandoff ? 0.07 : 0)))
-            .popover(isPresented: $showingHandoff, arrowEdge: .top) {
-                ContextHandoffDetails(settings: handoffSettings, context: pane.flatMap { usage.contexts[$0] },
-                                      armed: pane.flatMap { handoff.line($0) })
-            }
-        } else {
-            chip(contextLine(style), lit: false)
-        }
-    }
-
-    /// What the handoff button adds to the context chip past its padding.
-    private static let handoffWidth: CGFloat = 16
-
-    /// The focused pane, while its handoff is armed.
-    private var armedPane: UUID? { pane.flatMap { handoff.isArmed($0) ? $0 : nil } }
-
-    /// ↻ after the context while a handoff is armed. After you Skip its
-    /// countdown, it counts the skipped handoff down again; otherwise it
-    /// shows what the handoff waits for.
-    private func handoffButton(_ pane: UUID) -> some View {
-        let resumable = handoff.canResume(pane)
-        return Button {
-            if handoff.canResume(pane) { handoff.resume(pane) } else { showingHandoff.toggle() }
-        } label: {
-            Image(systemName: "arrow.triangle.2.circlepath")
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(accent)
-                .frame(width: 16, height: 16)
-                .background(
-                    RoundedRectangle(cornerRadius: 4, style: .continuous)
-                        .fill(ink.opacity(hovered == .handoff ? 0.12 : 0)))
-                .padding(.trailing, 5)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .onHover { hover(.handoff, $0) }
-        .help(resumable ? "Hand off now" : "Will hand off at the next clean break")
-        .accessibilityLabel(resumable ? "Hand off now" : "Handoff waiting")
-    }
-
-    /// Moving straight from one part to the other may report the new one
-    /// before the old one's exit, so an exit clears only its own part.
-    private func hover(_ part: Part, _ inside: Bool) {
-        if inside {
-            hovered = part
-        } else if hovered == part {
-            hovered = nil
-        }
-    }
-
-    private func chip(_ content: some View, lit: Bool) -> some View {
+    private func chip(_ content: some View) -> some View {
         content
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
-            .background(
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(ink.opacity(lit ? 0.07 : 0)))
             .contentShape(Rectangle())
     }
 
@@ -259,30 +176,11 @@ struct ClaudeUsageBar: View {
             if style.labels { Text("Context ").foregroundColor(ink.opacity(0.6)) }
             if style.cells > 0 {
                 ClaudeUsageBlocks.text(percent, accent: accent, empty: ink.opacity(0.28), cells: style.cells)
-                    .overlay(alignment: .leading) {
-                        if let mark = handoffMark(context) {
-                            // A line across the meter where the handoff limit falls.
-                            GeometryReader { meter in
-                                Rectangle()
-                                    .fill(ink.opacity(0.85))
-                                    .frame(width: 1.5, height: meter.size.height + 4)
-                                    .offset(x: meter.size.width * mark - 0.75, y: -2)
-                            }
-                        }
-                    }
             }
             Text((style.cells > 0 ? " " : "") + ClaudeUsageFormat.thousands(context?.used ?? 0))
                 .foregroundColor(number(percent, style))
         }
         .help(style.labels ? "" : "Context")
-    }
-
-    /// Where the handoff limit falls on the context meter, 0...1, while
-    /// handoffs are on and the window's size is known.
-    private func handoffMark(_ context: ClaudeUsageReport.Context?) -> Double? {
-        guard handsOff, handoffSettings.enabled, let context, context.size > 0 else { return nil }
-        let limit = ContextHandoffPolicy.limit(setting: handoffSettings.setting, size: context.size)
-        return min(1, Double(limit) / Double(context.size))
     }
 }
 
@@ -427,72 +325,6 @@ struct ClaudeUsageDetails: View {
         .padding(.vertical, 13)
         .frame(width: 320)
         .onAppear { breakdown.refresh() }
-    }
-}
-
-/// The focused window's context handoff: where it hands off, each limit
-/// to pick from (the same setting as Settings → Handoff), and the switch.
-private struct ContextHandoffDetails: View {
-    @ObservedObject var settings: ContextHandoffPreferences
-    let context: ClaudeUsageReport.Context?
-    /// What an armed handoff waits for (ContextHandoffCoordinator.line).
-    let armed: String?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Toggle(isOn: $settings.enabled) { Text("Hand off long conversations") }
-                .toggleStyle(.switch)
-                .controlSize(.mini)
-                .padding(.horizontal, 10)
-                .padding(.top, 7)
-            Text(summary)
-                .font(ClaudeUsageFont.font(size: 10))
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, 10)
-                .padding(.bottom, 4)
-            ForEach(ContextHandoffPreferences.limits, id: \.self) { limit in
-                row(limit)
-            }
-        }
-        .font(ClaudeUsageFont.font(size: 12))
-        .padding(6)
-        .frame(width: 320)
-    }
-
-    private var summary: String {
-        guard settings.enabled else { return "Off: Lostty doesn't hand off long conversations." }
-        if let armed { return armed }
-        let k = ContextHandoffDirective.k
-        guard let context, context.size > 0 else { return "Hands off past \(k(settings.setting))." }
-        let limit = ContextHandoffPolicy.limit(setting: settings.setting, size: context.size)
-        let ceiling = ContextHandoffPolicy.ceiling(setting: settings.setting, size: context.size)
-        return "This window: \(k(context.used)) of \(k(context.size)). Hands off at the next clean break "
-            + "past \(k(limit)), at the end of the turn past \(k(ceiling))."
-    }
-
-    private func row(_ limit: Int) -> some View {
-        let k = ContextHandoffDirective.k
-        // Capped at 70% of a smaller window.
-        let here = context.map { ContextHandoffPolicy.limit(setting: limit, size: $0.size) }
-        return Button { settings.limit = limit } label: {
-            HStack(spacing: 0) {
-                Text("Hand off after " + k(limit))
-                Spacer(minLength: 10)
-                if let here, here != limit {
-                    Text(k(here) + " here").foregroundStyle(.secondary)
-                }
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
-            .background(
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(Color.primary.opacity(settings.limit == limit ? 0.08 : 0)))
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .disabled(!settings.enabled)
-        .opacity(settings.enabled ? 1 : 0.5)
     }
 }
 

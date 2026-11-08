@@ -91,7 +91,7 @@ enum SessionRestore {
     /// Types `command` into the pane once its shell is up (it reports its
     /// folder at the first prompt), or after `shellWait`.
     static func type(_ command: String, into pane: UUID) {
-        guard let surface = ContextHandoffWiring.surface(pane) else { return }
+        guard let surface = PaneTyping.surface(pane) else { return }
         let resume = PendingResume()
         resume.watch = surface.$pwd.dropFirst().compactMap { $0 }.first()
             .receive(on: DispatchQueue.main)
@@ -111,7 +111,7 @@ enum SessionRestore {
             guard !typed else { return }
             typed = true
             watch = nil
-            ContextHandoffWiring.type(pane, [.text(command), .enter])
+            PaneTyping.type(pane, [.text(command), .enter])
         }
     }
 }

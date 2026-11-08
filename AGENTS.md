@@ -129,10 +129,6 @@ GitHub team workflow. In this repo these rules win over them:
 - **One workflow.** During a `/pstack:poteto-mode` run, its playbook is
   the only workflow: don't mix in superpowers, agent-skills, mattpocock
   or claude-codex-loop skills.
-- **Handoffs.** When Lostty asks for a handoff mid-run, follow "Pause
-  safely" and write it into Lostty's handoff note, with **Active
-  workflow** naming the playbook and the next step. The fresh window
-  resumes with "Session pickup".
 - **Upstream code.** no-comments, unslop and the comment rule apply only
   to code Lostty writes. Never remove or reformat upstream Ghostty
   comments or code.

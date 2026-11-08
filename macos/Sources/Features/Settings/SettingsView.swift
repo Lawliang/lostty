@@ -5,15 +5,12 @@ import SwiftUI
 /// config file.
 struct SettingsView: View {
     @ObservedObject var observer: ObserverPreferences
-    @ObservedObject var handoff: ContextHandoffPreferences
     @ObservedObject var font: TerminalFontPreferences
     @ObservedObject var updates: UpdatePreferences
     /// A build made on this Mac updates with install.sh, not the updater.
     var hasUpdateFeed = UpdateFeed.current != nil
     /// Turn summaries, while the observer is on.
     var observesTurns = LosttyChannel.current.observesTurns
-    /// The Handoff section is for the beta, the only build with the handoff.
-    var handsOff = LosttyChannel.current.handsOff
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -24,22 +21,6 @@ struct SettingsView: View {
                         Toggle("Summarize turns in the background", isOn: $observer.background)
                         Text("After each turn, Claude Haiku (or Codex, or Apple Intelligence) updates the "
                              + "turn's summary, using your own subscription. Off, it summarizes only when asked.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                if handsOff {
-                    Section("Handoff") {
-                        Toggle("Hand off long conversations", isOn: $handoff.enabled)
-                        Picker("Hand off after", selection: $handoff.limit) {
-                            ForEach(ContextHandoffPreferences.limits, id: \.self) { limit in
-                                Text(ContextHandoffDirective.k(limit)).tag(limit)
-                            }
-                        }
-                        .disabled(!handoff.enabled)
-                        Text("Past this, Claude hands off at its next clean break and Lostty starts a fresh "
-                             + "window from the handoff, in terminals open on this Mac. On 200k models: "
-                             + "\(ContextHandoffDirective.k(ContextHandoffPolicy.limit(setting: handoff.limit, size: 200_000))).")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -160,7 +141,6 @@ struct SettingsView_Previews: PreviewProvider {
     static var previews: some View {
         SettingsView(
             observer: ObserverPreferences(defaults: UserDefaults(suiteName: "preview")!),
-            handoff: ContextHandoffPreferences(defaults: UserDefaults(suiteName: "preview")!),
             font: TerminalFontPreferences(configURL: { nil }, reloadConfig: {}),
             updates: UpdatePreferences(defaults: UserDefaults(suiteName: "preview")!))
     }

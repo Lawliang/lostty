@@ -354,7 +354,6 @@ private struct NotificationBubble: View {
         return switch item.kind {
         case .hooksMissing: "link"
         case .hooks: "checkmark"
-        case .handoff: "exclamationmark"
         case .update: "arrow.up"
         case .zoneLeft: "square.dashed"
         case .keptInside: "hand.raised.fill"

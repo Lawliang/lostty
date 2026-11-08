@@ -37,10 +37,6 @@ final class ClaudeRuntime: ObservableObject {
     /// tell: the guard learns the pane runs an agent, for its badge.
     var agentSeen: @MainActor (UUID, HookAgent?) -> Void = { _, _ in }
 
-    /// What the context handoff hears: turn ends, prompts, a fresh window
-    /// after /clear, and the pane's agent going away. Set at launch.
-    var handoffSignal: @MainActor (UUID, ContextHandoffSignal) -> Void = { _, _ in }
-
     /// A pane's request ended: Claude stopped (not to ask permission) after a
     /// turn the hooks saw begin, naming its conversation file and when that
     /// turn began. The gold drop's cue. Set at launch.
@@ -59,11 +55,14 @@ final class ClaudeRuntime: ObservableObject {
     /// Panes whose title has shown a working spinner since the trace started.
     private var sawSpinner: Set<UUID> = []
     /// Panes whose hooks said a turn began (a prompt or a tool start) and no
-    /// Stop has ended it: the handoff's turns. Not the trace: the title or
+    /// Stop has ended it: the request's turns. Not the trace: the title or
     /// working line stops that at a permission prompt, and Claude carries on
     /// after you approve with no new prompt. Each with when its turn began,
     /// for the request's end.
     private var hookTurns: [UUID: Date] = [:]
+    /// Panes with keys typed since their agent's last prompt: the prompt
+    /// may hold half a message, so the trash's close check types nothing.
+    private var typed: Set<UUID> = []
 
     init(
         now: @escaping () -> Date = Date.init,
@@ -79,22 +78,20 @@ final class ClaudeRuntime: ObservableObject {
 
     func phase(_ id: UUID) -> TracePhase { phases[id] ?? .off }
 
+    func hasTyped(_ id: UUID) -> Bool { typed.contains(id) }
+
+    /// A key typed in the pane (`PaneTyping.watchKeys`).
+    func keyTyped(_ id: UUID) { typed.insert(id) }
+
     func userVarChanged(_ id: UUID, name: String, value: String) {
         guard name == ClaudeConstants.userVarName else { return }
         if let event = ClaudeMessage.task(value) {
             PaneTasks.shared.apply(event, to: id)
             return
         }
-        if ClaudeMessage.isFresh(value) {
+        if ClaudeMessage.isFresh(value) || ClaudeMessage.isCleared(value) {
             CanvasController.shared?.conversationEnded(id)
             PaneTasks.shared.clear(id)
-            handoffSignal(id, .fresh)
-            return
-        }
-        if ClaudeMessage.isCleared(value) {
-            CanvasController.shared?.conversationEnded(id)
-            PaneTasks.shared.clear(id)
-            handoffSignal(id, .cleared)
             return
         }
         if let target = ClaudeMessage.denied(value) { messageKeptInside(id, target) }
@@ -120,7 +117,7 @@ final class ClaudeRuntime: ObservableObject {
         switch state {
         case .busy:
             hookTurns[id] = hookTurns[id] ?? now()
-            handoffSignal(id, .prompted)
+            typed.remove(id)
         case .idle where !permission:
             // A Stop with subagents or shells still working says `agents`.
             PaneTasks.shared.clear(id)
@@ -137,7 +134,6 @@ final class ClaudeRuntime: ObservableObject {
         LastSessionStore.shared.conversation(id, transcript: path)
         if turnUnderWay { turnEnded(id, path) }
         if !permission, let start = hookTurns.removeValue(forKey: id) {
-            handoffSignal(id, .stopped(transcript: path))
             requestEnded(id, path, start)
         }
     }
@@ -151,7 +147,7 @@ final class ClaudeRuntime: ObservableObject {
         LastSessionStore.shared.agentGone(id)
         apply(.exit, to: id)
         hookTurns[id] = nil
-        handoffSignal(id, .gone)
+        typed.remove(id)
     }
 
     func surfaceClosed(_ id: UUID) {
@@ -165,7 +161,7 @@ final class ClaudeRuntime: ObservableObject {
         sawSpinner.remove(id)
         hookTurns[id] = nil
         setAction(nil, for: id)
-        handoffSignal(id, .gone)
+        typed.remove(id)
     }
 
     /// A pane is focused when its window is key and it is the selected pane.

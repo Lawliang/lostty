@@ -404,9 +404,9 @@ class AppDelegate: NSObject,
             CanvasController.shared?.cards.first { $0.surfaceTree.contains { $0.id == pane } }?.applyTitleToWindow()
         }
         if LosttyChannel.current.observesTurns { TurnObserver.shared.start() }
-        // The context handoff (beta): before the restart resume's hook
-        // reinstall, which brings in the handoff's hook events.
-        ContextHandoffWiring.start()
+        // Keys typed since an agent's last prompt keep the trash's close
+        // check from typing into that prompt.
+        PaneTyping.watchKeys()
         // A Claude dictation sends itself when you stop talking.
         VoiceAutoSend.shared.start()
         ClaudeRuntime.shared.messageKeptInside = { CanvasController.shared?.messageKeptInside(pane: $0, target: $1) }
