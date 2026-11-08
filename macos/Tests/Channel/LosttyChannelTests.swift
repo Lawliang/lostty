@@ -14,8 +14,8 @@ struct LosttyChannelTests {
     }
 
     @Test func theUnfinishedFeaturesAreOnlyInTheBeta() {
-        #expect(LosttyChannel.beta.isBeta && LosttyChannel.beta.handsOff && LosttyChannel.beta.hasBranches)
-        #expect(!LosttyChannel.stable.isBeta && !LosttyChannel.stable.handsOff && !LosttyChannel.stable.hasBranches)
+        #expect(LosttyChannel.beta.isBeta && LosttyChannel.beta.hasBranches)
+        #expect(!LosttyChannel.stable.isBeta && !LosttyChannel.stable.hasBranches)
     }
 
     @Test func theTurnObserverIsOffEverywhereUntilItHasANewHome() {

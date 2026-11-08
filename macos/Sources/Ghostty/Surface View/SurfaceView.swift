@@ -248,9 +248,6 @@ extension Ghostty {
                     .id(surfaceView.id)
                 if AgentCoordination.isOn { GuardBadgeOverlay(surfaceID: surfaceView.id) }
 
-                // Lostty: a handoff counting down to its clear, with Skip.
-                ContextHandoffCountdownCard(surfaceID: surfaceView.id)
-
                 // Grab handle for dragging the window. We want this to appear at the very
                 // top Z-index os it isn't faded by the unfocused overlay.
                 //

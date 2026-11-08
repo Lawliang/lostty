@@ -30,8 +30,6 @@ struct LosttyNotification: Identifiable {
         case hooksMissing(HookAgent)
         /// The outcome of connecting the agent's hooks.
         case hooks(HookAgent)
-        /// Context handoffs that didn't reach their fresh windows, in one bubble.
-        case handoff
         /// A new Lostty is ready for Restart to Update.
         case update
         /// Canvas cards that left the zone with this title, in one bubble.
@@ -46,7 +44,6 @@ struct LosttyNotification: Identifiable {
         var slot: String {
             switch self {
             case .hooksMissing(let agent), .hooks(let agent): "hooks-\(agent.rawValue)"
-            case .handoff: "handoff"
             case .update: "update"
             case .zoneLeft(let zone): "zone-left-\(zone)"
             case .keptInside(let pane): "kept-inside-\(pane.uuidString)"
@@ -71,7 +68,7 @@ struct LosttyNotification: Identifiable {
     /// Clicking the bubble itself: goes to what it's about.
     var open: (@MainActor () -> Void)?
     /// What a bubble for several events stands for, oldest first: the
-    /// cards that left a zone, or the handoffs that didn't finish.
+    /// cards that left a zone.
     var group: [String] = []
     /// The canvas project zone it's about: it stacks with the zone's others.
     var zone: UUID?

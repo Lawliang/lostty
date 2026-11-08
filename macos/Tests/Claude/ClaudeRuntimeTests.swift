@@ -454,28 +454,6 @@ struct ClaudeRuntimeTests {
         #expect(ClaudeMessage.agentKind(payload("idle")) == nil)
     }
 
-    @Test func handoffSignals() {
-        let runtime = makeRuntime()
-        var signals: [ContextHandoffSignal] = []
-        runtime.handoffSignal = { _, signal in signals.append(signal) }
-        runtime.userVarChanged(pane, name: ClaudeConstants.userVarName, value: payload("busy"))
-        runtime.userVarChanged(pane, name: ClaudeConstants.userVarName,
-                               value: #"{"v":1,"state":"idle","transcript":"/t.jsonl"}"#)
-        runtime.userVarChanged(pane, name: ClaudeConstants.userVarName, value: payload("fresh"))
-        runtime.commandFinished(pane)
-        #expect(signals == [.prompted, .stopped(transcript: "/t.jsonl"), .fresh, .gone])
-    }
-
-    @Test func aPermissionPromptIsNoHandoffStop() {
-        let runtime = makeRuntime()
-        var signals: [ContextHandoffSignal] = []
-        runtime.handoffSignal = { _, signal in signals.append(signal) }
-        runtime.userVarChanged(pane, name: ClaudeConstants.userVarName, value: payload("busy"))
-        runtime.userVarChanged(pane, name: ClaudeConstants.userVarName,
-                               value: #"{"v":1,"state":"idle","permission":true,"transcript":"/t.jsonl"}"#)
-        #expect(signals == [.prompted])
-    }
-
     @Test func aStopEndsTheRequestThatBeganAtItsPrompt() {
         let runtime = makeRuntime()
         var ended: [(UUID, String, Date)] = []
@@ -501,24 +479,24 @@ struct ClaudeRuntimeTests {
 
     // Claude carries on after you approve a tool with no new prompt, and the
     // approved call can be its last: its Stop still ends the turn.
-    @Test func theStopAfterAnApprovedToolIsAHandoffStop() {
+    @Test func theStopAfterAnApprovedToolEndsTheRequest() {
         let runtime = makeRuntime()
-        var signals: [ContextHandoffSignal] = []
-        runtime.handoffSignal = { _, signal in signals.append(signal) }
+        var ended: [String] = []
+        runtime.requestEnded = { _, path, _ in ended.append(path) }
         runtime.userVarChanged(pane, name: ClaudeConstants.userVarName, value: payload("busy"))
         runtime.userVarChanged(pane, name: ClaudeConstants.userVarName,
                                value: #"{"v":1,"state":"idle","permission":true,"transcript":"/t.jsonl"}"#)
         runtime.userVarChanged(pane, name: ClaudeConstants.userVarName,
                                value: #"{"v":1,"state":"idle","transcript":"/t.jsonl"}"#)
-        #expect(signals == [.prompted, .stopped(transcript: "/t.jsonl")])
+        #expect(ended == ["/t.jsonl"])
     }
 
     // The title stops spinning at the permission prompt, which ends the
-    // trace before the hook says why: the handoff's turn is the hooks'.
-    @Test func aTraceStoppedByTheTitleStillEndsTheHandoffsTurn() {
+    // trace before the hook says why: the request's turn is the hooks'.
+    @Test func aTraceStoppedByTheTitleStillEndsTheRequest() {
         let runtime = makeRuntime()
-        var signals: [ContextHandoffSignal] = []
-        runtime.handoffSignal = { _, signal in signals.append(signal) }
+        var ended: [String] = []
+        runtime.requestEnded = { _, path, _ in ended.append(path) }
         runtime.userVarChanged(pane, name: ClaudeConstants.userVarName, value: payload("busy"))
         runtime.titleChanged(pane, title: "◐ Working")
         runtime.titleChanged(pane, title: "✳ Working")
@@ -526,26 +504,23 @@ struct ClaudeRuntimeTests {
                                value: #"{"v":1,"state":"idle","permission":true,"transcript":"/t.jsonl"}"#)
         runtime.userVarChanged(pane, name: ClaudeConstants.userVarName,
                                value: #"{"v":1,"state":"idle","transcript":"/t.jsonl"}"#)
-        #expect(signals == [.prompted, .stopped(transcript: "/t.jsonl")])
+        #expect(ended == ["/t.jsonl"])
     }
 
     @Test func aPermissionPromptOutOfNowhereStartsNoTurn() {
         let runtime = makeRuntime()
-        var signals: [ContextHandoffSignal] = []
-        runtime.handoffSignal = { _, signal in signals.append(signal) }
+        var ended: [String] = []
+        runtime.requestEnded = { _, path, _ in ended.append(path) }
         runtime.userVarChanged(pane, name: ClaudeConstants.userVarName,
                                value: #"{"v":1,"state":"idle","permission":true,"transcript":"/t.jsonl"}"#)
         runtime.userVarChanged(pane, name: ClaudeConstants.userVarName,
                                value: #"{"v":1,"state":"idle","transcript":"/t.jsonl"}"#)
-        #expect(signals.isEmpty)
+        #expect(ended.isEmpty)
     }
 
-    @Test func aClearWithoutAHandoffIsSignalled() {
+    @Test func aClearChangesNoPhase() {
         let runtime = makeRuntime()
-        var signals: [ContextHandoffSignal] = []
-        runtime.handoffSignal = { _, signal in signals.append(signal) }
         runtime.userVarChanged(pane, name: ClaudeConstants.userVarName, value: payload("cleared"))
-        #expect(signals == [.cleared])
         #expect(runtime.phases[pane] == nil)
     }
 

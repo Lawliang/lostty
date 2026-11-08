@@ -89,7 +89,7 @@ struct LosttyNotificationsTests {
 
     @Test func theNewestIsOnTop() {
         let center = make()
-        let first = note(.update), second = note(.handoff)
+        let first = note(.update), second = note(.zoneLeft("Textberry"))
         center.post(first)
         center.post(second)
         #expect(center.items.map(\.id) == [second.id, first.id])
