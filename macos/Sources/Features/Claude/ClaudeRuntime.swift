@@ -64,6 +64,9 @@ final class ClaudeRuntime: ObservableObject {
     /// after you approve with no new prompt. Each with when its turn began,
     /// for the request's end.
     private var hookTurns: [UUID: Date] = [:]
+    /// Panes with keys typed since their agent's last prompt: the prompt
+    /// may hold half a message, so the trash's close check types nothing.
+    private var typed: Set<UUID> = []
 
     init(
         now: @escaping () -> Date = Date.init,
@@ -78,6 +81,11 @@ final class ClaudeRuntime: ObservableObject {
     }
 
     func phase(_ id: UUID) -> TracePhase { phases[id] ?? .off }
+
+    func hasTyped(_ id: UUID) -> Bool { typed.contains(id) }
+
+    /// A key typed in the pane (`PaneTyping.watchKeys`).
+    func keyTyped(_ id: UUID) { typed.insert(id) }
 
     func userVarChanged(_ id: UUID, name: String, value: String) {
         guard name == ClaudeConstants.userVarName else { return }
@@ -120,6 +128,7 @@ final class ClaudeRuntime: ObservableObject {
         switch state {
         case .busy:
             hookTurns[id] = hookTurns[id] ?? now()
+            typed.remove(id)
             handoffSignal(id, .prompted)
         case .idle where !permission:
             // A Stop with subagents or shells still working says `agents`.
@@ -151,6 +160,7 @@ final class ClaudeRuntime: ObservableObject {
         LastSessionStore.shared.agentGone(id)
         apply(.exit, to: id)
         hookTurns[id] = nil
+        typed.remove(id)
         handoffSignal(id, .gone)
     }
 
@@ -165,6 +175,7 @@ final class ClaudeRuntime: ObservableObject {
         sawSpinner.remove(id)
         hookTurns[id] = nil
         setAction(nil, for: id)
+        typed.remove(id)
         handoffSignal(id, .gone)
     }
 

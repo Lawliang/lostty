@@ -25,7 +25,7 @@ final class CanvasCloseCheck {
     static func pane(_ id: UUID) -> Pane {
         guard let agent = LastSessionStore.shared.agent(in: id) else { return .closes }
         let runtime = ClaudeRuntime.shared
-        if !runtime.phase(id).isOff || runtime.actions[id] != nil || ContextHandoffCoordinator.shared.hasTyped(id) {
+        if !runtime.phase(id).isOff || runtime.actions[id] != nil || runtime.hasTyped(id) {
             return .keeps
         }
         return .ask(agent)
@@ -65,7 +65,7 @@ final class CanvasCloseCheck {
             card.checkingClose = true
             for (id, agent) in ask {
                 asked[id] = card
-                ContextHandoffWiring.type(id, [.text(Self.prompt(for: agent)), .enter])
+                PaneTyping.type(id, [.text(Self.prompt(for: agent)), .enter])
             }
             let ids = ask.map(\.0)
             DispatchQueue.main.asyncAfter(deadline: .now() + Self.timeout) { [weak self, weak card] in

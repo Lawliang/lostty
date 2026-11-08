@@ -186,7 +186,7 @@ final class VoiceAutoSend {
     private func tickAll() {
         let now = Date()
         for pane in Array(watches.keys) {
-            guard var watch = watches[pane], let view = ContextHandoffWiring.surface(pane) else {
+            guard var watch = watches[pane], let view = PaneTyping.surface(pane) else {
                 watches[pane] = nil
                 continue
             }

@@ -549,6 +549,20 @@ struct ClaudeRuntimeTests {
         #expect(runtime.phases[pane] == nil)
     }
 
+    @Test func keysTypedHoldUntilTheNextPromptOrTheAgentGoes() {
+        let runtime = makeRuntime()
+        runtime.keyTyped(pane)
+        #expect(runtime.hasTyped(pane))
+        runtime.userVarChanged(pane, name: ClaudeConstants.userVarName, value: payload("busy"))
+        #expect(!runtime.hasTyped(pane))
+        runtime.keyTyped(pane)
+        runtime.commandFinished(pane)
+        #expect(!runtime.hasTyped(pane))
+        runtime.keyTyped(pane)
+        runtime.surfaceClosed(pane)
+        #expect(!runtime.hasTyped(pane))
+    }
+
     @Test func freshChangesNoPhase() {
         let runtime = makeRuntime()
         runtime.userVarChanged(pane, name: ClaudeConstants.userVarName, value: payload("fresh"))
