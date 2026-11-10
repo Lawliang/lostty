@@ -115,6 +115,7 @@ final class ClaudeRuntime: ObservableObject {
             return
         }
         if let target = ClaudeMessage.denied(value) { messageKeptInside(id, target) }
+        if let wake = ClaudeMessage.wake(value) { CanvasController.shared?.messageForSleeper(wake) }
         if let action = ClaudeMessage.action(value) {
             // A tool starting means Claude works, even with no new prompt
             // (it carries on after a permission prompt without one).

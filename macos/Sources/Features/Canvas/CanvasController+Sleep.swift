@@ -62,6 +62,16 @@ extension CanvasController {
         return TicketDelivery.input(in: TicketDelivery.screen(of: view, session: session))
     }
 
+    /// An agent messaged a sleeping one, and the hook held the message:
+    /// it wakes, and the message goes in once its Claude is back. Only a
+    /// pane that sleeps here: anything in a pane can print the user var.
+    func messageForSleeper(_ wake: ClaudeMessage.SleepWake) {
+        guard PaneSleep.shared.phase(wake.pane) != nil else { return }
+        PaneSleep.shared.wake(wake.pane)
+        guard let message = wake.message else { return }
+        tell(wake.pane, "Message from \(wake.from ?? "another agent"): \(message)")
+    }
+
     /// A click on a sleeping card wakes it; the click goes on as ever.
     func wakeClicked(_ event: NSEvent) {
         guard !surface.floats(at: event.locationInWindow) else { return }

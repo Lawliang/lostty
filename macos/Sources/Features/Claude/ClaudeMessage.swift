@@ -44,6 +44,17 @@ enum ClaudeMessage {
         return target
     }
 
+    /// A SendMessage the hook held for a sleeping agent:
+    /// `{"v":1,"state":"tool",…,"wake":{"pane":"…","from":"…","message":"…"}}`.
+    /// The message is missing when it was too long to carry.
+    static func wake(_ value: String) -> SleepWake? {
+        guard let object = object(value), object["state"] as? String == "tool",
+              let wake = object["wake"] as? [String: Any],
+              let pane = (wake["pane"] as? String).flatMap(UUID.init(uuidString:)) else { return nil }
+        let message = (wake["message"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+        return SleepWake(pane: pane, from: wake["from"] as? String, message: message)
+    }
+
     /// An `idle` that is Claude asking permission (`"permission":true`) to
     /// run the last action, rather than finishing its turn.
     static func isPermission(_ value: String) -> Bool {
@@ -120,6 +131,12 @@ enum ClaudeMessage {
         default:
             return nil
         }
+    }
+
+    struct SleepWake: Equatable {
+        var pane: UUID
+        var from: String?
+        var message: String?
     }
 
     enum TaskEvent: Equatable {

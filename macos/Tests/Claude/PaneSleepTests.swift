@@ -207,6 +207,27 @@ struct PaneSleepTests {
     }
 }
 
+struct SleepWakeMessageTests {
+    let pane = UUID(uuidString: "0F8C2A5E-1B2C-4D3E-8F90-A1B2C3D4E5F6")!
+
+    @Test func aHeldMessageNamesTheSleeperTheSenderAndTheText() {
+        let value = #"{"v":1,"state":"tool","action":"SendMessage","#
+            + #""wake":{"pane":"0F8C2A5E-1B2C-4D3E-8F90-A1B2C3D4E5F6","from":"wt-2","message":"hi"}}"#
+        #expect(ClaudeMessage.wake(value) == .init(pane: pane, from: "wt-2", message: "hi"))
+    }
+
+    @Test func aMessageTooLongToCarryStillWakes() {
+        let value = #"{"v":1,"state":"tool","action":"SendMessage","wake":{"pane":"0F8C2A5E-1B2C-4D3E-8F90-A1B2C3D4E5F6"}}"#
+        #expect(ClaudeMessage.wake(value) == .init(pane: pane, from: nil, message: nil))
+    }
+
+    @Test func anythingElseIsNoWake() {
+        #expect(ClaudeMessage.wake(#"{"v":1,"state":"tool","action":"SendMessage","denied":"x"}"#) == nil)
+        #expect(ClaudeMessage.wake(#"{"v":1,"state":"tool","wake":{"pane":"not-a-uuid"}}"#) == nil)
+        #expect(ClaudeMessage.wake(#"{"v":1,"state":"idle","wake":{"pane":"0F8C2A5E-1B2C-4D3E-8F90-A1B2C3D4E5F6"}}"#) == nil)
+    }
+}
+
 @MainActor
 struct ClaudeRuntimeIdleTests {
     final class Clock { var now = Date(timeIntervalSince1970: 1_000) }
