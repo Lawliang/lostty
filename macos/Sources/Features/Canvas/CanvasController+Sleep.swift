@@ -48,10 +48,18 @@ extension CanvasController {
                   let name = agentName(of: view.id),
                   let conversation = LastSessionStore.shared.conversation(in: view.id),
                   let folder = view.pwd,
-                  TicketDelivery.input(in: TicketDelivery.screen(of: view, session: session.id)) == .empty else { continue }
+                  inputBox(of: view) == .empty else { continue }
             sleep.fallAsleep(SleepingAgent(
                 pane: view.id, sessionId: conversation.id, name: name, tmux: session.name, folder: folder))
         }
+    }
+
+    /// What the pane's screen shows of Claude's input box, read from its
+    /// tmux session where it has one.
+    func inputBox(of view: Ghostty.SurfaceView) -> TicketDelivery.Input {
+        let pid = ProcessInfo.processInfo.processIdentifier
+        let session = TmuxOwnership.showing(view.id, ownedBy: pid, in: tmuxSessions).first?.id
+        return TicketDelivery.input(in: TicketDelivery.screen(of: view, session: session))
     }
 
     /// A click on a sleeping card wakes it; the click goes on as ever.
