@@ -7,6 +7,7 @@ struct SettingsView: View {
     @ObservedObject var observer: ObserverPreferences
     @ObservedObject var font: TerminalFontPreferences
     @ObservedObject var updates: UpdatePreferences
+    @ObservedObject var sleep: SleepPreferences
     /// A build made on this Mac updates with install.sh, not the updater.
     var hasUpdateFeed = UpdateFeed.current != nil
     /// Turn summaries, while the observer is on.
@@ -24,6 +25,17 @@ struct SettingsView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+                }
+                Section("Sleep") {
+                    Picker("Put idle Claude terminals to sleep", selection: $sleep.minutes) {
+                        ForEach(SleepPreferences.choices, id: \.self) { minutes in
+                            Text(minutes == 0 ? "Never" : "After \(minutes) minutes").tag(minutes)
+                        }
+                    }
+                    Text("A sleeping terminal's Claude quits, freeing its memory, under a light veil. "
+                         + "Click it to wake it: the same conversation picks up where it was.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
                 Section("Updates") {
                     Toggle("Install updates automatically", isOn: $updates.installsAutomatically)
@@ -142,7 +154,8 @@ struct SettingsView_Previews: PreviewProvider {
         SettingsView(
             observer: ObserverPreferences(defaults: UserDefaults(suiteName: "preview")!),
             font: TerminalFontPreferences(configURL: { nil }, reloadConfig: {}),
-            updates: UpdatePreferences(defaults: UserDefaults(suiteName: "preview")!))
+            updates: UpdatePreferences(defaults: UserDefaults(suiteName: "preview")!),
+            sleep: SleepPreferences(defaults: UserDefaults(suiteName: "preview")!))
     }
 }
 #endif

@@ -63,6 +63,10 @@ final class ClaudeRuntime: ObservableObject {
     /// Panes with keys typed since their agent's last prompt: the prompt
     /// may hold half a message, so the trash's close check types nothing.
     private var typed: Set<UUID> = []
+    /// When each pane's Claude last went idle and stayed untouched: a
+    /// turn's end, an interrupt or a key typed, else when sleep first
+    /// found it idle. For sleep.
+    private var idle: [UUID: Date] = [:]
 
     init(
         now: @escaping () -> Date = Date.init,
@@ -81,7 +85,19 @@ final class ClaudeRuntime: ObservableObject {
     func hasTyped(_ id: UUID) -> Bool { typed.contains(id) }
 
     /// A key typed in the pane (`PaneTyping.watchKeys`).
-    func keyTyped(_ id: UUID) { typed.insert(id) }
+    func keyTyped(_ id: UUID) {
+        typed.insert(id)
+        if idle[id] != nil { idle[id] = now() }
+    }
+
+    func idleSince(_ id: UUID) -> Date? { idle[id] }
+
+    /// Sleep found the pane idle with no turn's end seen, as after a
+    /// launch: it counts as idle from now.
+    func foundIdle(_ id: UUID) {
+        guard phase(id).isOff, idle[id] == nil else { return }
+        idle[id] = now()
+    }
 
     func userVarChanged(_ id: UUID, name: String, value: String) {
         guard name == ClaudeConstants.userVarName else { return }
@@ -162,6 +178,7 @@ final class ClaudeRuntime: ObservableObject {
         hookTurns[id] = nil
         setAction(nil, for: id)
         typed.remove(id)
+        idle[id] = nil
     }
 
     /// A pane is focused when its window is key and it is the selected pane.
@@ -236,13 +253,18 @@ final class ClaudeRuntime: ObservableObject {
             awaiting.remove(id)
             // A new prompt: the last one's action is done.
             if state == .busy { setAction(nil, for: id) }
+            idle[id] = nil
         case .resumed:
-            break
+            idle[id] = nil
         case .exit:
             awaiting.remove(id)
             setAction(nil, for: id)
+            idle[id] = nil
         case .idle:
-            if !permission { setAction(nil, for: id) }
+            if !permission {
+                setAction(nil, for: id)
+                idle[id] = now()
+            }
             // Waiting for the user. Focused now means they see it already.
             if !unfocused.contains(id) {
                 seen.insert(id)
