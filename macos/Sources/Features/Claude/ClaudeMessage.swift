@@ -84,6 +84,12 @@ enum ClaudeMessage {
         object(value)?["state"] as? String == "fresh"
     }
 
+    /// `{"v":1,"state":"start"}`: a Claude session started in the pane
+    /// (any SessionStart but /clear's). Not a ClaudeState: it changes no phase.
+    static func isStart(_ value: String) -> Bool {
+        object(value)?["state"] as? String == "start"
+    }
+
     /// `{"v":1,"state":"cleared"}`: the window was cleared with no handoff
     /// waiting (your own /clear). Not a ClaudeState either.
     static func isCleared(_ value: String) -> Bool {

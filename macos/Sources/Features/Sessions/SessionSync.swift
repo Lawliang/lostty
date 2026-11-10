@@ -12,6 +12,8 @@ final class SessionSync {
 
     /// This Lostty's panes whose session has a label.
     private(set) var labels: [UUID: String] = [:]
+    /// This Lostty's panes a phone shows now: they don't sleep.
+    private(set) var phonePanes: Set<UUID> = []
     private var observer: NSObjectProtocol?
     private let pid = ProcessInfo.processInfo.processIdentifier
     /// The SSH clients attached at the last refresh: only a new attach
@@ -46,8 +48,10 @@ final class SessionSync {
         }
         let newlyAttached = Self.newlyAttached(previous: previouslyAttached, current: phoneAttached)
         previouslyAttached = phoneAttached
+        phonePanes = Set(Self.panesWithAPhone(sessions, phoneAttached: Set(phoneAttached.map(\.session)), pid: pid))
         for pane in Self.panesWithAPhone(sessions, phoneAttached: newlyAttached, pid: pid) {
             ClaudeRuntime.shared.seenElsewhere(pane)
+            PaneSleep.shared.wake(pane)
         }
     }
 

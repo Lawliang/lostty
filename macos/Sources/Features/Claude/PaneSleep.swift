@@ -190,9 +190,8 @@ extension PaneSleep.Hands {
             return TicketDelivery.type("/exit", into: view)
         },
         resume: { agent in
-            let pid = ProcessInfo.processInfo.processIdentifier
-            guard PaneTyping.surface(agent.pane) != nil, ClaudeRuntime.shared.phase(agent.pane).isOff,
-                  TmuxClient(timeout: 0.5).isBusy(surface: agent.pane, ownedBy: pid) == false else { return false }
+            guard let view = PaneTyping.surface(agent.pane), ClaudeRuntime.shared.phase(agent.pane).isOff,
+                  !view.needsConfirmQuit else { return false }
             PaneTyping.type(agent.pane, [.text(agent.resumeCommand), .enter])
             return true
         },

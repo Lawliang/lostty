@@ -105,6 +105,10 @@ final class ClaudeRuntime: ObservableObject {
             PaneTasks.shared.apply(event, to: id)
             return
         }
+        if ClaudeMessage.isStart(value) {
+            PaneSleep.shared.started(id)
+            return
+        }
         if ClaudeMessage.isFresh(value) || ClaudeMessage.isCleared(value) {
             CanvasController.shared?.conversationEnded(id)
             PaneTasks.shared.clear(id)
@@ -141,8 +145,7 @@ final class ClaudeRuntime: ObservableObject {
         default: break
         }
         if state == .exit {
-            LastSessionStore.shared.agentGone(id)
-            CanvasController.shared?.conversationEnded(id)
+            exited(id)
             PaneTasks.shared.clear(id)
         }
         guard state == .idle, let path = ClaudeMessage.transcript(value) else { return }
@@ -158,15 +161,23 @@ final class ClaudeRuntime: ObservableObject {
     /// (claude included) is gone: a racing trace must not stay up.
     func commandFinished(_ id: UUID) {
         agentGone(id)
-        CanvasController.shared?.conversationEnded(id)
+        exited(id)
         PaneTasks.shared.clear(id)
-        LastSessionStore.shared.agentGone(id)
         apply(.exit, to: id)
         hookTurns[id] = nil
         typed.remove(id)
     }
 
+    /// Claude quit in the pane: its conversation, claims and recap go,
+    /// unless it went to sleep, which keeps them for the wake.
+    private func exited(_ id: UUID) {
+        guard !PaneSleep.shared.exited(id) else { return }
+        LastSessionStore.shared.agentGone(id)
+        CanvasController.shared?.conversationEnded(id)
+    }
+
     func surfaceClosed(_ id: UUID) {
+        PaneSleep.shared.closed(id)
         agentGone(id)
         PaneTasks.shared.clear(id)
         LastSessionStore.shared.agentGone(id)

@@ -28,15 +28,21 @@ enum PaneTyping {
     }
 
     /// Tells `ClaudeRuntime` of every key typed in a terminal. The key
-    /// still reaches the terminal.
+    /// still reaches the terminal, but for one typed into a sleeping pane:
+    /// that wakes it, and its shell must get the resume alone. Shortcuts
+    /// with ⌘ go on to the menus and don't wake it.
     static func watchKeys() {
         _ = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             MainActor.assumeIsolated {
-                if let view = NSApp.keyWindow?.firstResponder as? Ghostty.SurfaceView {
-                    ClaudeRuntime.shared.keyTyped(view.id)
+                guard let view = NSApp.keyWindow?.firstResponder as? Ghostty.SurfaceView else { return event }
+                if PaneSleep.shared.isVeiled(view.id) {
+                    guard !event.modifierFlags.contains(.command) else { return event }
+                    PaneSleep.shared.wake(view.id)
+                    return nil
                 }
+                ClaudeRuntime.shared.keyTyped(view.id)
+                return event
             }
-            return event
         }
     }
 }

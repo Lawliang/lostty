@@ -80,16 +80,17 @@ pub fn run(gpa: Allocator) !u8 {
         },
         // A session starting without the zone's brief gets it. After
         // /clear the fresh window also gets the handoff, and says so, or
-        // says it was cleared with none (the Mac disarms the pane).
+        // says it was cleared with none (the Mac disarms the pane). Any
+        // other start says `start`: a sleeping pane's resume woke it.
         .start => {
             const input = hookInput(alloc) orelse return 0;
             const source = speak.sessionSource(alloc, input) orelse return 0;
-            if (!zone.briefsAt(source)) return 0;
             const cleared = std.mem.eql(u8, source, "clear");
-            const handoff = if (cleared) take(alloc, pane, .start) else null;
-            speakTexts(alloc, "SessionStart", &.{ handoff, zoneBrief(alloc, pane, input) });
-            if (!cleared) return 0;
-            state = if (handoff != null) .fresh else .cleared;
+            if (zone.briefsAt(source)) {
+                const handoff = if (cleared) take(alloc, pane, .start) else null;
+                speakTexts(alloc, "SessionStart", &.{ handoff, zoneBrief(alloc, pane, input) });
+                if (cleared) state = if (handoff != null) .fresh else .cleared;
+            }
         },
         // A subagent starting, for the pane's list (Claude's own internal
         // agents aren't listed).

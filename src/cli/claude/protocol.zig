@@ -11,9 +11,10 @@ pub const surface_env = "LOSTTY_SURFACE";
 /// shells are still working, so it carries on by itself when they finish.
 /// `resumed`: the last of them finished, so Claude itself works again. `tool`: Claude (or one of
 /// its subagents) is about to run a tool; it carries the action, not a
-/// change of state. `done` (PostToolUse) and `start` (SessionStart) only
-/// speak the context handoff's queued text; after a /clear, `start` sends
-/// `fresh` (the fresh window took the handoff) or `cleared` (none waited).
+/// change of state. `done` (PostToolUse) only speaks queued text. `start`
+/// (SessionStart) says a session started, which wakes a sleeping pane;
+/// after a /clear it sends `fresh` (the fresh window took the handoff) or
+/// `cleared` (none waited) instead.
 /// `subagent` (SubagentStart) and `subagent_done` (SubagentStop) name a
 /// subagent and its transcript, and `shell` (PostToolUse) and `shell_done`
 /// (the task notification Claude Code prompts itself with) a background

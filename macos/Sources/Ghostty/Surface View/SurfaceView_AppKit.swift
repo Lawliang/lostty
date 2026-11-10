@@ -776,6 +776,7 @@ extension Ghostty {
             guard hitTest(location) == self else { return event }
             // Lostty Canvas: a card in front covering this pane takes the click.
             guard isUncoveredByCards(at: event.locationInWindow) else { return event }
+            PaneSleep.shared.wake(id)
 
             // We always assume that we're resetting our mouse suppression
             // unless we see the specific scenario below to set it.
