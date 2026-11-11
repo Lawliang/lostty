@@ -1,6 +1,6 @@
 #if os(macOS)
+import AppKit
 import Combine
-import Foundation
 
 /// How hard the Mac is pressed, from the two things macOS reports: memory
 /// pressure (it has started compressing or swapping to keep up) and heat
@@ -17,11 +17,14 @@ enum MacStrain: Int, Comparable {
 
     enum Memory { case normal, warning, critical }
 
-    init(memory: Memory, thermal: ProcessInfo.ThermalState) {
+    /// `lidShut`: the Mac is kept awake with its lid closed and no other
+    /// display (`MacStrainWatch.lidShut`). A closed lid covers the keyboard
+    /// deck, which is part of how the Mac sheds heat.
+    init(memory: Memory, thermal: ProcessInfo.ThermalState, lidShut: Bool = false) {
         switch (memory, thermal) {
         case (.critical, _), (_, .critical): self = .critical
         case (.warning, _), (_, .serious): self = .high
-        default: self = .none
+        default: self = lidShut ? .high : .none
         }
     }
 
@@ -43,10 +46,16 @@ final class MacStrainWatch: ObservableObject {
     static let shared = MacStrainWatch()
 
     @Published private(set) var strain: MacStrain = .none
+    /// Stay Awake holds the Mac awake with its lid closed and nothing but
+    /// the built-in display: nobody can see a window, so none draws.
+    @Published private(set) var lidShut = false
 
     private var memory: MacStrain.Memory = .normal
     private var source: DispatchSourceMemoryPressure?
     private var thermal: NSObjectProtocol?
+    private var lid: AnyCancellable?
+    private var screens: NSObjectProtocol?
+    private var lidClosed = false
 
     func start() {
         guard source == nil else { return }
@@ -68,7 +77,44 @@ final class MacStrainWatch: ObservableObject {
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.update() }
         }
+        // Stay Awake reads the lid every few seconds while it is on; with
+        // it off a closed lid puts the Mac to sleep.
+        lid = StayAwakeStore.shared.$model
+            .map { $0.isOn && $0.power?.lidClosed == true }
+            .removeDuplicates()
+            .sink { [weak self] closed in
+                MainActor.assumeIsolated {
+                    self?.lidClosed = closed
+                    self?.updateLid()
+                }
+            }
+        // A display plugged in or pulled while the lid stays closed.
+        screens = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.updateLid() }
+        }
         update()
+    }
+
+    private func updateLid() {
+        let shut = Self.lidShut(closed: lidClosed, displays: Self.displaysNow())
+        if shut != lidShut { lidShut = shut }
+        update()
+    }
+
+    /// Whether each display is the Mac's own.
+    static func displaysNow() -> [Bool] {
+        NSScreen.screens.map { screen in
+            let id = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID
+            return id.map { CGDisplayIsBuiltin($0) != 0 } ?? false
+        }
+    }
+
+    /// A closed lid hides every window unless another display is attached
+    /// (`displays`: whether each is built in).
+    nonisolated static func lidShut(closed: Bool, displays builtIn: [Bool]) -> Bool {
+        closed && builtIn.allSatisfy { $0 }
     }
 
     /// The kernel's memory pressure level now (1 normal, 2 warning, 4
@@ -81,7 +127,7 @@ final class MacStrainWatch: ObservableObject {
     }
 
     private func update() {
-        let next = MacStrain(memory: memory, thermal: ProcessInfo.processInfo.thermalState)
+        let next = MacStrain(memory: memory, thermal: ProcessInfo.processInfo.thermalState, lidShut: lidShut)
         if next != strain { strain = next }
     }
 }

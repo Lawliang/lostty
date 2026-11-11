@@ -25,5 +25,17 @@ struct MacStrainTests {
         #expect(MacStrain.high.sleepMinutes(setting: 3) == 3)
         #expect(MacStrain.critical.sleepMinutes(setting: 0) == 0)
     }
+
+    @Test func aLidClosedOverAMacKeptAwakeCountsAsStrain() {
+        #expect(MacStrain(memory: .normal, thermal: .nominal, lidShut: true) == .high)
+        #expect(MacStrain(memory: .critical, thermal: .nominal, lidShut: true) == .critical)
+    }
+
+    @Test func aClosedLidHidesTheWindowsUnlessAnotherDisplayIsAttached() {
+        #expect(MacStrainWatch.lidShut(closed: true, displays: [true]))
+        #expect(MacStrainWatch.lidShut(closed: true, displays: []))
+        #expect(!MacStrainWatch.lidShut(closed: true, displays: [true, false]))
+        #expect(!MacStrainWatch.lidShut(closed: false, displays: [true]))
+    }
 }
 #endif

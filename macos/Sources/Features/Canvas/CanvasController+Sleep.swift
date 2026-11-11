@@ -24,6 +24,11 @@ extension CanvasController {
             .filter { $0 >= .high }
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.sleepIdleCards() }
+        // The lid closed over a Mac kept awake: no card draws until it opens.
+        lidWatch = MacStrainWatch.shared.$lidShut
+            .removeDuplicates()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.updateVisibility() }
     }
 
     func sleepIdleCards() {

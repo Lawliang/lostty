@@ -80,7 +80,8 @@ final class PaneResourceMonitor: ObservableObject {
 
     private func sample() {
         let panes = Set(watchers.keys)
-        guard !panes.isEmpty else { return }
+        // Nobody reads a bar under a closed lid.
+        guard !panes.isEmpty, !MacStrainWatch.shared.lidShut else { return }
         let sampler = self.sampler
         queue.async {
             let sampled = sampler.sample(panes)
