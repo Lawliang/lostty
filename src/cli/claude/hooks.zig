@@ -98,6 +98,18 @@ pub const Status = enum {
 
 pub const EditError = error{Malformed} || Allocator.Error;
 
+/// The command line of a hot hook, one Claude Code runs on every tool call
+/// or reply. It runs `lostty-hook`, the small program beside the app's
+/// binary (src/main_hook.zig), and `lostty` itself when the build has no
+/// small program or it failed: starting the whole app costs most of a
+/// hook's time. LOSTTY_BIN names the app's binary, so a terminal opened
+/// before the app had the small program finds it too.
+fn hot(comptime action: []const u8) []const u8 {
+    return "[ -n \"$LOSTTY_SURFACE\" ] || exit 0; " ++
+        "[ -x \"$LOSTTY_BIN-hook\" ] && \"$LOSTTY_BIN-hook\" " ++ action ++ " && exit 0; " ++
+        "[ -x \"$LOSTTY_BIN\" ] && \"$LOSTTY_BIN\" " ++ action ++ "; exit 0";
+}
+
 /// The hook command for event `e`. A state hook is a no-op outside Lostty
 /// (no LOSTTY_SURFACE) and when the binary is gone, and always exits 0. The
 /// guard hook is a no-op outside Lostty, and otherwise `exec`s the guard, so
@@ -107,11 +119,7 @@ pub const EditError = error{Malformed} || Allocator.Error;
 /// stays blocked.
 pub fn command(alloc: Allocator, agent: Agent, e: Event) Allocator.Error![]u8 {
     return switch (e.kind) {
-        .state => std.fmt.allocPrint(
-            alloc,
-            "[ -n \"$LOSTTY_SURFACE\" ] && [ -x \"$LOSTTY_BIN\" ] && \"$LOSTTY_BIN\" +claude-state {s}; exit 0",
-            .{e.state},
-        ),
+        .state => std.fmt.allocPrint(alloc, hot("+claude-state {s}"), .{ e.state, e.state }),
         .guard => alloc.dupe(u8, switch (agent) {
             .claude => guard_claude_command,
             .codex => guard_codex_command,
@@ -137,8 +145,7 @@ pub fn isLosttyCommand(cmd: []const u8) bool {
 }
 
 /// Claude Code's status line runs this to feed the window's usage bar.
-pub const status_line_command =
-    "[ -n \"$LOSTTY_SURFACE\" ] && [ -x \"$LOSTTY_BIN\" ] && \"$LOSTTY_BIN\" +claude-usage; exit 0";
+pub const status_line_command = hot("+claude-usage");
 
 const StatusLine = enum { missing, foreign, outdated, current };
 
@@ -481,9 +488,11 @@ test "claude hooks: command and detection" {
     const a = arena.allocator();
     const cmd = try command(a, .claude, .{ .name = "Stop", .state = "busy" });
     try std.testing.expectEqualStrings(
-        "[ -n \"$LOSTTY_SURFACE\" ] && [ -x \"$LOSTTY_BIN\" ] && \"$LOSTTY_BIN\" +claude-state busy; exit 0",
-        cmd,
-    );
+        \\[ -n "$LOSTTY_SURFACE" ] || exit 0; [ -x "$LOSTTY_BIN-hook" ] && "$LOSTTY_BIN-hook" +claude-state busy && exit 0; [ -x "$LOSTTY_BIN" ] && "$LOSTTY_BIN" +claude-state busy; exit 0
+    , cmd);
+    try std.testing.expectEqualStrings(
+        \\[ -n "$LOSTTY_SURFACE" ] || exit 0; [ -x "$LOSTTY_BIN-hook" ] && "$LOSTTY_BIN-hook" +claude-usage && exit 0; [ -x "$LOSTTY_BIN" ] && "$LOSTTY_BIN" +claude-usage; exit 0
+    , status_line_command);
     try std.testing.expect(isLosttyCommand(cmd));
     try std.testing.expect(!isLosttyCommand("say done"));
     try std.testing.expect(!isLosttyCommand("echo +claude-state"));
@@ -677,6 +686,63 @@ test "claude hooks: the guard command is exactly the one specified" {
     try std.testing.expectEqualStrings(
         \\[ -n "$LOSTTY_SURFACE" ] || exit 0; [ -x "$LOSTTY_BIN" ] || { echo 'Blocked by Lostty: its app moved or was deleted, so this cannot be checked. Do not try another way.' >&2; exit 2; }; exec "$LOSTTY_BIN" +guard --agent=codex
     , guard_codex_command);
+}
+
+test "claude hooks: a hot hook runs the small program, and lostty when that is missing or broken" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const dir = try tmp.dir.realpathAlloc(a, ".");
+    const bin = try std.fs.path.join(a, &.{ dir, "lostty" });
+    const said = try std.fs.path.join(a, &.{ dir, "said" });
+    const script = "#!/bin/sh\ncat >/dev/null\necho \"{s} $*\" >> \"{s}\"\nexit {d}\n";
+    const Small = enum { works, missing, not_executable, fails };
+
+    const Hot = struct { cmd: []const u8, action: []const u8 };
+    for ([_]Hot{
+        .{ .cmd = try command(a, .claude, .{ .name = "Stop", .state = "idle" }), .action = "+claude-state idle" },
+        .{ .cmd = status_line_command, .action = "+claude-usage" },
+    }) |hook| {
+        const small_ran = try std.fmt.allocPrint(a, "lostty-hook {s}\n", .{hook.action});
+        const app_ran = try std.fmt.allocPrint(a, "lostty {s}\n", .{hook.action});
+        for (std.enums.values(Small)) |small| {
+            tmp.dir.deleteFile("said") catch {};
+            tmp.dir.deleteFile("lostty-hook") catch {};
+            try tmp.dir.writeFile(.{
+                .sub_path = "lostty",
+                .data = try std.fmt.allocPrint(a, script, .{ "lostty", said, 0 }),
+                .flags = .{ .mode = 0o755 },
+            });
+            if (small != .missing) try tmp.dir.writeFile(.{
+                .sub_path = "lostty-hook",
+                .data = try std.fmt.allocPrint(a, script, .{ "lostty-hook", said, @as(u8, if (small == .fails) 64 else 0) }),
+                .flags = .{ .mode = if (small == .not_executable) 0o644 else 0o755 },
+            });
+
+            var env = std.process.EnvMap.init(a);
+            try env.put("PATH", "/usr/bin:/bin");
+            try env.put("LOSTTY_BIN", bin);
+            try env.put("LOSTTY_SURFACE", "S");
+            const r = try std.process.Child.run(.{ .allocator = a, .argv = &.{ "/bin/sh", "-c", hook.cmd }, .env_map = &env });
+            try std.testing.expectEqual(@as(u8, 0), r.term.Exited);
+            try std.testing.expectEqualStrings("", r.stdout);
+            try std.testing.expectEqualStrings("", r.stderr);
+            try std.testing.expectEqualStrings(switch (small) {
+                .works => small_ran,
+                .missing, .not_executable => app_ran,
+                .fails => try std.mem.concat(a, u8, &.{ small_ran, app_ran }),
+            }, try tmp.dir.readFileAlloc(a, "said", 1024));
+        }
+    }
+
+    // With the app gone, or outside Lostty, nothing runs and nothing fails.
+    const gone = try runHook(a, status_line_command, "S");
+    try std.testing.expectEqual(@as(u8, 0), gone.term.Exited);
+    try std.testing.expectEqualStrings("", gone.stderr);
+    const outside = try runHook(a, status_line_command, null);
+    try std.testing.expectEqual(@as(u8, 0), outside.term.Exited);
 }
 
 fn runHook(alloc: Allocator, cmd: []const u8, surface: ?[]const u8) !std.process.Child.RunResult {
