@@ -19,7 +19,12 @@ final class NotesKeeper {
             // Only a waiting session with no title of its own is named by
             // its repo and branch, which take the listing script (a shell
             // and a process or more per session) to read.
-            if listed?.contains(where: NotesKeeper.isNamedByProject) == true { listed = client.readSessionListing() }
+            if listed?.contains(where: NotesKeeper.isNamedByProject) == true {
+                listed = client.readSessionListing()
+            } else {
+                // As the script does: a Lostty that is gone owns nothing.
+                listed = listed?.map { NotesKeeper.withoutDeadOwner($0) }
+            }
             return NotesKeeper.listing(listed, serverExists: TmuxClient.serverSocketExists)
         },
         signal: { _ = TmuxClient().run(TmuxHooks.signalArgs) })
@@ -35,6 +40,14 @@ final class NotesKeeper {
         guard session.claude == .waiting else { return false }
         let row = SessionLabel.row(for: session, now: Date())
         return row.title == row.project
+    }
+
+    nonisolated static func withoutDeadOwner(
+        _ session: RemoteSession, isAlive: (Int32) -> Bool = ProcessLiveness.isAlive
+    ) -> RemoteSession {
+        var session = session
+        if let owner = session.owner, !isAlive(owner) { session.owner = nil }
+        return session
     }
 
     private(set) var log = NoteLog()

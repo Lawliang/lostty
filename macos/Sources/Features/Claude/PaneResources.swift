@@ -194,7 +194,7 @@ final class PaneResourceSampler: @unchecked Sendable {
         var size = 0
         guard sysctl(&name, 3, nil, &size, nil, 0) == 0 else { return [:] }
         // Room for processes started between the two calls.
-        size += 64 * MemoryLayout<kinfo_proc>.stride
+        size += size / 4 + 64 * MemoryLayout<kinfo_proc>.stride
         var table = [kinfo_proc](repeating: kinfo_proc(), count: size / MemoryLayout<kinfo_proc>.stride)
         guard sysctl(&name, 3, &table, &size, nil, 0) == 0 else { return [:] }
         var children: [pid_t: [pid_t]] = [:]

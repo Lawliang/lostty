@@ -50,4 +50,14 @@ struct TmuxOptionSyncBatchTests {
         #expect(args == ["set-option", "-t", "$1", TmuxRemote.actionOption, "Edit", ";"] + TmuxHooks.signalCommand)
     }
 }
+
+/// The plain listing the phone's notes read stands in for the listing
+/// script, which reports a session of a Lostty that is gone as not open.
+struct NotesListingTests {
+    @Test func aSessionOfALosttyThatIsGoneIsNotOpenOnTheMac() {
+        let session = RemoteSession(id: "$1", name: "lostty", surface: "PANE", owner: 77, claude: .waiting)
+        #expect(NotesKeeper.withoutDeadOwner(session, isAlive: { _ in false }).owner == nil)
+        #expect(NotesKeeper.withoutDeadOwner(session, isAlive: { _ in true }).owner == 77)
+    }
+}
 #endif
