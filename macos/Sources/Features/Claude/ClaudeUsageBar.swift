@@ -131,9 +131,25 @@ struct ClaudeUsageBar: View {
         .help("Apps")
     }
 
+    /// Picks the pane's model (`ClaudeModelSwitch`); a beep when Claude
+    /// is busy or something is typed in its box.
     private var modelLabel: some View {
-        Text("✳ ").foregroundColor(Color(red: 0.85, green: 0.47, blue: 0.34))
-            + Text(modelName).foregroundColor(ink.opacity(0.6))
+        Menu {
+            ForEach(ClaudeModelSwitch.models(), id: \.id) { choice in
+                Button {
+                    guard let pane, ClaudeModelSwitch.switchTo(choice, in: pane) else { return NSSound.beep() }
+                } label: {
+                    if choice.name == modelName { Label(choice.name, systemImage: "checkmark") } else { Text(choice.name) }
+                }
+            }
+        } label: {
+            Text("✳ ").foregroundColor(Color(red: 0.85, green: 0.47, blue: 0.34))
+                + Text(modelName).foregroundColor(ink.opacity(0.6))
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Switch model")
     }
 
     /// `Context ▓▓░░░░░░░░ 50K`, as `contextLine` draws it in `style`.
