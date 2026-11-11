@@ -397,7 +397,7 @@ pub fn parsePs(out: []const u8) ?ProcInfo {
 }
 
 /// "ttys001" or "pts/3": letters/digits with at most one "/" and no dots.
-fn isTtyName(s: []const u8) bool {
+pub fn isTtyName(s: []const u8) bool {
     if (s.len == 0 or std.mem.indexOfScalar(u8, s, '?') != null) return false;
     var slashes: usize = 0;
     for (s) |c| {

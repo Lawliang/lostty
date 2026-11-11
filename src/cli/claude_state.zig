@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
 const Action = @import("ghostty.zig").Action;
 const protocol = @import("claude/protocol.zig");
@@ -317,11 +318,45 @@ fn hookInput(alloc: Allocator) ?[]const u8 {
 /// one, which is `claude` in the pane, or the tmux pane it runs in.
 pub fn openTerminal(alloc: Allocator) ?std.fs.File {
     if (std.fs.openFileAbsolute("/dev/tty", .{ .mode = .write_only })) |f| return f else |_| {}
-    const name = protocol.findTty(Ps{ .alloc = alloc }, std.c.getppid(), 8) orelse return null;
+    const Lookup = if (builtin.os.tag.isDarwin()) Kernel else Ps;
+    const name = protocol.findTty(Lookup{ .alloc = alloc }, std.c.getppid(), 8) orelse return null;
     const path = std.fmt.allocPrint(alloc, "/dev/{s}", .{name}) catch return null;
     return std.fs.openFileAbsolute(path, .{ .mode = .write_only }) catch null;
 }
 
+/// What `ps -o ppid=,tty=` prints for a pid, read from the kernel the way
+/// `ps` reads it, without starting `ps`: a hook runs on every tool call.
+/// libproc's `proc_pidinfo` is no substitute: it refuses root's processes.
+const Kernel = struct {
+    alloc: Allocator,
+
+    /// `struct kinfo_proc` (sys/sysctl.h) on 64-bit macOS: its size, and
+    /// where `kp_eproc.e_ppid` and `kp_eproc.e_tdev` sit in it.
+    const size = 648;
+    const ppid_at = 560;
+    const tdev_at = 572;
+    /// `e_tdev` of a process with no terminal (NODEV).
+    const no_device: i32 = -1;
+
+    extern "c" fn devname_r(dev: i32, mode: std.c.mode_t, buf: [*]u8, len: c_int) ?[*:0]const u8;
+
+    pub fn lookup(self: Kernel, pid: i32) ?protocol.ProcInfo {
+        var info: [size]u8 align(8) = undefined;
+        var len: usize = size;
+        // CTL_KERN, KERN_PROC, KERN_PROC_PID. A pid that isn't running
+        // succeeds with nothing written.
+        const mib = [_]c_int{ 1, 14, 1, pid };
+        if (std.c.sysctl(&mib, mib.len, &info, &len, null, 0) != 0 or len != size) return null;
+        const ppid = std.mem.readInt(i32, info[ppid_at..][0..4], builtin.cpu.arch.endian());
+        const tdev = std.mem.readInt(i32, info[tdev_at..][0..4], builtin.cpu.arch.endian());
+        var buf: [64]u8 = undefined;
+        const name = if (tdev == no_device) null else devname_r(tdev, std.c.S.IFCHR, &buf, buf.len);
+        const tty = if (name) |n| self.alloc.dupe(u8, std.mem.span(n)) catch return null else null;
+        return .{ .ppid = ppid, .tty = if (tty) |t| if (protocol.isTtyName(t)) t else null else null };
+    }
+};
+
+/// The same from `ps` itself, where the kernel isn't macOS's.
 const Ps = struct {
     alloc: Allocator,
 
@@ -335,6 +370,34 @@ const Ps = struct {
         return protocol.parsePs(result.stdout);
     }
 };
+
+test "claude state: the kernel names the parent and terminal ps names" {
+    if (comptime !builtin.os.tag.isDarwin()) return error.SkipZigTest;
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const kernel: Kernel = .{ .alloc = a };
+    const ps: Ps = .{ .alloc = a };
+
+    // This process and each ancestor up to launchd, which root owns.
+    var pid: i32 = std.c.getpid();
+    var seen: usize = 0;
+    while (pid >= 1) : (seen += 1) {
+        const want = ps.lookup(pid).?;
+        const got = kernel.lookup(pid).?;
+        try std.testing.expectEqual(want.ppid, got.ppid);
+        try std.testing.expectEqualDeep(want.tty, got.tty);
+        pid = got.ppid;
+    }
+    try std.testing.expect(seen >= 2);
+
+    // The walk a hook makes picks the same terminal either way.
+    try std.testing.expectEqualDeep(
+        protocol.findTty(ps, std.c.getpid(), 64),
+        protocol.findTty(kernel, std.c.getpid(), 64),
+    );
+    try std.testing.expect(kernel.lookup(std.math.maxInt(i32)) == null);
+}
 
 test {
     _ = @import("claude/protocol.zig");
