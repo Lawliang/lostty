@@ -172,10 +172,11 @@ build_dmg() {
   APP="$DIR/export/Lostty.app"
   codesign --verify --deep --strict "$APP" 2> "$DIR/codesign.log" || failed "$DIR/codesign.log" "the signature doesn't verify"
   # Notarization needs every helper (Sparkle's Autoupdate, Updater.app, its
-  # XPC services) signed as Developer ID with a timestamp, not just the app.
+  # XPC services, lostty-hook) signed as Developer ID with a timestamp, not
+  # just the app.
   # (Not the symlinks inside Sparkle.framework, nor resource bundles with no code.)
   { echo "$APP"; find "$APP/Contents" ! -type l \( -name "*.app" -o -name "*.xpc" -o -name "*.framework" \
-    -o -name "*.plugin" -o -name "*.bundle" -o -name Autoupdate \) -print; } > "$DIR/signed-parts.txt"
+    -o -name "*.plugin" -o -name "*.bundle" -o -name Autoupdate -o -name lostty-hook \) -print; } > "$DIR/signed-parts.txt"
   while read -r part; do
     case "$part" in *.bundle | *.plugin) [ -d "$part/Contents/MacOS" ] || continue ;; esac
     codesign -dvv "$part" > "$DIR/part.log" 2>&1

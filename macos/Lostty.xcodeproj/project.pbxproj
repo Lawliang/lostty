@@ -28,6 +28,7 @@
 		FC5218FA2D10FFCE004C93E0 /* zsh in Resources */ = {isa = PBXBuildFile; fileRef = FC5218F92D10FFC7004C93E0 /* zsh */; };
 		FC9ABA9C2D0F53F80020D4C8 /* bash-completion in Resources */ = {isa = PBXBuildFile; fileRef = FC9ABA9B2D0F538D0020D4C8 /* bash-completion */; };
 		4C5A00052F7A000000C0FFEE /* LosttyRemote in Frameworks */ = {isa = PBXBuildFile; productRef = 4C5A00062F7A000000C0FFEE /* LosttyRemote */; };
+		4C5A00112F7B000000C0FFEE /* lostty-hook in Copy lostty-hook */ = {isa = PBXBuildFile; fileRef = 4C5A00102F7B000000C0FFEE /* lostty-hook */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -66,6 +67,17 @@
 			name = "Copy DockTilePlugin";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		4C5A00122F7B000000C0FFEE /* Copy lostty-hook */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 6;
+			files = (
+				4C5A00112F7B000000C0FFEE /* lostty-hook in Copy lostty-hook */,
+			);
+			name = "Copy lostty-hook";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
@@ -83,6 +95,7 @@
 		A56B880A2A840447007A0E29 /* Carbon.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Carbon.framework; path = System/Library/Frameworks/Carbon.framework; sourceTree = SDKROOT; };
 		A571AB1C2A206FC600248498 /* Lostty-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = "Lostty-Info.plist"; sourceTree = "<group>"; };
 		A586167B2B7703CC009BDB1D /* fish */ = {isa = PBXFileReference; lastKnownFileType = folder; name = fish; path = "../zig-out/share/fish"; sourceTree = "<group>"; };
+		4C5A00102F7B000000C0FFEE /* lostty-hook */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.executable"; name = "lostty-hook"; path = "../zig-out/bin/lostty-hook"; sourceTree = "<group>"; };
 		A5985CE52C33060F00C57AD3 /* man */ = {isa = PBXFileReference; lastKnownFileType = folder; name = man; path = "../zig-out/share/man"; sourceTree = "<group>"; };
 		A5A1F8842A489D6800D1E8BC /* terminfo */ = {isa = PBXFileReference; lastKnownFileType = folder; name = terminfo; path = "../zig-out/share/terminfo"; sourceTree = "<group>"; };
 		A5B30531299BEAAA0047F10C /* Lostty.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Lostty.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -319,6 +332,7 @@
 				A586167B2B7703CC009BDB1D /* fish */,
 				55154BDF2B33911F001622DC /* ghostty */,
 				A546F1132D7B68D7003B11A0 /* locale */,
+				4C5A00102F7B000000C0FFEE /* lostty-hook */,
 				A5985CE52C33060F00C57AD3 /* man */,
 				9351BE8E2D22937F003B3499 /* nvim */,
 				A5A1F8842A489D6800D1E8BC /* terminfo */,
@@ -444,6 +458,7 @@
 				A5B3052E299BEAAA0047F10C /* Frameworks */,
 				A5B3052F299BEAAA0047F10C /* Resources */,
 				819324572F24E74E00A9ED8F /* Copy DockTilePlugin */,
+				4C5A00122F7B000000C0FFEE /* Copy lostty-hook */,
 				FC501E0B2F46B411007AE49D /* Link Legacy Executable Name */,
 			);
 			buildRules = (
