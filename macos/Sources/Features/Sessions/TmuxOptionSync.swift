@@ -7,20 +7,72 @@ import LosttyRemote
 /// this process owns: several Lostty processes share the server and must
 /// not fight. The one exception is clearing the option on sessions whose
 /// Lostty is gone: no one else would ever clear it.
+///
+/// Every option synced at about the same time shares one `list-sessions`
+/// and one write: each tmux call is a process, and a tmux change syncs
+/// them all.
 enum TmuxOptionSync {
-    /// Runs `args` against the live sessions off the main thread.
+    /// One option's latest wish: what each pane should hold, and how to
+    /// read what a session holds now.
+    struct Wish {
+        var desired: [String: String]
+        var current: @Sendable (RemoteSession) -> String?
+    }
+
+    /// How long a sync waits for the other options' syncs, so a tmux change
+    /// (which syncs every option) lists the sessions once, not once each.
+    static let gather: TimeInterval = 0.05
+
+    private static let queue = DispatchQueue(label: "Lostty tmux options", qos: .utility)
+    /// Wishes not yet written; only touched on `queue`.
+    nonisolated(unsafe) private static var waiting: [String: Wish] = [:]
+
+    /// Writes `option` to the live sessions off the main thread, together
+    /// with every other option synced within `gather`.
     static func sync(
         option: String, desired: [String: String], current: @escaping @Sendable (RemoteSession) -> String?
     ) {
-        let pid = ProcessInfo.processInfo.processIdentifier
-        Task.detached(priority: .utility) {
-            let client = TmuxClient()
-            let restarting = client.run(["show-option", "-gqv", Restarting.option]).flatMap(Restarting.init(tag:))
-            let changes = args(
-                option: option, desired: desired, current: current, sessions: client.remoteSessions(), pid: pid,
-                restarting: restarting)
-            if !changes.isEmpty { client.run(changes) }
+        queue.async {
+            let first = waiting.isEmpty
+            waiting[option] = Wish(desired: desired, current: current)
+            if first { queue.asyncAfter(deadline: .now() + gather) { flush() } }
         }
+    }
+
+    private static func flush() {
+        let wishes = waiting
+        waiting = [:]
+        let pid = ProcessInfo.processInfo.processIdentifier
+        let client = TmuxClient()
+        let sessions = client.remoteSessions()
+        // Only a session whose Lostty is gone asks whether it is restarting.
+        let restarting = sessions.contains(where: { isAbandoned($0, pid: pid) })
+            ? client.run(["show-option", "-gqv", Restarting.option]).flatMap(Restarting.init(tag:)) : nil
+        let changes = args(wishes, sessions: sessions, pid: pid, restarting: restarting)
+        if !changes.isEmpty { client.run(changes) }
+    }
+
+    /// One tmux call writing what differs for every option in `wishes`,
+    /// then one signal; empty when tmux already agrees.
+    static func args(
+        _ wishes: [String: Wish], sessions: [RemoteSession], pid: Int32,
+        isAlive: (Int32) -> Bool = ProcessLiveness.isAlive, restarting: Restarting? = nil, now: Date = Date()
+    ) -> [String] {
+        var args: [String] = []
+        for (option, wish) in wishes.sorted(by: { $0.key < $1.key }) {
+            let next = changes(
+                option: option, desired: wish.desired, current: wish.current, sessions: sessions, pid: pid,
+                isAlive: isAlive, restarting: restarting, now: now)
+            if !args.isEmpty, !next.isEmpty { args.append(";") }
+            args += next
+        }
+        return args.isEmpty ? [] : args + [";"] + TmuxHooks.signalCommand
+    }
+
+    private static func isAbandoned(
+        _ session: RemoteSession, pid: Int32, isAlive: (Int32) -> Bool = ProcessLiveness.isAlive
+    ) -> Bool {
+        session.owner != pid && !(session.owner.map(isAlive) ?? false)
     }
 
     /// One tmux call writing only what differs, then the signal; empty when
@@ -31,13 +83,25 @@ enum TmuxOptionSync {
         sessions: [RemoteSession], pid: Int32, isAlive: (Int32) -> Bool = ProcessLiveness.isAlive,
         restarting: Restarting? = nil, now: Date = Date()
     ) -> [String] {
+        let args = changes(
+            option: option, desired: desired, current: current, sessions: sessions, pid: pid, isAlive: isAlive,
+            restarting: restarting, now: now)
+        return args.isEmpty ? [] : args + [";"] + TmuxHooks.signalCommand
+    }
+
+    /// `args` without the signal, to chain several options into one call.
+    static func changes(
+        option: String, desired: [String: String], current: (RemoteSession) -> String?,
+        sessions: [RemoteSession], pid: Int32, isAlive: (Int32) -> Bool = ProcessLiveness.isAlive,
+        restarting: Restarting? = nil, now: Date = Date()
+    ) -> [String] {
         var args: [String] = []
         for session in sessions {
             let want: String?
             if session.owner == pid {
                 guard let pane = session.surface else { continue }
                 want = desired[pane]
-            } else if session.owner.map(isAlive) ?? false {
+            } else if !isAbandoned(session, pid: pid, isAlive: isAlive) {
                 continue  // another running Lostty's
             } else if let restarting, session.owner == restarting.pid, now < restarting.until {
                 continue  // its Lostty is restarting: the next one takes it over
@@ -52,7 +116,6 @@ enum TmuxOptionSync {
                 args += ["set-option", "-u", "-t", session.id, option]
             }
         }
-        if !args.isEmpty { args += [";"] + TmuxHooks.signalCommand }
         return args
     }
 
