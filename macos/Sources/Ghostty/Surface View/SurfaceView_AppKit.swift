@@ -1211,7 +1211,7 @@ extension Ghostty {
             // (CanvasScrollView.scrollingPane).
             if let canvas = canvasScrollView {
                 if CanvasScrollView.startsScroll(event) {
-                    let focused = window?.firstResponder === self
+                    let focused = window?.firstResponder === self || canvas.focusedPane?() === self
                     let mine = focused != event.modifierFlags.contains(.option) && !event.modifierFlags.contains(.command)
                         && !canvas.panCarriesOn()
                     canvas.scrollingPane = mine ? self : nil
