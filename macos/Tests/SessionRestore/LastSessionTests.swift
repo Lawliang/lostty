@@ -31,6 +31,13 @@ struct PaneConversationTests {
         #expect(PaneConversation(agent: "claude", id: "x; rm -rf ~").resumeCommand == nil)
         #expect(PaneConversation(agent: "gemini", id: id).resumeCommand == nil)
     }
+
+    @Test func claudeComesBackOnItsModel() {
+        #expect(PaneConversation(agent: "claude", id: id, model: "claude-opus-5-5[1m]").resumeCommand
+            == "claude --resume \(id) --model 'claude-opus-5-5[1m]'")
+        #expect(PaneConversation(agent: "claude", id: id, model: "x'; rm -rf ~").resumeCommand == "claude --resume \(id)")
+        #expect(PaneConversation(agent: "codex", id: id, model: "o3").resumeCommand == "codex resume \(id)")
+    }
 }
 
 struct LastSessionTests {

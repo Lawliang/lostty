@@ -5,8 +5,8 @@ import LosttyRemote
 
 /// What Claude Code's status line feed reports through `+claude-usage`
 /// (the LOSTTY_USAGE user var): `{"v":1,"ctx":{"used":…,"size":…},
-/// "five":{"pct":…,"reset":…},"week":{…},"model":"…"}`. Every piece but
-/// `v` is optional.
+/// "five":{"pct":…,"reset":…},"week":{…},"model":"…","mid":"…"}`. Every
+/// piece but `v` is optional.
 struct ClaudeUsageReport: Equatable {
     struct Context: Equatable {
         var used: Int
@@ -32,6 +32,8 @@ struct ClaudeUsageReport: Equatable {
     var fiveHour: Limit?
     var sevenDay: Limit?
     var model: String?
+    /// The model's id, as `--model` takes it: "claude-opus-5-5[1m]".
+    var modelID: String?
 
     /// Nil for other versions and malformed input.
     static func decode(_ value: String) -> ClaudeUsageReport? {
@@ -47,6 +49,7 @@ struct ClaudeUsageReport: Equatable {
         report.fiveHour = limit(object["five"])
         report.sevenDay = limit(object["week"])
         report.model = object["model"] as? String
+        report.modelID = (object["mid"] as? String).flatMap { PaneConversation.isModel($0) ? $0 : nil }
         return report
     }
 
@@ -112,6 +115,7 @@ final class ClaudeUsageRuntime: ObservableObject {
         if !sessions.contains(id) { sessions.insert(id) }
         if let context = report.context, contexts[id] != context { contexts[id] = context }
         if let model = report.model, models[id] != model { models[id] = model }
+        if let model = report.modelID { LastSessionStore.shared.model(model, in: id) }
         if let limit = report.fiveHour, fiveHour != limit {
             fiveHour = limit
             Self.save(defaults, Keys.fiveHour, limit)

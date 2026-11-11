@@ -18,12 +18,14 @@ struct ClaudeUsageTests {
     @Test func decodesAFullReport() {
         let report = ClaudeUsageReport.decode(
             #"{"v":1,"ctx":{"used":84000,"size":200000},"five":{"pct":42.5,"reset":1760000000},"#
-                + #""week":{"pct":17},"model":"Opus"}"#)
+                + #""week":{"pct":17},"model":"Opus","mid":"claude-opus-5-5[1m]"}"#)
         #expect(report?.context == .init(used: 84000, size: 200000))
         #expect(report?.context?.percent == 42)
         #expect(report?.fiveHour == .init(percent: 42.5, resetsAt: Date(timeIntervalSince1970: 1_760_000_000)))
         #expect(report?.sevenDay == .init(percent: 17, resetsAt: nil))
         #expect(report?.model == "Opus")
+        #expect(report?.modelID == "claude-opus-5-5[1m]")
+        #expect(ClaudeUsageReport.decode(#"{"v":1,"mid":"a b; c"}"#)?.modelID == nil)
     }
 
     @Test func rejectsOtherVersionsAndJunk() {
