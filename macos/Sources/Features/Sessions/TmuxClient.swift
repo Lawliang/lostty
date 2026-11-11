@@ -101,7 +101,12 @@ struct TmuxClient {
     /// Every session with the phone's columns (label, Claude state, title,
     /// folder, last use), for the menu bar and the sync.
     func remoteSessions() -> [RemoteSession] {
-        run(["list-sessions", "-F", TmuxRemote.listFormat]).map(TmuxRemote.parse) ?? []
+        readRemoteSessions() ?? []
+    }
+
+    /// `remoteSessions`, or nil when tmux didn't answer.
+    func readRemoteSessions() -> [RemoteSession]? {
+        run(["list-sessions", "-F", TmuxRemote.listFormat]).map(TmuxRemote.parse)
     }
 
     /// `remoteSessions` plus each one's repo and branch, as the phone lists
