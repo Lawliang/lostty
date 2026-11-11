@@ -286,11 +286,14 @@ extension Ghostty {
             // Lostty Mobile: the pane's shell lives in its own session on
             // Lostty's tmux, so it outlives the window and can be opened
             // from the phone. Decided before super.init (deinit reads it).
+            // Not in the test host: its sessions would outlive it on the
+            // user's live server, for their Lostty to offer back.
             self.remoteIO = baseConfig?.remoteIO
             let tmuxLaunch = baseConfig?.remoteIO != nil ? nil : SessionLaunch.command(
                 existing: baseConfig?.command,
                 binary: Bundle.main.executableURL?.path,
-                disabled: UserDefaults.ghostty.bool(forKey: TmuxConstants.disabledDefaultsKey))
+                disabled: UserDefaults.ghostty.bool(forKey: TmuxConstants.disabledDefaultsKey)
+                    || ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil)
             self.inTmuxSession = SessionLaunch.isLauncher(tmuxLaunch ?? baseConfig?.command)
 
             // Our initial config always is our application wide config.

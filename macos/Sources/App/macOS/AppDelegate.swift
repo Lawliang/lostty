@@ -447,8 +447,11 @@ class AppDelegate: NSObject,
         }
 
         // Lostty Mobile: after a crash, offer to reopen the tmux sessions
-        // the previous Lostty left running.
-        SessionsUI.offerOrphansAtLaunch(ghostty)
+        // the previous Lostty left running. Not in the test host, whose
+        // alert would wait on the user's screen.
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil {
+            SessionsUI.offerOrphansAtLaunch(ghostty)
+        }
 
         // Lostty Mobile: watch tmux for session changes (labels, a phone
         // attaching) and give a tmux server without them the change hooks.
