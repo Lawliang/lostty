@@ -61,12 +61,23 @@ final class MacStrainWatch: ObservableObject {
         }
         source.resume()
         self.source = source
+        // The source only reports changes: read where the level stands now.
+        memory = Self.memoryNow()
         thermal = NotificationCenter.default.addObserver(
             forName: ProcessInfo.thermalStateDidChangeNotification, object: nil, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.update() }
         }
         update()
+    }
+
+    /// The kernel's memory pressure level now (1 normal, 2 warning, 4
+    /// critical), which the source reports only when it changes.
+    static func memoryNow() -> MacStrain.Memory {
+        var level: Int32 = 0
+        var size = MemoryLayout<Int32>.size
+        guard sysctlbyname("kern.memorystatus_vm_pressure_level", &level, &size, nil, 0) == 0 else { return .normal }
+        return level >= 4 ? .critical : level >= 2 ? .warning : .normal
     }
 
     private func update() {

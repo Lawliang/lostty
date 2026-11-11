@@ -8,6 +8,9 @@ Every decision and its evidence is a row in `decisions.tsv`.
 
 ## Baseline (2026-11-11, installed build, 14 terminals)
 
+A second snapshot twenty minutes later, with 12 terminals, is in
+`baseline-installed.txt` (801 MB, 329 MB of frame buffers).
+
 | What | Value | How |
 | --- | --- | --- |
 | Lostty memory footprint | 835 MB | `footprint` |
@@ -27,8 +30,8 @@ processes, buffers and bytes are not.
 
 1. **tmux helper processes.** Each tmux change wakes seven listeners, and
    each starts its own `tmux` to read the same list. A write then signals
-   again. About 14 processes per wake, about 70% of Lostty's own CPU in
-   the sample.
+   again. About 15 processes per wake counted from the code, and most of
+   the process-start samples in the 5 s sample.
 2. **Agent hooks.** Every tool call of every agent starts the whole
    102 MB `lostty` binary twice (before and after the tool), plus `sh`
    and two `ps`.
@@ -46,25 +49,25 @@ Tier 1: high impact, low risk.
 
 | # | Unit | Section | State |
 | --- | --- | --- | --- |
-| 1 | One tmux read and one write for all per-session options; wakes within 0.2 s merge | tmux | see log |
-| 2 | Listeners stop re-reading what a wake did not change (pane sampler, notes listing) | tmux | see log |
-| 3 | Hooks skip the engine start-up; no `ps` walk; parse stdin once | hooks | see log |
-| 4 | Bar: cached model list, each bar reads only its own pane | canvas | see log |
-| 5 | Task list reads only new bytes; working-line watch slows down | polls | see log |
+| 1 | One tmux read and one write for all per-session options; wakes within 0.2 s merge | tmux | done, 89908cbb6 |
+| 2 | Listeners stop re-reading what a wake did not change (pane sampler, notes listing) | tmux | done, 0d2747fae and d0689a366 |
+| 3 | Hooks skip the engine start-up; no `ps` walk; parse stdin once | hooks | partly: no `ps` (06a83fb8b), one parse (a673b4298). Skipping start-up measured no gain and was dropped. A small hook program is on branch `perf-hook-binary` |
+| 4 | Bar: cached model list, each bar reads only its own pane | canvas | done, d0689a366 |
+| 5 | Task list reads only new bytes; working-line watch slows down | polls | partly: task list every 2 s (d0689a366), working-line watch in one call (c47d583bd). No incremental reader |
 
 Tier 2: memory.
 
 | # | Unit | Section | State |
 | --- | --- | --- | --- |
-| 6 | A sleeping card stops drawing; a split made in a hidden card starts hidden | canvas | see log |
-| 7 | A hidden terminal gives back its spare frame buffers (engine patch) | engine | see log |
+| 6 | A sleeping card stops drawing; a split made in a hidden card starts hidden | canvas | half: the split is done (b79c8c29c). A sleeping card on screen still draws |
+| 7 | A hidden terminal gives back its spare frame buffers (engine patch) | engine | done, a339b6263 |
 
 Tier 3: heat and power.
 
 | # | Unit | Section | State |
 | --- | --- | --- | --- |
-| 8 | Lostty sheds its own work when the Mac reports heat | thermal | see log |
-| 9 | Stay Awake reacts to events, not a 5 s poll; menu opens without blocking | stay awake | see log |
+| 8 | Lostty sheds its own work when the Mac reports heat | thermal | done, b79c8c29c |
+| 9 | Stay Awake reacts to events, not a 5 s poll; menu opens without blocking | stay awake | not done: left as is, see log |
 
 Skipped on purpose.
 
