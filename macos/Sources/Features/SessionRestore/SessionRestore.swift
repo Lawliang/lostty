@@ -83,7 +83,9 @@ enum SessionRestore {
     private static func continueSession(_ last: LastSession, _ ghostty: Ghostty.App) {
         last.windows.restore(ghostty)
         for (pane, conversation) in last.conversations {
-            guard let id = UUID(uuidString: pane), let command = conversation.resumeCommand else { continue }
+            // A sleeping pane stays asleep: its wake resumes it under its name.
+            guard let id = UUID(uuidString: pane), PaneSleep.shared.phase(id) == nil,
+                  let command = conversation.resumeCommand else { continue }
             type(command, into: id)
         }
     }

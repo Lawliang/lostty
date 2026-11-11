@@ -131,9 +131,25 @@ struct ClaudeUsageBar: View {
         .help("Apps")
     }
 
+    /// Picks the pane's model (`ClaudeModelSwitch`); a beep when Claude
+    /// is busy or something is typed in its box.
     private var modelLabel: some View {
-        Text("✳ ").foregroundColor(Color(red: 0.85, green: 0.47, blue: 0.34))
-            + Text(modelName).foregroundColor(ink.opacity(0.6))
+        Menu {
+            ForEach(ClaudeModelSwitch.models(), id: \.id) { choice in
+                Button {
+                    guard let pane, ClaudeModelSwitch.switchTo(choice, in: pane) else { return NSSound.beep() }
+                } label: {
+                    if choice.name == modelName { Label(choice.name, systemImage: "checkmark") } else { Text(choice.name) }
+                }
+            }
+        } label: {
+            Text("✳ ").foregroundColor(Color(red: 0.85, green: 0.47, blue: 0.34))
+                + Text(modelName).foregroundColor(ink.opacity(0.6))
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Switch model")
     }
 
     /// `Context ▓▓░░░░░░░░ 50K`, as `contextLine` draws it in `style`.
@@ -295,22 +311,18 @@ enum ClaudeUsageFont {
 }
 
 /// The Usage app's popover: the weekly limit, when it resets, and how much
-/// of it Claude Code and Lostty used.
+/// of it Claude Code and Lostty used; then each model's own weekly limit,
+/// such as Fable's (`ClaudeModelLimits`).
 struct ClaudeUsageDetails: View {
     @ObservedObject var usage: ClaudeUsageRuntime
     let accent: Color
     @ObservedObject var breakdown: UsageBreakdownRuntime = .shared
+    @ObservedObject var modelLimits: ClaudeModelLimits = .shared
 
     var body: some View {
         let percent = usage.percent(.weekly) ?? 0
         VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 0) {
-                Text(ClaudeUsageMetric.weekly.title)
-                Spacer(minLength: 10)
-                (ClaudeUsageBlocks.text(percent, accent: accent, empty: Color.primary.opacity(0.25))
-                    + Text(" " + ClaudeUsageFormat.percent(percent)))
-                    .fixedSize()
-            }
+            meter(ClaudeUsageMetric.weekly.title, percent)
             Text(usage.sevenDay?.resetsAt.map { ClaudeUsageFormat.reset($0, now: usage.now()) } ?? " ")
                 .font(ClaudeUsageFont.font(size: 10))
                 .foregroundStyle(.secondary)
@@ -319,12 +331,31 @@ struct ClaudeUsageDetails: View {
                     .font(ClaudeUsageFont.font(size: 10))
                     .foregroundStyle(.secondary)
             }
+            ForEach(modelLimits.limits, id: \.name) { limit in
+                meter(limit.name, limit.percent).padding(.top, 8)
+                Text(limit.reset.map { $0.prefix(1).uppercased() + $0.dropFirst() } ?? " ")
+                    .font(ClaudeUsageFont.font(size: 10))
+                    .foregroundStyle(.secondary)
+            }
         }
         .font(ClaudeUsageFont.font(size: 12))
         .padding(.horizontal, 16)
         .padding(.vertical, 13)
         .frame(width: 320)
-        .onAppear { breakdown.refresh() }
+        .onAppear {
+            breakdown.refresh()
+            modelLimits.refresh()
+        }
+    }
+
+    private func meter(_ title: String, _ percent: Double) -> some View {
+        HStack(spacing: 0) {
+            Text(title)
+            Spacer(minLength: 10)
+            (ClaudeUsageBlocks.text(percent, accent: accent, empty: Color.primary.opacity(0.25))
+                + Text(" " + ClaudeUsageFormat.percent(percent)))
+                .fixedSize()
+        }
     }
 }
 

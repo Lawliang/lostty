@@ -447,8 +447,11 @@ class AppDelegate: NSObject,
         }
 
         // Lostty Mobile: after a crash, offer to reopen the tmux sessions
-        // the previous Lostty left running.
-        SessionsUI.offerOrphansAtLaunch(ghostty)
+        // the previous Lostty left running. Not in the test host, whose
+        // alert would wait on the user's screen.
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil {
+            SessionsUI.offerOrphansAtLaunch(ghostty)
+        }
 
         // Lostty Mobile: watch tmux for session changes (labels, a phone
         // attaching) and give a tmux server without them the change hooks.
@@ -459,6 +462,8 @@ class AppDelegate: NSObject,
             ClaudeTmuxSync.shared.start()
             // Ends the trace of a Claude interrupted with Esc or Ctrl+C.
             ClaudeWorkingLineWatch.shared.start()
+            // The Usage app's per-model weekly limits, such as Fable's.
+            ClaudeModelLimits.shared.start()
             // Lostty Mobile: each pane's skin, for the phone's rows.
             SkinTmuxSync.shared.start()
             // Lostty Mobile: session labels as tab titles; a phone attaching

@@ -11,9 +11,10 @@ pub const surface_env = "LOSTTY_SURFACE";
 /// shells are still working, so it carries on by itself when they finish.
 /// `resumed`: the last of them finished, so Claude itself works again. `tool`: Claude (or one of
 /// its subagents) is about to run a tool; it carries the action, not a
-/// change of state. `done` (PostToolUse) and `start` (SessionStart) only
-/// speak the context handoff's queued text; after a /clear, `start` sends
-/// `fresh` (the fresh window took the handoff) or `cleared` (none waited).
+/// change of state. `done` (PostToolUse) only speaks queued text. `start`
+/// (SessionStart) says a session started, which wakes a sleeping pane;
+/// after a /clear it sends `fresh` (the fresh window took the handoff) or
+/// `cleared` (none waited) instead.
 /// `subagent` (SubagentStart) and `subagent_done` (SubagentStop) name a
 /// subagent and its transcript, and `shell` (PostToolUse) and `shell_done`
 /// (the task notification Claude Code prompts itself with) a background
@@ -37,6 +38,14 @@ pub const Shell = struct {
     output: ?[]const u8 = null,
 };
 
+/// A sleeping agent to wake: its pane, who messaged it and what, when the
+/// message fits in the user var.
+pub const Wake = struct {
+    pane: []const u8,
+    from: ?[]const u8 = null,
+    message: ?[]const u8 = null,
+};
+
 /// What a message says beyond its state.
 pub const Detail = struct {
     /// `tool`: what the tool call does, as `action` words it.
@@ -49,6 +58,9 @@ pub const Detail = struct {
     /// `tool`: the agent a SendMessage was for, kept inside the pane's
     /// zone (zone.zig), for the canvas's notice.
     denied: ?[]const u8 = null,
+    /// `tool`: a SendMessage held for a sleeping agent (sleep.zig), for the
+    /// app to wake it and pass the message on.
+    wake: ?Wake = null,
     /// `subagent` and `subagent_done`: which subagent.
     agent: ?Subagent = null,
     /// `shell` and `shell_done`: which background shell.
@@ -60,6 +72,10 @@ pub const action_max = 80;
 
 /// The longest kept-inside target sent, in bytes; a longer one is dropped.
 pub const denied_max = 256;
+
+/// The longest message JSON sent: Ghostty keeps an OSC 1337 of up to 2048
+/// bytes, `SetUserVar=LOSTTY_CLAUDE=` and the JSON's base64 included.
+pub const json_max = 1500;
 
 /// The longest conversation file path sent, in bytes; a longer one is
 /// dropped rather than cut.
@@ -412,18 +428,31 @@ pub fn findTty(ctx: anytype, start: i32, max_hops: usize) ?[]const u8 {
 /// `detail` has them. With `tmux`, wrapped in tmux's DCS passthrough (requires
 /// `allow-passthrough on`).
 pub fn encodeSequence(alloc: Allocator, state: State, detail: Detail, tmux: bool) ![]u8 {
-    const json = try std.json.Stringify.valueAlloc(alloc, .{
+    const json = try encodeJson(alloc, state, detail);
+    defer alloc.free(json);
+    return encodeUserVar(alloc, user_var_name, json, tmux);
+}
+
+/// Whether the message for `state` and `detail` fits in what the terminal
+/// takes (`json_max`).
+pub fn fits(alloc: Allocator, state: State, detail: Detail) bool {
+    const json = encodeJson(alloc, state, detail) catch return false;
+    defer alloc.free(json);
+    return json.len <= json_max;
+}
+
+fn encodeJson(alloc: Allocator, state: State, detail: Detail) ![]u8 {
+    return std.json.Stringify.valueAlloc(alloc, .{
         .v = 1,
         .state = @tagName(state),
         .action = detail.action,
         .permission = if (detail.permission) true else null,
         .transcript = detail.transcript,
         .denied = detail.denied,
+        .wake = detail.wake,
         .agent = detail.agent,
         .shell = detail.shell,
     }, .{ .emit_null_optional_fields = false });
-    defer alloc.free(json);
-    return encodeUserVar(alloc, user_var_name, json, tmux);
 }
 
 /// OSC 1337 SetUserVar setting `name` to `json` (base64-encoded on the
@@ -723,6 +752,26 @@ test "claude protocol: encodeSequence carries a message kept inside the zone" {
     try t.expectEqualStrings(
         \\{"v":1,"state":"tool","action":"SendMessage","denied":"lostty-a9"}
     , try decodeSequence(alloc, kept));
+}
+
+test "claude protocol: encodeSequence carries a message held for a sleeping agent" {
+    const t = std.testing;
+    var arena = std.heap.ArenaAllocator.init(t.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+    const detail: Detail = .{ .action = "SendMessage", .wake = .{ .pane = "P1", .from = "me", .message = "hi" } };
+    try t.expectEqualStrings(
+        \\{"v":1,"state":"tool","action":"SendMessage","wake":{"pane":"P1","from":"me","message":"hi"}}
+    , try decodeSequence(alloc, try encodeSequence(alloc, .tool, detail, false)));
+    try t.expect(fits(alloc, .tool, detail));
+    const long = try alloc.alloc(u8, json_max);
+    @memset(long, 'x');
+    try t.expect(!fits(alloc, .tool, .{ .action = "SendMessage", .wake = .{ .pane = "P1", .message = long } }));
+}
+
+test "claude protocol: the longest message fits in the terminal's OSC buffer" {
+    const osc_max = 2048;
+    try std.testing.expect("SetUserVar=LOSTTY_CLAUDE=".len + std.base64.standard.Encoder.calcSize(json_max) <= osc_max);
 }
 
 test "claude protocol: a started subagent's transcript sits beside its parent's" {

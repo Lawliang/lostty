@@ -119,11 +119,15 @@ extension CanvasController {
                   let ticket = TicketQueue.next(
                     in: domain.id, of: next, autoStart: project.autoStart == true, startedByHand: startedByHand),
                   let key = ticket.key else { continue }
-            let agent = panes.first { pane in
-                membership.panes.zones[pane.id] == domain.id && pane.id != project.manager
-                    && ClaudeRuntime.shared.phase(pane.id).isOff
+            let featurePanes = panes.filter { membership.panes.zones[$0.id] == domain.id && $0.id != project.manager }
+            let agent = featurePanes.first { pane in
+                ClaudeRuntime.shared.phase(pane.id).isOff
                     && TicketDelivery.input(in: TicketDelivery.screen(
                         of: pane, session: TmuxOwnership.showing(pane.id, ownedBy: pid, in: tmuxSessions).first?.id)) == .empty
+            }
+            // With none free, a sleeping one wakes for it.
+            if agent == nil, let sleeper = featurePanes.first(where: { PaneSleep.shared.phase($0.id) != nil }) {
+                PaneSleep.shared.wake(sleeper.id)
             }
             guard let agent, let delivered = TicketQueue.delivering(key, into: agent.id, in: next),
                   TicketDelivery.type(TicketDelivery.prompt(for: ticket, feature: domain.name), into: agent) else {

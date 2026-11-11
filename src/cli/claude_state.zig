@@ -2,6 +2,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Action = @import("ghostty.zig").Action;
 const protocol = @import("claude/protocol.zig");
+const sleep = @import("claude/sleep.zig");
 const speak = @import("claude/speak.zig");
 const zone = @import("claude/zone.zig");
 const peers = @import("peers.zig");
@@ -27,7 +28,8 @@ pub const Options = struct {
 /// (protocol.refine), and marks Claude asking permission. An `idle` also names the conversation
 /// file, for the Mac's turn observer. `tool` (PreToolUse) sends what the tool
 /// call is about to do, for Lostty Mobile's session list, and denies a
-/// SendMessage to an agent outside the pane's zone. `subagent`
+/// SendMessage to an agent outside the pane's zone, or to one asleep,
+/// which Lostty wakes to pass the message on. `subagent`
 /// (SubagentStart) names the subagent and its transcript, and a SubagentStop
 /// says `subagent_done` for it before anything else; `done` after a Bash
 /// call that started a background shell says `shell`, and a prompt that is
@@ -80,16 +82,17 @@ pub fn run(gpa: Allocator) !u8 {
         },
         // A session starting without the zone's brief gets it. After
         // /clear the fresh window also gets the handoff, and says so, or
-        // says it was cleared with none (the Mac disarms the pane).
+        // says it was cleared with none (the Mac disarms the pane). Any
+        // other start says `start`: a sleeping pane's resume woke it.
         .start => {
             const input = hookInput(alloc) orelse return 0;
             const source = speak.sessionSource(alloc, input) orelse return 0;
-            if (!zone.briefsAt(source)) return 0;
             const cleared = std.mem.eql(u8, source, "clear");
-            const handoff = if (cleared) take(alloc, pane, .start) else null;
-            speakTexts(alloc, "SessionStart", &.{ handoff, zoneBrief(alloc, pane, input) });
-            if (!cleared) return 0;
-            state = if (handoff != null) .fresh else .cleared;
+            if (zone.briefsAt(source)) {
+                const handoff = if (cleared) take(alloc, pane, .start) else null;
+                speakTexts(alloc, "SessionStart", &.{ handoff, zoneBrief(alloc, pane, input) });
+                if (cleared) state = if (handoff != null) .fresh else .cleared;
+            }
         },
         // A subagent starting, for the pane's list (Claude's own internal
         // agents aren't listed).
@@ -104,8 +107,8 @@ pub fn run(gpa: Allocator) !u8 {
         },
         .tool => {
             const input = hookInput(alloc) orelse return 0;
-            detail.denied = keepInside(alloc, pane, input);
             detail.action = protocol.action(alloc, input) orelse return 0;
+            holdMessage(alloc, pane, input, &detail);
         },
         else => {},
     }
@@ -209,19 +212,49 @@ fn othersLine(alloc: Allocator, pane: []const u8, input: []const u8) ?[]const u8
     return zone.othersLine(alloc, list) catch null;
 }
 
-/// A SendMessage to an agent outside the pane's zone: prints Claude
-/// Code's deny and returns the target, for the app's notice. The owner's
-/// Allow Once for that target lets one through.
-fn keepInside(alloc: Allocator, pane: []const u8, input: []const u8) ?[]const u8 {
-    const to = zone.sendTarget(alloc, input) orelse return null;
-    const file = zoneFile(alloc, pane) orelse return null;
-    const members = file.members orelse return null;
-    if (zone.decide(to, members, agents(alloc), worktrees(alloc)) == .allow) return null;
-    if (allowedOnce(alloc, pane, to)) return null;
-    const reason = zone.denyReason(alloc, to, file.zone) catch return null;
-    const out = wire.claudeJson(alloc, "deny", reason) catch return null;
+/// Denies a SendMessage that can't go as it is. One to an agent outside
+/// the pane's zone names the target in `detail.denied`, for the app's
+/// notice; the owner's Allow Once for that target lets one through. One
+/// to a sleeping agent names it in `detail.wake`, with the message when it
+/// fits, for the app to wake it and pass the message on.
+fn holdMessage(alloc: Allocator, pane: []const u8, input: []const u8, detail: *protocol.Detail) void {
+    const to = zone.sendTarget(alloc, input) orelse return;
+    const running = agents(alloc);
+    const sleepers = sleeping(alloc);
+    if (zoneFile(alloc, pane)) |file| if (file.members) |members| {
+        const all = sleep.withSleepers(alloc, running, sleepers) catch running;
+        if (zone.decide(to, members, all, worktrees(alloc)) == .deny and !allowedOnce(alloc, pane, to)) {
+            deny(alloc, zone.denyReason(alloc, to, file.zone) catch return);
+            if (to.len <= protocol.denied_max) detail.denied = to;
+            return;
+        }
+    };
+    const asleep = sleep.find(to, sleepers, running) orelse return;
+    detail.wake = .{
+        .pane = asleep.pane,
+        .from = sleep.sender(running, zone.sessionId(alloc, input)),
+        .message = sleep.message(alloc, input),
+    };
+    if (!protocol.fits(alloc, .tool, detail.*)) detail.wake.?.message = null;
+    if (!protocol.fits(alloc, .tool, detail.*)) {
+        detail.wake = null;
+        return;
+    }
+    deny(alloc, sleep.reason(alloc, to, detail.wake.?.message != null) catch return);
+}
+
+/// Prints Claude Code's deny of the tool call, with `reason`.
+fn deny(alloc: Allocator, reason: []const u8) void {
+    const out = wire.claudeJson(alloc, "deny", reason) catch return;
     std.fs.File.stdout().writeAll(out) catch {};
-    return if (to.len <= protocol.denied_max) to else null;
+}
+
+/// The agents Lostty put to sleep; none outside Lostty or with no list.
+fn sleeping(alloc: Allocator) []const sleep.Sleeper {
+    const home = std.posix.getenv("HOME") orelse return &.{};
+    const path = std.fs.path.join(alloc, &.{ home, sleep.path }) catch return &.{};
+    const json = std.fs.cwd().readFileAlloc(alloc, path, speak.text_max) catch return &.{};
+    return sleep.parse(alloc, json);
 }
 
 /// Takes the pane's Allow Once when it names `to`.
@@ -305,6 +338,7 @@ const Ps = struct {
 
 test {
     _ = @import("claude/protocol.zig");
+    _ = @import("claude/sleep.zig");
     _ = @import("claude/speak.zig");
     _ = @import("claude/zone.zig");
 }

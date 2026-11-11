@@ -146,8 +146,8 @@ extension CanvasController {
     }
 
     /// Types each pane's waiting lines into it, where its Claude is off
-    /// and its input box empty; a pane that's gone loses its lines. True
-    /// while some still wait.
+    /// and its input box empty; a sleeping pane wakes for them, and a pane
+    /// that's gone loses its lines. True while some still wait.
     func deliverInbox() -> Bool {
         var waiting = false
         let pid = ProcessInfo.processInfo.processIdentifier
@@ -156,6 +156,7 @@ extension CanvasController {
                 agentInbox[id] = nil
                 continue
             }
+            PaneSleep.shared.wake(id)
             let session = TmuxOwnership.showing(id, ownedBy: pid, in: tmuxSessions).first?.id
             guard ClaudeRuntime.shared.phase(id).isOff,
                   TicketDelivery.input(in: TicketDelivery.screen(of: pane, session: session)) == .empty,

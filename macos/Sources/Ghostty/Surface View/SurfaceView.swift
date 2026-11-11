@@ -246,6 +246,7 @@ extension Ghostty {
                     .id(surfaceView.id)
                 GoldDropOverlay(surfaceID: surfaceView.id)
                     .id(surfaceView.id)
+                SleepVeil(surfaceID: surfaceView.id)
                 if AgentCoordination.isOn { GuardBadgeOverlay(surfaceID: surfaceView.id) }
 
                 // Grab handle for dragging the window. We want this to appear at the very

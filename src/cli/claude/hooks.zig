@@ -31,7 +31,8 @@ pub const Agent = enum { claude, codex };
 /// (protocol.action); with no output it never decides anything about the
 /// call. PostToolUse (`done`) speaks the handoff's directive and,
 /// after ListAgents, which agents are in the zone, and names a background
-/// shell a Bash call started; SessionStart (`start`) the zone's brief and, after /clear, the handoff.
+/// shell a Bash call started; SessionStart (`start`) the zone's brief and, after /clear, the handoff,
+/// and says a session started, which ends a sleeping pane's wake.
 const claude_events = [_]Event{
     .{ .name = "UserPromptSubmit", .state = "busy" },
     .{ .name = "Stop", .state = "idle" },

@@ -126,6 +126,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     private(set) var placed = false
     private var eventMonitor: Any?
     private var cancellables: Set<AnyCancellable> = []
+    var sleepTimer: Timer?
 
     /// Opens the canvas, making it the first time; an empty canvas gets a
     /// fresh card unless panes are about to move in.
@@ -245,6 +246,15 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         NotificationCenter.default.publisher(for: .losttySessionsChanged)
             .sink { [weak self] _ in self?.tmuxSessionsDidChange() }
             .store(in: &cancellables)
+        PaneSleep.shared.$phases
+            .map { $0.mapValues(\.agent.name) }
+            .removeDuplicates()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                for card in self?.cards ?? [] { card.applyTitleToWindow() }
+            }
+            .store(in: &cancellables)
+        watchForSleep()
         // A terminal has no use for pinches, so pinching anywhere zooms the
         // canvas. (Scrolling over a pane, which pans the canvas, is the
         // pane's to pass on: a scroll-wheel monitor would turn off AppKit's
@@ -269,6 +279,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
                 scrollView.magnify(with: event)
                 return nil
             case .leftMouseDown:
+                wakeClicked(event)
                 if drawsZone, surface.hitTest(event.locationInWindow) !== scrollView.document { drawsZone = false }
                 if groupPressed(event) || selectionClicked(event) { return nil }
                 ticketClicked(event)
@@ -828,10 +839,10 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     }
 
     /// The name of the Claude running in pane `pane`, as its agents call
-    /// it, where one runs.
+    /// it, where one runs, or the one sleeping there.
     func agentName(of pane: UUID) -> String? {
         TmuxOwnership.showing(pane, ownedBy: ProcessInfo.processInfo.processIdentifier, in: tmuxSessions)
-            .lazy.compactMap { self.agentNames[$0.name] }.first
+            .lazy.compactMap { self.agentNames[$0.name] }.first ?? PaneSleep.shared.phase(pane)?.agent.name
     }
 
     /// Reads Claude's session names again, off the main thread; the cards

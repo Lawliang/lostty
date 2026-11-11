@@ -63,6 +63,10 @@ final class ClaudeRuntime: ObservableObject {
     /// Panes with keys typed since their agent's last prompt: the prompt
     /// may hold half a message, so the trash's close check types nothing.
     private var typed: Set<UUID> = []
+    /// When each pane's Claude last went idle and stayed untouched: a
+    /// turn's end, an interrupt or a key typed, else when sleep first
+    /// found it idle. For sleep.
+    private var idle: [UUID: Date] = [:]
 
     init(
         now: @escaping () -> Date = Date.init,
@@ -81,12 +85,28 @@ final class ClaudeRuntime: ObservableObject {
     func hasTyped(_ id: UUID) -> Bool { typed.contains(id) }
 
     /// A key typed in the pane (`PaneTyping.watchKeys`).
-    func keyTyped(_ id: UUID) { typed.insert(id) }
+    func keyTyped(_ id: UUID) {
+        typed.insert(id)
+        if idle[id] != nil { idle[id] = now() }
+    }
+
+    func idleSince(_ id: UUID) -> Date? { idle[id] }
+
+    /// Sleep found the pane idle with no turn's end seen, as after a
+    /// launch: it counts as idle from now.
+    func foundIdle(_ id: UUID) {
+        guard phase(id).isOff, idle[id] == nil else { return }
+        idle[id] = now()
+    }
 
     func userVarChanged(_ id: UUID, name: String, value: String) {
         guard name == ClaudeConstants.userVarName else { return }
         if let event = ClaudeMessage.task(value) {
             PaneTasks.shared.apply(event, to: id)
+            return
+        }
+        if ClaudeMessage.isStart(value) {
+            PaneSleep.shared.started(id)
             return
         }
         if ClaudeMessage.isFresh(value) || ClaudeMessage.isCleared(value) {
@@ -95,6 +115,7 @@ final class ClaudeRuntime: ObservableObject {
             return
         }
         if let target = ClaudeMessage.denied(value) { messageKeptInside(id, target) }
+        if let wake = ClaudeMessage.wake(value) { CanvasController.shared?.messageForSleeper(wake) }
         if let action = ClaudeMessage.action(value) {
             // A tool starting means Claude works, even with no new prompt
             // (it carries on after a permission prompt without one).
@@ -125,8 +146,7 @@ final class ClaudeRuntime: ObservableObject {
         default: break
         }
         if state == .exit {
-            LastSessionStore.shared.agentGone(id)
-            CanvasController.shared?.conversationEnded(id)
+            exited(id)
             PaneTasks.shared.clear(id)
         }
         guard state == .idle, let path = ClaudeMessage.transcript(value) else { return }
@@ -142,15 +162,23 @@ final class ClaudeRuntime: ObservableObject {
     /// (claude included) is gone: a racing trace must not stay up.
     func commandFinished(_ id: UUID) {
         agentGone(id)
-        CanvasController.shared?.conversationEnded(id)
+        exited(id)
         PaneTasks.shared.clear(id)
-        LastSessionStore.shared.agentGone(id)
         apply(.exit, to: id)
         hookTurns[id] = nil
         typed.remove(id)
     }
 
+    /// Claude quit in the pane: its conversation, claims and recap go,
+    /// unless it went to sleep, which keeps them for the wake.
+    private func exited(_ id: UUID) {
+        guard !PaneSleep.shared.exited(id) else { return }
+        LastSessionStore.shared.agentGone(id)
+        CanvasController.shared?.conversationEnded(id)
+    }
+
     func surfaceClosed(_ id: UUID) {
+        PaneSleep.shared.closed(id)
         agentGone(id)
         PaneTasks.shared.clear(id)
         LastSessionStore.shared.agentGone(id)
@@ -162,6 +190,7 @@ final class ClaudeRuntime: ObservableObject {
         hookTurns[id] = nil
         setAction(nil, for: id)
         typed.remove(id)
+        idle[id] = nil
     }
 
     /// A pane is focused when its window is key and it is the selected pane.
@@ -236,13 +265,18 @@ final class ClaudeRuntime: ObservableObject {
             awaiting.remove(id)
             // A new prompt: the last one's action is done.
             if state == .busy { setAction(nil, for: id) }
+            idle[id] = nil
         case .resumed:
-            break
+            idle[id] = nil
         case .exit:
             awaiting.remove(id)
             setAction(nil, for: id)
+            idle[id] = nil
         case .idle:
-            if !permission { setAction(nil, for: id) }
+            if !permission {
+                setAction(nil, for: id)
+                idle[id] = now()
+            }
             // Waiting for the user. Focused now means they see it already.
             if !unfocused.contains(id) {
                 seen.insert(id)

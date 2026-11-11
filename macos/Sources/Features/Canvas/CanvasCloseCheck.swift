@@ -65,7 +65,11 @@ final class CanvasCloseCheck {
             card.checkingClose = true
             for (id, agent) in ask {
                 asked[id] = card
-                PaneTyping.type(id, [.text(Self.prompt(for: agent)), .enter])
+                if PaneSleep.shared.phase(id) == nil {
+                    PaneTyping.type(id, [.text(Self.prompt(for: agent)), .enter])
+                } else {
+                    askAwake(id, agent)
+                }
             }
             let ids = ask.map(\.0)
             DispatchQueue.main.asyncAfter(deadline: .now() + Self.timeout) { [weak self, weak card] in
@@ -75,6 +79,21 @@ final class CanvasCloseCheck {
                 }
             }
         }
+    }
+
+    /// A sleeping pane wakes first, and is asked once its Claude is back,
+    /// idle with an empty input box; until the check times out.
+    private func askAwake(_ id: UUID, _ agent: HookAgent) {
+        guard asked[id] != nil else { return }
+        PaneSleep.shared.wake(id)
+        guard PaneSleep.shared.phase(id) == nil, ClaudeRuntime.shared.phase(id).isOff,
+              let view = PaneTyping.surface(id), CanvasController.shared?.inputBox(of: view) == .empty else {
+            DispatchQueue.main.asyncAfter(deadline: .now() + CanvasController.deliveryRetry) { [weak self] in
+                MainActor.assumeIsolated { self?.askAwake(id, agent) }
+            }
+            return
+        }
+        PaneTyping.type(id, [.text(Self.prompt(for: agent)), .enter])
     }
 
     func userVarChanged(_ surface: Ghostty.SurfaceView, name: String, value: String) {
