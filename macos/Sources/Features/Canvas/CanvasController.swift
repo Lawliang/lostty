@@ -212,6 +212,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
             self, selector: #selector(canvasMoved), name: NSView.boundsDidChangeNotification, object: scrollView.contentView)
         surface.shownMoved = { [weak self] in self?.updateVisibility() }
         scrollView.userMoves = { [weak self] in self?.stopGlide(keep: true) }
+        scrollView.focusedPane = { [weak self] in self?.focusedCard?.focusedSurface }
         // Focus follows the window's first responder: whichever card holds
         // it is the focused card.
         window?.publisher(for: \.firstResponder)

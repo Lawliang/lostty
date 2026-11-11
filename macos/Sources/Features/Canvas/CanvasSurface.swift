@@ -36,6 +36,9 @@ final class CanvasScrollView: NSScrollView {
     /// or nil. Decided where the scroll starts, as `scrollingPane` is; the
     /// canvas never hands a scroll on to it.
     weak var scrollingTicket: NSView?
+    /// The pane with the white edge: the focused card's focused pane, which
+    /// a scroll over it scrolls even when the keyboard is elsewhere.
+    var focusedPane: (() -> NSView?)?
 
     /// A scroll gesture's first event, or a mouse wheel's click.
     static func startsScroll(_ event: NSEvent) -> Bool {
