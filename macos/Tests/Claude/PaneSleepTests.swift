@@ -141,6 +141,16 @@ struct PaneSleepTests {
         #expect(sleep.phase(agent.pane) == nil)
     }
 
+    @Test func aClaudeThatNeverStartsIsAwakeAfterTheWakeTimeout() {
+        let sleep = makeSleep()
+        sleep.fallAsleep(agent)
+        _ = sleep.exited(agent.pane)
+        terminals.pending.removeAll()
+        sleep.wake(agent.pane)
+        terminals.pending.forEach { $0() }
+        #expect(sleep.phase(agent.pane) == nil)
+    }
+
     @Test func wakingTwiceResumesOnce() {
         let sleep = makeSleep()
         sleep.fallAsleep(agent)

@@ -94,6 +94,9 @@ final class PaneSleep: ObservableObject {
     /// How long a pane waits for Claude to go after `/exit` before it
     /// counts as awake again.
     static let exitTimeout: TimeInterval = 30
+    /// How long a waking pane waits for its Claude to start before it
+    /// counts as awake, free to sleep again.
+    static let wakeTimeout: TimeInterval = 60
 
     @Published private(set) var phases: [UUID: SleepPhase] = [:]
 
@@ -126,7 +129,12 @@ final class PaneSleep: ObservableObject {
     /// Wakes a sleeping pane; anything else is left as it is.
     func wake(_ pane: UUID) {
         guard case .asleep(let agent) = phases[pane] else { return }
-        set(hands.resume(agent) ? .waking(agent) : nil, for: pane)
+        guard hands.resume(agent) else { return set(nil, for: pane) }
+        set(.waking(agent), for: pane)
+        hands.schedule(Self.wakeTimeout) { [weak self] in
+            guard let self, phases[pane] == .waking(agent) else { return }
+            set(nil, for: pane)
+        }
     }
 
     /// A Claude started in the pane: it's awake.
