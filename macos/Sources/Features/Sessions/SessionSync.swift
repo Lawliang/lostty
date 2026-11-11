@@ -14,6 +14,8 @@ final class SessionSync {
     private(set) var labels: [UUID: String] = [:]
     /// This Lostty's panes a phone shows now: they don't sleep.
     private(set) var phonePanes: Set<UUID> = []
+    /// This Lostty's panes' tmux sessions, as of the last change.
+    private(set) var sessionIDs: [UUID: String] = [:]
     private var observer: NSObjectProtocol?
     private let pid = ProcessInfo.processInfo.processIdentifier
     /// The SSH clients attached at the last refresh: only a new attach
@@ -39,6 +41,7 @@ final class SessionSync {
     }
 
     func apply(_ sessions: [RemoteSession], phoneAttached: Set<AttachedClient>) {
+        sessionIDs = Self.sessionIDs(sessions, pid: pid)
         let next = Self.labels(sessions, pid: pid)
         if next != labels {
             labels = next
@@ -63,6 +66,14 @@ final class SessionSync {
         Task.detached(priority: .utility) {
             TmuxClient().setLabel(label, surface: pane, ownedBy: pid)
         }
+    }
+
+    nonisolated static func sessionIDs(_ sessions: [RemoteSession], pid: Int32) -> [UUID: String] {
+        var result: [UUID: String] = [:]
+        for session in sessions where session.owner == pid {
+            if let pane = session.surface.flatMap(UUID.init(uuidString:)) { result[pane] = session.id }
+        }
+        return result
     }
 
     nonisolated static func labels(_ sessions: [RemoteSession], pid: Int32) -> [UUID: String] {
