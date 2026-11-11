@@ -13,11 +13,14 @@ struct SleepingAgent: Codable, Equatable {
     /// The tmux session showing the pane, for the hooks' zone check.
     let tmux: String
     let folder: String
+    /// The model it was on, as `--model` takes it.
+    var model: String?
 
     /// Typed at the pane's shell prompt to wake it.
     var resumeCommand: String {
         let quote = Ghostty.Shell.quote
-        return "cd \(quote(folder)) && claude --resume \(quote(sessionId)) --name \(quote(name))"
+        let flag = model.flatMap { PaneConversation.isModel($0) ? " --model \(quote($0))" : nil } ?? ""
+        return "cd \(quote(folder)) && claude --resume \(quote(sessionId)) --name \(quote(name))" + flag
     }
 }
 

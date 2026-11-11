@@ -22,6 +22,8 @@ final class LastSessionStore {
     private let history: SessionHistory
     /// The agent panes' conversations, from each turn's end.
     private var conversations: [UUID: PaneConversation] = [:]
+    /// Each Claude pane's model, from its status line, for its conversation.
+    private var models: [UUID: String] = [:]
     private var last: LastSession?
     private var pending: DispatchWorkItem?
     private var started = false
@@ -42,7 +44,9 @@ final class LastSessionStore {
         if let saved = LastSession.load(from: url) {
             let open = Set(Self.openPanes().map(\.uuidString))
             for (pane, conversation) in saved.conversations where open.contains(pane) {
-                if let id = UUID(uuidString: pane) { conversations[id] = conversation }
+                guard let id = UUID(uuidString: pane) else { continue }
+                conversations[id] = conversation
+                if let model = conversation.model { models[id] = model }
             }
         }
         observe()
@@ -60,7 +64,19 @@ final class LastSessionStore {
 
     /// A pane's agent finished a turn in the conversation file at `path`.
     func conversation(_ pane: UUID, transcript path: String) {
-        guard let conversation = PaneConversation.from(transcript: path), conversations[pane] != conversation else { return }
+        guard var conversation = PaneConversation.from(transcript: path) else { return }
+        if conversation.agent == HookAgent.claude.rawValue { conversation.model = models[pane] }
+        guard conversations[pane] != conversation else { return }
+        conversations[pane] = conversation
+        noteChange()
+    }
+
+    /// A pane's Claude reported its model: a resume comes back on it.
+    func model(_ model: String, in pane: UUID) {
+        guard models[pane] != model else { return }
+        models[pane] = model
+        guard var conversation = conversations[pane], conversation.agent == HookAgent.claude.rawValue else { return }
+        conversation.model = model
         conversations[pane] = conversation
         noteChange()
     }
@@ -75,6 +91,7 @@ final class LastSessionStore {
 
     /// A pane's agent exited, or the pane closed.
     func agentGone(_ pane: UUID) {
+        models[pane] = nil
         guard conversations.removeValue(forKey: pane) != nil else { return }
         noteChange()
     }

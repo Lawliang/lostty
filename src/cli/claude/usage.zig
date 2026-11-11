@@ -1,7 +1,7 @@
 //! Pure logic for `+claude-usage`: turning the JSON Claude Code feeds its
 //! status line command into the LOSTTY_USAGE user var, e.g.
 //! `{"v":1,"ctx":{"used":84000,"size":200000},"five":{"pct":42,"reset":1760000000},
-//! "week":{"pct":17,"reset":1760400000},"model":"Opus"}`.
+//! "week":{"pct":17,"reset":1760400000},"model":"Opus","mid":"claude-opus"}`.
 //! Each key except `v` is left out when Claude Code did not send it.
 
 const std = @import("std");
@@ -48,6 +48,10 @@ pub fn report(alloc: Allocator, input: []const u8) !?[]u8 {
         if (field(model, "display_name")) |name| if (name == .string) {
             try out.put("model", name);
         };
+        // What --model takes, so a resumed Claude comes back on it.
+        if (field(model, "id")) |id| if (id == .string) {
+            try out.put("mid", id);
+        };
     }
 
     return try std.json.Stringify.valueAlloc(alloc, Value{ .object = out }, .{});
@@ -89,7 +93,7 @@ test "claude usage: full status line input" {
         \\   "seven_day":{"used_percentage":17,"resets_at":1760400000}}}
     )).?;
     try std.testing.expectEqualStrings(
-        \\{"v":1,"ctx":{"used":84000,"size":200000},"five":{"pct":42.5,"reset":1760000000},"week":{"pct":17,"reset":1760400000},"model":"Opus"}
+        \\{"v":1,"ctx":{"used":84000,"size":200000},"five":{"pct":42.5,"reset":1760000000},"week":{"pct":17,"reset":1760400000},"model":"Opus","mid":"claude-opus"}
     , out);
 }
 

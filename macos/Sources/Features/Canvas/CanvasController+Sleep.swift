@@ -50,7 +50,8 @@ extension CanvasController {
                   let folder = view.pwd,
                   inputBox(of: view) == .empty else { continue }
             sleep.fallAsleep(SleepingAgent(
-                pane: view.id, sessionId: conversation.id, name: name, tmux: session.name, folder: folder))
+                pane: view.id, sessionId: conversation.id, name: name, tmux: session.name, folder: folder,
+                model: conversation.model))
         }
     }
 

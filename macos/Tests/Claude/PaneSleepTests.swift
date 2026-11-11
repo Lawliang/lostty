@@ -151,6 +151,13 @@ struct PaneSleepTests {
         #expect(sleep.phase(agent.pane) == nil)
     }
 
+    @Test func wakingComesBackOnTheModelItWasOn() {
+        var agent = self.agent
+        agent.model = "claude-fable-5-2"
+        #expect(agent.resumeCommand
+            == "cd '/Users/me/My Repo' && claude --resume 0F8C2A5E-1B2C-4D3E-8F90-A1B2C3D4E5F6 --name wt-17-4c --model claude-fable-5-2")
+    }
+
     @Test func wakingTwiceResumesOnce() {
         let sleep = makeSleep()
         sleep.fallAsleep(agent)

@@ -8,6 +8,14 @@ struct PaneConversation: Codable, Equatable {
     var agent: String
     /// The conversation's id: always a UUID (it is typed into a shell).
     var id: String
+    /// The model it was last on, as `--model` takes it; Claude's only.
+    var model: String?
+
+    /// A model id plain enough to type into a shell: "claude-opus-5-5[1m]".
+    static func isModel(_ id: String) -> Bool {
+        !id.isEmpty && id.count <= 80 && !id.hasPrefix("-")
+            && id.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || "._-:[]".contains($0)) }
+    }
 
     /// From the conversation file a turn's end names: Claude's
     /// `~/.claude/projects/…/<id>.jsonl` or Codex's
@@ -26,7 +34,7 @@ struct PaneConversation: Codable, Equatable {
             return nil
         }
         guard UUID(uuidString: id) != nil else { return nil }
-        return PaneConversation(agent: agent.rawValue, id: id)
+        return PaneConversation(agent: agent.rawValue, id: id, model: nil)
     }
 
     /// What Continue types into the pane's shell; nil for an id that isn't
@@ -34,7 +42,9 @@ struct PaneConversation: Codable, Equatable {
     var resumeCommand: String? {
         guard UUID(uuidString: id) != nil else { return nil }
         switch HookAgent(rawValue: agent) {
-        case .claude: return "claude --resume \(id)"
+        case .claude:
+            let flag = model.flatMap { Self.isModel($0) ? " --model '\($0)'" : nil } ?? ""
+            return "claude --resume \(id)" + flag
         case .codex: return "codex resume \(id)"
         case nil: return nil
         }
