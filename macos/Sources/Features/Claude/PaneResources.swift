@@ -66,7 +66,7 @@ final class PaneResourceMonitor: ObservableObject {
             MainActor.assumeIsolated {
                 guard let self else { return }
                 let sampler = self.sampler
-                self.queue.async { sampler.forgetPanes() }
+                self.queue.async { sampler.retryMissing() }
             }
         }
     }
@@ -114,8 +114,9 @@ final class PaneResourceSampler: @unchecked Sendable {
         self.owner = owner
     }
 
-    func forgetPanes() {
-        shells = [:]
+    /// A pane tmux didn't list is looked up again now. Panes already
+    /// known keep their shells: one that exits is looked up anyway.
+    func retryMissing() {
         missedAt = nil
     }
 
@@ -124,12 +125,13 @@ final class PaneResourceSampler: @unchecked Sendable {
         lookUp(panes)
         previous = previous.filter { panes.contains($0.key) }
         var result: [UUID: PaneResources] = [:]
+        let children = Self.processChildren()
         for pane in panes {
             guard let roots = shells[pane] else { continue }
             let now = clock_gettime_nsec_np(CLOCK_UPTIME_RAW)
             var cpu: [pid_t: UInt64] = [:]
             var memory: UInt64 = 0
-            for pid in Self.tree(roots) {
+            for pid in Self.tree(roots, children: children) {
                 guard let usage = Self.usage(pid) else { continue }
                 cpu[pid] = usage.cpu
                 memory += usage.memory
@@ -172,23 +174,34 @@ final class PaneResourceSampler: @unchecked Sendable {
         return result
     }
 
-    /// `roots` and every process under them.
-    static func tree(_ roots: [pid_t]) -> [pid_t] {
+    /// `roots` and every process under them, as `children` (parent →
+    /// its processes) has them.
+    static func tree(_ roots: [pid_t], children: [pid_t: [pid_t]] = processChildren()) -> [pid_t] {
         var result: [pid_t] = []
         var pending = roots
         while let pid = pending.popLast(), result.count < 4096 {
             result.append(pid)
-            pending += children(pid)
+            pending += children[pid] ?? []
         }
         return result
     }
 
-    private static func children(_ pid: pid_t) -> [pid_t] {
-        var buffer = [pid_t](repeating: 0, count: 256)
-        let bytes = proc_listpids(UInt32(PROC_PPID_ONLY), UInt32(pid), &buffer,
-                                  Int32(buffer.count * MemoryLayout<pid_t>.stride))
-        guard bytes > 0 else { return [] }
-        return buffer.prefix(Int(bytes) / MemoryLayout<pid_t>.stride).filter { $0 > 0 }
+    /// Every process's children, from one read of the process table.
+    /// Asking the kernel for one process's children scans the whole table
+    /// each time, and the panes' trees hold hundreds of processes.
+    static func processChildren() -> [pid_t: [pid_t]] {
+        var name: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_ALL]
+        var size = 0
+        guard sysctl(&name, 3, nil, &size, nil, 0) == 0 else { return [:] }
+        // Room for processes started between the two calls.
+        size += 64 * MemoryLayout<kinfo_proc>.stride
+        var table = [kinfo_proc](repeating: kinfo_proc(), count: size / MemoryLayout<kinfo_proc>.stride)
+        guard sysctl(&name, 3, &table, &size, nil, 0) == 0 else { return [:] }
+        var children: [pid_t: [pid_t]] = [:]
+        for process in table.prefix(size / MemoryLayout<kinfo_proc>.stride) where process.kp_proc.p_pid > 0 {
+            children[process.kp_eproc.e_ppid, default: []].append(process.kp_proc.p_pid)
+        }
+        return children
     }
 
     private static let timebase: mach_timebase_info_data_t = {
