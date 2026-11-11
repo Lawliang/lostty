@@ -27,6 +27,7 @@ pub const UnicodeTables = @import("UnicodeTables.zig");
 // Steps
 pub const LibtoolStep = @import("LibtoolStep.zig");
 pub const LipoStep = @import("LipoStep.zig");
+pub const LosttyHook = @import("LosttyHook.zig");
 pub const MetallibStep = @import("MetallibStep.zig");
 pub const XCFrameworkStep = @import("XCFrameworkStep.zig");
 

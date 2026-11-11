@@ -163,6 +163,12 @@ pub fn build(b: *std.Build) !void {
             if (i18n) |v| v.install();
         }
 
+        // The macOS xcode project also copies `lostty-hook` into the app.
+        // `zig build lostty-hook` builds it alone, in seconds.
+        const hook = buildpkg.LosttyHook.init(b, &config);
+        hook.install(b.step("lostty-hook", "Build lostty-hook, the small program Claude Code's hooks run"));
+        if (config.emit_xcframework) hook.install(b.getInstallStep());
+
         // Ghostty macOS app
         const macos_app = try buildpkg.GhosttyXcodebuild.init(
             b,
