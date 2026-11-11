@@ -1062,6 +1062,36 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                     display_link.stop() catch {};
                 }
             }
+
+            // Lostty: a hidden surface draws nothing, so it gives back
+            // its spare frame buffers. See releaseSpareTargets.
+            if (!visible) self.releaseSpareTargets();
+        }
+
+        /// Lostty: shrinks the target of every swap chain frame but the
+        /// one on screen to 1x1. Each target is a full-size buffer, and a
+        /// canvas of terminals holds three per terminal whether it shows
+        /// or not. drawFrame makes a target again at the surface's size
+        /// when it next draws into the frame.
+        fn releaseSpareTargets(self: *Self) void {
+            if (comptime !builtin.target.os.tag.isDarwin()) return;
+
+            self.draw_mutex.lock();
+            defer self.draw_mutex.unlock();
+            if (self.swap_chain.defunct) return;
+
+            // No target may go while the GPU still draws into it.
+            const count = SwapChain.buf_count;
+            for (0..count) |_| self.swap_chain.frame_sema.wait();
+            defer for (0..count) |_| self.swap_chain.frame_sema.post();
+
+            for (&self.swap_chain.frames, 0..) |*frame, i| {
+                if (i == self.swap_chain.frame_index) continue;
+                if (frame.target.width <= 1 and frame.target.height <= 1) continue;
+                frame.resize(self.api, 1, 1) catch |err| {
+                    log.warn("error releasing a spare target err={}", .{err});
+                };
+            }
         }
 
         /// Set the new font grid.
