@@ -333,14 +333,24 @@ final class CanvasZoneCaptionView: NSView {
         needsDisplay = true
     }
 
+    /// Made once: AppKit crashed twice laying out a caption in a font it
+    /// was handed fresh on every draw, with the Mac nearly out of memory.
+    private static let domainFont = NSFont.systemFont(ofSize: 11)
+    private static let folderFont = NSFont.monospacedSystemFont(ofSize: 11.5, weight: .regular)
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsDisplay = true
+    }
+
     override func draw(_ dirtyRect: NSRect) {
         guard let note = caption?.note, bounds.width > 0 else { return }
-        let text = NSAttributedString(string: note, attributes: [
-            .font: isDomain ? NSFont.systemFont(ofSize: 11) : NSFont.monospacedSystemFont(ofSize: 11.5, weight: .regular),
-            .foregroundColor: color.caption,
-        ])
-        let height = text.size().height
-        text.draw(
+        let font = isDomain ? Self.domainFont : Self.folderFont
+        // The line's height from the font, without laying the text out twice.
+        let height = ceil(font.ascender - font.descender + font.leading)
+        NSAttributedString(string: note, attributes: [
+            .font: font, .foregroundColor: color.caption(dark: isDark(effectiveAppearance)),
+        ]).draw(
             with: CGRect(x: 0, y: (bounds.height - height) / 2, width: bounds.width, height: height),
             options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
     }
@@ -353,10 +363,8 @@ private func isDark(_ appearance: NSAppearance) -> Bool {
 extension CanvasZone.Color {
     /// A caption's text on the zone's faint fill: the tint lightened on the
     /// dark canvas, the pill's shade on the light one.
-    var caption: NSColor {
-        NSColor(name: nil) { appearance in
-            isDark(appearance) ? tint.blended(withFraction: 0.4, of: .white) ?? tint : pill
-        }
+    func caption(dark: Bool) -> NSColor {
+        dark ? tint.blended(withFraction: 0.4, of: .white) ?? tint : pill
     }
 
     var tint: NSColor {
