@@ -179,6 +179,12 @@ final class CardView: NSView, CanvasStacked {
         nextResponder = card
     }
 
+    /// A pane made in a hidden card (a split) starts drawing like any new
+    /// pane: tell it the card is hidden.
+    func panesChanged() {
+        if mode == .hidden { applyMode() }
+    }
+
     private func applyMode() {
         // The panes stay shown, so a focused pane out of view keeps keyboard
         // focus instead of AppKit handing it on.

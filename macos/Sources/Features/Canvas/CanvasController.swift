@@ -127,6 +127,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     private var eventMonitor: Any?
     private var cancellables: Set<AnyCancellable> = []
     var sleepTimer: Timer?
+    var strainWatch: AnyCancellable?
 
     /// Opens the canvas, making it the first time; an empty canvas gets a
     /// fresh card unless panes are about to move in.
@@ -777,6 +778,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
             focus(card)
         }
         updateVisibility()
+        views[card.id]?.panesChanged()
         saveSoon()
         for surface in card.surfaceTree { surface.canvasZoomDidSettle(settledZoom) }
         zoneMembershipDidChange()

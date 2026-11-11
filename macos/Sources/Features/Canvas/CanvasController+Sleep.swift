@@ -1,5 +1,6 @@
 #if os(macOS)
 import AppKit
+import Combine
 
 /// Sleep on the canvas (`PaneSleep`): once a minute, each Claude card idle
 /// long enough, with nothing under way or waiting for it and an empty input
@@ -15,12 +16,20 @@ extension CanvasController {
         timer.tolerance = Self.sleepCheckInterval / 4
         RunLoop.main.add(timer, forMode: .common)
         sleepTimer = timer
+        // The Mac runs short of memory or hot: idle cards sleep sooner
+        // (`MacStrain.sleepMinutes`), starting now.
+        MacStrainWatch.shared.start()
+        strainWatch = MacStrainWatch.shared.$strain
+            .removeDuplicates()
+            .filter { $0 >= .high }
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.sleepIdleCards() }
     }
 
     func sleepIdleCards() {
         let sleep = PaneSleep.shared
         sleep.keep(Set(LastSessionStore.openPanes()))
-        let minutes = SleepPreferences.shared.minutes
+        let minutes = MacStrainWatch.shared.strain.sleepMinutes(setting: SleepPreferences.shared.minutes)
         guard minutes > 0 else { return }
         let runtime = ClaudeRuntime.shared
         let now = Date()
