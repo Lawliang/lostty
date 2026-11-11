@@ -459,6 +459,8 @@ class AppDelegate: NSObject,
             ClaudeTmuxSync.shared.start()
             // Ends the trace of a Claude interrupted with Esc or Ctrl+C.
             ClaudeWorkingLineWatch.shared.start()
+            // The Usage app's per-model weekly limits, such as Fable's.
+            ClaudeModelLimits.shared.start()
             // Lostty Mobile: each pane's skin, for the phone's rows.
             SkinTmuxSync.shared.start()
             // Lostty Mobile: session labels as tab titles; a phone attaching
