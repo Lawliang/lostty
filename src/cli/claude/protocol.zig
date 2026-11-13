@@ -92,6 +92,13 @@ pub fn parseState(s: []const u8) ?State {
 /// left out, as they only watch.
 const working_task_types = [_][]const u8{ "subagent", "workflow", "teammate", "shell" };
 
+/// The hook input Claude Code writes to stdin, parsed once for everything
+/// that reads it. Input that isn't JSON is `.null`, which every reader
+/// takes as a payload with nothing in it. `arena` owns the value.
+pub fn parseInput(arena: Allocator, input: []const u8) std.json.Value {
+    return std.json.parseFromSliceLeaky(std.json.Value, arena, input, .{}) catch .null;
+}
+
 /// Refines the hook's `state` with the hook input Claude Code passes on
 /// stdin. Returns null when the hook should send nothing.
 /// - Stop (`idle`): `agents` while working tasks are still running.
@@ -99,10 +106,7 @@ const working_task_types = [_][]const u8{ "subagent", "workflow", "teammate", "s
 /// - Notification: nothing for `idle_prompt` and `auth_success`, which
 ///   don't mean Claude is waiting on the person to continue.
 /// Input that isn't a hook payload leaves `state` as it is.
-pub fn refine(alloc: Allocator, state: State, input: []const u8) ?State {
-    const parsed = std.json.parseFromSlice(std.json.Value, alloc, input, .{}) catch return state;
-    defer parsed.deinit();
-    const root = parsed.value;
+pub fn refine(state: State, root: std.json.Value) ?State {
     if (root != .object) return state;
     const event = stringField(root, "hook_event_name") orelse return state;
     if (std.mem.eql(u8, event, "Notification")) {
@@ -121,10 +125,7 @@ pub fn refine(alloc: Allocator, state: State, input: []const u8) ?State {
 
 /// Whether a Notification hook's input is Claude asking permission (for
 /// the tool call the last PreToolUse described).
-pub fn isPermissionPrompt(alloc: Allocator, input: []const u8) bool {
-    const parsed = std.json.parseFromSlice(std.json.Value, alloc, input, .{}) catch return false;
-    defer parsed.deinit();
-    const root = parsed.value;
+pub fn isPermissionPrompt(root: std.json.Value) bool {
     if (root != .object) return false;
     const event = stringField(root, "hook_event_name") orelse return false;
     const kind = stringField(root, "notification_type") orelse return false;
@@ -135,16 +136,12 @@ pub fn isPermissionPrompt(alloc: Allocator, input: []const u8) bool {
 /// (`transcript_path`, which Claude Code and Codex both send). Null for
 /// other events, a missing or blank path, or one longer than
 /// `transcript_max` bytes. The Mac decides whether to read it.
-pub fn transcriptPath(alloc: Allocator, input: []const u8) ?[]const u8 {
-    const parsed = std.json.parseFromSlice(std.json.Value, alloc, input, .{}) catch return null;
-    defer parsed.deinit();
-    const root = parsed.value;
+pub fn transcriptPath(root: std.json.Value) ?[]const u8 {
     if (root != .object) return null;
     const event = stringField(root, "hook_event_name") orelse return null;
     if (!std.mem.eql(u8, event, "Stop") and !std.mem.eql(u8, event, "Notification")) return null;
     const path = textField(root, "transcript_path") orelse return null;
-    if (path.len > transcript_max) return null;
-    return alloc.dupe(u8, path) catch null;
+    return if (path.len > transcript_max) null else path;
 }
 
 /// The subagent a SubagentStart or SubagentStop hook fires for. Its
@@ -153,17 +150,14 @@ pub fn transcriptPath(alloc: Allocator, input: []const u8) ?[]const u8 {
 /// folder beside it (`<session>.jsonl` → `<session>/subagents/agent-<id>.jsonl`).
 /// Null for Claude Code's own internal agents (prompt suggestions, /btw),
 /// whose type is empty, and for anything else.
-pub fn subagent(alloc: Allocator, input: []const u8) ?Subagent {
-    const parsed = std.json.parseFromSlice(std.json.Value, alloc, input, .{}) catch return null;
-    defer parsed.deinit();
-    const root = parsed.value;
+pub fn subagent(alloc: Allocator, root: std.json.Value) ?Subagent {
     if (root != .object) return null;
     const event = stringField(root, "hook_event_name") orelse return null;
     const id = textField(root, "agent_id") orelse return null;
     const kind = textField(root, "agent_type") orelse return null;
     if (std.mem.indexOfAny(u8, id, "/\\") != null or std.mem.indexOf(u8, id, "..") != null) return null;
     const transcript = if (std.mem.eql(u8, event, "SubagentStop"))
-        alloc.dupe(u8, textField(root, "agent_transcript_path") orelse return null) catch return null
+        textField(root, "agent_transcript_path") orelse return null
     else if (std.mem.eql(u8, event, "SubagentStart")) path: {
         const parent = textField(root, "transcript_path") orelse return null;
         if (!std.mem.endsWith(u8, parent, ".jsonl")) return null;
@@ -171,21 +165,14 @@ pub fn subagent(alloc: Allocator, input: []const u8) ?Subagent {
         break :path std.fmt.allocPrint(alloc, "{s}/subagents/{s}.jsonl", .{ parent[0 .. parent.len - ".jsonl".len], file }) catch return null;
     } else return null;
     if (transcript.len > transcript_max) return null;
-    return .{
-        .id = alloc.dupe(u8, id) catch return null,
-        .type = alloc.dupe(u8, kind) catch return null,
-        .transcript = transcript,
-    };
+    return .{ .id = id, .type = kind, .transcript = transcript };
 }
 
 /// The background shell a PostToolUse hook's Bash call started
 /// (`tool_response.backgroundTaskId`). Claude Code writes its output to
 /// `<session>/tasks/<id>.output`, the folder holding the session's
 /// scratchpad. Null for anything else.
-pub fn backgroundShell(alloc: Allocator, input: []const u8) ?Shell {
-    const parsed = std.json.parseFromSlice(std.json.Value, alloc, input, .{}) catch return null;
-    defer parsed.deinit();
-    const root = parsed.value;
+pub fn backgroundShell(alloc: Allocator, root: std.json.Value) ?Shell {
     if (root != .object) return null;
     const event = stringField(root, "hook_event_name") orelse return null;
     const tool = stringField(root, "tool_name") orelse return null;
@@ -198,7 +185,7 @@ pub fn backgroundShell(alloc: Allocator, input: []const u8) ?Shell {
     else
         null else null;
     return .{
-        .id = alloc.dupe(u8, id) catch return null,
+        .id = id,
         .description = if (description) |d| clean(alloc, d) catch null else null,
         .output = if (output) |o| if (o.len <= transcript_max) o else null else null,
     };
@@ -206,10 +193,7 @@ pub fn backgroundShell(alloc: Allocator, input: []const u8) ?Shell {
 
 /// The background tasks a UserPromptSubmit says finished: the notice Claude
 /// Code prompts itself with names them. Null for a prompt the owner typed.
-pub fn finishedTasks(alloc: Allocator, input: []const u8) ?[]const []const u8 {
-    const parsed = std.json.parseFromSlice(std.json.Value, alloc, input, .{}) catch return null;
-    defer parsed.deinit();
-    const root = parsed.value;
+pub fn finishedTasks(alloc: Allocator, root: std.json.Value) ?[]const []const u8 {
     if (root != .object) return null;
     const event = stringField(root, "hook_event_name") orelse return null;
     if (!std.mem.eql(u8, event, "UserPromptSubmit")) return null;
@@ -221,7 +205,7 @@ pub fn finishedTasks(alloc: Allocator, input: []const u8) ?[]const []const u8 {
         rest = rest[start + "<task-id>".len ..];
         const end = std.mem.indexOf(u8, rest, "</task-id>") orelse break;
         const id = rest[0..end];
-        if (isTaskId(id)) ids.append(alloc, alloc.dupe(u8, id) catch return null) catch return null;
+        if (isTaskId(id)) ids.append(alloc, id) catch return null;
         rest = rest[end..];
     }
     return ids.toOwnedSlice(alloc) catch null;
@@ -240,10 +224,7 @@ fn isTaskId(id: []const u8) bool {
 /// it gave one: commands can carry secrets). One line, at most
 /// `action_max` characters. Null when the input isn't a PreToolUse
 /// payload, or for a to-do list with nothing in progress.
-pub fn action(alloc: Allocator, input: []const u8) ?[]const u8 {
-    const parsed = std.json.parseFromSlice(std.json.Value, alloc, input, .{}) catch return null;
-    defer parsed.deinit();
-    const root = parsed.value;
+pub fn action(alloc: Allocator, root: std.json.Value) ?[]const u8 {
     if (root != .object) return null;
     const event = stringField(root, "hook_event_name") orelse return null;
     if (!std.mem.eql(u8, event, "PreToolUse")) return null;
@@ -397,7 +378,7 @@ pub fn parsePs(out: []const u8) ?ProcInfo {
 }
 
 /// "ttys001" or "pts/3": letters/digits with at most one "/" and no dots.
-fn isTtyName(s: []const u8) bool {
+pub fn isTtyName(s: []const u8) bool {
     if (s.len == 0 or std.mem.indexOfScalar(u8, s, '?') != null) return false;
     var slashes: usize = 0;
     for (s) |c| {
@@ -545,69 +526,77 @@ test "claude protocol: encodeSequence wraps for tmux" {
 
 test "claude protocol: Stop with subagents or shells still running reports agents" {
     const t = std.testing;
-    const alloc = t.allocator;
+    var arena = std.heap.ArenaAllocator.init(t.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
     const running =
         \\{"hook_event_name":"Stop","stop_hook_active":false,"background_tasks":[
         \\{"id":"b1","type":"shell","status":"running","description":"dev server"},
         \\{"id":"a7","type":"subagent","status":"running","description":"Explore","agent_type":"Explore"}]}
     ;
-    try t.expectEqual(State.agents, refine(alloc, .idle, running).?);
+    try t.expectEqual(State.agents, refine(.idle, parseInput(alloc, running)).?);
     const workflow =
         \\{"hook_event_name":"Stop","background_tasks":[{"id":"w1","type":"workflow","status":"pending"}]}
     ;
-    try t.expectEqual(State.agents, refine(alloc, .idle, workflow).?);
+    try t.expectEqual(State.agents, refine(.idle, parseInput(alloc, workflow)).?);
     // A background shell counts too; a monitor alone doesn't.
     const shell =
         \\{"hook_event_name":"Stop","background_tasks":[{"id":"b1","type":"shell","status":"running"}]}
     ;
-    try t.expectEqual(State.agents, refine(alloc, .idle, shell).?);
+    try t.expectEqual(State.agents, refine(.idle, parseInput(alloc, shell)).?);
     const monitor =
         \\{"hook_event_name":"Stop","background_tasks":[{"id":"m1","type":"monitor","status":"running"}]}
     ;
-    try t.expectEqual(State.idle, refine(alloc, .idle, monitor).?);
-    try t.expectEqual(State.idle, refine(alloc, .idle, "{\"hook_event_name\":\"Stop\",\"background_tasks\":[]}").?);
-    try t.expectEqual(State.idle, refine(alloc, .idle, "{\"hook_event_name\":\"Stop\"}").?);
+    try t.expectEqual(State.idle, refine(.idle, parseInput(alloc, monitor)).?);
+    try t.expectEqual(State.idle, refine(.idle, parseInput(alloc, "{\"hook_event_name\":\"Stop\",\"background_tasks\":[]}")).?);
+    try t.expectEqual(State.idle, refine(.idle, parseInput(alloc, "{\"hook_event_name\":\"Stop\"}")).?);
 }
 
 test "claude protocol: SubagentStop resumes only when nothing else still works" {
     const t = std.testing;
-    const alloc = t.allocator;
+    var arena = std.heap.ArenaAllocator.init(t.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
     const last =
         \\{"hook_event_name":"SubagentStop","agent_id":"a7","background_tasks":[
         \\{"id":"a7","type":"subagent","status":"running"},{"id":"m1","type":"monitor","status":"running"}]}
     ;
-    try t.expectEqual(State.resumed, refine(alloc, .resumed, last).?);
+    try t.expectEqual(State.resumed, refine(.resumed, parseInput(alloc, last)).?);
     const shell =
         \\{"hook_event_name":"SubagentStop","agent_id":"a7","background_tasks":[
         \\{"id":"a7","type":"subagent","status":"running"},{"id":"b1","type":"shell","status":"running"}]}
     ;
-    try t.expect(refine(alloc, .resumed, shell) == null);
+    try t.expect(refine(.resumed, parseInput(alloc, shell)) == null);
     const others =
         \\{"hook_event_name":"SubagentStop","agent_id":"a7","background_tasks":[
         \\{"id":"a7","type":"subagent","status":"running"},{"id":"a8","type":"subagent","status":"running"}]}
     ;
-    try t.expect(refine(alloc, .resumed, others) == null);
+    try t.expect(refine(.resumed, parseInput(alloc, others)) == null);
 }
 
 test "claude protocol: idle and auth notifications send nothing" {
     const t = std.testing;
-    const alloc = t.allocator;
-    try t.expect(refine(alloc, .idle, "{\"hook_event_name\":\"Notification\",\"notification_type\":\"idle_prompt\"}") == null);
-    try t.expect(refine(alloc, .idle, "{\"hook_event_name\":\"Notification\",\"notification_type\":\"auth_success\"}") == null);
-    try t.expectEqual(State.idle, refine(alloc, .idle, "{\"hook_event_name\":\"Notification\",\"notification_type\":\"permission_prompt\"}").?);
-    try t.expectEqual(State.idle, refine(alloc, .idle, "{\"hook_event_name\":\"Notification\"}").?);
+    var arena = std.heap.ArenaAllocator.init(t.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+    try t.expect(refine(.idle, parseInput(alloc, "{\"hook_event_name\":\"Notification\",\"notification_type\":\"idle_prompt\"}")) == null);
+    try t.expect(refine(.idle, parseInput(alloc, "{\"hook_event_name\":\"Notification\",\"notification_type\":\"auth_success\"}")) == null);
+    try t.expectEqual(State.idle, refine(.idle, parseInput(alloc, "{\"hook_event_name\":\"Notification\",\"notification_type\":\"permission_prompt\"}")).?);
+    try t.expectEqual(State.idle, refine(.idle, parseInput(alloc, "{\"hook_event_name\":\"Notification\"}")).?);
 }
 
 test "claude protocol: input that isn't a hook payload keeps the state" {
     const t = std.testing;
-    const alloc = t.allocator;
-    try t.expectEqual(State.idle, refine(alloc, .idle, "").?);
-    try t.expectEqual(State.idle, refine(alloc, .idle, "not json").?);
-    try t.expectEqual(State.resumed, refine(alloc, .resumed, "[1,2]").?);
-    try t.expectEqual(State.busy, refine(alloc, .busy, "{\"hook_event_name\":\"UserPromptSubmit\"}").?);
+    var arena = std.heap.ArenaAllocator.init(t.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+    try t.expectEqual(State.idle, refine(.idle, parseInput(alloc, "")).?);
+    try t.expectEqual(State.idle, refine(.idle, parseInput(alloc, "not json")).?);
+    try t.expectEqual(State.resumed, refine(.resumed, parseInput(alloc, "[1,2]")).?);
+    try t.expectEqual(State.busy, refine(.busy, parseInput(alloc, "{\"hook_event_name\":\"UserPromptSubmit\"}")).?);
     // Only a Stop hook's idle is refined to agents.
     const stop = "{\"hook_event_name\":\"Stop\",\"background_tasks\":[{\"id\":\"a\",\"type\":\"subagent\"}]}";
-    try t.expectEqual(State.exit, refine(alloc, .exit, stop).?);
+    try t.expectEqual(State.exit, refine(.exit, parseInput(alloc, stop)).?);
 }
 
 fn decodeSequence(alloc: Allocator, seq: []const u8) ![]u8 {
@@ -633,12 +622,14 @@ test "claude protocol: encodeSequence carries the action and a permission wait" 
 
 test "claude protocol: isPermissionPrompt" {
     const t = std.testing;
-    const alloc = t.allocator;
-    try t.expect(isPermissionPrompt(alloc, "{\"hook_event_name\":\"Notification\",\"notification_type\":\"permission_prompt\"}"));
-    try t.expect(!isPermissionPrompt(alloc, "{\"hook_event_name\":\"Notification\",\"notification_type\":\"idle_prompt\"}"));
-    try t.expect(!isPermissionPrompt(alloc, "{\"hook_event_name\":\"Notification\"}"));
-    try t.expect(!isPermissionPrompt(alloc, "{\"hook_event_name\":\"Stop\"}"));
-    try t.expect(!isPermissionPrompt(alloc, "not json"));
+    var arena = std.heap.ArenaAllocator.init(t.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+    try t.expect(isPermissionPrompt(parseInput(alloc, "{\"hook_event_name\":\"Notification\",\"notification_type\":\"permission_prompt\"}")));
+    try t.expect(!isPermissionPrompt(parseInput(alloc, "{\"hook_event_name\":\"Notification\",\"notification_type\":\"idle_prompt\"}")));
+    try t.expect(!isPermissionPrompt(parseInput(alloc, "{\"hook_event_name\":\"Notification\"}")));
+    try t.expect(!isPermissionPrompt(parseInput(alloc, "{\"hook_event_name\":\"Stop\"}")));
+    try t.expect(!isPermissionPrompt(parseInput(alloc, "not json")));
 }
 
 test "claude protocol: action words each tool call" {
@@ -670,7 +661,7 @@ test "claude protocol: action words each tool call" {
     };
     for (cases) |c| {
         const input = try std.fmt.allocPrint(alloc, "{{\"hook_event_name\":\"PreToolUse\",{s}", .{c[0][1..]});
-        try t.expectEqualStrings(c[1], action(alloc, input) orelse "(null)");
+        try t.expectEqualStrings(c[1], action(alloc, parseInput(alloc, input)) orelse "(null)");
     }
 }
 
@@ -681,38 +672,32 @@ test "claude protocol: action caps the line and ignores other input" {
     const alloc = arena.allocator();
     const long = "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"description\":\"" ++
         "\u{e9}" ** 100 ++ "\"}}";
-    const line = action(alloc, long).?;
+    const line = action(alloc, parseInput(alloc, long)).?;
     try t.expectEqual(@as(usize, action_max), try std.unicode.utf8CountCodepoints(line));
     try t.expect(std.mem.endsWith(u8, line, "\u{2026}"));
     // A cut that lands after a blank doesn't leave it before the ellipsis.
     const spaced = "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"description\":\"" ++
         "a" ** 78 ++ " " ++ "b" ** 10 ++ "\"}}";
-    try t.expectEqualStrings("a" ** 78 ++ "\u{2026}", action(alloc, spaced).?);
+    try t.expectEqualStrings("a" ** 78 ++ "\u{2026}", action(alloc, parseInput(alloc, spaced)).?);
     const todo = "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"TodoWrite\",\"tool_input\":{\"todos\":[{\"status\":\"pending\",\"activeForm\":\"Later\"}]}}";
-    try t.expect(action(alloc, todo) == null);
-    try t.expect(action(alloc, "{\"hook_event_name\":\"Stop\",\"tool_name\":\"Bash\"}") == null);
-    try t.expect(action(alloc, "not json") == null);
-    try t.expect(action(alloc, "") == null);
+    try t.expect(action(alloc, parseInput(alloc, todo)) == null);
+    try t.expect(action(alloc, parseInput(alloc, "{\"hook_event_name\":\"Stop\",\"tool_name\":\"Bash\"}")) == null);
+    try t.expect(action(alloc, parseInput(alloc, "not json")) == null);
+    try t.expect(action(alloc, parseInput(alloc, "")) == null);
 }
 test "claude protocol: transcriptPath reads Stop and Notification input" {
     const t = std.testing;
     var arena = std.heap.ArenaAllocator.init(t.allocator);
     defer arena.deinit();
     const alloc = arena.allocator();
-    try t.expectEqualStrings("/Users/a/.claude/projects/p/s.jsonl", transcriptPath(
-        alloc,
-        "{\"hook_event_name\":\"Stop\",\"transcript_path\":\"/Users/a/.claude/projects/p/s.jsonl\"}",
-    ).?);
-    try t.expectEqualStrings("/Users/a/.codex/sessions/r.jsonl", transcriptPath(
-        alloc,
-        "{\"hook_event_name\":\"Notification\",\"notification_type\":\"permission_prompt\",\"transcript_path\":\"/Users/a/.codex/sessions/r.jsonl\"}",
-    ).?);
-    try t.expect(transcriptPath(alloc, "{\"hook_event_name\":\"Stop\"}") == null);
-    try t.expect(transcriptPath(alloc, "{\"hook_event_name\":\"Stop\",\"transcript_path\":\"  \"}") == null);
-    try t.expect(transcriptPath(alloc, "{\"hook_event_name\":\"Stop\",\"transcript_path\":42}") == null);
-    try t.expect(transcriptPath(alloc, "{\"hook_event_name\":\"PreToolUse\",\"transcript_path\":\"/x.jsonl\"}") == null);
-    try t.expect(transcriptPath(alloc, "not json") == null);
-    try t.expect(transcriptPath(alloc, "") == null);
+    try t.expectEqualStrings("/Users/a/.claude/projects/p/s.jsonl", transcriptPath(parseInput(alloc, "{\"hook_event_name\":\"Stop\",\"transcript_path\":\"/Users/a/.claude/projects/p/s.jsonl\"}")).?);
+    try t.expectEqualStrings("/Users/a/.codex/sessions/r.jsonl", transcriptPath(parseInput(alloc, "{\"hook_event_name\":\"Notification\",\"notification_type\":\"permission_prompt\",\"transcript_path\":\"/Users/a/.codex/sessions/r.jsonl\"}")).?);
+    try t.expect(transcriptPath(parseInput(alloc, "{\"hook_event_name\":\"Stop\"}")) == null);
+    try t.expect(transcriptPath(parseInput(alloc, "{\"hook_event_name\":\"Stop\",\"transcript_path\":\"  \"}")) == null);
+    try t.expect(transcriptPath(parseInput(alloc, "{\"hook_event_name\":\"Stop\",\"transcript_path\":42}")) == null);
+    try t.expect(transcriptPath(parseInput(alloc, "{\"hook_event_name\":\"PreToolUse\",\"transcript_path\":\"/x.jsonl\"}")) == null);
+    try t.expect(transcriptPath(parseInput(alloc, "not json")) == null);
+    try t.expect(transcriptPath(parseInput(alloc, "")) == null);
 }
 
 test "claude protocol: transcriptPath drops an over-long path" {
@@ -721,9 +706,9 @@ test "claude protocol: transcriptPath drops an over-long path" {
     defer arena.deinit();
     const alloc = arena.allocator();
     const at_max = "{\"hook_event_name\":\"Stop\",\"transcript_path\":\"/" ++ "a" ** (transcript_max - 1) ++ "\"}";
-    try t.expectEqual(@as(usize, transcript_max), transcriptPath(alloc, at_max).?.len);
+    try t.expectEqual(@as(usize, transcript_max), transcriptPath(parseInput(alloc, at_max)).?.len);
     const over = "{\"hook_event_name\":\"Stop\",\"transcript_path\":\"/" ++ "a" ** transcript_max ++ "\"}";
-    try t.expect(transcriptPath(alloc, over) == null);
+    try t.expect(transcriptPath(parseInput(alloc, over)) == null);
 }
 
 test "claude protocol: encodeSequence carries the transcript" {
@@ -778,25 +763,25 @@ test "claude protocol: a started subagent's transcript sits beside its parent's"
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const started = subagent(a,
+    const started = subagent(a, parseInput(a,
         \\{"hook_event_name":"SubagentStart","transcript_path":"/h/.claude/projects/p/s1.jsonl","agent_id":"a765","agent_type":"Explore"}
-    ).?;
+    )).?;
     try std.testing.expectEqualStrings("a765", started.id);
     try std.testing.expectEqualStrings("Explore", started.type);
     try std.testing.expectEqualStrings("/h/.claude/projects/p/s1/subagents/agent-a765.jsonl", started.transcript);
     // An id that already reads "agent-…" isn't doubled.
-    try std.testing.expectEqualStrings("/p/s1/subagents/agent-abc.jsonl", subagent(a,
+    try std.testing.expectEqualStrings("/p/s1/subagents/agent-abc.jsonl", subagent(a, parseInput(a,
         \\{"hook_event_name":"SubagentStart","transcript_path":"/p/s1.jsonl","agent_id":"agent-abc","agent_type":"Plan"}
-    ).?.transcript);
+    )).?.transcript);
 }
 
 test "claude protocol: a stopped subagent names its own transcript" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const stopped = subagent(a,
+    const stopped = subagent(a, parseInput(a,
         \\{"hook_event_name":"SubagentStop","transcript_path":"/p/s1.jsonl","agent_id":"def456","agent_type":"Explore","agent_transcript_path":"/p/s1/subagents/agent-def456.jsonl"}
-    ).?;
+    )).?;
     try std.testing.expectEqualStrings("def456", stopped.id);
     try std.testing.expectEqualStrings("/p/s1/subagents/agent-def456.jsonl", stopped.transcript);
 }
@@ -815,7 +800,7 @@ test "claude protocol: internal agents and odd ids aren't subagents" {
         \\{"hook_event_name":"Stop","transcript_path":"/p/s1.jsonl","agent_id":"a1","agent_type":"Explore"}
         ,
         "nope",
-    }) |input| try std.testing.expect(subagent(a, input) == null);
+    }) |input| try std.testing.expect(subagent(a, parseInput(a, input)) == null);
 }
 
 test "claude protocol: a subagent message carries the agent" {
@@ -836,9 +821,9 @@ test "claude protocol: a background Bash call names its shell and output" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const shell = backgroundShell(a,
+    const shell = backgroundShell(a, parseInput(a,
         \\{"scratchpad_dir":"/private/tmp/claude-501/-p/9bfe/scratchpad","hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"sleep 2","description":"Print six\nticks","run_in_background":true},"tool_response":{"stdout":"","backgroundTaskId":"bbsacozcd"}}
-    ).?;
+    )).?;
     try std.testing.expectEqualStrings("bbsacozcd", shell.id);
     try std.testing.expectEqualStrings("Print six ticks", shell.description.?);
     try std.testing.expectEqualStrings("/private/tmp/claude-501/-p/9bfe/tasks/bbsacozcd.output", shell.output.?);
@@ -850,25 +835,25 @@ test "claude protocol: a background Bash call names its shell and output" {
         ,
         \\{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_response":{"backgroundTaskId":"../x"}}
         ,
-    }) |input| try std.testing.expect(backgroundShell(a, input) == null);
+    }) |input| try std.testing.expect(backgroundShell(a, parseInput(a, input)) == null);
 }
 
 test "claude protocol: a task notification prompt names the finished tasks" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const finished = finishedTasks(a,
+    const finished = finishedTasks(a, parseInput(a,
         \\{"hook_event_name":"UserPromptSubmit","prompt":"<task-notification>\n<task-id>bbsacozcd</task-id>\n<status>completed</status>\n</task-notification>\n<task-notification>\n<task-id>b2</task-id>\n</task-notification>"}
-    ).?;
+    )).?;
     try std.testing.expectEqual(@as(usize, 2), finished.len);
     try std.testing.expectEqualStrings("bbsacozcd", finished[0]);
     try std.testing.expectEqualStrings("b2", finished[1]);
-    try std.testing.expect(finishedTasks(a,
+    try std.testing.expect(finishedTasks(a, parseInput(a,
         \\{"hook_event_name":"UserPromptSubmit","prompt":"fix the <task-id>x</task-id> parser"}
-    ) == null);
-    try std.testing.expect(finishedTasks(a,
+    )) == null);
+    try std.testing.expect(finishedTasks(a, parseInput(a,
         \\{"hook_event_name":"Stop"}
-    ) == null);
+    )) == null);
 }
 
 test "claude protocol: a shell message carries the shell" {

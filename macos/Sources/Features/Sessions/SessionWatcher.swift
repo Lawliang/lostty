@@ -18,8 +18,14 @@ final class SessionWatcher: @unchecked Sendable {
     /// user's ~/.tmux.conf.
     static let waitArgs = ["-f", "/dev/null", "wait-for", TmuxRemote.changedChannel]
 
+    /// How long a wake waits for more before it is posted: one change in
+    /// Lostty often signals several times (a state write, a title, a note),
+    /// and every post makes each listener ask tmux again.
+    static let settle: TimeInterval = 0.2
+
     private let lock = NSLock()
     private var started = false
+    private var posting = false
 
     func start() {
         let first: Bool = lock.withLock {
@@ -39,6 +45,20 @@ final class SessionWatcher: @unchecked Sendable {
         !woke && waited < 1 ? 5 : 0
     }
 
+    /// Posts once for every wake within `settle`, after the last of them
+    /// could have changed tmux.
+    private func postSoon() {
+        let first: Bool = lock.withLock {
+            defer { posting = true }
+            return !posting
+        }
+        guard first else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.settle) { [self] in
+            lock.withLock { posting = false }
+            NotificationCenter.default.post(name: .losttySessionsChanged, object: nil)
+        }
+    }
+
     private func loop() {
         let client = TmuxClient()
         guard client.tmuxPath != nil else { return }
@@ -47,9 +67,7 @@ final class SessionWatcher: @unchecked Sendable {
         var hooksSet = false
         while true {
             if !hooksSet { hooksSet = client.run(TmuxHooks.setArgs) != nil }
-            DispatchQueue.main.async {
-                NotificationCenter.default.post(name: .losttySessionsChanged, object: nil)
-            }
+            postSoon()
             let start = Date()
             let woke = waiter.run(Self.waitArgs) != nil
             // A failed wait may mean a new server: set the hooks again.

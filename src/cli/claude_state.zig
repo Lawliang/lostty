@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
 const Action = @import("ghostty.zig").Action;
 const protocol = @import("claude/protocol.zig");
@@ -62,7 +63,7 @@ pub fn run(gpa: Allocator) !u8 {
         // zone's note comes with the zone's other agents as they are now,
         // and a conversation not yet told how to claim a feature is told.
         .busy => {
-            const input = hookInput(alloc) orelse "{}";
+            const input = hookInput(alloc);
             const note = take(alloc, pane, .zone_say);
             const others = if (note != null) othersLine(alloc, pane, input) else null;
             speakTexts(alloc, "UserPromptSubmit", &.{ take(alloc, pane, .say), note, others, claimOnce(alloc, pane, input) });
@@ -75,9 +76,9 @@ pub fn run(gpa: Allocator) !u8 {
         // calls, not a subagent's), and name a background shell it started.
         .done => {
             const input = hookInput(alloc);
-            if (input) |i| if (speak.isSubagent(alloc, i)) return 0;
-            speakTexts(alloc, "PostToolUse", &.{ take(alloc, pane, .say), if (input) |i| zoneAgents(alloc, pane, i) else null });
-            const shell = protocol.backgroundShell(alloc, input orelse return 0) orelse return 0;
+            if (speak.isSubagent(input)) return 0;
+            speakTexts(alloc, "PostToolUse", &.{ take(alloc, pane, .say), zoneAgents(alloc, pane, input) });
+            const shell = protocol.backgroundShell(alloc, input) orelse return 0;
             return say(alloc, protocol.encodeSequence(alloc, .shell, .{ .shell = shell }, tmux) catch null);
         },
         // A session starting without the zone's brief gets it. After
@@ -85,8 +86,8 @@ pub fn run(gpa: Allocator) !u8 {
         // says it was cleared with none (the Mac disarms the pane). Any
         // other start says `start`: a sleeping pane's resume woke it.
         .start => {
-            const input = hookInput(alloc) orelse return 0;
-            const source = speak.sessionSource(alloc, input) orelse return 0;
+            const input = hookInput(alloc);
+            const source = speak.sessionSource(input) orelse return 0;
             const cleared = std.mem.eql(u8, source, "clear");
             if (zone.briefsAt(source)) {
                 const handoff = if (cleared) take(alloc, pane, .start) else null;
@@ -96,17 +97,18 @@ pub fn run(gpa: Allocator) !u8 {
         },
         // A subagent starting, for the pane's list (Claude's own internal
         // agents aren't listed).
-        .subagent => detail.agent = protocol.subagent(alloc, hookInput(alloc) orelse return 0) orelse return 0,
-        .idle, .resumed => if (hookInput(alloc)) |input| {
+        .subagent => detail.agent = protocol.subagent(alloc, hookInput(alloc)) orelse return 0,
+        .idle, .resumed => {
+            const input = hookInput(alloc);
             if (state == .resumed) if (protocol.subagent(alloc, input)) |agent| {
                 stopped = protocol.encodeSequence(alloc, .subagent_done, .{ .agent = agent }, tmux) catch null;
             };
-            state = protocol.refine(alloc, state, input) orelse return say(alloc, stopped);
-            detail.permission = state == .idle and protocol.isPermissionPrompt(alloc, input);
-            if (state == .idle) detail.transcript = protocol.transcriptPath(alloc, input);
+            state = protocol.refine(state, input) orelse return say(alloc, stopped);
+            detail.permission = state == .idle and protocol.isPermissionPrompt(input);
+            if (state == .idle) detail.transcript = protocol.transcriptPath(input);
         },
         .tool => {
-            const input = hookInput(alloc) orelse return 0;
+            const input = hookInput(alloc);
             detail.action = protocol.action(alloc, input) orelse return 0;
             holdMessage(alloc, pane, input, &detail);
         },
@@ -160,12 +162,12 @@ fn take(alloc: Allocator, pane: []const u8, kind: speak.Kind) ?[]const u8 {
 /// The brief of the pane's zone, left in place for the next session, and
 /// the zone's other agents. A move's note still queued is dropped: the
 /// brief is the zone as it is now.
-fn zoneBrief(alloc: Allocator, pane: []const u8, input: []const u8) ?[]const u8 {
+fn zoneBrief(alloc: Allocator, pane: []const u8, input: std.json.Value) ?[]const u8 {
     if (paneFile(alloc, pane, .zone_say)) |path| std.fs.deleteFileAbsolute(path) catch {};
     const file = zoneFile(alloc, pane) orelse return null;
     const start = file.start orelse return null;
     // The brief holds how to claim a feature.
-    if (file.claim != null) if (zone.sessionId(alloc, input)) |session| markTold(alloc, pane, session);
+    if (file.claim != null) if (zone.sessionId(input)) |session| markTold(alloc, pane, session);
     const line = othersLine(alloc, pane, input) orelse return start;
     return std.fmt.allocPrint(alloc, "{s}\n{s}", .{ start, line }) catch start;
 }
@@ -173,10 +175,10 @@ fn zoneBrief(alloc: Allocator, pane: []const u8, input: []const u8) ?[]const u8 
 /// How to claim a feature, once a conversation: with its first prompt
 /// when its start didn't say it, as a conversation that began before the
 /// zone told it. Null when the zone has no claim or this one was told.
-fn claimOnce(alloc: Allocator, pane: []const u8, input: []const u8) ?[]const u8 {
+fn claimOnce(alloc: Allocator, pane: []const u8, input: std.json.Value) ?[]const u8 {
     const file = zoneFile(alloc, pane) orelse return null;
     const claim = file.claim orelse return null;
-    const session = zone.sessionId(alloc, input) orelse return null;
+    const session = zone.sessionId(input) orelse return null;
     const path = paneFile(alloc, pane, .zone_told) orelse return null;
     if (std.fs.cwd().readFileAlloc(alloc, path, 256)) |told| {
         if (std.mem.eql(u8, told, session)) return null;
@@ -194,21 +196,21 @@ fn markTold(alloc: Allocator, pane: []const u8, session: []const u8) void {
 
 /// After ListAgents, which lists every session on the Mac: which of them
 /// are in the pane's zone. Null for other tools or outside a zone.
-fn zoneAgents(alloc: Allocator, pane: []const u8, input: []const u8) ?[]const u8 {
-    if (!zone.isListAgents(alloc, input)) return null;
+fn zoneAgents(alloc: Allocator, pane: []const u8, input: std.json.Value) ?[]const u8 {
+    if (!zone.isListAgents(input)) return null;
     const file = zoneFile(alloc, pane) orelse return null;
     const title = file.zone orelse return null;
     const members = file.members orelse return null;
-    const list = zone.others(alloc, members, file.features, agents(alloc), zone.sessionId(alloc, input), std.posix.getenv("TMUX_PANE")) catch return null;
+    const list = zone.others(alloc, members, file.features, agents(alloc), zone.sessionId(input), std.posix.getenv("TMUX_PANE")) catch return null;
     return zone.listAgentsNote(alloc, title, list) catch null;
 }
 
 /// The line naming the pane's zone's other agents and their features;
 /// null with none.
-fn othersLine(alloc: Allocator, pane: []const u8, input: []const u8) ?[]const u8 {
+fn othersLine(alloc: Allocator, pane: []const u8, input: std.json.Value) ?[]const u8 {
     const file = zoneFile(alloc, pane) orelse return null;
     const members = file.members orelse return null;
-    const list = zone.others(alloc, members, file.features, agents(alloc), zone.sessionId(alloc, input), std.posix.getenv("TMUX_PANE")) catch return null;
+    const list = zone.others(alloc, members, file.features, agents(alloc), zone.sessionId(input), std.posix.getenv("TMUX_PANE")) catch return null;
     return zone.othersLine(alloc, list) catch null;
 }
 
@@ -217,8 +219,8 @@ fn othersLine(alloc: Allocator, pane: []const u8, input: []const u8) ?[]const u8
 /// notice; the owner's Allow Once for that target lets one through. One
 /// to a sleeping agent names it in `detail.wake`, with the message when it
 /// fits, for the app to wake it and pass the message on.
-fn holdMessage(alloc: Allocator, pane: []const u8, input: []const u8, detail: *protocol.Detail) void {
-    const to = zone.sendTarget(alloc, input) orelse return;
+fn holdMessage(alloc: Allocator, pane: []const u8, input: std.json.Value, detail: *protocol.Detail) void {
+    const to = zone.sendTarget(input) orelse return;
     const running = agents(alloc);
     const sleepers = sleeping(alloc);
     if (zoneFile(alloc, pane)) |file| if (file.members) |members| {
@@ -232,8 +234,8 @@ fn holdMessage(alloc: Allocator, pane: []const u8, input: []const u8, detail: *p
     const asleep = sleep.find(to, sleepers, running) orelse return;
     detail.wake = .{
         .pane = asleep.pane,
-        .from = sleep.sender(running, zone.sessionId(alloc, input)),
-        .message = sleep.message(alloc, input),
+        .from = sleep.sender(running, zone.sessionId(input)),
+        .message = sleep.message(input),
     };
     if (!protocol.fits(alloc, .tool, detail.*)) detail.wake.?.message = null;
     if (!protocol.fits(alloc, .tool, detail.*)) {
@@ -302,14 +304,16 @@ fn sessionsDir(alloc: Allocator) ?[]const u8 {
     return std.fs.path.join(alloc, &.{ home, ".claude", "sessions" }) catch null;
 }
 
-/// The hook input Claude Code writes to stdin, or null when stdin is a
-/// terminal (someone ran the command by hand) or can't be read.
-fn hookInput(alloc: Allocator) ?[]const u8 {
+/// The hook input Claude Code writes to stdin, read and parsed once. With
+/// stdin a terminal (someone ran the command by hand), unreadable or not
+/// JSON it is `.null`: a payload with nothing in it.
+fn hookInput(alloc: Allocator) std.json.Value {
     const stdin = std.fs.File.stdin();
-    if (std.posix.isatty(stdin.handle)) return null;
+    if (std.posix.isatty(stdin.handle)) return .null;
     var buf: [4096]u8 = undefined;
     var reader = stdin.reader(&buf);
-    return reader.interface.allocRemaining(alloc, .limited(4 << 20)) catch null;
+    const text = reader.interface.allocRemaining(alloc, .limited(4 << 20)) catch return .null;
+    return protocol.parseInput(alloc, text);
 }
 
 /// `/dev/tty` when we have a controlling terminal; otherwise (Claude Code
@@ -317,11 +321,45 @@ fn hookInput(alloc: Allocator) ?[]const u8 {
 /// one, which is `claude` in the pane, or the tmux pane it runs in.
 pub fn openTerminal(alloc: Allocator) ?std.fs.File {
     if (std.fs.openFileAbsolute("/dev/tty", .{ .mode = .write_only })) |f| return f else |_| {}
-    const name = protocol.findTty(Ps{ .alloc = alloc }, std.c.getppid(), 8) orelse return null;
+    const Lookup = if (builtin.os.tag.isDarwin()) Kernel else Ps;
+    const name = protocol.findTty(Lookup{ .alloc = alloc }, std.c.getppid(), 8) orelse return null;
     const path = std.fmt.allocPrint(alloc, "/dev/{s}", .{name}) catch return null;
     return std.fs.openFileAbsolute(path, .{ .mode = .write_only }) catch null;
 }
 
+/// What `ps -o ppid=,tty=` prints for a pid, read from the kernel the way
+/// `ps` reads it, without starting `ps`: a hook runs on every tool call.
+/// libproc's `proc_pidinfo` is no substitute: it refuses root's processes.
+const Kernel = struct {
+    alloc: Allocator,
+
+    /// `struct kinfo_proc` (sys/sysctl.h) on 64-bit macOS: its size, and
+    /// where `kp_eproc.e_ppid` and `kp_eproc.e_tdev` sit in it.
+    const size = 648;
+    const ppid_at = 560;
+    const tdev_at = 572;
+    /// `e_tdev` of a process with no terminal (NODEV).
+    const no_device: i32 = -1;
+
+    extern "c" fn devname_r(dev: i32, mode: std.c.mode_t, buf: [*]u8, len: c_int) ?[*:0]const u8;
+
+    pub fn lookup(self: Kernel, pid: i32) ?protocol.ProcInfo {
+        var info: [size]u8 align(8) = undefined;
+        var len: usize = size;
+        // CTL_KERN, KERN_PROC, KERN_PROC_PID. A pid that isn't running
+        // succeeds with nothing written.
+        const mib = [_]c_int{ 1, 14, 1, pid };
+        if (std.c.sysctl(&mib, mib.len, &info, &len, null, 0) != 0 or len != size) return null;
+        const ppid = std.mem.readInt(i32, info[ppid_at..][0..4], builtin.cpu.arch.endian());
+        const tdev = std.mem.readInt(i32, info[tdev_at..][0..4], builtin.cpu.arch.endian());
+        var buf: [64]u8 = undefined;
+        const name = if (tdev == no_device) null else devname_r(tdev, std.c.S.IFCHR, &buf, buf.len);
+        const tty = if (name) |n| self.alloc.dupe(u8, std.mem.span(n)) catch return null else null;
+        return .{ .ppid = ppid, .tty = if (tty) |t| if (protocol.isTtyName(t)) t else null else null };
+    }
+};
+
+/// The same from `ps` itself, where the kernel isn't macOS's.
 const Ps = struct {
     alloc: Allocator,
 
@@ -335,6 +373,34 @@ const Ps = struct {
         return protocol.parsePs(result.stdout);
     }
 };
+
+test "claude state: the kernel names the parent and terminal ps names" {
+    if (comptime !builtin.os.tag.isDarwin()) return error.SkipZigTest;
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const kernel: Kernel = .{ .alloc = a };
+    const ps: Ps = .{ .alloc = a };
+
+    // This process and each ancestor up to launchd, which root owns.
+    var pid: i32 = std.c.getpid();
+    var seen: usize = 0;
+    while (pid >= 1) : (seen += 1) {
+        const want = ps.lookup(pid).?;
+        const got = kernel.lookup(pid).?;
+        try std.testing.expectEqual(want.ppid, got.ppid);
+        try std.testing.expectEqualDeep(want.tty, got.tty);
+        pid = got.ppid;
+    }
+    try std.testing.expect(seen >= 2);
+
+    // The walk a hook makes picks the same terminal either way.
+    try std.testing.expectEqualDeep(
+        protocol.findTty(ps, std.c.getpid(), 64),
+        protocol.findTty(kernel, std.c.getpid(), 64),
+    );
+    try std.testing.expect(kernel.lookup(std.math.maxInt(i32)) == null);
+}
 
 test {
     _ = @import("claude/protocol.zig");

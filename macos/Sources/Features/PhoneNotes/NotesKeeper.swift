@@ -13,7 +13,20 @@ import LosttyRemote
 final class NotesKeeper {
     static let shared = NotesKeeper(
         folder: NotesFolder(root: NotesFolder.standard),
-        list: { NotesKeeper.listing(TmuxClient().readSessionListing(), serverExists: TmuxClient.serverSocketExists) },
+        list: {
+            let client = TmuxClient()
+            var listed = client.readRemoteSessions()
+            // Only a waiting session with no title of its own is named by
+            // its repo and branch, which take the listing script (a shell
+            // and a process or more per session) to read.
+            if listed?.contains(where: NotesKeeper.isNamedByProject) == true {
+                listed = client.readSessionListing()
+            } else {
+                // As the script does: a Lostty that is gone owns nothing.
+                listed = listed?.map { NotesKeeper.withoutDeadOwner($0) }
+            }
+            return NotesKeeper.listing(listed, serverExists: TmuxClient.serverSocketExists)
+        },
         signal: { _ = TmuxClient().run(TmuxHooks.signalArgs) })
 
     /// A session listing that failed while the server may still be there is
@@ -21,6 +34,20 @@ final class NotesKeeper {
     /// and start them all again on the next good listing.
     nonisolated static func listing(_ listed: [RemoteSession]?, serverExists: Bool) -> [RemoteSession]? {
         listed ?? (serverExists ? nil : [])
+    }
+
+    nonisolated static func isNamedByProject(_ session: RemoteSession) -> Bool {
+        guard session.claude == .waiting else { return false }
+        let row = SessionLabel.row(for: session, now: Date())
+        return row.title == row.project
+    }
+
+    nonisolated static func withoutDeadOwner(
+        _ session: RemoteSession, isAlive: (Int32) -> Bool = ProcessLiveness.isAlive
+    ) -> RemoteSession {
+        var session = session
+        if let owner = session.owner, !isAlive(owner) { session.owner = nil }
+        return session
     }
 
     private(set) var log = NoteLog()
