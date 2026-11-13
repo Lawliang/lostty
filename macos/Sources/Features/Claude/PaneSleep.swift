@@ -53,8 +53,12 @@ struct SleepCandidate: Equatable {
     var working = false
     /// A tool call under way or a permission question open.
     var asking = false
-    /// Subagents or background shells listed for the pane.
+    /// Subagents or background shells listed for the pane, or work its
+    /// last Stop said comes back to it: a scheduled wakeup, a cron, a
+    /// monitor. `/exit` would ask "exit and stop tasks?" and drop them.
     var tasks = false
+    /// The owner marked it Keep Awake.
+    var keptAwake = false
     /// A guard request waits on the owner.
     var guardWaiting = false
     var focused = false
@@ -68,7 +72,7 @@ struct SleepCandidate: Equatable {
     /// conversation is all there when it wakes.
     func qualifies(now: Date, minutes: Int) -> Bool {
         guard minutes > 0, agent == .claude, let idleSince,
-              !working, !asking, !tasks, !guardWaiting, !focused, !onPhone, !deliveryWaiting else { return false }
+              !working, !asking, !tasks, !keptAwake, !guardWaiting, !focused, !onPhone, !deliveryWaiting else { return false }
         return now.timeIntervalSince(idleSince) >= TimeInterval(minutes * 60)
     }
 }

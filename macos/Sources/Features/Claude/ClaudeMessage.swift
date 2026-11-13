@@ -61,6 +61,13 @@ enum ClaudeMessage {
         object(value)?["permission"] as? Bool == true
     }
 
+    /// A Stop's `"pending"`: whether work comes back to the session later
+    /// (a scheduled wakeup, a cron, a background task). nil for messages
+    /// that aren't a Stop's.
+    static func pending(_ value: String) -> Bool? {
+        object(value)?["pending"] as? Bool
+    }
+
     /// The conversation file an `idle` names (`"transcript":"…"`), for the
     /// turn observer; nil for anything else. Only a hint: anything in a pane
     /// can print this user var, so TranscriptLocation decides what is read.

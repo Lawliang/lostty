@@ -65,6 +65,10 @@ pub const Detail = struct {
     agent: ?Subagent = null,
     /// `shell` and `shell_done`: which background shell.
     shell: ?Shell = null,
+    /// A Stop (`idle` or `agents`): whether the session has work that
+    /// will come back to it (`pendingWork`), so Lostty doesn't put it to
+    /// sleep. Null for anything else.
+    pending: ?bool = null,
 };
 
 /// The longest action sent, in characters.
@@ -117,6 +121,24 @@ pub fn refine(alloc: Allocator, state: State, input: []const u8) ?State {
         return if (runningTasks(root, stringField(root, "agent_id"))) null else .resumed;
     }
     return state;
+}
+
+/// Whether a Stop leaves the session with work that comes back to it: a
+/// scheduled wakeup, cron or /loop (`session_crons`), or any background
+/// task, monitors included. Quitting such a session asks "exit and stop
+/// tasks?" and drops what it scheduled. Null for anything but a Stop.
+pub fn pendingWork(alloc: Allocator, input: []const u8) ?bool {
+    const parsed = std.json.parseFromSlice(std.json.Value, alloc, input, .{}) catch return null;
+    defer parsed.deinit();
+    const root = parsed.value;
+    if (root != .object) return null;
+    const event = stringField(root, "hook_event_name") orelse return null;
+    if (!std.mem.eql(u8, event, "Stop")) return null;
+    for ([_][]const u8{ "session_crons", "background_tasks" }) |key| {
+        const list = root.object.get(key) orelse continue;
+        if (list == .array and list.array.items.len > 0) return true;
+    }
+    return false;
 }
 
 /// Whether a Notification hook's input is Claude asking permission (for
@@ -452,6 +474,7 @@ fn encodeJson(alloc: Allocator, state: State, detail: Detail) ![]u8 {
         .wake = detail.wake,
         .agent = detail.agent,
         .shell = detail.shell,
+        .pending = detail.pending,
     }, .{ .emit_null_optional_fields = false });
 }
 
@@ -567,6 +590,24 @@ test "claude protocol: Stop with subagents or shells still running reports agent
     try t.expectEqual(State.idle, refine(alloc, .idle, monitor).?);
     try t.expectEqual(State.idle, refine(alloc, .idle, "{\"hook_event_name\":\"Stop\",\"background_tasks\":[]}").?);
     try t.expectEqual(State.idle, refine(alloc, .idle, "{\"hook_event_name\":\"Stop\"}").?);
+}
+
+test "claude protocol: a Stop says whether work will come back to the session" {
+    const t = std.testing;
+    const alloc = t.allocator;
+    const wakeup =
+        \\{"hook_event_name":"Stop","background_tasks":[],"session_crons":[
+        \\{"id":"c1","schedule":"7 14 13 11 *","recurring":false,"prompt":"check in"}]}
+    ;
+    try t.expectEqual(true, pendingWork(alloc, wakeup).?);
+    const monitor =
+        \\{"hook_event_name":"Stop","background_tasks":[{"id":"m1","type":"monitor","status":"running"}]}
+    ;
+    try t.expectEqual(true, pendingWork(alloc, monitor).?);
+    try t.expectEqual(false, pendingWork(alloc, "{\"hook_event_name\":\"Stop\",\"background_tasks\":[],\"session_crons\":[]}").?);
+    try t.expectEqual(false, pendingWork(alloc, "{\"hook_event_name\":\"Stop\"}").?);
+    try t.expect(pendingWork(alloc, "{\"hook_event_name\":\"Notification\",\"notification_type\":\"permission_prompt\"}") == null);
+    try t.expect(pendingWork(alloc, "not json") == null);
 }
 
 test "claude protocol: SubagentStop resumes only when nothing else still works" {

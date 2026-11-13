@@ -104,6 +104,7 @@ pub fn run(gpa: Allocator) !u8 {
             state = protocol.refine(alloc, state, input) orelse return say(alloc, stopped);
             detail.permission = state == .idle and protocol.isPermissionPrompt(alloc, input);
             if (state == .idle) detail.transcript = protocol.transcriptPath(alloc, input);
+            detail.pending = protocol.pendingWork(alloc, input);
         },
         .tool => {
             const input = hookInput(alloc) orelse return 0;

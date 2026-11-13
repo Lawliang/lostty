@@ -52,6 +52,12 @@ struct ClaudeMessageTests {
         #expect(!ClaudeMessage.isPermission(#"{"v":1,"state":"idle","permission":false}"#))
     }
 
+    @Test func readsAStopsPendingWork() {
+        #expect(ClaudeMessage.pending(#"{"v":1,"state":"idle","pending":true}"#) == true)
+        #expect(ClaudeMessage.pending(#"{"v":1,"state":"agents","pending":false}"#) == false)
+        #expect(ClaudeMessage.pending(#"{"v":1,"state":"idle","permission":true}"#) == nil)
+    }
+
     @Test func matchesTheZigEncoder() {
         // Exact JSON `+claude-state busy` encodes (see protocol.zig).
         #expect(ClaudeMessage.decode(#"{"v":1,"state":"busy"}"#) == .busy)

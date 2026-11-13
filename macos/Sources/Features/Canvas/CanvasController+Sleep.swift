@@ -2,8 +2,8 @@
 import AppKit
 
 /// Sleep on the canvas (`PaneSleep`): once a minute, each Claude card idle
-/// long enough, with nothing under way or waiting for it and an empty input
-/// box, falls asleep.
+/// long enough, with nothing under way or waiting for it, no scheduled
+/// work, no Keep Awake mark and an empty input box, falls asleep.
 extension CanvasController {
     static let sleepCheckInterval: TimeInterval = 60
 
@@ -26,6 +26,7 @@ extension CanvasController {
         let now = Date()
         var focused = Set(focusedCard.map { $0.surfaceTree.map(\.id) } ?? [])
         if let view = NSApp.keyWindow?.firstResponder as? Ghostty.SurfaceView { focused.insert(view.id) }
+        let pid = ProcessInfo.processInfo.processIdentifier
         let ready = cards.flatMap { Array($0.surfaceTree) }.filter { view in
             let id = view.id
             guard sleep.phase(id) == nil else { return false }
@@ -34,7 +35,8 @@ extension CanvasController {
                 agent: LastSessionStore.shared.agent(in: id),
                 working: !runtime.phase(id).isOff,
                 asking: runtime.actions[id] != nil,
-                tasks: PaneTasks.shared.lists[id] != nil,
+                tasks: PaneTasks.shared.lists[id] != nil || runtime.pendingWork.contains(id),
+                keptAwake: isKeptAwake(id, pid: pid),
                 guardWaiting: GuardRuntime.shared.pending(for: id) != nil,
                 focused: focused.contains(id),
                 onPhone: SessionSync.shared.phonePanes.contains(id),
@@ -42,7 +44,6 @@ extension CanvasController {
                 idleSince: runtime.idleSince(id)
             ).qualifies(now: now, minutes: minutes)
         }
-        let pid = ProcessInfo.processInfo.processIdentifier
         for view in ready {
             guard let session = TmuxOwnership.showing(view.id, ownedBy: pid, in: tmuxSessions).first,
                   let name = agentName(of: view.id),
@@ -52,6 +53,23 @@ extension CanvasController {
             sleep.fallAsleep(SleepingAgent(
                 pane: view.id, sessionId: conversation.id, name: name, tmux: session.name, folder: folder,
                 model: conversation.model))
+        }
+    }
+
+    /// The owner marked the pane's tmux session Keep Awake.
+    func isKeptAwake(_ pane: UUID, pid: Int32 = ProcessInfo.processInfo.processIdentifier) -> Bool {
+        TmuxOwnership.showing(pane, ownedBy: pid, in: tmuxSessions).contains(where: \.keepAwake)
+    }
+
+    /// Marks every pane of `card` Keep Awake, or not, and wakes the
+    /// sleeping ones it marks.
+    func setKeepAwake(_ on: Bool, for card: CardController) {
+        let panes = card.surfaceTree.map(\.id)
+        if on { for pane in panes { PaneSleep.shared.wake(pane) } }
+        let pid = ProcessInfo.processInfo.processIdentifier
+        Task.detached(priority: .userInitiated) {
+            let client = TmuxClient()
+            for pane in panes { client.setKeepAwake(on, surface: pane, ownedBy: pid) }
         }
     }
 

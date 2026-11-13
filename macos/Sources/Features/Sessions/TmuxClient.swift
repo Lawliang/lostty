@@ -201,6 +201,16 @@ struct TmuxClient {
         return set + [";"] + TmuxHooks.signalCommand
     }
 
+    /// Marks the session showing pane `surface` kept awake, or not, then
+    /// wakes watchers so the canvas lists it again.
+    func setKeepAwake(_ on: Bool, surface: UUID, ownedBy pid: Int32) {
+        for session in TmuxOwnership.showing(surface, ownedBy: pid, in: sessions()) {
+            let option = TmuxConstants.keepAwakeOption
+            let set = on ? ["set-option", "-t", session.id, option, "1"] : ["set-option", "-u", "-t", session.id, option]
+            run(set + [";"] + TmuxHooks.signalCommand)
+        }
+    }
+
     func isBusy(surface: UUID, ownedBy pid: Int32) -> Bool? {
         guard let out = run(["list-panes", "-a", "-F", TmuxPane.listFormat]) else { return nil }
         return TmuxPane.isBusy(surface, ownedBy: pid, panes: TmuxPane.parseList(out))
