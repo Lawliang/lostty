@@ -53,8 +53,12 @@ struct SleepCandidate: Equatable {
     var working = false
     /// A tool call under way or a permission question open.
     var asking = false
-    /// Subagents or background shells listed for the pane.
+    /// Subagents or background shells listed for the pane, or work its
+    /// last Stop said comes back to it: a scheduled wakeup, a cron, a
+    /// monitor. `/exit` would ask "exit and stop tasks?" and drop them.
     var tasks = false
+    /// The owner marked it Keep Awake.
+    var keptAwake = false
     /// A guard request waits on the owner.
     var guardWaiting = false
     var focused = false
@@ -62,14 +66,26 @@ struct SleepCandidate: Equatable {
     /// A ticket or an inbox line waits to be typed into it.
     var deliveryWaiting = false
     var idleSince: Date?
+    /// Claude's last reply asks the owner something (`SleepSignals`).
+    var asksOwner = false
+    /// When another agent's message last woke the pane.
+    var wokenByWork: Date?
+    /// When the Mac last woke: its own sleep isn't the pane's idle time.
+    var macWokeAt: Date?
 
     /// A Claude idle for `minutes` with nothing under way or waiting;
     /// 0 minutes is never. An unread reply doesn't keep it awake: the
-    /// conversation is all there when it wakes.
+    /// conversation is all there when it wakes. One that asks the owner
+    /// something waits longer for the answer, one another agent just woke
+    /// stays up for the next message, and only time the Mac was awake
+    /// counts.
     func qualifies(now: Date, minutes: Int) -> Bool {
         guard minutes > 0, agent == .claude, let idleSince,
-              !working, !asking, !tasks, !guardWaiting, !focused, !onPhone, !deliveryWaiting else { return false }
-        return now.timeIntervalSince(idleSince) >= TimeInterval(minutes * 60)
+              !working, !asking, !tasks, !keptAwake, !guardWaiting, !focused, !onPhone, !deliveryWaiting else { return false }
+        if let wokenByWork, now.timeIntervalSince(wokenByWork) < SleepSignals.afterWork { return false }
+        let wait = asksOwner ? max(minutes, SleepSignals.askingMinutes) : minutes
+        let since = macWokeAt.map { max($0, idleSince) } ?? idleSince
+        return now.timeIntervalSince(since) >= TimeInterval(wait * 60)
     }
 }
 

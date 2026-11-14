@@ -8,6 +8,7 @@ struct SettingsView: View {
     @ObservedObject var font: TerminalFontPreferences
     @ObservedObject var updates: UpdatePreferences
     @ObservedObject var sleep: SleepPreferences
+    @ObservedObject var notifications: NotificationPreferences
     /// A build made on this Mac updates with install.sh, not the updater.
     var hasUpdateFeed = UpdateFeed.current != nil
     /// Turn summaries, while the observer is on.
@@ -34,6 +35,13 @@ struct SettingsView: View {
                     }
                     Text("A sleeping terminal's Claude quits, freeing its memory, under a light veil. "
                          + "Click it to wake it: the same conversation picks up where it was.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Section("Notifications") {
+                    Toggle("Mute notifications", isOn: $notifications.muted)
+                    Text("No bubbles at the top right, no Mac banners and no sounds. "
+                         + "An agent asking for approval still shows.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -155,7 +163,8 @@ struct SettingsView_Previews: PreviewProvider {
             observer: ObserverPreferences(defaults: UserDefaults(suiteName: "preview")!),
             font: TerminalFontPreferences(configURL: { nil }, reloadConfig: {}),
             updates: UpdatePreferences(defaults: UserDefaults(suiteName: "preview")!),
-            sleep: SleepPreferences(defaults: UserDefaults(suiteName: "preview")!))
+            sleep: SleepPreferences(defaults: UserDefaults(suiteName: "preview")!),
+            notifications: NotificationPreferences(defaults: UserDefaults(suiteName: "preview")!, marker: nil))
     }
 }
 #endif

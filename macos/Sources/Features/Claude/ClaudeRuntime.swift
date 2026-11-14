@@ -67,6 +67,9 @@ final class ClaudeRuntime: ObservableObject {
     /// turn's end, an interrupt or a key typed, else when sleep first
     /// found it idle. For sleep.
     private var idle: [UUID: Date] = [:]
+    /// Panes whose last Stop said work comes back to them
+    /// (`ClaudeMessage.pending`), which sleep leaves alone.
+    private(set) var pendingWork: Set<UUID> = []
 
     init(
         now: @escaping () -> Date = Date.init,
@@ -112,6 +115,7 @@ final class ClaudeRuntime: ObservableObject {
         if ClaudeMessage.isFresh(value) || ClaudeMessage.isCleared(value) {
             CanvasController.shared?.conversationEnded(id)
             PaneTasks.shared.clear(id)
+            pendingWork.remove(id)
             return
         }
         if let target = ClaudeMessage.denied(value) { messageKeptInside(id, target) }
@@ -129,6 +133,9 @@ final class ClaudeRuntime: ObservableObject {
             Ghostty.logger.debug("claude: rejected malformed \(ClaudeConstants.userVarName) payload")
             return
         }
+        if let pending = ClaudeMessage.pending(value) {
+            if pending { pendingWork.insert(id) } else { pendingWork.remove(id) }
+        }
         if state == .exit { agentGone(id) } else { agentSeen(id, ClaudeMessage.agentKind(value)) }
         // Only a turn that was under way ends: anything printed in a pane can
         // carry this user var, so an idle out of nowhere names no file.
@@ -139,6 +146,7 @@ final class ClaudeRuntime: ObservableObject {
         case .busy:
             hookTurns[id] = hookTurns[id] ?? now()
             typed.remove(id)
+            SleepSignals.shared.turnStarted(id)
         case .idle where !permission:
             // A Stop with subagents or shells still working says `agents`.
             PaneTasks.shared.clear(id)
@@ -148,10 +156,12 @@ final class ClaudeRuntime: ObservableObject {
         if state == .exit {
             exited(id)
             PaneTasks.shared.clear(id)
+            pendingWork.remove(id)
         }
         guard state == .idle, let path = ClaudeMessage.transcript(value) else { return }
         // The conversation to resume after the Mac restarts.
         LastSessionStore.shared.conversation(id, transcript: path)
+        if !permission { SleepSignals.shared.turnEnded(id, transcript: path) }
         if turnUnderWay { turnEnded(id, path) }
         if !permission, let start = hookTurns.removeValue(forKey: id) {
             requestEnded(id, path, start)
@@ -164,6 +174,7 @@ final class ClaudeRuntime: ObservableObject {
         agentGone(id)
         exited(id)
         PaneTasks.shared.clear(id)
+        pendingWork.remove(id)
         apply(.exit, to: id)
         hookTurns[id] = nil
         typed.remove(id)
@@ -181,6 +192,7 @@ final class ClaudeRuntime: ObservableObject {
         PaneSleep.shared.closed(id)
         agentGone(id)
         PaneTasks.shared.clear(id)
+        pendingWork.remove(id)
         LastSessionStore.shared.agentGone(id)
         phases[id] = nil
         unfocused.remove(id)

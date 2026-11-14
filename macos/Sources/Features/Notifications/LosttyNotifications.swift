@@ -102,18 +102,24 @@ final class LosttyNotifications: ObservableObject {
     @Published private(set) var front: ObjectIdentifier?
 
     private let schedule: Scheduler
+    private let muted: @MainActor () -> Bool
     private var shown: Set<UUID> = []
     private var hovering: Set<UUID> = []
     private var generation: [UUID: Int] = [:]
 
-    init(schedule: @escaping Scheduler = { delay, work in
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { MainActor.assumeIsolated { work() } }
-    }) {
+    init(
+        muted: @escaping @MainActor () -> Bool = { NotificationPreferences.shared.muted },
+        schedule: @escaping Scheduler = { delay, work in
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { MainActor.assumeIsolated { work() } }
+        }
+    ) {
+        self.muted = muted
         self.schedule = schedule
     }
 
-    /// On top, in place of the bubble in its slot.
+    /// On top, in place of the bubble in its slot. Muted, it's dropped.
     func post(_ notification: LosttyNotification) {
+        guard !muted() else { return }
         if let index = items.firstIndex(where: { $0.kind.slot == notification.kind.slot }) {
             forget(items[index].id)
             items.remove(at: index)
@@ -129,6 +135,10 @@ final class LosttyNotifications: ObservableObject {
     func dismiss(_ id: UUID) {
         items.removeAll { $0.id == id }
         forget(id)
+    }
+
+    func clear() {
+        for item in items { dismiss(item.id) }
     }
 
     /// The bubble in `kind`'s slot, if one is up.

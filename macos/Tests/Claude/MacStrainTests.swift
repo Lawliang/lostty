@@ -8,7 +8,7 @@ struct MacStrainTests {
     @Test func theWorseOfMemoryAndHeatDecides() {
         #expect(MacStrain(memory: .normal, thermal: .nominal) == .none)
         #expect(MacStrain(memory: .normal, thermal: .fair) == .none)
-        #expect(MacStrain(memory: .warning, thermal: .nominal) == .high)
+        #expect(MacStrain(memory: .warning, thermal: .nominal) == .none)
         #expect(MacStrain(memory: .normal, thermal: .serious) == .high)
         #expect(MacStrain(memory: .critical, thermal: .nominal) == .critical)
         #expect(MacStrain(memory: .warning, thermal: .critical) == .critical)

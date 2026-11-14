@@ -17,6 +17,14 @@ struct TmuxSessionTests {
         ])
     }
 
+    @Test func readsTheKeepAwakeMark() {
+        let out = "$1\ta\t\(paneA.uuidString)\t4242\t1\n$2\tb\t\t\t\n"
+        #expect(TmuxSession.parseList(out) == [
+            TmuxSession(id: "$1", name: "a", surface: paneA.uuidString, owner: 4242, keepAwake: true),
+            TmuxSession(id: "$2", name: "b", surface: nil, owner: nil),
+        ])
+    }
+
     @Test func skipsMalformedLines() {
         #expect(TmuxSession.parseList("garbage\n\n1\tx\t\t\n$4\t\t\t\n").isEmpty)
     }

@@ -8,7 +8,9 @@ import Combine
 /// memory, so under strain it frees what its own idle terminals hold.
 enum MacStrain: Int, Comparable {
     case none
-    /// Memory pressure "warning", or thermal state "serious".
+    /// Thermal state "serious", or a lid closed over a Mac kept awake.
+    /// Not memory pressure "warning": a Mac full of agents sits there
+    /// all day, so it says nothing about now.
     case high
     /// Memory pressure or thermal state "critical".
     case critical
@@ -23,7 +25,7 @@ enum MacStrain: Int, Comparable {
     init(memory: Memory, thermal: ProcessInfo.ThermalState, lidShut: Bool = false) {
         switch (memory, thermal) {
         case (.critical, _), (_, .critical): self = .critical
-        case (.warning, _), (_, .serious): self = .high
+        case (_, .serious): self = .high
         default: self = lidShut ? .high : .none
         }
     }
