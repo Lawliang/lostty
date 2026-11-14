@@ -13,7 +13,7 @@ struct LosttyNotificationsTests {
 
     func make() -> LosttyNotifications {
         let harness = self.harness
-        return LosttyNotifications(schedule: { delay, work in harness.pending.append((delay, work)) })
+        return LosttyNotifications(muted: { false }, schedule: { delay, work in harness.pending.append((delay, work)) })
     }
 
     func runPending() {

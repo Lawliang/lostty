@@ -14,7 +14,7 @@ struct TerminalNoticesTests {
 
     func make() -> TerminalNotices {
         let harness = self.harness
-        return TerminalNotices(schedule: { delay, work in harness.pending.append((delay, work)) })
+        return TerminalNotices(muted: { false }, schedule: { delay, work in harness.pending.append((delay, work)) })
     }
 
     func runPending() {

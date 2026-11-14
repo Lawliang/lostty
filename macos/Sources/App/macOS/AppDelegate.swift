@@ -1159,6 +1159,11 @@ class AppDelegate: NSObject,
             withCompletionHandler([.banner, .list])
             return
         }
+        // Lostty: muted, only the guard's banners show.
+        if NotificationPreferences.isMuted {
+            withCompletionHandler([])
+            return
+        }
         // Lostty: Stay Awake's notices carry no surface, so show them here.
         if willPresent.request.content.userInfo["lostty"] as? String == "stay-awake" {
             withCompletionHandler([.banner])

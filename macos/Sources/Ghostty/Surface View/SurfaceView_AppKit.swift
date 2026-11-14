@@ -1865,6 +1865,8 @@ extension Ghostty {
 
         /// Show a user notification and associate it with this surface
         func showUserNotification(title: String, body: String, requireFocus: Bool = true) {
+            // Lostty: muted in Lostty Settings.
+            guard !NotificationPreferences.isMuted else { return }
             let content = UNMutableNotificationContent()
             content.title = title
             content.subtitle = self.title
