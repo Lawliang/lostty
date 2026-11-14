@@ -127,6 +127,8 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     private var eventMonitor: Any?
     private var cancellables: Set<AnyCancellable> = []
     var sleepTimer: Timer?
+    var strainWatch: AnyCancellable?
+    var lidWatch: AnyCancellable?
 
     /// Opens the canvas, making it the first time; an empty canvas gets a
     /// fresh card unless panes are about to move in.
@@ -777,6 +779,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
             focus(card)
         }
         updateVisibility()
+        views[card.id]?.panesChanged()
         saveSoon()
         for surface in card.surfaceTree { surface.canvasZoomDidSettle(settledZoom) }
         zoneMembershipDidChange()
@@ -1301,6 +1304,7 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
     /// canvas is hidden or covered.
     func updateVisibility() {
         let shown = window?.isVisible == true && window?.occlusionState.contains(.visible) == true
+            && !MacStrainWatch.shared.lidShut
         let inView = model.cardsInView(scrollView.shownRect)
         for card in cards {
             views[card.id]?.mode = shown && inView.contains(card.id) ? .live : .hidden

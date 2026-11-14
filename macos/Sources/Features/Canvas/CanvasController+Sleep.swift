@@ -1,5 +1,6 @@
 #if os(macOS)
 import AppKit
+import Combine
 
 /// Sleep on the canvas (`PaneSleep`): once a minute, each Claude card idle
 /// long enough, with nothing under way or waiting for it, no scheduled
@@ -15,14 +16,29 @@ extension CanvasController {
         timer.tolerance = Self.sleepCheckInterval / 4
         RunLoop.main.add(timer, forMode: .common)
         sleepTimer = timer
+        // The Mac runs short of memory or hot: idle cards sleep sooner
+        // (`MacStrain.sleepMinutes`), starting now.
+        MacStrainWatch.shared.start()
+        SleepSignals.shared.start()
+        strainWatch = MacStrainWatch.shared.$strain
+            .removeDuplicates()
+            .filter { $0 >= .high }
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.sleepIdleCards() }
+        // The lid closed over a Mac kept awake: no card draws until it opens.
+        lidWatch = MacStrainWatch.shared.$lidShut
+            .removeDuplicates()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.updateVisibility() }
     }
 
     func sleepIdleCards() {
         let sleep = PaneSleep.shared
         sleep.keep(Set(LastSessionStore.openPanes()))
-        let minutes = SleepPreferences.shared.minutes
+        let minutes = MacStrainWatch.shared.strain.sleepMinutes(setting: SleepPreferences.shared.minutes)
         guard minutes > 0 else { return }
         let runtime = ClaudeRuntime.shared
+        let signals = SleepSignals.shared
         let now = Date()
         var focused = Set(focusedCard.map { $0.surfaceTree.map(\.id) } ?? [])
         if let view = NSApp.keyWindow?.firstResponder as? Ghostty.SurfaceView { focused.insert(view.id) }
@@ -41,7 +57,10 @@ extension CanvasController {
                 focused: focused.contains(id),
                 onPhone: SessionSync.shared.phonePanes.contains(id),
                 deliveryWaiting: deliveryWaits(for: id),
-                idleSince: runtime.idleSince(id)
+                idleSince: runtime.idleSince(id),
+                asksOwner: signals.asksOwner.contains(id),
+                wokenByWork: signals.wokenByWork[id],
+                macWokeAt: signals.macWokeAt
             ).qualifies(now: now, minutes: minutes)
         }
         for view in ready {
@@ -87,6 +106,7 @@ extension CanvasController {
     func messageForSleeper(_ wake: ClaudeMessage.SleepWake) {
         guard PaneSleep.shared.phase(wake.pane) != nil else { return }
         PaneSleep.shared.wake(wake.pane)
+        SleepSignals.shared.wokeForWork(wake.pane)
         guard let message = wake.message else { return }
         tell(wake.pane, "Message from \(wake.from ?? "another agent"): \(message)")
     }

@@ -146,6 +146,7 @@ final class ClaudeRuntime: ObservableObject {
         case .busy:
             hookTurns[id] = hookTurns[id] ?? now()
             typed.remove(id)
+            SleepSignals.shared.turnStarted(id)
         case .idle where !permission:
             // A Stop with subagents or shells still working says `agents`.
             PaneTasks.shared.clear(id)
@@ -160,6 +161,7 @@ final class ClaudeRuntime: ObservableObject {
         guard state == .idle, let path = ClaudeMessage.transcript(value) else { return }
         // The conversation to resume after the Mac restarts.
         LastSessionStore.shared.conversation(id, transcript: path)
+        if !permission { SleepSignals.shared.turnEnded(id, transcript: path) }
         if turnUnderWay { turnEnded(id, path) }
         if !permission, let start = hookTurns.removeValue(forKey: id) {
             requestEnded(id, path, start)

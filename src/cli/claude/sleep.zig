@@ -48,10 +48,9 @@ pub fn find(to: []const u8, sleepers: []const Sleeper, agents: []const zone.Agen
 
 /// The text of a PreToolUse hook's SendMessage (`tool_input.message`, else
 /// `content`); null when it isn't text.
-pub fn message(alloc: Allocator, input: []const u8) ?[]const u8 {
-    const parsed = std.json.parseFromSliceLeaky(std.json.Value, alloc, input, .{}) catch return null;
-    if (parsed != .object) return null;
-    const tool_input = parsed.object.get("tool_input") orelse return null;
+pub fn message(root: std.json.Value) ?[]const u8 {
+    if (root != .object) return null;
+    const tool_input = root.object.get("tool_input") orelse return null;
     if (tool_input != .object) return null;
     for ([_][]const u8{ "message", "content" }) |key| {
         const value = tool_input.object.get(key) orelse continue;
@@ -79,6 +78,8 @@ pub fn reason(alloc: Allocator, to: []const u8, passed: bool) Allocator.Error![]
 }
 
 const testing = std.testing;
+
+const parseInput = @import("protocol.zig").parseInput;
 
 test "claude sleep: the app's list" {
     var arena = std.heap.ArenaAllocator.init(testing.allocator);
@@ -125,19 +126,19 @@ test "claude sleep: the message's text and its sender" {
     var arena = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    try testing.expectEqualStrings("hello", message(a,
+    try testing.expectEqualStrings("hello", message(parseInput(a,
         \\{"session_id":"s","hook_event_name":"PreToolUse","tool_name":"SendMessage","tool_input":{"to":"x","message":"hello","content":"other"}}
-    ).?);
-    try testing.expectEqualStrings("hi", message(a,
+    )).?);
+    try testing.expectEqualStrings("hi", message(parseInput(a,
         \\{"tool_input":{"recipient":"x","content":"hi"}}
-    ).?);
-    try testing.expect(message(a,
+    )).?);
+    try testing.expect(message(parseInput(a,
         \\{"tool_input":{"to":"x","message":{"type":"shutdown_request"}}}
-    ) == null);
-    try testing.expect(message(a,
+    )) == null);
+    try testing.expect(message(parseInput(a,
         \\{"tool_input":{"to":"x","message":"  "}}
-    ) == null);
-    try testing.expect(message(a, "not json") == null);
+    )) == null);
+    try testing.expect(message(parseInput(a, "not json")) == null);
     const agents = [_]zone.Agent{ .{ .name = "me", .sessionId = "s" }, .{ .name = "you", .sessionId = "t" } };
     try testing.expectEqualStrings("me", sender(&agents, "s").?);
     try testing.expect(sender(&agents, "u") == null);
