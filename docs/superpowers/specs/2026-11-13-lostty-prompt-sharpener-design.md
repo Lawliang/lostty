@@ -1,6 +1,7 @@
 # Lostty prompt sharpener — design
 
-Date: 2026-11-13. Status: approved by the owner, not built.
+Date: 2026-11-13. Status: built on `prompt-rewriter` (2026-11-17). Where this
+doc and the code differ, §11 says what changed.
 Branch: `prompt-rewriter`. Visual version:
 https://claude.ai/artifact/N9P2KT6bwxZbdRH6T8xUXR
 
@@ -213,3 +214,20 @@ these would need.
 Exact prompts for the check and the rewrite (within §5–6), the word limit
 and time caps, the strip's look (dark palette, matching the pane's existing
 task strip), how the toggle is stored, and test fixtures drawn from §5–6.
+
+## 11. As built (2026-11-17)
+
+- The model calls live in the mod (`mods/lostty-sharpener/hooks/register.ts`)
+  through `$.model.complete` (Haiku check, Sonnet rewrite), not `claude -p`
+  children: no cold start, no recursion, the session's own login. The check
+  takes about a second.
+- The Zig side is only `lostty +sharpen-log`: it appends the entry the mod
+  sends on stdin, and tells the pane `{"v":1,"state":"sharpened","id":…}`
+  for a rewrite, or the same with no id (clear the strip) for any other
+  prompt the owner sent. The strip doesn't clear on `busy`, because the
+  order of the mod and the UserPromptSubmit hook isn't fixed.
+- Extra skips: slash commands (`e.command`), meta prompts, and any origin
+  but the composer or the phone.
+- Context: the last four messages, from `$.session.messages`.
+- The off switch is the Lostty menu's "Sharpen Prompts", and "Turn off" in
+  the open strip; both use the `off` file next to the log.
