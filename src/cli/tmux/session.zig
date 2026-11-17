@@ -22,6 +22,7 @@ pub const Env = struct {
     skins_surface: ?[]const u8 = null, // LOSTTY_SKINS_SURFACE (or older GHOSTTY_SKINS_SURFACE)
     app_pid: ?[]const u8 = null, // LOSTTY_APP_PID
     guard_socket: ?[]const u8 = null, // LOSTTY_GUARD_SOCKET
+    plugin_dirs: ?[]const u8 = null, // CLAUDE_CODE_PLUGIN_DIRS
     shell: ?[]const u8 = null, // SHELL
     resources_dir: ?[]const u8 = null, // GHOSTTY_RESOURCES_DIR
     shell_features: ?[]const u8 = null, // GHOSTTY_SHELL_FEATURES
@@ -36,6 +37,7 @@ pub const Env = struct {
             .skins_surface = get("LOSTTY_SKINS_SURFACE") orelse get("GHOSTTY_SKINS_SURFACE"),
             .app_pid = get("LOSTTY_APP_PID"),
             .guard_socket = get("LOSTTY_GUARD_SOCKET"),
+            .plugin_dirs = get("CLAUDE_CODE_PLUGIN_DIRS"),
             .shell = get("SHELL"),
             .resources_dir = get("GHOSTTY_RESOURCES_DIR"),
             .shell_features = get("GHOSTTY_SHELL_FEATURES"),
@@ -134,6 +136,8 @@ pub fn newSessionArgv(alloc: Allocator, s: NewSession) ![]const []const u8 {
     if (s.env.app_pid) |v| try appendEnv(alloc, &argv, "LOSTTY_APP_PID", v);
     // The guard asks the app that owns this pane (Debug or Release).
     if (s.env.guard_socket) |v| try appendEnv(alloc, &argv, "LOSTTY_GUARD_SOCKET", v);
+    // Claude Code loads Lostty's mods (the prompt sharpener) from these.
+    if (s.env.plugin_dirs) |v| try appendEnv(alloc, &argv, "CLAUDE_CODE_PLUGIN_DIRS", v);
     if (s.env.shell_features) |v| try appendEnv(alloc, &argv, "GHOSTTY_SHELL_FEATURES", v);
     const shell = s.env.shellPath();
     if (isZsh(shell)) {
@@ -295,6 +299,7 @@ test "lostty tmux session: newSessionArgv for zsh" {
             .skins_surface = test_surface,
             .app_pid = "4242",
             .guard_socket = "/Users/me/.config/lostty/coord/guard-com.lawliang.lostty.sock",
+            .plugin_dirs = "/R/lostty-mods/lostty-sharpener",
             .shell = "/bin/zsh",
             .shell_features = "cursor,title",
             .zdotdir = "/Users/me/.zsh",
@@ -321,6 +326,7 @@ test "lostty tmux session: newSessionArgv for zsh" {
     try t.expect(hasPair(argv, "-e", "LOSTTY_BIN=/Apps/Lostty.app/Contents/MacOS/lostty"));
     try t.expect(hasPair(argv, "-e", "LOSTTY_APP_PID=4242"));
     try t.expect(hasPair(argv, "-e", "LOSTTY_GUARD_SOCKET=/Users/me/.config/lostty/coord/guard-com.lawliang.lostty.sock"));
+    try t.expect(hasPair(argv, "-e", "CLAUDE_CODE_PLUGIN_DIRS=/R/lostty-mods/lostty-sharpener"));
     try t.expect(hasPair(argv, "-e", "GHOSTTY_RESOURCES_DIR=/R"));
     try t.expect(hasPair(argv, "-e", "GHOSTTY_SHELL_FEATURES=cursor,title"));
     try t.expect(hasPair(argv, "-e", "ZDOTDIR=/R/shell-integration/lostty-tmux/zsh"));

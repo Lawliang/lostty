@@ -22,7 +22,7 @@ pub const Options = struct {
 /// and the time, and appends it as one line to
 /// `~/Library/Application Support/Lostty/sharpener/log.jsonl`. A
 /// `rewritten` entry also tells the pane, so it can show yours next to the
-/// rewrite. It prints the entry's id and never fails the prompt: on any
+/// rewrite; any other prompt clears that. It prints the entry's id and never fails the prompt: on any
 /// problem it exits 0 having done nothing.
 pub fn run(gpa: Allocator) !u8 {
     var arena_state = std.heap.ArenaAllocator.init(gpa);
@@ -44,8 +44,12 @@ pub fn run(gpa: Allocator) !u8 {
     std.fs.File.stdout().writeAll(&id) catch {};
 
     if (std.posix.getenv(protocol.surface_env) == null) return 0;
-    if (!(isRewrite(alloc, input) catch false)) return 0;
-    const seq = signal(alloc, &id, std.posix.getenv("TMUX") != null) catch return 0;
+    const shown: ?[]const u8 = switch (paneSignal(alloc, input)) {
+        .none => return 0,
+        .show => &id,
+        .clear => null,
+    };
+    const seq = signal(alloc, shown, std.posix.getenv("TMUX") != null) catch return 0;
     const tty = claude_state.openTerminal(alloc) orelse return 0;
     defer tty.close();
     claude_state.writeWhole(tty, seq) catch {};
@@ -88,19 +92,33 @@ pub fn append(dir: []const u8, line: []const u8) !void {
     try f.writeAll(line);
 }
 
-/// Whether the entry is a rewrite, the one verdict the pane shows.
-pub fn isRewrite(alloc: Allocator, input: []const u8) !bool {
-    const parsed = std.json.parseFromSlice(std.json.Value, alloc, input, .{}) catch return false;
+pub const PaneSignal = enum { none, show, clear };
+
+/// What an entry tells its pane's strip: a rewrite shows; any other prompt
+/// the owner sent clears the last one; a notification or a peer's message
+/// (rule `origin`) leaves it.
+pub fn paneSignal(alloc: Allocator, input: []const u8) PaneSignal {
+    const parsed = std.json.parseFromSlice(std.json.Value, alloc, input, .{}) catch return .none;
     defer parsed.deinit();
-    if (parsed.value != .object) return false;
-    const verdict = parsed.value.object.get("verdict") orelse return false;
-    return verdict == .string and std.mem.eql(u8, verdict.string, "rewritten");
+    if (parsed.value != .object) return .none;
+    const o = parsed.value.object;
+    const verdict = o.get("verdict") orelse return .none;
+    if (verdict != .string) return .none;
+    if (std.mem.eql(u8, verdict.string, "rewritten")) return .show;
+    if (o.get("rule")) |rule| {
+        if (rule == .string and std.mem.eql(u8, rule.string, "origin")) return .none;
+    }
+    return .clear;
 }
 
-/// The pane's `sharpened` message. It carries only the id: the app reads
-/// the entry from the log, as a prompt can outgrow what the message holds.
-pub fn signal(alloc: Allocator, id: []const u8, tmux: bool) ![]u8 {
-    const json = try std.json.Stringify.valueAlloc(alloc, .{ .v = 1, .state = "sharpened", .id = id }, .{});
+/// The pane's `sharpened` message: with an id, the rewrite to show (the app
+/// reads it from the log, as a prompt can outgrow what the message holds);
+/// with none, clear the strip.
+pub fn signal(alloc: Allocator, id: ?[]const u8, tmux: bool) ![]u8 {
+    const json = if (id) |v|
+        try std.json.Stringify.valueAlloc(alloc, .{ .v = 1, .state = "sharpened", .id = v }, .{})
+    else
+        try std.json.Stringify.valueAlloc(alloc, .{ .v = 1, .state = "sharpened" }, .{});
     defer alloc.free(json);
     return protocol.encodeUserVar(alloc, protocol.user_var_name, json, tmux);
 }
@@ -152,17 +170,33 @@ test "sharpen log: a rewrite signals the pane with only the entry's id" {
     const a = std.testing.allocator;
     const seq = try signal(a, "a1b2", false);
     defer a.free(seq);
+    try std.testing.expectEqualStrings("{\"v\":1,\"state\":\"sharpened\",\"id\":\"a1b2\"}", try decodeSeq(&seq_buf, seq));
+}
+
+test "sharpen log: a prompt that wasn't rewritten clears the pane's strip" {
+    const a = std.testing.allocator;
+    const seq = try signal(a, null, false);
+    defer a.free(seq);
+    try std.testing.expectEqualStrings("{\"v\":1,\"state\":\"sharpened\"}", try decodeSeq(&seq_buf, seq));
+}
+
+test "sharpen log: what each entry tells the pane" {
+    const a = std.testing.allocator;
+    try std.testing.expectEqual(PaneSignal.show, paneSignal(a, "{\"verdict\":\"rewritten\"}"));
+    try std.testing.expectEqual(PaneSignal.clear, paneSignal(a, "{\"verdict\":\"clean\"}"));
+    try std.testing.expectEqual(PaneSignal.clear, paneSignal(a, "{\"verdict\":\"skipped\",\"rule\":\"short\"}"));
+    // A notification or a peer's message is not the owner's prompt.
+    try std.testing.expectEqual(PaneSignal.none, paneSignal(a, "{\"verdict\":\"skipped\",\"rule\":\"origin\"}"));
+    try std.testing.expectEqual(PaneSignal.none, paneSignal(a, "nope"));
+}
+
+var seq_buf: [256]u8 = undefined;
+
+fn decodeSeq(buf: []u8, seq: []const u8) ![]const u8 {
     const prefix = "\x1b]1337;SetUserVar=LOSTTY_CLAUDE=";
     try std.testing.expect(std.mem.startsWith(u8, seq, prefix));
     const b64 = seq[prefix.len .. seq.len - 1];
-    var buf: [128]u8 = undefined;
     const n = try std.base64.standard.Decoder.calcSizeForSlice(b64);
     try std.base64.standard.Decoder.decode(buf[0..n], b64);
-    try std.testing.expectEqualStrings("{\"v\":1,\"state\":\"sharpened\",\"id\":\"a1b2\"}", buf[0..n]);
-}
-
-test "sharpen log: only a rewrite signals" {
-    const a = std.testing.allocator;
-    try std.testing.expect(try isRewrite(a, "{\"verdict\":\"rewritten\"}"));
-    try std.testing.expect(!try isRewrite(a, "{\"verdict\":\"clean\"}"));
+    return buf[0..n];
 }
