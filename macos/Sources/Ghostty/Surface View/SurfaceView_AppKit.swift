@@ -438,6 +438,13 @@ extension Ghostty {
             if let bin = Bundle.main.executableURL?.path {
                 surface_cfg.environmentVariables[ClaudeConstants.binEnvKey] = bin
             }
+            // Prompt sharpener: Claude Code in this pane loads Lostty's mod.
+            if let mod = Sharpener.modPath {
+                surface_cfg.environmentVariables[Sharpener.pluginDirsKey] = Sharpener.pluginDirs(
+                    existing: surface_cfg.environmentVariables[Sharpener.pluginDirsKey]
+                        ?? ProcessInfo.processInfo.environment[Sharpener.pluginDirsKey],
+                    mod: mod)
+            }
             // Lostty Guard: `+guard` asks this app's socket, not another build's.
             if AgentCoordination.isOn {
                 surface_cfg.environmentVariables[GuardServer.envKey] = GuardServer.appPath.path

@@ -105,6 +105,14 @@ final class ClaudeRuntime: ObservableObject {
             PaneTasks.shared.apply(event, to: id)
             return
         }
+        if let entry = ClaudeMessage.sharpened(value) {
+            PaneSharpens.shared.load(entry, on: id)
+            return
+        }
+        if ClaudeMessage.sharpenCleared(value) {
+            PaneSharpens.shared.clear(id)
+            return
+        }
         if ClaudeMessage.isStart(value) {
             PaneSleep.shared.started(id)
             return
@@ -112,6 +120,7 @@ final class ClaudeRuntime: ObservableObject {
         if ClaudeMessage.isFresh(value) || ClaudeMessage.isCleared(value) {
             CanvasController.shared?.conversationEnded(id)
             PaneTasks.shared.clear(id)
+            PaneSharpens.shared.clear(id)
             return
         }
         if let target = ClaudeMessage.denied(value) { messageKeptInside(id, target) }
@@ -148,6 +157,7 @@ final class ClaudeRuntime: ObservableObject {
         if state == .exit {
             exited(id)
             PaneTasks.shared.clear(id)
+            PaneSharpens.shared.clear(id)
         }
         guard state == .idle, let path = ClaudeMessage.transcript(value) else { return }
         // The conversation to resume after the Mac restarts.

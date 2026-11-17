@@ -95,6 +95,23 @@ enum ClaudeMessage {
         object(value)?["state"] as? String == "fresh"
     }
 
+    /// The log entry a `{"v":1,"state":"sharpened","id":"…"}` names: the
+    /// prompt sharpener rewrote this pane's prompt (`+sharpen-log`). Only
+    /// a short hex id, as it becomes part of a lookup.
+    static func sharpened(_ value: String) -> String? {
+        guard let object = object(value), object["state"] as? String == "sharpened",
+              let id = object["id"] as? String, !id.isEmpty, id.count <= 32,
+              id.allSatisfy(\.isHexDigit) else { return nil }
+        return id
+    }
+
+    /// `{"v":1,"state":"sharpened"}` with no id: the pane's latest prompt
+    /// went out as typed, so its strip clears.
+    static func sharpenCleared(_ value: String) -> Bool {
+        guard let object = object(value) else { return false }
+        return object["state"] as? String == "sharpened" && object["id"] == nil
+    }
+
     /// `{"v":1,"state":"start"}`: a Claude session started in the pane
     /// (any SessionStart but /clear's). Not a ClaudeState: it changes no phase.
     static func isStart(_ value: String) -> Bool {
