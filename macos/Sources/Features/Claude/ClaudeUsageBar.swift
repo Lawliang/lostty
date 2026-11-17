@@ -23,6 +23,7 @@ struct ClaudeUsageBar: View {
     @ObservedObject private var usage = ClaudeUsageRuntime.shared
     @ObservedObject private var skins = SkinsRuntime.shared.manager
     @ObservedObject private var style = WindowStylePreferences.shared
+    @ObservedObject private var sharpens = PaneSharpens.shared
     @State private var width: CGFloat = 0
     /// This bar's pane only: observing the monitor would redraw every
     /// card's bar whenever any pane's numbers moved.
@@ -50,6 +51,8 @@ struct ClaudeUsageBar: View {
                 if !model.showsApps { meters(fit.style).transition(.opacity) }
                 Spacer(minLength: 0)
                 if hasSession, !model.showsApps, fit.showsModel {
+                    sharpenSwitch
+                        .transition(.opacity)
                     modelLabel
                         .padding(.trailing, ClaudeUsageFit.gap)
                         .transition(.opacity)
@@ -90,7 +93,8 @@ struct ClaudeUsageBar: View {
     /// The meters' style at the bar's width, and whether the model fits.
     private var fit: (style: ClaudeUsageFit.Style, showsModel: Bool) {
         ClaudeUsageFit.fit(
-            width: width, model: modelName.isEmpty ? nil : ClaudeUsageFont.width("✳ " + modelName),
+            width: width,
+            model: modelName.isEmpty ? nil : ClaudeUsageFont.width("✳ " + modelName) + Self.sharpenSwitchWidth,
             meters: ClaudeUsageFit.styles.map(metersWidth))
     }
 
@@ -134,6 +138,33 @@ struct ClaudeUsageBar: View {
         .buttonStyle(.plain)
         .accessibilityLabel(model.showsApps ? "Hide apps" : "Show apps")
         .help("Apps")
+    }
+
+    static let sharpenSwitchWidth: CGFloat = 28
+
+    /// This pane's prompt sharpener (`PaneSharpens`), off in a new
+    /// terminal; lit while on.
+    private var sharpenSwitch: some View {
+        let isOn = pane.map(sharpens.isOn) ?? false
+        return Button {
+            guard let pane else { return }
+            sharpens.setOn(!isOn, for: pane)
+        } label: {
+            Image(systemName: "wand.and.sparkles")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(isOn ? accent : ink.opacity(0.4))
+                .frame(width: 24, height: 20)
+                .background(
+                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        .fill(ink.opacity(isOn ? 0.12 : 0)))
+                .frame(width: Self.sharpenSwitchWidth, height: Self.height)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(isOn ? "Stop sharpening prompts" : "Sharpen prompts")
+        .help(isOn
+            ? "Sharpening this terminal's prompts. Click to send them as typed."
+            : "Sharpen this terminal's prompts: a sloppy one is rewritten before Claude reads it.")
     }
 
     /// Picks the pane's model (`ClaudeModelSwitch`); a beep when Claude

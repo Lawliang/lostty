@@ -229,5 +229,10 @@ task strip), how the toggle is stored, and test fixtures drawn from §5–6.
 - Extra skips: slash commands (`e.command`), meta prompts, and any origin
   but the composer or the phone.
 - Context: the last four messages, from `$.session.messages`.
-- The off switch is the Lostty menu's "Sharpen Prompts", and "Turn off" in
-  the open strip; both use the `off` file next to the log.
+- The owner's change (2026-11-17): the switch is per terminal, on the
+  bottom bar left of the model name, and off in every new terminal. The app
+  keeps an empty file per pane that has it on (`sharpener/on/<pane>`), which
+  the mod checks on every prompt. "Turn off" in the open strip turns off
+  that terminal. There is no app-wide toggle. Worker terminals start off
+  like any new one; `claude -p`, scheduled prompts, notifications and peer
+  agents are skipped by origin even with the switch on.

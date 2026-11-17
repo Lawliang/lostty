@@ -1,6 +1,6 @@
 import type { Register } from 'claude-code'
 
-// Lostty's prompt sharpener. In a Lostty pane, each prompt you type is
+// Lostty's prompt sharpener. In a Lostty pane with its switch on, each prompt you type is
 // checked by a quick model; a sloppy one is rewritten in plain words before
 // Claude reads it. Every prompt is logged through `lostty +sharpen-log`,
 // which also tells the pane to show yours next to the rewrite. Any failure
@@ -139,8 +139,10 @@ export const register: Register = on => {
       await $.process.run([bin, '+sharpen-log'], { stdin: JSON.stringify(record), timeoutMs: 3000 }).catch(() => undefined)
     }
 
+    // Each terminal has its own switch on Lostty's bottom bar, off until
+    // turned on: the app keeps a file per pane that has it on.
     const home = await $.env.get('HOME')
-    const off = home ? await $.fs.exists(`${home}/Library/Application Support/Lostty/sharpener/off`) : false
+    const off = !(home && (await $.fs.exists(`${home}/Library/Application Support/Lostty/sharpener/on/${pane}`)))
     const skip = off ? { rule: 'off', send: original } : skipRule(original, e.origin.kind, e.command !== undefined, e.isMeta === true)
     if (skip) {
       await log({ verdict: 'skipped', original, sent: skip.send, rule: skip.rule })

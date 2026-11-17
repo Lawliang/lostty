@@ -4,7 +4,8 @@ import AppKit
 /// Lostty's prompt sharpener: a Claude Code mod each pane loads, which
 /// rewrites a sloppy prompt before Claude reads it and logs every prompt
 /// through `+sharpen-log`. The app loads the mod, shows the latest rewrite
-/// under the pane (SharpenStrip), and keeps the off switch.
+/// under the pane (SharpenStrip), and keeps each pane's switch, off until
+/// turned on from the bottom bar.
 /// Design: docs/superpowers/specs/2026-11-13-lostty-prompt-sharpener-design.md
 enum Sharpener {
     static let pluginDirsKey = "CLAUDE_CODE_PLUGIN_DIRS"
@@ -40,23 +41,11 @@ enum Sharpener {
         return (dirs.contains(mod) ? dirs : dirs + [mod]).joined(separator: ":")
     }
 
-    /// Where `+sharpen-log` keeps the log, and the mod looks for `off`.
+    /// Where `+sharpen-log` keeps the log, and the mod looks for each
+    /// pane's switch (`on/<pane>`).
     static var folder: URL {
         FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Application Support/Lostty/sharpener")
-    }
-
-    static var isOn: Bool {
-        get { !FileManager.default.fileExists(atPath: folder.appendingPathComponent("off").path) }
-        set {
-            let off = folder.appendingPathComponent("off")
-            if newValue {
-                try? FileManager.default.removeItem(at: off)
-            } else {
-                try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-                FileManager.default.createFile(atPath: off.path, contents: nil)
-            }
-        }
     }
 
     /// One rewrite from the log: what was typed, what Claude got, and the
@@ -101,13 +90,38 @@ enum Sharpener {
     }
 }
 
-/// Each pane's latest rewrite, until its next prompt goes out as typed or
-/// its conversation ends.
+/// Each pane's switch, and its latest rewrite until its next prompt goes
+/// out as typed or its conversation ends.
 @MainActor
 final class PaneSharpens: ObservableObject {
-    static let shared = PaneSharpens()
+    static let shared = PaneSharpens(folder: Sharpener.folder)
 
     @Published private(set) var entries: [UUID: Sharpener.Entry] = [:]
+    /// Panes with the switch on. The mod reads one empty file per pane in
+    /// `on/`, so a switch holds across Restart to Update.
+    @Published private(set) var on: Set<UUID>
+    private let onFolder: URL
+
+    init(folder: URL) {
+        onFolder = folder.appendingPathComponent("on")
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: onFolder.path)) ?? []
+        on = Set(names.compactMap(UUID.init(uuidString:)))
+    }
+
+    func isOn(_ pane: UUID) -> Bool { on.contains(pane) }
+
+    func setOn(_ isOn: Bool, for pane: UUID) {
+        let file = onFolder.appendingPathComponent(pane.uuidString)
+        if isOn {
+            try? FileManager.default.createDirectory(at: onFolder, withIntermediateDirectories: true)
+            FileManager.default.createFile(atPath: file.path, contents: nil)
+            on.insert(pane)
+        } else {
+            try? FileManager.default.removeItem(at: file)
+            on.remove(pane)
+            clear(pane)
+        }
+    }
 
     func show(_ entry: Sharpener.Entry, on pane: UUID) {
         entries[pane] = entry
