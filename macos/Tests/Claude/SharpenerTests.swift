@@ -57,6 +57,25 @@ struct SharpenerTests {
         #expect(!FileManager.default.fileExists(atPath: target.appendingPathComponent("hooks/gone.ts").path))
     }
 
+    @MainActor @Test func eachTerminalHasItsOwnSwitchOffByDefault() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let one = UUID(), two = UUID()
+        let sharpens = PaneSharpens(folder: folder)
+        #expect(!sharpens.isOn(one))
+
+        sharpens.setOn(true, for: one)
+        #expect(sharpens.isOn(one))
+        #expect(!sharpens.isOn(two))
+        #expect(FileManager.default.fileExists(atPath: folder.appendingPathComponent("on/\(one.uuidString)").path))
+        // A new launch reads the switches back.
+        #expect(PaneSharpens(folder: folder).isOn(one))
+
+        sharpens.setOn(false, for: one)
+        #expect(!sharpens.isOn(one))
+        #expect(!FileManager.default.fileExists(atPath: folder.appendingPathComponent("on/\(one.uuidString)").path))
+    }
+
     @Test func aSharpenedMessageWithNoIDClearsTheStrip() {
         #expect(ClaudeMessage.sharpenCleared(#"{"v":1,"state":"sharpened"}"#))
         #expect(!ClaudeMessage.sharpenCleared(#"{"v":1,"state":"sharpened","id":"a1"}"#))
@@ -64,7 +83,7 @@ struct SharpenerTests {
     }
 
     @MainActor @Test func theStripShowsTheLatestRewriteUntilCleared() {
-        let sharpens = PaneSharpens()
+        let sharpens = PaneSharpens(folder: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString))
         let pane = UUID()
         let entry = Sharpener.Entry(id: "bb", original: "a", sent: "b", fixed: nil)
         sharpens.show(entry, on: pane)

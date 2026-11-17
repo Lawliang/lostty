@@ -55,14 +55,11 @@ struct SharpenStrip: View {
             .help(open ? "Hide the prompts" : "Show what you typed beside what Claude got")
             Spacer(minLength: 0)
             if open {
-                Button("Turn off") {
-                    Sharpener.isOn = false
-                    sharpens.clear(pane)
-                }
-                .buttonStyle(.plain)
-                .font(.system(size: 10))
-                .foregroundStyle(ink.opacity(0.55))
-                .help("Send prompts as typed. Turn it back on in the Lostty menu.")
+                Button("Turn off") { sharpens.setOn(false, for: pane) }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 10))
+                    .foregroundStyle(ink.opacity(0.55))
+                    .help("Send this terminal's prompts as typed. Turn it back on from the bottom bar.")
             }
             Button { sharpens.clear(pane) } label: {
                 Image(systemName: "xmark").font(.system(size: 9, weight: .semibold))
