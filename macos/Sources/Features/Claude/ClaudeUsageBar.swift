@@ -22,9 +22,11 @@ struct ClaudeUsageBar: View {
     @ObservedObject var model: ExtensionSidebarModel
     @ObservedObject private var usage = ClaudeUsageRuntime.shared
     @ObservedObject private var skins = SkinsRuntime.shared.manager
-    @ObservedObject private var monitor = PaneResourceMonitor.shared
     @ObservedObject private var style = WindowStylePreferences.shared
     @State private var width: CGFloat = 0
+    /// This bar's pane only: observing the monitor would redraw every
+    /// card's bar whenever any pane's numbers moved.
+    @State private var resources: PaneResources?
 
     private var pane: UUID? { model.focusedSurfaceID }
     private var chrome: NSColor { model.chromeColor ?? .windowBackgroundColor }
@@ -33,7 +35,6 @@ struct ClaudeUsageBar: View {
         pane.flatMap { skins.effectiveSkin($0) }.map { Color(rgb: $0.accent) } ?? ink.opacity(0.8)
     }
     private var hasSession: Bool { pane.map { usage.sessions.contains($0) } ?? false }
-    private var resources: PaneResources? { pane.flatMap { monitor.resources[$0] } }
 
     var body: some View {
         let fit = self.fit
@@ -61,10 +62,14 @@ struct ClaudeUsageBar: View {
         .animation(.easeOut(duration: 0.15), value: model.showsApps)
         // Sampled while the bar shows this pane.
         .task(id: pane) {
+            resources = nil
             guard let pane else { return }
+            let monitor = PaneResourceMonitor.shared
             monitor.watch(pane)
-            while !Task.isCancelled { try? await Task.sleep(nanoseconds: 3_600_000_000_000) }
-            monitor.unwatch(pane)
+            defer { monitor.unwatch(pane) }
+            for await reading in monitor.$resources.map({ $0[pane] }).removeDuplicates().values {
+                resources = reading
+            }
         }
         .font(ClaudeUsageFont.font(size: 12))
         .lineLimit(1)
@@ -135,7 +140,7 @@ struct ClaudeUsageBar: View {
     /// is busy or something is typed in its box.
     private var modelLabel: some View {
         Menu {
-            ForEach(ClaudeModelSwitch.models(), id: \.id) { choice in
+            ForEach(ClaudeModelSwitch.menuModels(), id: \.id) { choice in
                 Button {
                     guard let pane, ClaudeModelSwitch.switchTo(choice, in: pane) else { return NSSound.beep() }
                 } label: {

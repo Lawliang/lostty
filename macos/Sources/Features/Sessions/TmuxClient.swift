@@ -101,7 +101,12 @@ struct TmuxClient {
     /// Every session with the phone's columns (label, Claude state, title,
     /// folder, last use), for the menu bar and the sync.
     func remoteSessions() -> [RemoteSession] {
-        run(["list-sessions", "-F", TmuxRemote.listFormat]).map(TmuxRemote.parse) ?? []
+        readRemoteSessions() ?? []
+    }
+
+    /// `remoteSessions`, or nil when tmux didn't answer.
+    func readRemoteSessions() -> [RemoteSession]? {
+        run(["list-sessions", "-F", TmuxRemote.listFormat]).map(TmuxRemote.parse)
     }
 
     /// `remoteSessions` plus each one's repo and branch, as the phone lists
@@ -199,6 +204,16 @@ struct TmuxClient {
         let set = clean.map { ["set-option", "-t", sessionID, TmuxRemote.labelOption, $0] }
             ?? ["set-option", "-u", "-t", sessionID, TmuxRemote.labelOption]
         return set + [";"] + TmuxHooks.signalCommand
+    }
+
+    /// Marks the session showing pane `surface` kept awake, or not, then
+    /// wakes watchers so the canvas lists it again.
+    func setKeepAwake(_ on: Bool, surface: UUID, ownedBy pid: Int32) {
+        for session in TmuxOwnership.showing(surface, ownedBy: pid, in: sessions()) {
+            let option = TmuxConstants.keepAwakeOption
+            let set = on ? ["set-option", "-t", session.id, option, "1"] : ["set-option", "-u", "-t", session.id, option]
+            run(set + [";"] + TmuxHooks.signalCommand)
+        }
     }
 
     func isBusy(surface: UUID, ownedBy pid: Int32) -> Bool? {

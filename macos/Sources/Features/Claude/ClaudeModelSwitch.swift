@@ -8,6 +8,21 @@ enum ClaudeModelSwitch {
     static let catalogFolder = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent(".claude/cache/model-catalog")
 
+    /// How long the bar's menu keeps a reading of the catalog. SwiftUI
+    /// builds the menu each time a bar draws, which is every few seconds
+    /// on every card.
+    static let keep: TimeInterval = 60
+    @MainActor private static var kept: (models: [AgentModel], at: Date)?
+
+    /// `models(in:)` of Claude's own catalog, read at most once a minute.
+    @MainActor
+    static func menuModels(now: Date = Date()) -> [AgentModel] {
+        if let kept, now.timeIntervalSince(kept.at) < keep { return kept.models }
+        let models = models()
+        kept = (models, now)
+        return models
+    }
+
     /// The models in the newest `…-cc.json` catalog, in its order; Claude's
     /// aliases for each family's latest when there's none.
     static func models(in folder: URL = catalogFolder) -> [AgentModel] {

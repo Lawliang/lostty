@@ -85,6 +85,10 @@ final class CardHeaderView: NSView {
     override func menu(for event: NSEvent) -> NSMenu? {
         let menu = NSMenu()
         menu.addItem(withTitle: "Move to Window", action: #selector(moveToWindow), keyEquivalent: "").target = self
+        let awake = menu.addItem(withTitle: "Keep Awake", action: #selector(toggleKeepAwake), keyEquivalent: "")
+        awake.target = self
+        awake.state = keptAwake ? .on : .off
+        awake.toolTip = "Lostty won't put this card's Claude to sleep when it's idle."
         menu.addItem(.separator())
         menu.addItem(withTitle: "Close Card", action: #selector(closeCard), keyEquivalent: "").target = self
         return menu
@@ -92,6 +96,15 @@ final class CardHeaderView: NSView {
 
     @objc private func closeCard() {
         card.closeCard()
+    }
+
+    private var keptAwake: Bool {
+        guard let canvas else { return false }
+        return card.surfaceTree.contains { canvas.isKeptAwake($0.id) }
+    }
+
+    @objc private func toggleKeepAwake() {
+        canvas?.setKeepAwake(!keptAwake, for: card)
     }
 
     @objc private func moveToWindow() {

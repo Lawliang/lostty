@@ -37,7 +37,8 @@ struct SleepCandidateTests {
     }
 
     @Test(arguments: [
-        \SleepCandidate.working, \.asking, \.tasks, \.guardWaiting, \.focused, \.onPhone, \.deliveryWaiting,
+        \SleepCandidate.working, \.asking, \.tasks, \.keptAwake, \.guardWaiting, \.focused, \.onPhone,
+        \.deliveryWaiting,
     ])
     func anythingUnderWayOrWaitingKeepsItAwake(_ blocker: WritableKeyPath<SleepCandidate, Bool>) {
         var candidate = idle(minutes: 60)
@@ -291,6 +292,20 @@ struct ClaudeRuntimeIdleTests {
         runtime.apply(.busy, to: pane)
         runtime.foundIdle(pane)
         #expect(runtime.idleSince(pane) == nil)
+    }
+
+    @Test func aStopWithScheduledWorkHoldsItUntilAStopWithout() {
+        let runtime = makeRuntime()
+        let stop = { (pending: Bool) in #"{"v":1,"state":"idle","pending":\#(pending)}"# }
+        runtime.userVarChanged(pane, name: "LOSTTY_CLAUDE", value: stop(true))
+        #expect(runtime.pendingWork.contains(pane))
+        runtime.userVarChanged(pane, name: "LOSTTY_CLAUDE", value: #"{"v":1,"state":"idle","permission":true}"#)
+        #expect(runtime.pendingWork.contains(pane))
+        runtime.userVarChanged(pane, name: "LOSTTY_CLAUDE", value: stop(false))
+        #expect(!runtime.pendingWork.contains(pane))
+        runtime.userVarChanged(pane, name: "LOSTTY_CLAUDE", value: stop(true))
+        runtime.userVarChanged(pane, name: "LOSTTY_CLAUDE", value: #"{"v":1,"state":"exit"}"#)
+        #expect(!runtime.pendingWork.contains(pane))
     }
 }
 #endif

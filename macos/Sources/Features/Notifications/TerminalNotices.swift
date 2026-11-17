@@ -36,14 +36,19 @@ final class TerminalNotices: ObservableObject {
     @Published private(set) var collapsed: Set<UUID> = []
 
     private let schedule: Scheduler
+    private let hidden: @MainActor () -> Bool
     private var hovering: Set<UUID> = []
     private var generation: [UUID: Int] = [:]
     private var awaiting: Set<UUID> = []
     private var watch: AnyCancellable?
 
-    init(schedule: @escaping Scheduler = { delay, work in
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { MainActor.assumeIsolated { work() } }
-    }) {
+    init(
+        hidden: @escaping @MainActor () -> Bool = { !NotificationPreferences.shared.showsTerminalBubbles },
+        schedule: @escaping Scheduler = { delay, work in
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { MainActor.assumeIsolated { work() } }
+        }
+    ) {
+        self.hidden = hidden
         self.schedule = schedule
     }
 
@@ -56,7 +61,7 @@ final class TerminalNotices: ObservableObject {
     /// awaits a response, its notice, once its conversation names the
     /// request and the reply.
     func requestEnded(pane: UUID, path: String, since: Date) {
-        guard awaiting.contains(pane), let surface = (NSApp.delegate as? AppDelegate)?.findSurface(forUUID: pane) else { return }
+        guard awaiting.contains(pane), !hidden(), let surface = (NSApp.delegate as? AppDelegate)?.findSurface(forUUID: pane) else { return }
         let header = CanvasController.shared?.headerTitle(ofPane: pane)
         let title = Self.title(header?.topic ?? surface.title)
         let pwd = SkinsRuntime.shared.manager.panes[pane]?.pwd
@@ -75,7 +80,7 @@ final class TerminalNotices: ObservableObject {
 
     /// The pane's notice replaces any it had, while it still awaits.
     func post(_ notice: TerminalNotice) {
-        guard awaiting.contains(notice.pane) else { return }
+        guard awaiting.contains(notice.pane), !hidden() else { return }
         for old in items where old.pane == notice.pane { forget(old.id) }
         items.removeAll { $0.pane == notice.pane }
         items.insert(notice, at: 0)
@@ -86,6 +91,10 @@ final class TerminalNotices: ObservableObject {
         awaiting = panes
         for item in items where !panes.contains(item.pane) { forget(item.id) }
         items.removeAll { !panes.contains($0.pane) }
+    }
+
+    func clear() {
+        for item in items { dismiss(item.id) }
     }
 
     /// Until its pane's agent finishes another request.

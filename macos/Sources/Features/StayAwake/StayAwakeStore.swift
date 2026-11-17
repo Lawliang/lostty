@@ -199,6 +199,7 @@ final class StayAwakeStore: ObservableObject {
     }
 
     static func postMacNotification(_ text: String) {
+        guard !NotificationPreferences.isMuted else { return }
         let content = UNMutableNotificationContent()
         content.title = "Lostty"
         content.body = text

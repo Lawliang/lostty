@@ -10,6 +10,9 @@ enum TmuxConstants {
     static let surfaceOption = "@lostty_surface"
     static let ownerOption = "@lostty_owner"
     static let shellOption = "@lostty_shell"
+    /// "1" on a session whose Claude never sleeps (PaneSleep), set from the
+    /// card's menu or `open-lostty.sh --keep-awake`.
+    static let keepAwakeOption = "@lostty_keep_awake"
     /// Set on every pane so the launcher can tag its session with this
     /// Lostty's pid.
     static let appPIDEnvKey = "LOSTTY_APP_PID"
@@ -27,15 +30,19 @@ struct TmuxSession: Equatable, Sendable {
     /// Pid of the Lostty that shows it; nil when no Lostty does (made on the
     /// phone, or let go after a crash).
     var owner: Int32?
+    /// Its Claude is kept awake (`TmuxConstants.keepAwakeOption`).
+    var keepAwake = false
 
-    static let listFormat = "#{session_id}\t#{session_name}\t#{@lostty_surface}\t#{@lostty_owner}"
+    static let listFormat = "#{session_id}\t#{session_name}\t#{@lostty_surface}\t#{@lostty_owner}\t#{@lostty_keep_awake}"
 
     /// Parses `list-sessions -F listFormat`; malformed lines are skipped.
     static func parseList(_ output: String) -> [TmuxSession] {
         output.split(whereSeparator: \.isNewline).compactMap { line in
             let f = line.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
-            guard f.count == 4, f[0].hasPrefix("$"), !f[1].isEmpty else { return nil }
-            return TmuxSession(id: f[0], name: f[1], surface: f[2].isEmpty ? nil : f[2], owner: Int32(f[3]))
+            guard f.count == 4 || f.count == 5, f[0].hasPrefix("$"), !f[1].isEmpty else { return nil }
+            return TmuxSession(
+                id: f[0], name: f[1], surface: f[2].isEmpty ? nil : f[2], owner: Int32(f[3]),
+                keepAwake: f.count == 5 && f[4] == "1")
         }
     }
 }

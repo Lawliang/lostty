@@ -1,0 +1,22 @@
+pid 29813  load 42.95 50.91 74.54
+terminals 19  threads 96
+footprint 1287 MB
+   688 MB        0 B       128 MB        166    IOSurface
+   207 MB        0 B          0 B        310    Malloc Small
+   111 MB        0 B      4800 KB        853    IOAccelerator (graphics)
+    49 MB        0 B       336 KB        300    CoreAnimation
+cpu 15.7%  idle wakeups 15460/s
+samples in 5 s (1 ms each), by Lostty caller:
+  process starts total 42
+     16 __posix_spawn  closure #1 in static TmuxOptionSync.sync(option:desired:current:)
+     10 __posix_spawn  TmuxClient.remoteSessions()
+     10 __proc_info    specialized static PaneResourceSampler.tree(_:)
+      7 __posix_spawn  TmuxClient.readSessionListing()
+      4 __posix_spawn  TmuxClient.sessionListing()
+      3 __open         closure #1 in static TmuxOptionSync.sync(option:desired:current:)
+      2 __open         closure #1 in ClaudeUsageBar.modelLabel.getter
+      2 __posix_spawn  specialized SessionWatcher.loop()
+      1 __posix_spawn  specialized static AttachedPhones.currentClients()
+      1 __open         closure #1 in closure #1 in RecapTitles.check(_:)
+      1 __posix_spawn  TmuxClient.sessions()
+      1 __posix_spawn  specialized static NewTerminalRequests.claim(_:)

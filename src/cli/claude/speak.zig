@@ -81,26 +81,20 @@ pub fn output(alloc: Allocator, event: []const u8, text: []const u8) Allocator.E
 
 /// Whether a tool hook's input comes from one of Claude's subagents (it
 /// names a non-empty `agent_id`): the directive is for Claude itself.
-pub fn isSubagent(alloc: Allocator, input: []const u8) bool {
-    const parsed = std.json.parseFromSlice(std.json.Value, alloc, input, .{}) catch return false;
-    defer parsed.deinit();
-    if (parsed.value != .object) return false;
-    const id = parsed.value.object.get("agent_id") orelse return false;
+pub fn isSubagent(root: std.json.Value) bool {
+    if (root != .object) return false;
+    const id = root.object.get("agent_id") orelse return false;
     return id == .string and id.string.len > 0;
 }
 
 /// A SessionStart hook's `source` ("startup", "resume", "clear",
 /// "compact" or "fork"); null for other events.
-pub fn sessionSource(alloc: Allocator, input: []const u8) ?[]const u8 {
-    const parsed = std.json.parseFromSlice(std.json.Value, alloc, input, .{}) catch return null;
-    defer parsed.deinit();
-    const root = parsed.value;
+pub fn sessionSource(root: std.json.Value) ?[]const u8 {
     if (root != .object) return null;
     const event = root.object.get("hook_event_name") orelse return null;
     if (event != .string or !std.mem.eql(u8, event.string, "SessionStart")) return null;
     const source = root.object.get("source") orelse return null;
-    if (source != .string) return null;
-    return alloc.dupe(u8, source.string) catch null;
+    return if (source == .string) source.string else null;
 }
 
 /// Takes the file at `path` (renaming it first, so of two hooks running at
@@ -112,6 +106,8 @@ pub fn take(alloc: Allocator, path: []const u8) ?[]u8 {
     defer std.fs.deleteFileAbsolute(taken) catch {};
     return std.fs.cwd().readFileAlloc(alloc, taken, text_max) catch null;
 }
+
+const parseInput = @import("protocol.zig").parseInput;
 
 test "claude speak: pane ids" {
     const t = std.testing;
@@ -164,29 +160,29 @@ test "claude speak: a subagent's tool call is not spoken to" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    try std.testing.expect(isSubagent(a,
+    try std.testing.expect(isSubagent(parseInput(a,
         \\{"hook_event_name":"PostToolUse","agent_id":"a7","tool_name":"Read"}
-    ));
-    try std.testing.expect(!isSubagent(a,
+    )));
+    try std.testing.expect(!isSubagent(parseInput(a,
         \\{"hook_event_name":"PostToolUse","tool_name":"Read"}
-    ));
-    try std.testing.expect(!isSubagent(a,
+    )));
+    try std.testing.expect(!isSubagent(parseInput(a,
         \\{"hook_event_name":"PostToolUse","agent_id":"","tool_name":"Read"}
-    ));
-    try std.testing.expect(!isSubagent(a, "not json"));
+    )));
+    try std.testing.expect(!isSubagent(parseInput(a, "not json")));
 }
 
 test "claude speak: session source" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    try std.testing.expectEqualStrings("clear", sessionSource(a,
+    try std.testing.expectEqualStrings("clear", sessionSource(parseInput(a,
         \\{"hook_event_name":"SessionStart","source":"clear"}
-    ).?);
-    try std.testing.expect(sessionSource(a,
+    )).?);
+    try std.testing.expect(sessionSource(parseInput(a,
         \\{"hook_event_name":"Stop","source":"clear"}
-    ) == null);
-    try std.testing.expect(sessionSource(a, "{}") == null);
+    )) == null);
+    try std.testing.expect(sessionSource(parseInput(a, "{}")) == null);
 }
 
 test "claude speak: take is once" {

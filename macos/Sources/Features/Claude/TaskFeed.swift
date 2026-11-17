@@ -211,7 +211,7 @@ enum TaskFeed {
     }
 }
 
-/// The feeds of the tasks a view shows, read again each second while it
+/// The feeds of the tasks a view shows, read again every two seconds while it
 /// shows them; a file that hasn't changed isn't read again.
 @MainActor
 final class TaskFeedModel: ObservableObject {
@@ -232,7 +232,7 @@ final class TaskFeedModel: ObservableObject {
                 stamps[id] = stamp
                 if entries[id] != entry { entries[id] = entry }
             }
-            try? await Task.sleep(for: .seconds(1))
+            try? await Task.sleep(for: .seconds(2))
         }
     }
 }

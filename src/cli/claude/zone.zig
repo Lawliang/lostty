@@ -84,20 +84,26 @@ pub fn parseAgent(alloc: Allocator, json: []const u8) ?Agent {
 
 /// The agent a PreToolUse hook's SendMessage is for (`tool_input.to`, else
 /// `recipient`), its ` [ref]` left off; null for any other tool call.
-pub fn sendTarget(alloc: Allocator, input: []const u8) ?[]const u8 {
-    const Input = struct {
-        hook_event_name: []const u8 = "",
-        tool_name: []const u8 = "",
-        tool_input: struct { to: ?[]const u8 = null, recipient: ?[]const u8 = null } = .{},
+pub fn sendTarget(root: std.json.Value) ?[]const u8 {
+    if (!isText(root, "hook_event_name", "PreToolUse") or !isText(root, "tool_name", "SendMessage")) return null;
+    const tool_input = root.object.get("tool_input") orelse return null;
+    if (tool_input != .object) return null;
+    // `to` wins over `recipient`, and neither may be anything but text.
+    var to: ?[]const u8 = null;
+    for ([_][]const u8{ "recipient", "to" }) |key| switch (tool_input.object.get(key) orelse .null) {
+        .string => |name| to = name,
+        .null => {},
+        else => return null,
     };
-    const parsed = std.json.parseFromSliceLeaky(Input, alloc, input, .{
-        .ignore_unknown_fields = true,
-        .allocate = .alloc_always,
-    }) catch return null;
-    if (!std.mem.eql(u8, parsed.hook_event_name, "PreToolUse")) return null;
-    if (!std.mem.eql(u8, parsed.tool_name, "SendMessage")) return null;
-    const to = target(parsed.tool_input.to orelse parsed.tool_input.recipient orelse return null);
-    return if (to.len == 0) null else to;
+    const name = target(to orelse return null);
+    return if (name.len == 0) null else name;
+}
+
+/// Whether `root` is an object whose `key` is the text `want`.
+fn isText(root: std.json.Value, key: []const u8, want: []const u8) bool {
+    if (root != .object) return false;
+    const value = root.object.get(key) orelse return false;
+    return value == .string and std.mem.eql(u8, value.string, want);
 }
 
 /// "name [3fa9c1]" → "name": SendMessage's docs allow a ref after the name.
@@ -204,13 +210,8 @@ pub fn othersLine(alloc: Allocator, list: []const Peer) Allocator.Error!?[]const
 }
 
 /// Whether a hook's input is for Claude Code's ListAgents.
-pub fn isListAgents(alloc: Allocator, input: []const u8) bool {
-    const Input = struct { tool_name: []const u8 = "" };
-    const parsed = std.json.parseFromSliceLeaky(Input, alloc, input, .{
-        .ignore_unknown_fields = true,
-        .allocate = .alloc_always,
-    }) catch return false;
-    return std.mem.eql(u8, parsed.tool_name, "ListAgents");
+pub fn isListAgents(root: std.json.Value) bool {
+    return isText(root, "tool_name", "ListAgents");
 }
 
 /// What Claude hears after ListAgents in the zone `title`: ListAgents
@@ -227,16 +228,15 @@ pub fn listAgentsNote(alloc: Allocator, title: []const u8, list: []const Peer) A
         "answer about these, and mention the rest of that list only if asked.", .{ title, zone_agents });
 }
 
-pub fn sessionId(alloc: Allocator, input: []const u8) ?[]const u8 {
-    const Input = struct { session_id: ?[]const u8 = null };
-    const parsed = std.json.parseFromSliceLeaky(Input, alloc, input, .{
-        .ignore_unknown_fields = true,
-        .allocate = .alloc_always,
-    }) catch return null;
-    return parsed.session_id;
+pub fn sessionId(root: std.json.Value) ?[]const u8 {
+    if (root != .object) return null;
+    const id = root.object.get("session_id") orelse return null;
+    return if (id == .string) id.string else null;
 }
 
 const testing = std.testing;
+
+const parseInput = @import("protocol.zig").parseInput;
 
 test "claude zone: the file's brief, title and members" {
     var arena = std.heap.ArenaAllocator.init(testing.allocator);
@@ -293,19 +293,26 @@ test "claude zone: SendMessage's target without its ref" {
     var arena = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    try testing.expectEqualStrings("lostty-a9", sendTarget(a,
+    try testing.expectEqualStrings("lostty-a9", sendTarget(parseInput(a,
         \\{"session_id":"s","hook_event_name":"PreToolUse","tool_name":"SendMessage","tool_input":{"to":"lostty-a9 [3fa9c1]","summary":"x","message":"y","type":"message","recipient":"lostty-a9 [3fa9c1]","recipient_kind":"name","content":"y"},"tool_use_id":"t"}
-    ).?);
-    try testing.expectEqualStrings("main", sendTarget(a,
+    )).?);
+    try testing.expectEqualStrings("main", sendTarget(parseInput(a,
         \\{"hook_event_name":"PreToolUse","tool_name":"SendMessage","tool_input":{"recipient":"main"}}
-    ).?);
-    try testing.expect(sendTarget(a,
+    )).?);
+    try testing.expect(sendTarget(parseInput(a,
         \\{"hook_event_name":"PreToolUse","tool_name":"Read","tool_input":{"to":"x"}}
-    ) == null);
-    try testing.expect(sendTarget(a,
+    )) == null);
+    try testing.expect(sendTarget(parseInput(a,
         \\{"hook_event_name":"PostToolUse","tool_name":"SendMessage","tool_input":{"to":"x"}}
-    ) == null);
-    try testing.expect(sendTarget(a, "not json") == null);
+    )) == null);
+    try testing.expect(sendTarget(parseInput(a, "not json")) == null);
+    // A name that isn't text names no one, whatever the other field says.
+    try testing.expect(sendTarget(parseInput(a,
+        \\{"hook_event_name":"PreToolUse","tool_name":"SendMessage","tool_input":{"to":7,"recipient":"main"}}
+    )) == null);
+    try testing.expectEqualStrings("main", sendTarget(parseInput(a,
+        \\{"hook_event_name":"PreToolUse","tool_name":"SendMessage","tool_input":{"to":null,"recipient":"main"}}
+    )).?);
     try testing.expectEqualStrings("name", target("name [3fa9c1]"));
     try testing.expectEqualStrings("name", target("name"));
     try testing.expectEqualStrings("a [b] c", target("a [b] c"));
@@ -415,18 +422,18 @@ test "claude zone: a hook's session id" {
     var arena = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    try testing.expectEqualStrings("s1", sessionId(a,
+    try testing.expectEqualStrings("s1", sessionId(parseInput(a,
         \\{"session_id":"s1","hook_event_name":"SessionStart","source":"startup"}
-    ).?);
-    try testing.expect(sessionId(a, "{}") == null);
+    )).?);
+    try testing.expect(sessionId(parseInput(a, "{}")) == null);
 }
 
 test "zone: ListAgents names the zone's agents" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    try std.testing.expect(isListAgents(a, "{\"hook_event_name\":\"PostToolUse\",\"tool_name\":\"ListAgents\"}"));
-    try std.testing.expect(!isListAgents(a, "{\"tool_name\":\"Read\"}"));
+    try std.testing.expect(isListAgents(parseInput(a, "{\"hook_event_name\":\"PostToolUse\",\"tool_name\":\"ListAgents\"}")));
+    try std.testing.expect(!isListAgents(parseInput(a, "{\"tool_name\":\"Read\"}")));
     const note = try listAgentsNote(a, "Lostty", &.{ .{ .name = "zones-7e" }, .{ .name = "media-fix-02", .feature = "Karaoke" } });
     try std.testing.expect(std.mem.indexOf(u8, note, "Your zone is Lostty.") != null);
     try std.testing.expect(std.mem.indexOf(u8, note, "are: zones-7e, media-fix-02 (Karaoke).") != null);

@@ -18,7 +18,7 @@ enum SettingsUI {
     static func show() {
         if window == nil {
             let host = NSHostingController(rootView: SettingsView(
-                observer: .shared, font: .shared, updates: .shared, sleep: .shared))
+                observer: .shared, font: .shared, updates: .shared, sleep: .shared, notifications: .shared))
             let window = NSWindow(contentViewController: host)
             window.title = "Lostty Settings"
             window.styleMask = [.titled, .closable]
