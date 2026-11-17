@@ -23,6 +23,7 @@ const skins = @import("skins.zig");
 const claude_state = @import("claude_state.zig");
 const claude_hooks = @import("claude_hooks.zig");
 const claude_usage = @import("claude_usage.zig");
+const sharpen_log = @import("sharpen_log.zig");
 const close_check = @import("close_check.zig");
 const guard = @import("guard.zig");
 const tmux_launch = @import("tmux_launch.zig");
@@ -86,6 +87,7 @@ pub const Action = enum {
 
     // Lostty: report Claude Code's state to this pane (run by hooks).
     @"claude-state",
+    @"sharpen-log",
 
     // Lostty: install or remove the Claude Code hooks that drive the trace.
     @"claude-hooks",
@@ -204,6 +206,7 @@ pub const Action = enum {
             .@"new-window" => try new_window.run(alloc),
             .skins => try skins.run(alloc),
             .@"claude-state" => try claude_state.run(alloc),
+            .@"sharpen-log" => try sharpen_log.run(alloc),
             .@"claude-hooks" => try claude_hooks.run(alloc),
             .@"claude-usage" => try claude_usage.run(alloc),
             .@"close-check" => try close_check.run(alloc),
@@ -255,6 +258,7 @@ pub const Action = enum {
                 .@"new-window" => new_window.Options,
                 .skins => skins.Options,
                 .@"claude-state" => claude_state.Options,
+                .@"sharpen-log" => sharpen_log.Options,
                 .@"claude-hooks" => claude_hooks.Options,
                 .@"claude-usage" => claude_usage.Options,
                 .@"close-check" => close_check.Options,
@@ -385,6 +389,7 @@ test {
     _ = claude_state;
     _ = claude_hooks;
     _ = claude_usage;
+    _ = sharpen_log;
     _ = close_check;
     _ = guard;
     _ = @import("guard/wire.zig");

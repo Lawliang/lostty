@@ -135,6 +135,18 @@ pub fn init(b: *std.Build, cfg: *const Config, deps: *const SharedDeps) !Ghostty
         try steps.append(b.allocator, &install_step.step);
     }
 
+    // Lostty's Claude Code mods, which each pane loads through
+    // CLAUDE_CODE_PLUGIN_DIRS
+    {
+        const install_step = b.addInstallDirectory(.{
+            .source_dir = b.path("mods"),
+            .install_dir = .{ .custom = "share" },
+            .install_subdir = b.pathJoin(&.{ "ghostty", "lostty-mods" }),
+            .exclude_extensions = &.{".test.ts"},
+        });
+        try steps.append(b.allocator, &install_step.step);
+    }
+
     // Themes
     if (cfg.emit_themes) {
         if (b.lazyDependency("iterm2_themes", .{})) |upstream| {

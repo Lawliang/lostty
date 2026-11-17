@@ -1,0 +1,1 @@
+{ "name": "lostty-sharpener", "version": "0.1.0", "description": "Lostty's prompt sharpener: rewrites a sloppy prompt in plain words before Claude reads it, and logs every prompt." }

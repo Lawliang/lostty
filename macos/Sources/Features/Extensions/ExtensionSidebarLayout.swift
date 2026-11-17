@@ -26,6 +26,7 @@ struct ExtensionSidebarLayout<Content: View>: View {
                     if model.showsNotifications { NotificationStackView() }
                 }
             ClaudeUsageBar(model: model)
+            SharpenStrip(model: model)
             if model.showsTasks { PaneTaskStrip(model: model) }
         }
         .overlay {

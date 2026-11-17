@@ -497,6 +497,17 @@ class AppDelegate: NSObject,
             menu.insertItem(gallery, at: menu.index(of: item) + 1)
         }
         #endif
+
+        // Prompt sharpener: on unless the owner turned it off.
+        if let anchor = menuOpenConfig, let menu = anchor.menu {
+            let item = NSMenuItem(title: "Sharpen Prompts", action: #selector(toggleSharpener(_:)), keyEquivalent: "")
+            item.target = self
+            menu.insertItem(item, at: menu.index(of: anchor) + 1)
+        }
+    }
+
+    @objc private func toggleSharpener(_ sender: Any?) {
+        Sharpener.isOn.toggle()
     }
 
     #if DEBUG
@@ -1664,6 +1675,10 @@ extension AppDelegate {
 extension AppDelegate: NSMenuItemValidation {
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         switch item.action {
+        case #selector(toggleSharpener(_:)):
+            item.state = Sharpener.isOn ? .on : .off
+            return true
+
         case #selector(setAsDefaultTerminal(_:)):
             return NSWorkspace.shared.defaultTerminal != Bundle.main.bundleURL
 
