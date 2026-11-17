@@ -6,7 +6,7 @@ import SwiftUI
 /// screen whose terminal finished and waits on you shows an avatar on the
 /// edge nearest it, with an arrow pointing its way. Markers that would
 /// overlap become one, with a count. Notifications → Arrows in Lostty Settings.
-enum CanvasAttention {
+enum CanvasArrows {
     /// A waiting pane and its card's frame, in canvas points.
     struct Target: Equatable {
         let pane: UUID
@@ -57,32 +57,32 @@ enum CanvasAttention {
 }
 
 @MainActor
-final class CanvasAttentionState: ObservableObject {
-    @Published var markers: [CanvasAttention.Marker] = []
+final class CanvasArrowsState: ObservableObject {
+    @Published var markers: [CanvasArrows.Marker] = []
     var open: (UUID) -> Void = { _ in }
 }
 
 /// Over the cards, under the notification stack. Clicks pass through but
 /// on a marker.
-final class CanvasAttentionView: NSHostingView<CanvasAttentionMarkers> {
-    let state: CanvasAttentionState
+final class CanvasArrowsView: NSHostingView<CanvasArrowsMarkers> {
+    let state: CanvasArrowsState
 
     init() {
-        let state = CanvasAttentionState()
+        let state = CanvasArrowsState()
         self.state = state
-        super.init(rootView: CanvasAttentionMarkers(state: state))
+        super.init(rootView: CanvasArrowsMarkers(state: state))
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
     @available(*, unavailable)
-    required init(rootView: CanvasAttentionMarkers) { fatalError("init(rootView:) is not supported") }
+    required init(rootView: CanvasArrowsMarkers) { fatalError("init(rootView:) is not supported") }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
         let local = convert(point, from: superview)
         let flipped = CGPoint(x: local.x, y: isFlipped ? local.y : bounds.height - local.y)
-        let radius = CanvasAttentionMarker.size / 2 + 4
+        let radius = CanvasArrowMarker.size / 2 + 4
         guard state.markers.contains(where: { hypot($0.center.x - flipped.x, $0.center.y - flipped.y) <= radius }) else {
             return nil
         }
@@ -90,14 +90,14 @@ final class CanvasAttentionView: NSHostingView<CanvasAttentionMarkers> {
     }
 }
 
-struct CanvasAttentionMarkers: View {
-    @ObservedObject var state: CanvasAttentionState
+struct CanvasArrowsMarkers: View {
+    @ObservedObject var state: CanvasArrowsState
 
     var body: some View {
         ZStack(alignment: .topLeading) {
             Color.clear
             ForEach(state.markers) { marker in
-                CanvasAttentionMarker(marker: marker)
+                CanvasArrowMarker(marker: marker)
                     .position(marker.center)
                     .onTapGesture { state.open(marker.id) }
                     .transition(.scale.combined(with: .opacity))
@@ -109,13 +109,13 @@ struct CanvasAttentionMarkers: View {
 
 /// An avatar in a ring, the arrow outside it pointing at the card, and a
 /// count when it stands for more than one.
-struct CanvasAttentionMarker: View {
+struct CanvasArrowMarker: View {
     static let size: CGFloat = 44
-    let marker: CanvasAttention.Marker
+    let marker: CanvasArrows.Marker
 
     var body: some View {
         ZStack {
-            CanvasAttentionArrow()
+            CanvasArrowShape()
                 .fill(LosttyTheme.accent)
                 .frame(width: 12, height: 14)
                 .offset(x: Self.size / 2 + 8)
@@ -146,7 +146,7 @@ struct CanvasAttentionMarker: View {
 }
 
 /// A triangle pointing right.
-struct CanvasAttentionArrow: Shape {
+struct CanvasArrowShape: Shape {
     func path(in rect: CGRect) -> Path {
         Path { path in
             path.move(to: CGPoint(x: rect.minX, y: rect.minY))
