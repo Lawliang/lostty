@@ -454,9 +454,9 @@ final class CanvasSurfaceView: NSView {
     let zones = CanvasZoneLayer(frame: NSRect(x: 0, y: 0, width: CanvasModel.size, height: CanvasModel.size))
     private let grid = CanvasGridView(frame: .zero)
     private let notifications = CanvasNotificationsView(rootView: NotificationStackView())
-    let attention = CanvasAttentionView()
-    /// The cards that wait on you, for `attention`.
-    var attentionTargets: () -> [CanvasAttention.Target] = { [] }
+    let arrows = CanvasArrowsView()
+    /// The cards that wait on you, for `arrows`.
+    var arrowTargets: () -> [CanvasArrows.Target] = { [] }
     private let zoomState = CanvasZoomMeterState()
     private lazy var zoomMeter = PassthroughHostingView(rootView: CanvasZoomMeter(state: zoomState))
 
@@ -476,7 +476,7 @@ final class CanvasSurfaceView: NSView {
         zoomMeter.sizingOptions = [.intrinsicContentSize]
         zoomMeter.translatesAutoresizingMaskIntoConstraints = false
         addSubview(zoomMeter)
-        addSubview(attention)
+        addSubview(arrows)
         // As big as its bubbles, at the top right.
         notifications.sizingOptions = [.intrinsicContentSize]
         notifications.translatesAutoresizingMaskIntoConstraints = false
@@ -514,7 +514,7 @@ final class CanvasSurfaceView: NSView {
         selectionBar.layer?.setAffineTransform(CGAffineTransform(translationX: moved.x - top.x, y: moved.y - top.y))
         grid.update()
         zoomState.zoomed(to: scrollView.shownZoom)
-        updateAttention()
+        updateArrows()
         shownMoved?()
     }
 
@@ -529,8 +529,8 @@ final class CanvasSurfaceView: NSView {
                 size: selectionBar.fittingSize, under: convert(picked, from: scrollView.document), in: bounds)
         }
         dock.frame = CanvasDockView.frame(size: dock.fittingSize, in: bounds)
-        attention.frame = bounds
-        updateAttention()
+        arrows.frame = bounds
+        updateArrows()
         // Its button `margin` in from the bottom right (the view is unflipped).
         let size = CanvasAddMenuView.size, room = CanvasAddMenuView.shadowRoom, margin = CanvasAddMenuView.margin
         addMenu.frame = NSRect(
@@ -546,10 +546,10 @@ final class CanvasSurfaceView: NSView {
     }
 
     /// The arrows, for where the canvas is drawn now.
-    func updateAttention() {
-        let markers = CanvasAttention.markers(
-            attentionTargets(), shown: scrollView.shownRect, zoom: scrollView.shownZoom, size: bounds.size)
-        if attention.state.markers != markers { attention.state.markers = markers }
+    func updateArrows() {
+        let markers = CanvasArrows.markers(
+            arrowTargets(), shown: scrollView.shownRect, zoom: scrollView.shownZoom, size: bounds.size)
+        if arrows.state.markers != markers { arrows.state.markers = markers }
     }
 
     /// Whether a click at `point` (in the window) is on what floats over
@@ -557,7 +557,7 @@ final class CanvasSurfaceView: NSView {
     /// notification, or a zone's label no card covers there.
     func floats(at point: NSPoint) -> Bool {
         addMenu.covers(point) || selectionBar.covers(point) || dock.covers(point)
-            || attention.hitTest(convert(point, from: nil)) != nil
+            || arrows.hitTest(convert(point, from: nil)) != nil
             || notifications.hitTest(convert(point, from: nil)) != nil
             || scrollView.document.hitTest(scrollView.contentView.convert(point, from: nil))?
                 .isDescendant(of: zones.labels) == true

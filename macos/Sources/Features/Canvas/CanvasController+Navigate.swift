@@ -26,13 +26,13 @@ extension CanvasController {
 
     /// The cards whose terminals wait on you, oldest first, for the arrows
     /// at the canvas's edges; none unless Notifications is set to Arrows.
-    func attentionTargets() -> [CanvasAttention.Target] {
+    func arrowTargets() -> [CanvasArrows.Target] {
         guard NotificationPreferences.shared.showsArrows else { return [] }
         return waits.order.compactMap { pane in
             guard let card = cards.first(where: { $0.surfaceTree.contains { $0.id == pane } }),
                   let frame = model.card(card.id)?.frame else { return nil }
             let title = headerTitle(ofPane: pane)
-            return CanvasAttention.Target(pane: pane, frame: frame, name: title?.agent ?? title?.topic)
+            return CanvasArrows.Target(pane: pane, frame: frame, name: title?.agent ?? title?.topic)
         }
     }
 

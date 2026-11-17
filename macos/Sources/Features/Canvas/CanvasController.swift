@@ -236,15 +236,15 @@ final class CanvasController: NSWindowController, NSWindowDelegate {
         ClaudeRuntime.shared.$awaiting
             .sink { [weak self] awaiting in
                 self?.waits.update(awaiting: awaiting, now: Date())
-                self?.surface.updateAttention()
+                self?.surface.updateArrows()
             }
             .store(in: &cancellables)
         NotificationPreferences.shared.objectWillChange
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] in self?.surface.updateAttention() }
+            .sink { [weak self] in self?.surface.updateArrows() }
             .store(in: &cancellables)
-        surface.attentionTargets = { [weak self] in self?.attentionTargets() ?? [] }
-        surface.attention.state.open = { [weak self] pane in self?.goToWaiting(pane) }
+        surface.arrowTargets = { [weak self] in self?.arrowTargets() ?? [] }
+        surface.arrows.state.open = { [weak self] pane in self?.goToWaiting(pane) }
         ClaudeRuntime.shared.$phases
             .map { Set($0.keys) }
             .removeDuplicates()
