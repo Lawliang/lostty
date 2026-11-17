@@ -33,6 +33,30 @@ struct SharpenerTests {
         #expect(Sharpener.entry(id: "zz", in: log) == nil)
     }
 
+    @Test func readsTheLogsTailWhenTheCutSplitsACharacter() {
+        let line = #"{"verdict":"rewritten","original":"é","sent":"b","id":"cc","time":1}"#
+        let whole = Data(("xé\n" + line + "\n").utf8)
+        // Cut inside the "é" of the first line, as a seek from the end can.
+        let tail = whole.subdata(in: 2..<whole.count)
+        #expect(Sharpener.entry(id: "cc", in: Sharpener.tailText(tail, cut: true) ?? "")?.original == "é")
+    }
+
+    @Test func copiesTheModOutOfTheAppReplacingAnOldCopy() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = root.appendingPathComponent("bundle/lostty-sharpener")
+        let target = root.appendingPathComponent("support/mods/lostty-sharpener")
+        try FileManager.default.createDirectory(at: source.appendingPathComponent("hooks"), withIntermediateDirectories: true)
+        try Data("new".utf8).write(to: source.appendingPathComponent("hooks/register.ts"))
+        try FileManager.default.createDirectory(at: target.appendingPathComponent("hooks"), withIntermediateDirectories: true)
+        try Data("old".utf8).write(to: target.appendingPathComponent("hooks/register.ts"))
+        try Data("stale".utf8).write(to: target.appendingPathComponent("hooks/gone.ts"))
+
+        #expect(Sharpener.copyMod(from: source, to: target))
+        #expect(try String(contentsOf: target.appendingPathComponent("hooks/register.ts"), encoding: .utf8) == "new")
+        #expect(!FileManager.default.fileExists(atPath: target.appendingPathComponent("hooks/gone.ts").path))
+    }
+
     @Test func aSharpenedMessageWithNoIDClearsTheStrip() {
         #expect(ClaudeMessage.sharpenCleared(#"{"v":1,"state":"sharpened"}"#))
         #expect(!ClaudeMessage.sharpenCleared(#"{"v":1,"state":"sharpened","id":"a1"}"#))

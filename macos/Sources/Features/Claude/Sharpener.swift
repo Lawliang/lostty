@@ -9,9 +9,29 @@ import AppKit
 enum Sharpener {
     static let pluginDirsKey = "CLAUDE_CODE_PLUGIN_DIRS"
 
-    /// The bundled mod (`zig-out/share/ghostty/lostty-mods`).
-    static var modPath: String? {
-        Bundle.main.resourceURL?.appendingPathComponent("ghostty/lostty-mods/lostty-sharpener").path
+    /// The mod for panes to load: a copy of the bundled one
+    /// (`zig-out/share/ghostty/lostty-mods`), made once per launch, because
+    /// Claude Code writes type files into a mod's folder, which would break
+    /// the app's signature.
+    static let modPath: String? = {
+        guard let bundled = Bundle.main.resourceURL?
+            .appendingPathComponent("ghostty/lostty-mods/lostty-sharpener") else { return nil }
+        let copy = folder.deletingLastPathComponent().appendingPathComponent("mods/lostty-sharpener")
+        return copyMod(from: bundled, to: copy) ? copy.path : nil
+    }()
+
+    /// Replaces `target` with a copy of `source`.
+    nonisolated static func copyMod(from source: URL, to target: URL) -> Bool {
+        let files = FileManager.default
+        guard files.fileExists(atPath: source.path) else { return false }
+        try? files.removeItem(at: target)
+        do {
+            try files.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try files.copyItem(at: source, to: target)
+            return true
+        } catch {
+            return false
+        }
     }
 
     /// `existing` with `mod` added, so a pane keeps the owner's own folders.
@@ -66,8 +86,18 @@ enum Sharpener {
         let size = (try? handle.seekToEnd()) ?? 0
         let tail: UInt64 = 1 << 20
         try? handle.seek(toOffset: size > tail ? size - tail : 0)
-        guard let data = try? handle.readToEnd(), let text = String(bytes: data, encoding: .utf8) else { return nil }
+        guard let data = try? handle.readToEnd(), let text = tailText(data, cut: size > tail) else { return nil }
         return entry(id: id, in: text)
+    }
+
+    /// The log's last bytes as text. A `cut` tail starts mid-line, maybe
+    /// mid-character, so its first line is dropped.
+    nonisolated static func tailText(_ data: Data, cut: Bool) -> String? {
+        var data = data
+        if cut, let newline = data.firstIndex(of: UInt8(ascii: "\n")) {
+            data = data.subdata(in: data.index(after: newline)..<data.endIndex)
+        }
+        return String(bytes: data, encoding: .utf8)
     }
 }
 
