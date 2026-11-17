@@ -454,6 +454,9 @@ final class CanvasSurfaceView: NSView {
     let zones = CanvasZoneLayer(frame: NSRect(x: 0, y: 0, width: CanvasModel.size, height: CanvasModel.size))
     private let grid = CanvasGridView(frame: .zero)
     private let notifications = CanvasNotificationsView(rootView: NotificationStackView())
+    let attention = CanvasAttentionView()
+    /// The cards that wait on you, for `attention`.
+    var attentionTargets: () -> [CanvasAttention.Target] = { [] }
     private let zoomState = CanvasZoomMeterState()
     private lazy var zoomMeter = PassthroughHostingView(rootView: CanvasZoomMeter(state: zoomState))
 
@@ -473,6 +476,7 @@ final class CanvasSurfaceView: NSView {
         zoomMeter.sizingOptions = [.intrinsicContentSize]
         zoomMeter.translatesAutoresizingMaskIntoConstraints = false
         addSubview(zoomMeter)
+        addSubview(attention)
         // As big as its bubbles, at the top right.
         notifications.sizingOptions = [.intrinsicContentSize]
         notifications.translatesAutoresizingMaskIntoConstraints = false
@@ -510,6 +514,7 @@ final class CanvasSurfaceView: NSView {
         selectionBar.layer?.setAffineTransform(CGAffineTransform(translationX: moved.x - top.x, y: moved.y - top.y))
         grid.update()
         zoomState.zoomed(to: scrollView.shownZoom)
+        updateAttention()
         shownMoved?()
     }
 
@@ -524,6 +529,8 @@ final class CanvasSurfaceView: NSView {
                 size: selectionBar.fittingSize, under: convert(picked, from: scrollView.document), in: bounds)
         }
         dock.frame = CanvasDockView.frame(size: dock.fittingSize, in: bounds)
+        attention.frame = bounds
+        updateAttention()
         // Its button `margin` in from the bottom right (the view is unflipped).
         let size = CanvasAddMenuView.size, room = CanvasAddMenuView.shadowRoom, margin = CanvasAddMenuView.margin
         addMenu.frame = NSRect(
@@ -538,11 +545,19 @@ final class CanvasSurfaceView: NSView {
         needsLayout = true
     }
 
+    /// The arrows, for where the canvas is drawn now.
+    func updateAttention() {
+        let markers = CanvasAttention.markers(
+            attentionTargets(), shown: scrollView.shownRect, zoom: scrollView.shownZoom, size: bounds.size)
+        if attention.state.markers != markers { attention.state.markers = markers }
+    }
+
     /// Whether a click at `point` (in the window) is on what floats over
     /// the cards: the + menu, the selection's bar, the dock, a
     /// notification, or a zone's label no card covers there.
     func floats(at point: NSPoint) -> Bool {
         addMenu.covers(point) || selectionBar.covers(point) || dock.covers(point)
+            || attention.hitTest(convert(point, from: nil)) != nil
             || notifications.hitTest(convert(point, from: nil)) != nil
             || scrollView.document.hitTest(scrollView.contentView.convert(point, from: nil))?
                 .isDescendant(of: zones.labels) == true

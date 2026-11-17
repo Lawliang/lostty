@@ -39,8 +39,19 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 }
                 Section("Notifications") {
+                    Picker("When a terminal needs you", selection: $notifications.style) {
+                        ForEach(NotificationPreferences.Style.allCases, id: \.self) { Text($0.title).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    .disabled(notifications.muted)
+                    Text(notifications.style == .arrows
+                         ? "On the canvas, a card off screen that finished shows an avatar at the edge, "
+                            + "with an arrow pointing its way. Click it to go there."
+                         : "A bubble at the top right says which terminal finished.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                     Toggle("Mute notifications", isOn: $notifications.muted)
-                    Text("No bubbles at the top right, no Mac banners and no sounds. "
+                    Text("No bubbles, arrows or Mac banners, and no sounds. "
                          + "An agent asking for approval still shows.")
                         .font(.caption)
                         .foregroundStyle(.secondary)

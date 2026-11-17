@@ -29,7 +29,7 @@ struct NotificationPreferencesTests {
     @Test func aMutedCenterDropsBubblesAndNotices() {
         var muted = true
         let bubbles = LosttyNotifications(muted: { muted }, schedule: { _, _ in })
-        let notices = TerminalNotices(muted: { muted }, schedule: { _, _ in })
+        let notices = TerminalNotices(hidden: { muted }, schedule: { _, _ in })
         let pane = UUID()
         notices.awaitingChanged([pane])
 
